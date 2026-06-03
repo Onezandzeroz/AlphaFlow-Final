@@ -6,6 +6,7 @@ import { VATCode } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
 import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { generateVoucherNumber } from '@/lib/voucher-number';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -154,6 +155,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (description !== undefined) updateData.description = description;
     if (reference !== undefined) updateData.reference = reference || null;
     if (status !== undefined) updateData.status = status;
+
+    // DRAFT → POSTED transition: assign voucher number atomically
+    const isDraftToPosted = existing.status === 'DRAFT' && status === 'POSTED';
+    if (isDraftToPosted && !existing.voucherNumber) {
+      const voucherNumber = await db.$transaction(async (tx) => {
+        const vNum = await generateVoucherNumber(tx, existing.companyId);
+        return vNum;
+      });
+      updateData.voucherNumber = voucherNumber;
+    }
 
     // Update the entry
     const entry = await db.journalEntry.update({

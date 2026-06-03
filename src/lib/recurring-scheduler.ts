@@ -23,6 +23,7 @@ import { db } from '@/lib/db';
 import { RecurringFrequency } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { parseLocalDate, todayLocal, formatDateLocal } from '@/lib/date-utils';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -132,23 +133,30 @@ async function executeRecurringEntry(entry: {
     const journalDescription = `${name} — ${dateStr}`;
 
     // 5. Create a POSTED journal entry
-    const journalEntry = await db.journalEntry.create({
-      data: {
-        date: executionDate,
-        description: journalDescription,
-        reference: ref,
-        status: 'POSTED',
-        companyId,
-        lines: {
-          create: parsedLines.map(l => ({
-            companyId,
-            accountId: l.accountId,
-            debit: l.debit,
-            credit: l.credit,
-            description: l.description || null,
-          })),
+    const journalEntry = await db.$transaction(async (tx) => {
+      const je = await tx.journalEntry.create({
+        data: {
+          date: executionDate,
+          description: journalDescription,
+          reference: ref,
+          status: 'POSTED',
+          companyId,
+          lines: {
+            create: parsedLines.map(l => ({
+              companyId,
+              accountId: l.accountId,
+              debit: l.debit,
+              credit: l.credit,
+              description: l.description || null,
+            })),
+          },
         },
-      },
+      });
+
+      // Assign voucher number for POSTED journal entry
+      await assignVoucherNumberIfPosted(tx, je.id, companyId, 'POSTED');
+
+      return je;
     });
 
     // 6. Calculate next execution date — timezone-safe

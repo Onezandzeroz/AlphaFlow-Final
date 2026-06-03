@@ -198,7 +198,39 @@ Permissions-Policy         "camera=(), microphone=(), geolocation=()"
 
 ---
 
-### 3.5 Samlet leverandøroversigt
+### 3.5 IONOS VPS — Applikationsserver og lokal backup-lagring
+
+**Tjeneste:** Cloud VPS (Virtual Private Server)
+**Brug i AlphaFlow:** Applikationsserver (Next.js, Caddy, PM2) og lokal backup-lagring (Tenant-Backup/ folder med AES-256-GCM krypterede ZIP-arkiver)
+**Teknisk reference:** `src/lib/backup-engine.ts`, `src/lib/backup-scheduler.ts`
+**Forbindelse:** Krypteret SSH-adgang til server
+
+| Kriterie | Vurdering | Status |
+|----------|----------|--------|
+| Sikkerhedscertificering | **C5 (BSI Cloud Computing Compliance)** + **IT-Grundschutz** — første europæiske udbyder med begge certificeringer | ✅ Opfyldt |
+| Datakryptering i hvile | Backup-filer krypteret med **AES-256-GCM** før lagring på disk | ✅ Opfyldt |
+| Datakryptering under transport | **TLS 1.3** for al webtrafik (via Caddy) + SSH for administration | ✅ Opfyldt |
+| EU/EØS-hosting | Alle datacentre i Europa — fuldt GDPR-kompatibel | ✅ Opfyldt |
+| GDPR/DPA | Data Processing Agreement tilgængelig og indgået | ✅ Opfyldt |
+| Oppetid | 99,95 % SLA med geo-redundant infrastruktur | ✅ Opfyldt |
+| DDoS-beskyttelse | Automatisk detektion og blokering af DDoS-angreb | ✅ Opfyldt |
+| Kontosikkerhed | 2FA og brute-force beskyttelse på alle konti | ✅ Opfyldt |
+| ISO-certificering | 25 ISO-certificerede datacentre i Europa med geo-redundans | ✅ Opfyldt |
+| Backup-kryptering | Backup-filer krypteres med AES-256-GCM før lagring i Tenant-Backup/ folder | ✅ Opfyldt |
+| Cloud-sikkerhed | Første europæiske cloud-udbyder der opfylder både C5 og IT-Grundschutz-standarderne | ✅ Opfyldt |
+
+**Konklusion:** IONOS VPS opfylder alle kritiske og høje kriterier. C5- og IT-Grundschutz-certificeringerne bekræfter et højt sikkerhedsniveau, der overstiger almindelige cloud-udbydere. Som den første europæiske udbyder med begge certificeringer tilbyder IONOS en unik kombination af cloud-sikkerhed og EU-datasuverænitet. Al data forbliver i Europa, og backup-filer er krypteret med AES-256-GCM før lagring.
+
+**Tilgængelig dokumentation:**
+- C5 (BSI Cloud Computing Compliance) certificering
+- IT-Grundschutz certificering
+- Data Processing Agreement (DPA)
+- ISO-certificeringer for 25 europæiske datacentre
+- Privacy Policy: https://www.ionos.de/terms-gtc/privacy
+
+---
+
+### 3.6 Samlet leverandøroversigt
 
 | Leverandør | Tjeneste | Sikkerhed | GDPR | EU-hosting | Risiko | DPA indgået |
 |-----------|---------|-----------|------|------------|--------|-------------|
@@ -206,6 +238,7 @@ Permissions-Policy         "camera=(), microphone=(), geolocation=()"
 | Caddy | Reverse Proxy | Open source | ✅ | ✅ | Minimal | N/A (self-hosted) |
 | Let's Encrypt | TLS-certifikater | Non-profit CA | ✅ | ✅ | Minimal | N/A |
 | Frankfurter API | Valutakurser | ECB-kilde | ✅ | ✅ (Tyskland) | Minimal | N/A (kun læsning) |
+| IONOS VPS | Applikationsserver + backup | C5 + IT-Grundschutz | ✅ | ✅ (Europa) | Lav | ✅ |
 
 ---
 
@@ -361,6 +394,22 @@ Let's Encrypt har ingen underleverandører, der behandler AlphaFlow-specifikke d
 
 Frankfurter API er en statisk API-wrapper uden underleverandører. API'et transmitterer ingen AlphaFlow-specifikke data — kun HTTP GET-forespørgsler om valutakurser.
 
+### 6.5 IONOS VPS
+
+IONOS VPS fungerer som AlphaFlows applikationsserver og lokal backup-lagring. IONOS benytter følgende underleverandører (baseret på offentlig tilgængelig information):
+
+| Underleverandør | Tjeneste | Lokation | Formål |
+|----------------|---------|---------|--------|
+| IONOS egne datacentre | Cloud-infrastruktur | Europa (flere lokationer) | Hosting af VPS og backup-lagring |
+
+**Vurdering:**
+- Alle IONOS-datacentre er beliggende i Europa — fuldt GDPR-kompatibel
+- 25 ISO-certificerede datacentre med geo-redundans sikrer høj tilgængelighed
+- C5 (BSI) og IT-Grundschutz-certificeringer bekræfter sikkerhedsniveauet
+- IONOS er den første europæiske cloud-udbyder med begge certificeringer
+- Ingen underleverandører uden for EU/EØS håndterer AlphaFlows data
+- Backup-filer (Tenant-Backup/) er AES-256-GCM krypteret før lagring på IONOS VPS
+
 ---
 
 ## 7. Konklusion
@@ -372,6 +421,7 @@ AlphaFlows valg af tekniske leverandører er baseret på objektive kriterier med
 | Leverandør | Kritiske krav opfyldt | Samlet risiko |
 |-----------|----------------------|---------------|
 | Neon PostgreSQL | 5/5 | Lav |
+| IONOS VPS | 5/5 | Lav |
 | Caddy | 5/5 | Minimal |
 | Let's Encrypt | 5/5 | Minimal |
 | Frankfurter API | 5/5 | Minimal |
@@ -382,6 +432,7 @@ AlphaFlows valg af tekniske leverandører er baseret på objektive kriterier med
 |---------|------|----------|-----------|
 | 1.0 | 2025 | Første udgave | AlphaAi ApS |
 | 2.0 | 2025 | Opdateret med konkrete kode-referencer og teknisk vurdering | AlphaAi ApS |
+| 2.1 | 2025 | Tilføjet IONOS VPS som leverandør (applikationsserver + backup-lagring) | AlphaAi ApS |
 
 ### 7.3 Godkendelse
 

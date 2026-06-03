@@ -8,6 +8,7 @@ import { requirePermission, tenantFilter, companyScope, Permission, blockOversig
 import { requireTokenPayAccess } from '@/lib/tokenpay';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { enrichTransactionsWithVAT } from '@/lib/vat-utils';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // GET - Fetch all non-cancelled transactions for the logged-in user
 export async function GET(request: NextRequest) {
@@ -181,16 +182,20 @@ export async function POST(request: NextRequest) {
 
           if (jeLines.length >= 2 && Math.abs(totalDebit - totalCredit) < 0.01) {
             try {
-              await db.journalEntry.create({
-                data: {
-                  date: new Date(date),
-                  description: `Køb – ${description}`,
-                  reference: `TX-${transaction.id.slice(0, 8)}`,
-                  status: 'POSTED',
-                  userId: ctx.id,
-                  companyId: ctx.activeCompanyId!,
-                  lines: { create: jeLines.map(l => ({ companyId: l.companyId, account: { connect: { id: l.accountId } }, debit: l.debit, credit: l.credit, description: l.description, vatCode: l.vatCode })) },
-                },
+              await db.$transaction(async (tx) => {
+                const je = await tx.journalEntry.create({
+                  data: {
+                    date: new Date(date),
+                    description: `Køb – ${description}`,
+                    reference: `TX-${transaction.id.slice(0, 8)}`,
+                    status: 'POSTED',
+                    userId: ctx.id,
+                    companyId: ctx.activeCompanyId!,
+                    lines: { create: jeLines.map(l => ({ companyId: l.companyId, account: { connect: { id: l.accountId } }, debit: l.debit, credit: l.credit, description: l.description, vatCode: l.vatCode })) },
+                  },
+                });
+                // Assign voucher number for POSTED journal entry
+                await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
               });
               logger.info(`[PURCHASE] Created journal entry for transaction ${transaction.id}: DR=${totalDebit}, CR=${totalCredit}`);
             } catch (jeError) {

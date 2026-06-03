@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { requirePermission, tenantFilter, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
 import { requireTokenPayAccess } from '@/lib/tokenpay';
 import { addFrequency, parseLocalDate, todayLocal } from '@/lib/date-utils';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // ─── POST - Execute a single recurring entry (create journal entry & advance) ─
 
@@ -104,23 +105,30 @@ export async function POST(request: NextRequest) {
     const journalDescription = `${entry.name} — ${dateStr}`;
 
     // ─── 5. Create a POSTED journal entry ───────────────────────────
-    const journalEntry = await db.journalEntry.create({
-      data: {
-        date: executionDate,
-        description: journalDescription,
-        reference: ref,
-        status: 'POSTED',
-        companyId: entry.companyId,
-        lines: {
-          create: parsedLines.map((l) => ({
-            companyId: entry.companyId,
-            accountId: l.accountId,
-            debit: l.debit,
-            credit: l.credit,
-            description: l.description || null,
-          })),
+    const journalEntry = await db.$transaction(async (tx) => {
+      const je = await tx.journalEntry.create({
+        data: {
+          date: executionDate,
+          description: journalDescription,
+          reference: ref,
+          status: 'POSTED',
+          companyId: entry.companyId,
+          lines: {
+            create: parsedLines.map((l) => ({
+              companyId: entry.companyId,
+              accountId: l.accountId,
+              debit: l.debit,
+              credit: l.credit,
+              description: l.description || null,
+            })),
+          },
         },
-      },
+      });
+
+      // Assign voucher number for POSTED journal entry
+      await assignVoucherNumberIfPosted(tx, je.id, entry.companyId, 'POSTED');
+
+      return je;
     });
 
     // ─── 6. Calculate next execution date (timezone-safe) ───────────

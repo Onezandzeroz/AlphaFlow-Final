@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
 import { requireTokenPayAccess } from '@/lib/tokenpay';
 import { addFrequency, parseLocalDate, todayLocal, formatDateLocal } from '@/lib/date-utils';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // ─── GET - List recurring entries for the authenticated user ──────────────
 
@@ -283,23 +284,27 @@ export async function POST(request: NextRequest) {
           : null;
 
         // Create a POSTED journal entry with the scheduled date
-        await db.journalEntry.create({
-          data: {
-            date: new Date(current),
-            description: journalDescription,
-            reference: ref,
-            status: 'POSTED',
-            companyId: ctx.activeCompanyId!,
-            lines: {
-              create: (resolvedLines as Array<{ accountId: string; debit: number; credit: number; description?: string }>).map((l) => ({
-                companyId: ctx.activeCompanyId!,
-                accountId: l.accountId,
-                debit: l.debit,
-                credit: l.credit,
-                description: l.description || null,
-              })),
+        await db.$transaction(async (tx) => {
+          const je = await tx.journalEntry.create({
+            data: {
+              date: new Date(current),
+              description: journalDescription,
+              reference: ref,
+              status: 'POSTED',
+              companyId: ctx.activeCompanyId!,
+              lines: {
+                create: (resolvedLines as Array<{ accountId: string; debit: number; credit: number; description?: string }>).map((l) => ({
+                  companyId: ctx.activeCompanyId!,
+                  accountId: l.accountId,
+                  debit: l.debit,
+                  credit: l.credit,
+                  description: l.description || null,
+                })),
+              },
             },
-          },
+          });
+          // Assign voucher number for POSTED journal entry
+          await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
         });
 
         postedCount++;

@@ -42,6 +42,7 @@ AlphaFlow benytter et *defense-in-depth*-princip, hvor data beskyttes på flere 
 | Netværk | TLS 1.3 + HSTS | Kryptering af al netværkstrafik |
 | Transport | `sslmode=require` (PostgreSQL) | Krypteret databaseforbindelse |
 | Applikation | AES-256-GCM | Kryptering af følsomme data før lagring |
+| Backup | AES-256-GCM filkryptering | Kryptering af backup-ZIP før lagring på IONOS VPS |
 | Adgangskontrol | bcrypt + RBAC | Sikker autentificering og autorisation |
 | Overvågning | Audit trail | Uforanderlig logning af alle ændringer |
 
@@ -69,7 +70,7 @@ Nedenstående diagram illustrerer dataflowet gennem AlphaFlows kryptografiske la
 │                         │                                           │
 │                         ▼ TLS 1.3 (Let's Encrypt)                  │
 │                                                                     │
-│  Caddy Reverse Proxy                                                │
+│  Caddy Reverse Proxy (IONOS VPS — EU)                               │
 │  ┌──────────────────────────────────────────────────────────┐      │
 │  │  alphaflow.dk                                           │      │
 │  │  ├── Automatiske certifikater (Let's Encrypt)           │      │
@@ -80,7 +81,7 @@ Nedenstående diagram illustrerer dataflowet gennem AlphaFlows kryptografiske la
 │                         │                                           │
 │                         ▼ Intern kommunikation                      │
 │                                                                     │
-│  AlphaFlow Applikation (Next.js)                                    │
+│  AlphaFlow Applikation (Next.js — IONOS VPS)                        │
 │  ┌──────────────────────────────────────────────────────────┐      │
 │  │                                                          │      │
 │  │  ┌──────────────────────────────────────────────────┐   │      │
@@ -106,17 +107,23 @@ Nedenstående diagram illustrerer dataflowet gennem AlphaFlows kryptografiske la
 │  │  └──────────────────────────────────────────────────┘   │      │
 │  └──────────────────────┬───────────────────────────────────┘      │
 │                         │                                           │
-│                         ▼ sslmode=require (TLS)                     │
-│                                                                     │
-│  PostgreSQL (Neon — Managed)                                        │
-│  ┌──────────────────────────────────────────────────────────┐      │
-│  │  Datalagring                                            │      │
-│  │  ├── Adgangskoder: bcrypt-hash                          │      │
-│  │  ├── Bank-tokens: AES-256-GCM krypteret                 │      │
-│  │  │   Format: iv_base64:authTag_base64:ciphertext_base64 │      │
-│  │  ├── Sessions: krypteret transport, token i database    │      │
-│  │  └── Regnskabsdata: krypteret transport                 │      │
-│  └──────────────────────────────────────────────────────────┘      │
+│              ┌──────────┴──────────┐                                │
+│              ▼                     ▼                                │
+│  sslmode=require (TLS)    Lokal backup-lagring                      │
+│                              │                                      │
+│  PostgreSQL (Neon — Managed) │  IONOS VPS (Tenant-Backup/)          │
+│  ┌───────────────────────┐  │  ┌──────────────────────────────┐   │
+│  │  Datalagring          │  │  │  AES-256-GCM krypterede      │   │
+│  │  ├── Adgangskoder:    │  │  │  ZIP-arkiver                  │   │
+│  │  │   bcrypt-hash      │  │  │  ├── Hourly backups           │   │
+│  │  ├── Bank-tokens:     │  │  │  ├── Daily backups            │   │
+│  │  │   AES-256-GCM      │  │  │  ├── Weekly backups           │   │
+│  │  ├── Sessions:        │  │  │  ├── Monthly backups (5 år)   │   │
+│  │  │   krypteret        │  │  │  └── Manual backups           │   │
+│  │  └── Regnskabsdata:   │  │  │                              │   │
+│  │      krypteret transp.│  │  │  IONOS VPS — C5 + IT-Grund-  │   │
+│  └───────────────────────┘  │  │  schutz cert., EU-hosted     │   │
+│                             └──┴──────────────────────────────┘   │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -213,14 +220,55 @@ Systemet understøtter automatisk migration af ældre, ukrypterede tokens:
 
 Krypteringsnøglen parses fra hex-format til `Buffer` ved første brug og caches derefter i hukommelsen. Dette forbedrer ydeevnen ved hyppige krypterings-/dekrypteringsoperationer og reducerer risikoen for parsing-fejl ved gentagne kald.
 
-### 3.10 Implementeringsmodul
+### 3.10 Backup-filkryptering
 
-Al kryptering er centraliseret i én server-side modul:
+Udover kryptering af følsomme databasefelter (bank-tokens, 2FA-secrets) implementerer AlphaFlow også **AES-256-GCM filkryptering** af alle backup-ZIP-arkiver før lagring på IONOS VPS.
+
+| Parameter | Værdi |
+|-----------|-------|
+| **Krypteringsalgoritme** | AES-256-GCM (samme algoritme som database-kryptering) |
+| **Nøgle** | Backup-specifik krypteringsnøgle (afledt fra `ENCRYPTION_KEY` eller separat `BACKUP_ENCRYPTION_KEY`) |
+| **IV** | 96 bit (12 bytes) — tilfældig pr. backup-fil |
+| **Auth Tag** | 128 bit (16 bytes) |
+| **Lagringssted** | IONOS VPS — Tenant-Backup/ folder |
+| **Lagringslokation** | EU-datacenter (C5 + IT-Grundschutz certificeret) |
+| **Implementering** | `src/lib/backup-engine.ts` |
+
+**Krypteringsproces for backup-filer:**
+
+```
+1. Opret ZIP-arkiv med tenant-data (JSON-filer)
+2. Beregn SHA-256 checksum af ZIP-arkivet
+3. Krypter ZIP-arkiv med AES-256-GCM → .zip.enc fil
+4. Gem krypteret fil i Tenant-Backup/ folder på IONOS VPS
+5. Gem SHA-256 checksum og metadata i database
+```
+
+**Dekrypteringsproces ved gendannelse:**
+
+```
+1. Læs krypteret backup-fil fra Tenant-Backup/
+2. Dekrypter med AES-256-GCM → ZIP-arkiv
+3. Verificer SHA-256 checksum af ZIP-arkivet
+4. Parse og importer data via atomisk database-transaktion
+```
+
+> **Vigtigt:** Backup-filer er krypteret med AES-256-GCM, hvilket sikrer både fortrolighed og integritet. Selv ved uautoriseret adgang til IONOS VPS filsystemet kan backup-filer ikke læses uden den korrekte krypteringsnøgle. IONOS VPS er C5 (BSI) og IT-Grundschutz certificeret med alle datacentre i Europa.
+
+### 3.11 Implementeringsmodul
+
+Al kryptering er centraliseret i server-side moduler:
 
 - **Fil:** `src/lib/crypto.ts`
 - **Miljø:** Server-side kun (indlejres ikke i klient-kode)
 - **Funktioner:** `encrypt()` og `decrypt()`
 - **Runtime:** Node.js `crypto` modul (Web Crypto API understøttes ikke på server-side i denne kontekst)
+
+Backup-kryptering er implementeret i:
+
+- **Fil:** `src/lib/backup-engine.ts`
+- **Funktioner:** Filkryptering og dekryptering af backup-ZIP-arkiver
+- **Lagringssted:** IONOS VPS — Tenant-Backup/ folder (EU, C5 + IT-Grundschutz)
 
 ---
 
@@ -486,6 +534,8 @@ Nedenstående tabel viser alle kildekodefiler, der er direkte involveret i krypt
 | Fil | Rolle |
 |-----|-------|
 | `src/lib/crypto.ts` | Krypterings-/dekrypteringsmodul. Implementerer AES-256-GCM med tilfældig IV, authentication tag og hex-nøgleparsing. Server-side kun. |
+| `src/lib/backup-engine.ts` | Backup-motor. Opretter og gendanner tenant-snapshots. AES-256-GCM kryptering af backup-ZIP-filer før lagring på IONOS VPS. SHA-256 checksum-verificering. |
+| `src/lib/backup-scheduler.ts` | Backup-scheduler. Automatiske cron-baserede backup-cykler (hourly/daily/weekly/monthly). |
 | `src/lib/password.ts` | Adgangskode-hashingsmodul. Implementerer bcrypt med 12 salt-runder. |
 | `src/app/api/bank-connections/route.ts` | API-rute for bankforbindelser. Krypterer bank-tokens ved oprettelse, dekrypterer ved synkronisering. |
 | `src/app/api/bank-connections/[id]/consent/route.ts` | API-rute for samtykkefornyelse. Krypterer nye bank-tokens ved fornyelse af samtykke. |

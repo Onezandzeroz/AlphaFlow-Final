@@ -38,11 +38,13 @@ Dokumentet adresserer specifikt følgende krav fra Erhvervsstyrelsen:
 Denne risikovurdering dækker følgende systemkomponenter:
 
 - **Applikation:** AlphaFlow Next.js 16 webapplikation (TypeScript, Prisma ORM)
+- **Applikationsserver:** IONOS VPS (Cloud VPS, C5 + IT-Grundschutz cert., EU-hosted)
 - **Database:** Neon PostgreSQL (hosted, EU-baseret)
+- **Backup-lagring:** IONOS VPS (Tenant-Backup/ folder, AES-256-GCM krypteret)
 - **Reverse proxy/TLS:** Caddy (open source, TLS 1.3)
 - **E-faktura:** OIOUBL og Peppol BIS Billing 3.0 parser/validator
 - **Valutakurser:** Frankfurter API (ECB reference rates)
-- **Backup:** Automatiseret tenant-snapshot backup med SHA-256 verificering
+- **Backup:** Automatiseret tenant-snapshot backup med AES-256-GCM kryptering og SHA-256 verificering
 - **Tredjepartstjenester:** NemHandel-klient, bank-sync integrationer
 
 ### 1.3 Metodologi
@@ -100,9 +102,9 @@ Følgende kritiske informationssystemer er identificeret som væsentlige aktiver
 | **A3** | Bankforbindelser | Data | Fortroligt | Bank access tokens, refresh tokens (AES-256-GCM krypterede), kontoudtog, bank-reconciliation data |
 | **A4** | Audit trail | Data | Fortroligt | Uforanderlig log over alle ændringer til regnskabsdata (bogføringslov §10-12) |
 | **A5** | E-faktura data | Data | Fortroligt | Modtagne OIOUBL/Peppol fakturaer, kreditnotaer og genererede responses |
-| **A6** | Backup arkiv | Data | Fortroligt | Automatiske og manuelle snapshots (ZIP med SHA-256 checksum) af alle tenant-data |
+| **A6** | Backup arkiv | Data | Fortroligt | Automatiske og manuelle snapshots (AES-256-GCM krypteret ZIP med SHA-256 checksum) af alle tenant-data, lagret på IONOS VPS i EU |
 | **A7** | Applikationskode | Software | Internt | Next.js kildekode, API routes, library-moduler |
-| **A8** | Infrastruktur | System | Internt | Server, database (Neon PostgreSQL), reverse proxy (Caddy), filsystem |
+| **A8** | Infrastruktur | System | Internt | IONOS VPS (applikationsserver + backup-lagring, C5 + IT-Grundschutz), Neon PostgreSQL database, Caddy reverse proxy |
 
 ### Aktivafhængigheder
 
@@ -112,6 +114,8 @@ A1 (Regnskabsdata) ──beskyttes af──→ A4 (Audit trail)
 A3 (Bankforbindelser) ──beskyttes af──→ AES-256-GCM kryptering
 A2 (Brugerdata) ──beskyttes af──→ bcrypt + 2FA + RBAC
 A6 (Backup) ──gendanner──→ A1 + A2 + A3 + A4 + A5
+A6 (Backup) ──krypteret med──→ AES-256-GCM filkryptering (lagret på IONOS VPS)
+A8 (Infrastruktur) ──hostet af──→ IONOS VPS (C5 + IT-Grundschutz, EU)
 ```
 
 ---
@@ -181,7 +185,28 @@ Trusler er kategoriseret i fire hovedkategorier baseret på CIKA (Confidentialit
 | Sikkerhedsbreach hos Neon | 5 | 1 | SOC 2 Type II certificering, sslmode=require krypterer transport |
 | Kontraktligt driftsstop | 4 | 1 | Databehandleraftale indgået, eksport-funktionalitet sikrer portabilitet |
 
-### 4.2 Caddy (Reverse Proxy / TLS)
+### 4.2 IONOS VPS (Applikationsserver og Backup-lagring)
+
+| Egenskab | Vurdering |
+|----------|-----------|
+| **Type** | Cloud VPS (Virtual Private Server) |
+| **Lokation** | EU/EØS (alle datacentre i Europa) |
+| **Certificeringer** | C5 (BSI Cloud Computing Compliance) + IT-Grundschutz — første europæiske udbyder med begge |
+| **Kritikalitet** | 🔴 Kritisk — applikationsserver og lokal backup-lagring |
+| **Konsekvens ved nedetid** | Komplet tab af tilgængelighed; backup-gendannelse kræver adgang til IONOS VPS |
+| **ISO-certificering** | 25 ISO-certificerede datacentre i Europa med geo-redundans |
+
+**Identificerede risici:**
+
+| Risiko | Konsekvens | Sandsynlighed | Foranstaltning |
+|--------|------------|---------------|----------------|
+| VPS nedetid (hardware) | 4 | 2 | PM2 auto-restart, IONOS geo-redundans, beredskabsplan for servergendannelse |
+| Sikkerhedsbreach på VPS | 5 | 1 | C5 + IT-Grundschutz certificering, DDoS-beskyttelse, 2FA/brute-force beskyttelse, SSH-nøgler |
+| Tab af backup-data | 4 | 1 | AES-256-GCM kryptering af backup-filer, SHA-256 checksum, Neon PITR som alternativ kilde |
+| Dataoverførsel til tredjelande | 5 | 1 | Alle IONOS-datacentre i Europa, DPA indgået, fuld GDPR-compliance |
+| DDoS angreb | 3 | 2 | IONOS automatisk DDoS-detektion og blokering, Caddy rate limiting |
+
+### 4.3 Caddy (Reverse Proxy / TLS)
 
 | Egenskab | Vurdering |
 |----------|-----------|
@@ -198,7 +223,7 @@ Trusler er kategoriseret i fire hovedkategorier baseret på CIKA (Confidentialit
 | Caddy sårbarhed | 3 | 1 | Regelmæssige opdateringer, open source audit |
 | Certificate expiry | 2 | 1 | Caddy auto-fornyer certifikater via ACME-protokollen |
 
-### 4.3 Frankfurter API (Valutakurser)
+### 4.4 Frankfurter API (Valutakurser)
 
 | Egenskab | Vurdering |
 |----------|-----------|
@@ -215,7 +240,7 @@ Trusler er kategoriseret i fire hovedkategorier baseret på CIKA (Confidentialit
 | Manipulerede kurser | 3 | 1 | ECB er autoriseret offentlig datakilde, validering af responsformat |
 | API deprecation | 2 | 1 | Open source, ECB-reference data, nem udskiftning til alternativ kilde |
 
-### 4.4 E-faktura Netværk (NemHandel / Peppol)
+### 4.5 E-faktura Netværk (NemHandel / Peppol)
 
 | Egenskab | Vurdering |
 |----------|-----------|
@@ -326,7 +351,7 @@ Alle eksisterende tekniske og organisatoriske kontroller er dokumenteret nedenfo
 
 | Kontrol ID | Kontrol | Reference | Beskrivelse |
 |------------|---------|-----------|-------------|
-| **K-BK1** | Automatiske Backups | `src/lib/backup-engine.ts`, `src/lib/backup-scheduler.ts` | Fire niveauer: hourly (minut 5, hver time), daily (kl. 02:15), weekly (mandag kl. 03:30), monthly (1. kl. 04:00). Tenant-snapshot som ZIP med struktureret JSON (manifest.json, company.json, accounts.json, osv.). SHA-256 checksum. |
+| **K-BK1** | Automatiske Backups | `src/lib/backup-engine.ts`, `src/lib/backup-scheduler.ts` | Fire niveauer: hourly (minut 5, hver time), daily (kl. 02:15), weekly (mandag kl. 03:30), monthly (1. kl. 04:00). Tenant-snapshot som ZIP med struktureret JSON. **AES-256-GCM filkryptering** af backup-ZIP før lagring på IONOS VPS. SHA-256 checksum. Lagret på IONOS VPS i EU (C5 + IT-Grundschutz cert.). |
 | **K-BK2** | Retention Policy | `src/lib/backup-engine.ts` (linje 76–82) | Hourly: 24 backups (25 timer), Daily: 30 backups (31 dage), Weekly: 52 backups (53 dage), Monthly: 60 backups (1 år), Manual: 999 backups (90 dage). Automated cleanup dagligt kl. 03:00. |
 | **K-BK3** | Backup Restore med Verificering | `src/lib/backup-engine.ts` (`restoreBackup()`) | SHA-256 checksum-validering før restore. Pre-restore safety backup oprettes automatisk. Atomic database-transaktion (rollback ved fejl). 10-minut timeout for store restores. |
 | **K-BK4** | Per-Tenant Cron Health | `src/lib/backup-scheduler.ts` (`getCronHealth()`) | Uafhængig overvågning per tenant: idle/pending/healthy/unhealthy. Tracker consecutive errors. Overlever server-genstarter via database-hydratering. |
@@ -433,6 +458,7 @@ Alle ændringer i risikovurderingen dokumenteres i tabelform:
 | Dato | Ændring | Forårsaget af | Udført af |
 |------|---------|---------------|-----------|
 | 1. juli 2025 | Første version (v2.0) af IT-risikovurdering | System anmeldelse til Erhvervsstyrelsen | AlphaAi |
+| 2025 | Tilføjet IONOS VPS som tredjepartsrisiko (C5 + IT-Grundschutz, EU-hosted), opdateret backup-kryptering til AES-256-GCM | IONOS VPS tilføjet som leverandør | AlphaAi |
 
 ---
 
@@ -459,7 +485,7 @@ Denne IT-risikovurdering har identificeret og vurderet **18 specifikke trusler**
    - GDPR art. 32 (sikkerhed ved behandling af personoplysninger)
    - BEK nr. 98 (IT-sikkerhed på tilstrækkeligt niveau, hændelig tilintetgørelse)
 
-4. **Tredjepartsrisici** er acceptable: Neon (SOC 2 Type II, EU-baseret), Caddy (open source, auto-TLS), Frankfurter API (ECB-reference, cache med fallback).
+4. **Tredjepartsrisici** er acceptable: Neon (SOC 2 Type II, EU-baseret), IONOS VPS (C5 + IT-Grundschutz, EU-baseret, første europæiske udbyder med begge cert.), Caddy (open source, auto-TLS), Frankfurter API (ECB-reference, cache med fallback).
 
 5. **4 accepterede mellemrisici** (R1-R4) er alle effektivt dæmpet af 2FA, automatiske backups og monitoring, og udgør ikke en trussel mod systemets lovmæssige forpligtelser.
 

@@ -6,6 +6,7 @@ import { auditCreate, requestMetadata } from '@/lib/audit';
 import { AccountType, AccountGroup } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -566,27 +567,34 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the closing journal entry (POSTED status)
-    const closingEntry = await db.journalEntry.create({
-      data: {
-        date: new Date(year, 11, 31), // December 31
-        description: `Årsafslutning ${year}`,
-        status: 'POSTED',
-        userId: ctx.id,
-        companyId: ctx.activeCompanyId!,
-        lines: {
-          create: closingLinesData.map(({ accountId, ...rest }) => ({
-            ...rest,
-            account: { connect: { id: accountId } },
-          })),
-        },
-      },
-      include: {
-        lines: {
-          include: {
-            account: true,
+    const closingEntry = await db.$transaction(async (tx) => {
+      const je = await tx.journalEntry.create({
+        data: {
+          date: new Date(year, 11, 31), // December 31
+          description: `Årsafslutning ${year}`,
+          status: 'POSTED',
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId!,
+          lines: {
+            create: closingLinesData.map(({ accountId, ...rest }) => ({
+              ...rest,
+              account: { connect: { id: accountId } },
+            })),
           },
         },
-      },
+        include: {
+          lines: {
+            include: {
+              account: true,
+            },
+          },
+        },
+      });
+
+      // Assign voucher number for POSTED journal entry
+      await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
+
+      return je;
     });
 
     // Lock all 12 fiscal periods for the year

@@ -8,6 +8,7 @@ import JSZip from 'jszip';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { auditLog } from '@/lib/audit';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // POST /api/import-tenant — Restore tenant data from a previously exported ZIP snapshot
 // Version 3: atomic transaction, validate-before-delete, proper error reporting
@@ -371,18 +372,25 @@ export async function POST(request: NextRequest) {
       let filesSkipped = 0;
 
       for (const je of journalEntries) {
+        const jeStatus = (je.status as string) || 'POSTED';
         const entry = await tx.journalEntry.create({
           data: {
             date: new Date(String(je.date)),
             description: String(je.description),
             reference: je.reference ?? undefined,
-            status: (je.status as never) || 'POSTED',
+            voucherNumber: (je.voucherNumber as string) ?? null,
+            status: jeStatus as never,
             cancelled: je.cancelled ?? false,
             cancelReason: je.cancelReason ?? undefined,
             userId,
             companyId,
           },
         });
+
+        // For imported POSTED entries without a voucherNumber, assign one
+        if (jeStatus === 'POSTED' && !je.voucherNumber) {
+          await assignVoucherNumberIfPosted(tx, entry.id, companyId, 'POSTED');
+        }
 
         if (Array.isArray(je.lines)) {
           for (const line of je.lines) {

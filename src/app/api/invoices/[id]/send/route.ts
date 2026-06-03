@@ -6,6 +6,7 @@ import { sendInvoiceEmail } from '@/lib/email-service';
 import { logger } from '@/lib/logger';
 import { requireTokenPayAccess } from '@/lib/tokenpay';
 import { blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // POST /api/invoices/[id]/send — Generate PDF, send email, mark as SENT
 export async function POST(
@@ -233,25 +234,29 @@ export async function POST(
         const totalCredit = jeLines.reduce((s, l) => s + l.credit, 0);
 
         if (jeLines.length >= 2 && Math.abs(totalDebit - totalCredit) < 0.01) {
-          await db.journalEntry.create({
-            data: {
-              date: invoice.issueDate,
-              description: `Tilgodehavende – Faktura ${invoice.invoiceNumber} – ${invoice.customerName}`,
-              reference: invoice.invoiceNumber,
-              status: 'POSTED',
-              userId: ctx.id,
-              companyId,
-              lines: {
-                create: jeLines.map(l => ({
-                  companyId,
-                  accountId: l.accountId,
-                  debit: l.debit,
-                  credit: l.credit,
-                  description: l.description,
-                  vatCode: (l.vatCode as any) ?? null,
-                })),
+          await db.$transaction(async (tx) => {
+            const je = await tx.journalEntry.create({
+              data: {
+                date: invoice.issueDate,
+                description: `Tilgodehavende – Faktura ${invoice.invoiceNumber} – ${invoice.customerName}`,
+                reference: invoice.invoiceNumber,
+                status: 'POSTED',
+                userId: ctx.id,
+                companyId,
+                lines: {
+                  create: jeLines.map(l => ({
+                    companyId,
+                    accountId: l.accountId,
+                    debit: l.debit,
+                    credit: l.credit,
+                    description: l.description,
+                    vatCode: (l.vatCode as any) ?? null,
+                  })),
+                },
               },
-            },
+            });
+            // Assign voucher number for POSTED journal entry
+            await assignVoucherNumberIfPosted(tx, je.id, companyId, 'POSTED');
           });
         }
       }

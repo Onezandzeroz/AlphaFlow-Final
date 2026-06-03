@@ -7,6 +7,7 @@ import { logger } from '@/lib/logger';
 import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
 import { requireTokenPayAccess } from '@/lib/tokenpay';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // GET - List journal entries for the authenticated user
 export async function GET(request: NextRequest) {
@@ -165,32 +166,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const entry = await db.journalEntry.create({
-      data: {
-        date: new Date(date),
-        description,
-        reference: reference || null,
-        status: entryStatus,
-        userId: ctx.id,
-        companyId: ctx.activeCompanyId!,
-        lines: {
-          create: lines.map((l: { accountId: string; debit: number; credit: number; description?: string; vatCode?: string }) => ({
-            companyId: ctx.activeCompanyId!,
-            accountId: l.accountId,
-            debit: l.debit,
-            credit: l.credit,
-            description: l.description || null,
-            vatCode: (l.vatCode as VATCode | undefined) ?? null,
-          })),
-        },
-      },
-      include: {
-        lines: {
-          include: {
-            account: true,
+    // Create journal entry inside a transaction to support atomic voucher number assignment
+    const entry = await db.$transaction(async (tx) => {
+      const je = await tx.journalEntry.create({
+        data: {
+          date: new Date(date),
+          description,
+          reference: reference || null,
+          status: entryStatus,
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId!,
+          lines: {
+            create: lines.map((l: { accountId: string; debit: number; credit: number; description?: string; vatCode?: string }) => ({
+              companyId: ctx.activeCompanyId!,
+              accountId: l.accountId,
+              debit: l.debit,
+              credit: l.credit,
+              description: l.description || null,
+              vatCode: (l.vatCode as VATCode | undefined) ?? null,
+            })),
           },
         },
-      },
+        include: {
+          lines: {
+            include: {
+              account: true,
+            },
+          },
+        },
+      });
+
+      // Assign voucher number if the entry is created directly as POSTED
+      await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, entryStatus);
+
+      return je;
     });
 
     await auditCreate(

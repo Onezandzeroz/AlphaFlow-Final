@@ -334,6 +334,7 @@ Backup-systemet er implementeret i følgende moduler:
 |----------|---------|
 | **Format** | ZIP-arkiv med strukturerede JSON-filer pr. tenant |
 | **Indhold** | manifest.json, company.json, accounts.json, transactions.json, invoices.json, journal-entries.json, m.fl. |
+| **Filkryptering** | AES-256-GCM kryptering af backup-ZIP før lagring på IONOS VPS |
 | **Integritetskontrol** | SHA-256-checksum af hele ZIP-filen (streaming-beregnet) |
 | **Versionsnummer** | Manifest version 2 (aktuel) |
 | **Tenant-isolering** | Hver backup indeholder kun data tilhørende én specifik virksomhed |
@@ -389,8 +390,12 @@ Før hver gendannelse oprettes automatisk en **pre-restore safety backup** for a
 | **Lag 1: Neons infrastruktur** | Neon | AES-256-kryptering på disk, PITR, daglige backups |
 | **Lag 2: AlphaFlows tenant-backups** | AlphaFlow | SHA-256-verificerede tenant-snapshots med 5-års retention |
 | **Lag 3: Applikationskryptering** | AlphaFlow | AES-256-GCM for følsomme felter (tokens, 2FA-secrets) |
+| **Lag 4: Backup-filkryptering** | AlphaFlow | AES-256-GCM kryptering af backup-filer før lagring på IONOS VPS |
+| **Lag 5: Lokal backup-lagring (IONOS VPS)** | IONOS | Backup-arkiver lagret på IONOS VPS i EU med C5 + IT-Grundschutz certificering |
 
-Disse tre lag er teknologisk uafhængige — et fejl i ét lag kompromitterer ikke de øvrige.
+Disse fem lag er teknologisk uafhængige — et fejl i ét lag kompromitterer ikke de øvrige.
+
+> **Bemærkning vedr. lokal backup-lagring:** AlphaFlows backup-filer lagres på en IONOS VPS (Virtual Private Server), der fungerer som applikationsserver og lokal backup-lagring. IONOS er den første europæiske cloud-udbyder med både **C5 (BSI Cloud Computing Compliance)** og **IT-Grundschutz**-certificeringer. Alle IONOS-datacentre er beliggende i Europa, hvilket sikrer fuld GDPR-compliance og at ingen data overføres til tredjelande. Backup-filer er desuden krypteret med AES-256-GCM før lagring i Tenant-Backup/ folderen på IONOS VPS.
 
 ---
 
@@ -415,7 +420,7 @@ Neon PostgreSQL opfylder som databaseløsning alle krav, der stilles til en tred
 | Datatab ved Neon-nedetid | Lav | Høj | AlphaFlows uafhængige tenant-backups (defense in depth) |
 | Uautoriseret adgang til database | Meget lav | Kritisk | `sslmode=require`, adgangskontrol, applikationskryptering |
 | Dataoverførsel uden for EU/EEA | Meget lav | Høj | EU-region valgt; DPA forbyder transfer til tredjelande |
-| Service-afbrydelse hos Neon | Lav | Medium | PITR, auto-scaling, AlphaFlows lokale backups |
+| Service-afbrydelse hos Neon | Lav | Medium | PITR, auto-scaling, AlphaFlows lokale backups (AES-256-GCM krypteret på IONOS VPS i EU) |
 
 ### 8.3 Dokumentgodkendelse
 

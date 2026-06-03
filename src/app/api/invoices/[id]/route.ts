@@ -6,6 +6,7 @@ import { VATCode } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
 import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // GET /api/invoices/[id] - Get a specific invoice
 export async function GET(
@@ -165,25 +166,32 @@ async function createAccrualJournalEntry(
   }
 
   // Create the journal entry (reference = invoiceNumber, no suffix)
-  const je = await db.journalEntry.create({
-    data: {
-      date: existing.issueDate,
-      description: `Tilgodehavende – Faktura ${existing.invoiceNumber} – ${existing.customerName}`,
-      reference: existing.invoiceNumber,
-      status: 'POSTED',
-      userId: ctx.id,
-      companyId: effectiveCompanyId(ctx),
-      lines: {
-        create: jeLines.map(l => ({
-          companyId: effectiveCompanyId(ctx),
-          accountId: l.accountId,
-          debit: l.debit,
-          credit: l.credit,
-          description: l.description,
-          vatCode: (l.vatCode as VATCode | undefined) ?? null,
-        })),
+  const je = await db.$transaction(async (tx) => {
+    const journalEntry = await tx.journalEntry.create({
+      data: {
+        date: existing.issueDate,
+        description: `Tilgodehavende – Faktura ${existing.invoiceNumber} – ${existing.customerName}`,
+        reference: existing.invoiceNumber,
+        status: 'POSTED',
+        userId: ctx.id,
+        companyId: effectiveCompanyId(ctx),
+        lines: {
+          create: jeLines.map(l => ({
+            companyId: effectiveCompanyId(ctx),
+            accountId: l.accountId,
+            debit: l.debit,
+            credit: l.credit,
+            description: l.description,
+            vatCode: (l.vatCode as VATCode | undefined) ?? null,
+          })),
+        },
       },
-    },
+    });
+
+    // Assign voucher number for POSTED journal entry
+    await assignVoucherNumberIfPosted(tx, journalEntry.id, effectiveCompanyId(ctx), 'POSTED');
+
+    return journalEntry;
   });
 
   await auditCreate(
@@ -247,25 +255,32 @@ async function createCashReceiptJournalEntry(
   // Reference uses "-IND" suffix to distinguish from the accrual entry
   const cashRef = `${existing.invoiceNumber}-IND`;
 
-  const je = await db.journalEntry.create({
-    data: {
-      date: paymentDate || existing.issueDate,
-      description: `Indbetaling – Faktura ${existing.invoiceNumber} – ${existing.customerName}`,
-      reference: cashRef,
-      status: 'POSTED',
-      userId: ctx.id,
-      companyId: effectiveCompanyId(ctx),
-      lines: {
-        create: jeLines.map(l => ({
-          companyId: effectiveCompanyId(ctx),
-          accountId: l.accountId,
-          debit: l.debit,
-          credit: l.credit,
-          description: l.description,
-          vatCode: null,
-        })),
+  const je = await db.$transaction(async (tx) => {
+    const journalEntry = await tx.journalEntry.create({
+      data: {
+        date: paymentDate || existing.issueDate,
+        description: `Indbetaling – Faktura ${existing.invoiceNumber} – ${existing.customerName}`,
+        reference: cashRef,
+        status: 'POSTED',
+        userId: ctx.id,
+        companyId: effectiveCompanyId(ctx),
+        lines: {
+          create: jeLines.map(l => ({
+            companyId: effectiveCompanyId(ctx),
+            accountId: l.accountId,
+            debit: l.debit,
+            credit: l.credit,
+            description: l.description,
+            vatCode: null,
+          })),
+        },
       },
-    },
+    });
+
+    // Assign voucher number for POSTED journal entry
+    await assignVoucherNumberIfPosted(tx, journalEntry.id, effectiveCompanyId(ctx), 'POSTED');
+
+    return journalEntry;
   });
 
   await auditCreate(

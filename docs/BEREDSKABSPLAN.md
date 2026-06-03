@@ -47,10 +47,11 @@ Denne beredskabsplan beskriver AlphaFlows procedurer for forebyggelse, registrer
 Denne plan dækker:
 
 - AlphaFlow-applikationen (Next.js 16)
+- IONOS VPS (applikationsserver og lokal backup-lagring i EU)
 - Neon PostgreSQL-database
 - Caddy reverse proxy
 - Mini-services (TokenPay Access Service, notification WS, Hermes AI)
-- Backup-system og backup-lagring
+- Backup-system og backup-lagring (AES-256-GCM krypteret på IONOS VPS)
 
 ---
 
@@ -118,9 +119,10 @@ Denne plan dækker:
 | 1 | PM2 registrerer crash og forsøger automatisk genstart | System | Automatisk (5 sek) |
 | 2 | Verificer at applikation er tilgængelig via health check | System | Automatisk |
 | 3 | Hvis PM2 max_restarts nået: undersøg fejllogs (`./logs/error.log`) | SysAdmin | 5 min |
-| 4 | Eskaler til Technical Lead hvis fejlen ikke kan løses | SysAdmin | 15 min |
-| 5 | Udbedring / hotfix og redeployment | Tech Lead | < 2 timer |
-| 6 | Verificer system tilgængelighed og audit log | SysAdmin | 15 min |
+| 4 | Kontakt IONOS support hvis infrastruktur-problem mistænkes | SysAdmin | 10 min |
+| 5 | Eskaler til Technical Lead hvis fejlen ikke kan løses | SysAdmin | 15 min |
+| 6 | Udbedring / hotfix og redeployment | Tech Lead | < 2 timer |
+| 7 | Verificer system tilgængelighed og audit log | SysAdmin | 15 min |
 
 **Konkret PM2-konfiguration** (`ecosystem.config.js`):
 ```javascript
@@ -172,7 +174,8 @@ Denne plan dækker:
 **Forebyggelse:**
 - Uforanderlig audit trail (`src/lib/audit.ts`) — kan aldrig slettes eller ændres
 - AES-256-GCM kryptering af følsomme data (`src/lib/crypto.ts`)
-- Krypterede backups (SHA-256 verificerede ZIP-arkiver)
+- Krypterede backups (AES-256-GCM krypterede ZIP-arkiver lagret på IONOS VPS i EU)
+- IONOS VPS med C5 (BSI) og IT-Grundschutz certificering sikrer backup-lagring i EU
 - Server adgang kun via SSH-nøgler (ingen password-login)
 - RBAC med 5 roller og 23 permissions (`src/lib/rbac.ts`)
 - TOTP-baseret 2FA (`src/lib/two-factor.ts`)
@@ -294,24 +297,28 @@ Backup-systemet er implementeret i følgende filer:
 1. Vælg backup til restore
    └── GET /api/backups → liste over tilgængelige backups
 
-2. Verificer backup-integritet
+2. Dekrypter backup-fil
+   └── AES-256-GCM dekryptering af krypteret backup-ZIP (src/lib/backup-engine.ts)
+   └── Backup-filer er krypteret før lagring på IONOS VPS
+
+3. Verificer backup-integritet
    └── calculateChecksum(filePath) → sammenlign med gemt SHA-256
 
-3. Opret pre-restore safety backup
+4. Opret pre-restore safety backup
    └── createBackup(userId, 'automatic', 'hourly', companyId, 'tenant')
    └── Hvis safety backup fejler → ABORT restore (data beskyttet)
 
-4. Parse backup ZIP
+5. Parse backup ZIP
    └── Valider manifest.json (version 2 kræves)
 
-5. Udfør restore i atomisk database-transaktion
+6. Udfør restore i atomisk database-transaktion
    └── db.$transaction(async (tx) => {
        ├── Slet eksisterende tenant-data (FK-safe rækkefølge)
        └── Importér data fra backup ZIP
      }, { timeout: 10 * 60 * 1000 })
 
-6. Ved succes: audit log med gendannede record counts
-7. Ved fiasko: transaktion ruller automatisk tilbage (ROLLBACK)
+7. Ved succes: audit log med gendannede record counts
+8. Ved fiasko: transaktion ruller automatisk tilbage (ROLLBACK)
 ```
 
 #### SHA-256 checksum-verifikation
@@ -366,23 +373,25 @@ Backups udføres automatisk via `src/lib/backup-scheduler.ts` med følgende tids
 
 ### 4.4 Backup-format
 
-Alle backups gemmes som ZIP-arkiver med strukturerede JSON-filer:
+Alle backups gemmes som AES-256-GCM krypterede ZIP-arkiver med strukturerede JSON-filer:
 
 ```
-snapshot-tenant-hourly-2025-01-15T10-30-00-000Z.zip
-├── manifest.json          — Metadata (version, timestamp, record counts)
-├── company.json           — Virksomhedsindstillinger
-├── accounts.json          — Kontoplan
-├── contacts.json          — Kontakter
-├── transactions.json      — Transaktioner
-├── invoices.json          — Fakturaer
-├── journal-entries.json   — Journalposter (med linjer og bilag)
-├── fiscal-periods.json    — Regnskabsperioder
-├── budgets.json           — Budgetter
-├── recurring-entries.json  — Tilbagevendende poster
-├── bank-statements.json   — Bankkontoudtog
-├── bank-connections.json   — Bankforbindelser
-└── members.json           — Teammedlemmer
+snapshot-tenant-hourly-2025-01-15T10-30-00-000Z.zip.enc
+├── [AES-256-GCM krypteret ZIP-arkiv]
+│   ├── manifest.json          — Metadata (version, timestamp, record counts)
+│   ├── company.json           — Virksomhedsindstillinger
+│   ├── accounts.json          — Kontoplan
+│   ├── contacts.json          — Kontakter
+│   ├── transactions.json      — Transaktioner
+│   ├── invoices.json          — Fakturaer
+│   ├── journal-entries.json   — Journalposter (med linjer og bilag)
+│   ├── fiscal-periods.json    — Regnskabsperioder
+│   ├── budgets.json           — Budgetter
+│   ├── recurring-entries.json  — Tilbagevendende poster
+│   ├── bank-statements.json   — Bankkontoudtog
+│   ├── bank-connections.json   — Bankforbindelser
+│   └── members.json           — Teammedlemmer
+└── Lagret på IONOS VPS (Tenant-Backup/ folder, EU-datacenter)
 ```
 
 ### 4.5 Cleanup procedure
@@ -509,11 +518,11 @@ Alle beredskabstests dokumenteres med:
 
 | Leverandør | Formål | Kontaktkanal | SLA |
 |-----------|--------|-------------|-----|
+| IONOS VPS | Applikationsserver og backup-lagring | https://www.ionos.de/hilfe | 24/7 telefon + chat |
 | Neon PostgreSQL | Database support | https://neon.tech/support | 24/7 chat |
 | Let's Encrypt | Certifikat-problemer | Community forum | Best effort |
 | Datatilsynet | GDPR-underretning | https://www.datatilsynet.dk | < 72 timer |
 | Erhvervsstyrelsen | Bogføringsloven | https://www.erhvervsstyrelsen.dk | Efter behov |
-| Webhosting-udbyder | Infrastruktur | [Indsæt kontakt] | 24/7 telefon |
 
 ### 7.3 Kommunikation med kunder
 
@@ -560,6 +569,7 @@ Ved incidents der påvirker kunder:
 |---------|------|----------|-----------|
 | 1.0 | 2025 | Første udgave | AlphaAi ApS |
 | 2.0 | 2025 | Opdateret med konkrete kode-referencer, RTO/RPO-beregninger og 6 incidentscenarier | AlphaAi ApS |
+| 2.1 | 2025 | Tilføjet IONOS VPS som applikationsserver/backup-lagring, AES-256-GCM backup-kryptering, dekryptering i restore-flow | AlphaAi ApS |
 
 ### 8.4 Godkendelse
 

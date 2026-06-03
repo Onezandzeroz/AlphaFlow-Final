@@ -13,6 +13,7 @@
 
 import { db } from '@/lib/db'
 import { seedChartOfAccounts } from '@/lib/seed-chart-of-accounts'
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number'
 import {
   TransactionType,
   InvoiceStatus,
@@ -1323,26 +1324,33 @@ export async function seedDemoCompany(demoCompanyId: string, systemUserId: strin
 
   let jeCount = 0
   for (const je of jeSeeds) {
-    await db.journalEntry.create({
-      data: {
-        date: je.date,
-        description: je.description,
-        reference: je.reference ?? null,
-        status: je.status,
-        cancelled: false,
-        userId: systemUserId,
-        companyId: demoCompanyId,
-        lines: {
-          create: je.lines.map((l) => ({
-            companyId: demoCompanyId,
-            accountId: ac(l.accountNumber),
-            debit: l.debit,
-            credit: l.credit,
-            vatCode: l.vatCode ?? null,
-            description: l.description ?? null,
-          })),
+    const created = await db.$transaction(async (tx) => {
+      const entry = await tx.journalEntry.create({
+        data: {
+          date: je.date,
+          description: je.description,
+          reference: je.reference ?? null,
+          status: je.status,
+          cancelled: false,
+          userId: systemUserId,
+          companyId: demoCompanyId,
+          lines: {
+            create: je.lines.map((l) => ({
+              companyId: demoCompanyId,
+              accountId: ac(l.accountNumber),
+              debit: l.debit,
+              credit: l.credit,
+              vatCode: l.vatCode ?? null,
+              description: l.description ?? null,
+            })),
+          },
         },
-      },
+      })
+
+      // Assign voucher number for POSTED demo entries
+      await assignVoucherNumberIfPosted(tx, entry.id, demoCompanyId, je.status)
+
+      return entry
     })
     jeCount++
   }

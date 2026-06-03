@@ -206,6 +206,10 @@ model Company {
   nextInvoiceSequence  Int      @default(1)
   currentYear          Int      @default(2026)
 
+  // Journal entry numbering (Bogføringsloven — fortløbende bilagsnummer)
+  journalPrefix        String   @default("BIL")   // Prefix for bilagsnumre
+  nextJournalSequence  Int      @default(1)       // Næste fortløbende nummer
+
   // Bank details
   bankName             String   @default("")
   bankAccount          String   @default("")
@@ -493,6 +497,7 @@ model Backup {
   filePath      String
   fileSize      Int
   sha256        String?
+  encrypted     Boolean  @default(false)              // true = AES-256-GCM encrypted .zip.enc file
   status        String   @default("completed")
   errorMessage  String?
   expiresAt     DateTime
@@ -567,25 +572,27 @@ model StandardAccountMapping {
 // ─── JOURNAL ENTRIES ──────────────────────────────────────────────
 
 model JournalEntry {
-  id          String             @id @default(cuid())
-  date        DateTime
-  description String
-  reference   String?
-  status      JournalEntryStatus @default(DRAFT)
-  cancelled   Boolean            @default(false)
-  cancelReason String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  userId      String?
-  user        User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
-  lines       JournalEntryLine[]
-  documents   Document[]
-  companyId   String
-  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id            String             @id @default(cuid())
+  date          DateTime
+  description   String
+  reference     String?
+  voucherNumber String?                     // Fortløbende bilagsnummer (f.eks. BIL-2026-0001) — tildeles ved POSTED
+  status        JournalEntryStatus @default(DRAFT)
+  cancelled     Boolean            @default(false)
+  cancelReason  String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  userId        String?
+  user          User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lines         JournalEntryLine[]
+  documents     Document[]
+  companyId     String
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, date])
   @@index([companyId, status, date])
   @@index([userId, date])
+  @@index([companyId, voucherNumber])
 }
 
 model JournalEntryLine {

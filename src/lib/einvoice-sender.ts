@@ -76,8 +76,10 @@ const MAX_RETRIES = 3;
 /** Retry delay in minutes (5 minutes) */
 const RETRY_DELAY_MINUTES = 5;
 
-/** NemHandel client singleton */
-const nemHandelClient = new NemHandelClient();
+/** NemHandel client singleton (simulation mode controlled by NEMHANDEL_SIMULATION_MODE env var) */
+const nemHandelClient = new NemHandelClient({
+  simulationMode: process.env.NEMHANDEL_SIMULATION_MODE !== 'false',
+});
 
 // ─── HELPERS ──────────────────────────────────────────────────────
 

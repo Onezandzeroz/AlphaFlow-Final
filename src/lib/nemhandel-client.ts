@@ -290,5 +290,11 @@ export class NemHandelClient {
 
 // ─── SINGLETON ────────────────────────────────────────────────────
 
-/** Shared NemHandel client instance (simulation mode by default) */
-export const nemHandelClient = new NemHandelClient();
+/** Shared NemHandel client instance.
+ * Simulation mode is controlled by the NEMHANDEL_SIMULATION_MODE env var.
+ * Default: true (safe — no real API calls until explicitly configured).
+ * Set NEMHANDEL_SIMULATION_MODE=false in production to enable real API calls.
+ */
+export const nemHandelClient = new NemHandelClient({
+  simulationMode: process.env.NEMHANDEL_SIMULATION_MODE !== 'false',
+});

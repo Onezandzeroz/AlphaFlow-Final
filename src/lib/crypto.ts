@@ -23,6 +23,8 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import fs from 'fs';
+import { rmSync } from 'fs';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -223,4 +225,91 @@ export function migrateBase64Token(value: string | null | undefined): string | n
  */
 export function generateEncryptionKey(): string {
   return randomBytes(KEY_LENGTH).toString('hex');
+}
+
+// ─── File Encryption (Backup Files) ─────────────────────────────────────────
+
+/**
+ * Encrypt a file using AES-256-GCM.
+ *
+ * Reads the file, encrypts its contents with the same ENCRYPTION_KEY used
+ * for bank tokens, and writes the encrypted version to a new file with
+ * a `.enc` suffix. The original unencrypted file is securely deleted.
+ *
+ * Encrypted file format (binary):
+ *   [12 bytes IV] [16 bytes authTag] [N bytes ciphertext]
+ *
+ * The IV and authTag are prepended as raw bytes (not base64) for efficient
+ * streaming during decryption.
+ *
+ * @param inputPath - Path to the unencrypted file (e.g., backup.zip)
+ * @returns Path to the encrypted file (e.g., backup.zip.enc)
+ * @throws Error if ENCRYPTION_KEY is not set or file operations fail
+ */
+export function encryptFile(inputPath: string): string {
+  const key = getEncryptionKey();
+  const iv = randomBytes(IV_LENGTH);
+
+  const inputBuffer = fs.readFileSync(inputPath);
+
+  const cipher = createCipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  const encrypted = Buffer.concat([cipher.update(inputBuffer), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+
+  // Format: IV (12 bytes) + authTag (16 bytes) + ciphertext
+  const outputBuffer = Buffer.concat([iv, authTag, encrypted]);
+
+  const encPath = inputPath + '.enc';
+  fs.writeFileSync(encPath, outputBuffer);
+
+  // Securely delete the unencrypted original
+  rmSync(inputPath, { force: true });
+
+  return encPath;
+}
+
+/**
+ * Decrypt a backup file that was encrypted with AES-256-GCM.
+ *
+ * Reads the encrypted file, parses the binary format, and writes
+ * the decrypted contents to a temporary file for processing.
+ *
+ * IMPORTANT: The caller is responsible for deleting the temporary
+ * decrypted file after use (security best practice).
+ *
+ * @param encPath - Path to the encrypted file (e.g., backup.zip.enc)
+ * @returns Path to a temporary decrypted file (e.g., backup.zip.tmp)
+ * @throws Error if ENCRYPTION_KEY is not set, decryption fails, or file is tampered
+ */
+export function decryptFile(encPath: string): string {
+  const key = getEncryptionKey();
+  const encBuffer = fs.readFileSync(encPath);
+
+  // Minimum size: IV (12) + authTag (16) + at least 1 byte ciphertext
+  if (encBuffer.length < IV_LENGTH + AUTH_TAG_LENGTH + 1) {
+    throw new Error(
+      'Encrypted file is too small to be valid. ' +
+      `Expected at least ${IV_LENGTH + AUTH_TAG_LENGTH + 1} bytes, got ${encBuffer.length}.`
+    );
+  }
+
+  // Parse: IV (12 bytes) + authTag (16 bytes) + ciphertext
+  const iv = encBuffer.subarray(0, IV_LENGTH);
+  const authTag = encBuffer.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+  const ciphertext = encBuffer.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
+
+  const decipher = createDecipheriv(ALGORITHM, key, iv, {
+    authTagLength: AUTH_TAG_LENGTH,
+  });
+  decipher.setAuthTag(authTag);
+
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+
+  // Write to temp file for JSZip to read
+  const tempPath = encPath.replace('.zip.enc', '.zip.tmp');
+  fs.writeFileSync(tempPath, decrypted);
+
+  return tempPath;
 }

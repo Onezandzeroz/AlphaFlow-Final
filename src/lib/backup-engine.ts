@@ -42,6 +42,7 @@ import { createWriteStream, createReadStream, mkdirSync, rmSync } from 'fs';
 import archiver from 'archiver';
 import JSZip from 'jszip';
 import { logger } from '@/lib/logger';
+import { encryptFile, decryptFile } from '@/lib/crypto';
 
 // Transaction client type from Prisma
 type PrismaTransactionClient = Parameters<Parameters<typeof db.$transaction>[0]>[0];
@@ -270,7 +271,7 @@ async function createTenantSnapshotZip(companyId: string, zipOutputPath: string)
         archive.append(JSON.stringify(journalEntries.map((je) => ({
           date: je.date.toISOString().split('T')[0], description: je.description,
           reference: je.reference, status: je.status, cancelled: je.cancelled,
-          cancelReason: je.cancelReason,
+          cancelReason: je.cancelReason, voucherNumber: je.voucherNumber,
           lines: je.lines.map((l) => ({
             accountId: l.accountId, debit: l.debit, credit: l.credit,
             vatCode: l.vatCode, description: l.description,
@@ -395,9 +396,13 @@ export async function createBackup(
     // ─── Tenant snapshot backup ──────────────────────────────────────
     await createTenantSnapshotZip(companyId, zipFilePath);
 
-    // Calculate SHA-256 of the ZIP file (streaming)
-    const stats = fs.statSync(zipFilePath);
+    // Calculate SHA-256 of the unencrypted ZIP file (streaming)
     const sha256 = await calculateChecksum(zipFilePath);
+
+    // Encrypt the ZIP file with AES-256-GCM (same ENCRYPTION_KEY as bank tokens)
+    // After encryption, the unencrypted ZIP is securely deleted from disk.
+    const encPath = encryptFile(zipFilePath);
+    const encStats = fs.statSync(encPath);
 
     // Calculate expiry
     const expiresMs = RETENTION[backupType]?.expiresMs || 365 * 24 * 60 * 60 * 1000;
@@ -413,9 +418,10 @@ export async function createBackup(
         triggerType,
         backupType,
         scope,
-        filePath: zipFilePath,
-        fileSize: stats.size,
+        filePath: encPath,
+        fileSize: encStats.size,
         sha256,
+        encrypted: true,
         status: 'completed',
         expiresAt,
       },
@@ -432,18 +438,19 @@ export async function createBackup(
         triggerType,
         backupType,
         scope,
-        fileSize: stats.size,
+        fileSize: encStats.size,
         sha256,
         filename: zipFilename,
         format: 'zip',
+        encrypted: true,
         ...meta,
       },
     });
 
     return {
       id: backup.id,
-      filePath: zipFilePath,
-      fileSize: stats.size,
+      filePath: encPath,
+      fileSize: encStats.size,
       sha256,
     };
   } catch (error) {
@@ -502,15 +509,33 @@ export async function restoreBackup(
     return { success: false, error: 'Backup file not found on disk' };
   }
 
+  // Decrypt if the backup is encrypted, then verify checksum on the decrypted file
+  let zipPath = backup.filePath;
+  let tempDecryptedPath: string | null = null;
+
+  if (backup.encrypted) {
+    try {
+      tempDecryptedPath = decryptFile(backup.filePath);
+      zipPath = tempDecryptedPath;
+    } catch (decErr) {
+      logger.error('[BACKUP] Failed to decrypt backup file:', decErr);
+      return { success: false, error: 'Failed to decrypt backup file — encryption key may have changed' };
+    }
+  }
+
   // Verify checksum on the ZIP file (streaming)
   if (backup.sha256) {
-    const currentChecksum = await calculateChecksum(backup.filePath);
+    const currentChecksum = await calculateChecksum(zipPath);
     if (currentChecksum !== backup.sha256) {
+      // Clean up temp file
+      if (tempDecryptedPath) {
+        try { rmSync(tempDecryptedPath, { force: true }); } catch { /* ignore */ }
+      }
       return { success: false, error: 'Backup checksum mismatch — file may be corrupted' };
     }
   }
 
-  return restoreTenantSnapshot(userId, backup, companyId, meta);
+  return restoreTenantSnapshot(userId, { ...backup, filePath: zipPath, tempDecryptedPath }, companyId, meta);
 }
 
 /**
@@ -523,7 +548,7 @@ export async function restoreBackup(
  */
 async function restoreTenantSnapshot(
   userId: string,
-  backup: { id: string; backupType: string; filePath: string },
+  backup: { id: string; backupType: string; filePath: string; tempDecryptedPath?: string | null },
   companyId: string,
   meta?: Record<string, unknown>
 ): Promise<{ success: boolean; error?: string }> {
@@ -593,9 +618,21 @@ async function restoreTenantSnapshot(
     });
 
     logger.warn(`[BACKUP] Tenant snapshot restore successful for company ${companyId}:`, importedCounts);
+
+    // Clean up temporary decrypted file
+    if (backup.tempDecryptedPath) {
+      try { rmSync(backup.tempDecryptedPath, { force: true }); } catch { /* ignore */ }
+    }
+
     return { success: true };
   } catch (error) {
     logger.error('[BACKUP] Tenant snapshot restore failed:', error);
+
+    // Clean up temporary decrypted file
+    if (backup.tempDecryptedPath) {
+      try { rmSync(backup.tempDecryptedPath, { force: true }); } catch { /* ignore */ }
+    }
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error during tenant restore',
@@ -859,6 +896,7 @@ async function importTenantDataFromZip(
           reference: (je.reference as string) ?? null, status: je.status as JournalEntryStatus,
           cancelled: (je.cancelled as boolean) ?? false,
           cancelReason: (je.cancelReason as string) ?? null,
+          voucherNumber: (je.voucherNumber as string) ?? null,
         },
       });
       for (const l of ((je.lines as Array<Record<string, unknown>>) ?? [])) {

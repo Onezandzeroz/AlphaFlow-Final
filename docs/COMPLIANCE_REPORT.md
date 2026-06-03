@@ -152,10 +152,12 @@ Herudover definerer systemet 15 enums, herunder:
 | Komponent | Beskrivelse |
 |-----------|-------------|
 | **Produktionsdomæne** | alphaflow.dk |
+| **Applikationsserver** | IONOS VPS (Cloud VPS) — C5 + IT-Grundschutz certificeret, EU-hosted |
 | **Reverse Proxy** | Caddy v2 med automatiske Let's Encrypt-certifikater |
 | **Database** | Neon Serverless PostgreSQL med `sslmode=require` |
+| **Backup-lagring** | IONOS VPS (Tenant-Backup/ folder) — AES-256-GCM krypterede ZIP-arkiver |
 | **Kryptering i transit** | TLS 1.3 (standard), minimum TLS 1.2 |
-| **Kryptering i hvile** | AES-256-GCM for følsomme data (bank-tokens) |
+| **Kryptering i hvile** | AES-256-GCM for følsomme data (bank-tokens) + backup-filer |
 | **Adgangskodehashing** | bcrypt med 12 salt-runder |
 | **Sessionsikkerhed** | 32-byte kryptografisk tilfældige tokens |
 
@@ -779,6 +781,8 @@ Hver backup indeholder virksomhedens komplette regnskabsdata som JSON-filer i et
 | **SHA-256 checksums** | Alle backup-filer forsynes med SHA-256 checksum |
 | **Verifikation** | Checksum kan bruges til at verificere filens integritet |
 | **Manipulationsdetektion** | Enhver ændring af backup-filen opdages ved checksum-kontrol |
+| **AES-256-GCM kryptering** | Backup-filer krypteres med AES-256-GCM før lagring på IONOS VPS (Tenant-Backup/) |
+| **Krypteret opbevaring** | Krypterede backup-arkiver opbevares på IONOS VPS i EU med C5 + IT-Grundschutz certificering |
 
 ### 9.4 Gendannelsesprocedure
 
@@ -786,10 +790,11 @@ Gendannelse af data fra backup udføres via følgende sikrede procedure:
 
 1. Brugeren vælger en backup fra listen
 2. Klik på "Gendan"
-3. Systemet opretter automatisk en **præ-gendannelses sikkerhedskopi** af nuværende data
-4. Data importeres via **atomiske databasetransaktioner**
-5. Ved fejl: transaktionen rulles automatisk tilbage (rollback)
-6. Ved succes: gendannelsen fuldføres, og den gamle data er bevaret i sikkerhedskopien
+3. Systemet dekrypterer backup-filen (AES-256-GCM) og verificerer SHA-256 checksum
+4. Systemet opretter automatisk en **præ-gendannelses sikkerhedskopi** af nuværende data
+5. Data importeres via **atomiske databasetransaktioner**
+6. Ved fejl: transaktionen rulles automatisk tilbage (rollback)
+7. Ved succes: gendannelsen fuldføres, og den gamle data er bevaret i sikkerhedskopien
 
 ### 9.5 Audit af Backup
 
@@ -808,7 +813,8 @@ I henhold med Bogføringsloven § 15 stk. 1 skal regnskabsmateriale opbevares i 
 - **Månedsbackups med 60 måneders retention** (5 år)
 - **Ugebackups med 52 ugers retention** (1 år, overlap med månedsbackups)
 - **SHA-256 checksums** til verificering af dataintegritet
-- **Krypteret opbevaring** (TLS 1.3 for transit, AES-256-GCM for følsomme data)
+- **Krypteret opbevaring** (TLS 1.3 for transit, AES-256-GCM for følsomme data og backup-filer)
+- **AES-256-GCM backup-kryptering** på IONOS VPS (C5 + IT-Grundschutz certificeret, EU-hosted)
 
 ---
 

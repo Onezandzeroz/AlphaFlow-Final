@@ -12,6 +12,7 @@ import { tenantFilter, blockOversightMutation, requireNotDemoCompany } from '@/l
 import { generateInvoiceResponse } from '@/lib/einvoice-response';
 import { logger } from '@/lib/logger';
 import { JournalEntryStatus } from '@prisma/client';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -194,42 +195,49 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       const description = `E-faktura: ${existing.invoiceNumber} fra ${existing.supplierName}`;
 
       // Create JournalEntry with two lines
-      const journalEntry = await db.journalEntry.create({
-        data: {
-          date: issueDate,
-          description,
-          reference: existing.invoiceNumber,
-          status: JournalEntryStatus.POSTED,
-          userId: ctx.id,
-          companyId,
-          lines: {
-            create: [
-              // Debit: expense account
-              {
-                companyId,
-                accountId: expenseAccount.id,
-                debit: totalAmount,
-                credit: 0,
-                description: `E-faktura ${existing.invoiceNumber} — ${existing.supplierName}`,
-              },
-              // Credit: payables account
-              {
-                companyId,
-                accountId: payablesAccount.id,
-                debit: 0,
-                credit: totalAmount,
-                description: `Leverandørgæld: ${existing.supplierName} — ${existing.invoiceNumber}`,
-              },
-            ],
-          },
-        },
-        include: {
-          lines: {
-            include: {
-              account: true,
+      const journalEntry = await db.$transaction(async (tx) => {
+        const je = await tx.journalEntry.create({
+          data: {
+            date: issueDate,
+            description,
+            reference: existing.invoiceNumber,
+            status: JournalEntryStatus.POSTED,
+            userId: ctx.id,
+            companyId,
+            lines: {
+              create: [
+                // Debit: expense account
+                {
+                  companyId,
+                  accountId: expenseAccount.id,
+                  debit: totalAmount,
+                  credit: 0,
+                  description: `E-faktura ${existing.invoiceNumber} — ${existing.supplierName}`,
+                },
+                // Credit: payables account
+                {
+                  companyId,
+                  accountId: payablesAccount.id,
+                  debit: 0,
+                  credit: totalAmount,
+                  description: `Leverandørgæld: ${existing.supplierName} — ${existing.invoiceNumber}`,
+                },
+              ],
             },
           },
-        },
+          include: {
+            lines: {
+              include: {
+                account: true,
+              },
+            },
+          },
+        });
+
+        // Assign voucher number for POSTED journal entry
+        await assignVoucherNumberIfPosted(tx, je.id, companyId, 'POSTED');
+
+        return je;
       });
 
       // Update the received invoice
