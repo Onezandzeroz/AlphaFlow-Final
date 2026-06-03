@@ -25,19 +25,15 @@ export async function GET(request: NextRequest) {
 
     const companyId = ctx.activeCompanyId;
 
-    // Fetch export audit logs (where metadata contains exportGuid)
+    // Fetch export audit logs (filter for exportGuid in-memory since Prisma JSON null filtering is strict)
     const exportLogs = await db.auditLog.findMany({
       where: {
         companyId,
         entityType: 'Company',
         action: 'CREATE',
-        metadata: {
-          path: ['exportGuid'],
-          not: null,
-        },
       },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: 50,
       select: {
         id: true,
         createdAt: true,
