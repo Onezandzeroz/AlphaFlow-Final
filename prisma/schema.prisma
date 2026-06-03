@@ -1,0 +1,1133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── LEGACY ENUMS ──────────────────────────────────────────────────
+
+enum TransactionType {
+  SALE
+  PURCHASE
+  SALARY
+  BANK
+  Z_REPORT
+  PRIVATE
+  ADJUSTMENT
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  CANCELLED
+}
+
+// ─── CORE ACCOUNTING ENUMS ────────────────────────────────────────
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum AccountGroup {
+  CASH
+  BANK
+  RECEIVABLES
+  INVENTORY
+  FIXED_ASSETS
+  OTHER_ASSETS
+  PAYABLES
+  SHORT_TERM_DEBT
+  LONG_TERM_DEBT
+  OTHER_LIABILITIES
+  SHARE_CAPITAL
+  RETAINED_EARNINGS
+  SALES_REVENUE
+  OUTPUT_VAT
+  OTHER_REVENUE
+  INPUT_VAT
+  COST_OF_GOODS
+  PERSONNEL
+  OTHER_OPERATING
+  FINANCIAL_EXPENSE
+  FINANCIAL_INCOME
+  TAX
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum ContactType {
+  CUSTOMER
+  SUPPLIER
+  BOTH
+}
+
+enum PeriodStatus {
+  OPEN
+  CLOSED
+}
+
+enum VATCode {
+  S25
+  S12
+  S0
+  SEU
+  K25
+  K12
+  K0
+  KEU
+  KUF
+  NONE
+}
+
+enum RecurringFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum RecurringStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum ReconciliationStatus {
+  UNMATCHED
+  MATCHED
+  MANUAL
+  AI_SUGGESTED
+}
+
+enum BankConnectionStatus {
+  ACTIVE
+  EXPIRED
+  PENDING
+  REVOKED
+  ERROR
+}
+
+enum SyncStatus {
+  SUCCESS
+  PARTIAL
+  FAILED
+  PENDING
+}
+
+// ─── E-INVOICE ENUMS (FASE 3 & 4) ─────────────────────────────────
+
+enum ReceivedInvoiceStatus {
+  RECEIVED    // Incoming e-invoice parsed and stored
+  APPROVED    // User approved for booking
+  REJECTED    // User rejected
+  POSTED      // Journal entry created from e-invoice
+}
+
+enum EInvoiceFormat {
+  OIOUBL      // OIOUBL (Danish national e-invoice format)
+  PEPPOL_BIS  // Peppol BIS Billing 3.0
+}
+
+enum EInvoiceType {
+  INVOICE         // 380 — Commercial invoice
+  CREDIT_NOTE     // 381 — Credit note
+  CORRECTED       // 384 — Corrected invoice
+  SELF_BILLED     // 389 — Self-billed invoice
+}
+
+enum EInvoiceSendChannel {
+  NEMHANDEL_OIOUBL  // OIOUBL via NemHandel network
+  PEPPOL_BIS        // Peppol BIS Billing 3.0 via Access Point
+}
+
+enum EInvoiceSendStatus {
+  PENDING      // Queued for sending
+  QUEUED       // Handed off to mini-service
+  SENDING      // Actively being transmitted
+  DELIVERED    // Successfully delivered to recipient
+  ACCEPTED     // Recipient acknowledged (positive response)
+  FAILED       // Transmission or delivery failed
+  REJECTED     // Recipient rejected the invoice
+  CANCELLED    // Cancelled by user before sending
+}
+
+// ─── MULTI-TENANT ENUMS ───────────────────────────────────────────
+
+enum CompanyRole {
+  OWNER        // Full control + can transfer ownership, manage members
+  ADMIN        // Full control except ownership transfer and member removal of OWNER
+  ACCOUNTANT   // Can create/edit all accounting data, cannot manage members or settings
+  VIEWER       // Read-only access to all accounting data
+  AUDITOR      // Read-only + can export reports and run audits
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+// ─── COMPANY (TENANT ENTITY) ──────────────────────────────────────
+// Replaces the old CompanyInfo model. This IS the tenant boundary.
+
+model Company {
+  id                   String   @id @default(cuid())
+  name                 String   // Company display name
+  logo                 String?  // Base64 or URL
+
+  // Business registration
+  address              String   @default("")
+  phone                String   @default("")
+  email                String   @default("")
+  cvrNumber            String   @default("")
+  companyType          String?  // ApS, A/S, IVS, Enkeltmandsvirksomhed
+
+  // Invoice settings
+  invoicePrefix        String   @default("INV")
+  invoiceTerms         String   @default("Betaling forfalder senest 30 dage efter\nfakturadatoen. Ved forsinkelse, påløber\nder renter efter Renteloven.\nEvt. spørgsmål, så kontakt os venligst.")
+  invoiceNotesTemplate String?
+  nextInvoiceSequence  Int      @default(1)
+  currentYear          Int      @default(2026)
+
+  // Bank details
+  bankName             String   @default("")
+  bankAccount          String   @default("")
+  bankRegistration     String   @default("")
+  bankIban             String?
+  bankStreet           String?
+  bankCity             String?
+  bankCountry          String?
+
+  // Dashboard widget visibility (JSON map: { widgetId: boolean })
+  dashboardWidgets     Json?
+
+  // Two-Factor Authentication (tenant-level toggle)
+  // When true, ALL users in this tenant must have 2FA enabled
+  twoFactorRequired    Boolean  @default(false)
+
+  // E-invoicing configuration (FASE 4)
+  einvoiceEnabled          Boolean             @default(false)
+  einvoiceDefaultChannel   EInvoiceSendChannel? // Preferred default sending channel
+  einvoiceEndpointId       String?             // CVR-based EndpointID for e-invoicing (scheme 0184)
+  einvoiceGLN             String?             // GLN/EAN number (optional alternative to CVR)
+  einvoicePeppolAs4Id      String?             // Peppol AS4 identifier (e.g., 0188:CVR12345678)
+  einvoiceRegistrationNo   String?             // NemHandelsregisteret registration number
+  einvoiceRegisteredAt     DateTime?           // When registered in NemHandelsregisteret
+  einvoiceAutoSendOnFinalize Boolean           @default(false) // Auto-send when invoice is finalized
+
+  // Meta
+  isDemo               Boolean  @default(false)  // Demo company flag — only the shared demo company should be true
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relations
+  members              UserCompany[]
+  invitations          Invitation[]
+  transactions         Transaction[]
+  invoices             Invoice[]
+  accounts             Account[]
+  journalEntries       JournalEntry[]
+  contacts             Contact[]
+  fiscalPeriods        FiscalPeriod[]
+  bankStatements       BankStatement[]
+  bankConnections      BankConnection[]
+  recurringEntries     RecurringEntry[]
+  budgets              Budget[]
+  backups              Backup[]
+  auditLogs            AuditLog[]
+  sessions             Session[]
+  oversightSessions    Session[]  @relation("OversightCompany")
+  hermesAgent          HermesAgent?
+  standardAccountMappings StandardAccountMapping[]
+  receivedInvoices      ReceivedInvoice[]
+  eInvoiceSendings      EInvoiceSending[]
+  vatSubmissions         VATSubmission[]
+
+  @@unique([name])
+  @@index([isActive])
+  @@index([cvrNumber])
+}
+
+// ─── USER-COMPANY JUNCTION ────────────────────────────────────────
+
+model UserCompany {
+  id        String      @id @default(cuid())
+  userId    String
+  companyId String
+  role      CompanyRole @default(VIEWER)
+  joinedAt  DateTime    @default(now())
+  invitedBy String?
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([userId])
+  @@index([companyId])
+  @@index([role])
+}
+
+// ─── INVITATION SYSTEM ────────────────────────────────────────────
+
+model Invitation {
+  id          String           @id @default(cuid())
+  companyId   String
+  email       String           // Invitee email (lowercased, trimmed)
+  role        CompanyRole      @default(VIEWER)
+  token       String           @unique
+  status      InvitationStatus @default(PENDING)
+  invitedBy   String           // userId of the inviter
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  acceptedBy  String?          // userId who accepted
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([email, status])
+  @@index([companyId, status])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+// ─── USER ─────────────────────────────────────────────────────────
+
+model User {
+  id                     String             @id @default(cuid())
+  email                  String             @unique
+  password               String             // bcrypt hash
+  emailVerified          Boolean            @default(false)
+  emailVerificationToken String?            @unique
+  emailVerifiedAt        DateTime?
+  resetPasswordToken     String?            @unique
+  resetPasswordExpires   DateTime?
+  businessName           String?
+  sidebarPrefs           Json?
+  userPrefs              Json?
+  demoModeEnabled        Boolean            @default(false)
+  isSuperDev             Boolean            @default(false)  // AlphaAi SUPER_DEV read-only cross-tenant access
+  trialClaimedAt         DateTime?          // When user self-claimed their one-time free trial (not set for owner-granted trials)
+
+  // Two-Factor Authentication (TOTP)
+  // twoFactorSecret: AES-256-GCM encrypted TOTP secret (base32-encoded)
+  // twoFactorBackupCodes: AES-256-GCM encrypted JSON array of hashed backup codes
+  twoFactorSecret        String?
+  twoFactorBackupCodes  String?   // Encrypted JSON: [hashedCode1, hashedCode2, ...]
+  twoFactorEnabled      Boolean   @default(false)
+  twoFactorEnabledAt     DateTime?
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  // Relations
+  transactions Transaction[]
+  invoices     Invoice[]
+  sessions     Session[]
+  auditLogs    AuditLog[]
+  backups      Backup[]
+  accounts     Account[]
+  journalEntries JournalEntry[]
+  contacts     Contact[]
+  fiscalPeriods FiscalPeriod[]
+  bankStatements    BankStatement[]
+  bankConnections   BankConnection[]
+  recurringEntries  RecurringEntry[]
+  budgets           Budget[]
+
+  // Multi-tenant relations
+  companies        UserCompany[]
+  performedAuditLogs AuditLog[]       @relation("PerformedByUser")
+  notificationReads NotificationRead[]
+  vatSubmissions    VATSubmission[]
+}
+
+// ─── SESSION (with activeCompanyId) ───────────────────────────────
+
+model Session {
+  id                 String    @id @default(cuid())
+  token              String    @unique
+  userId             String
+  activeCompanyId    String?
+  oversightCompanyId String?   // When set, the App Owner is overseeing this tenant in read-only mode
+  ipAddress          String?
+  userAgent          String?
+  expiresAt          DateTime
+  createdAt          DateTime  @default(now())
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeCompany      Company?  @relation(fields: [activeCompanyId], references: [id], onDelete: SetNull)
+  oversightCompany   Company?  @relation("OversightCompany", fields: [oversightCompanyId], references: [id], onDelete: SetNull)
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([activeCompanyId])
+  @@index([oversightCompanyId])
+}
+
+// ─── TRANSACTIONS ─────────────────────────────────────────────────
+
+model Transaction {
+  id              String          @id @default(cuid())
+  date            DateTime
+  type            TransactionType @default(SALE)
+  amount          Decimal         @db.Decimal(18, 2)
+  currency        String          @default("DKK")
+  exchangeRate    Decimal?        @db.Decimal(12, 6)
+  amountDKK       Decimal?        @db.Decimal(18, 2)
+  description     String
+  vatPercent      Decimal         @db.Decimal(5, 2) @default(25.0)
+  receiptImage    String?
+  invoiceId       String?
+  accountId       String?
+  cancelled       Boolean         @default(false)
+  cancelReason    String?
+  originalId      String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  invoice         Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  account         Account?        @relation(fields: [accountId], references: [id])
+  companyId       String
+  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, date])
+  @@index([companyId, type, date])
+  @@index([userId])
+  @@index([accountId])
+}
+
+// ─── INVOICES ─────────────────────────────────────────────────────
+
+model Invoice {
+  id              String        @id @default(cuid())
+  invoiceNumber   String
+  customerName    String
+  customerAddress String?
+  customerEmail   String?
+  customerPhone   String?
+  customerCvr     String?
+  issueDate       DateTime
+  dueDate         DateTime
+  lineItems       Json
+  subtotal        Decimal       @db.Decimal(18, 2)
+  vatTotal        Decimal       @db.Decimal(18, 2)
+  total           Decimal       @db.Decimal(18, 2)
+  currency        String        @default("DKK")
+  exchangeRate    Decimal?      @db.Decimal(12, 6)
+  status          InvoiceStatus @default(DRAFT)
+  notes           String?
+  cancelled       Boolean       @default(false)
+  cancelReason    String?
+  contactId       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  contact         Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  transactions    Transaction[]
+  eInvoiceSendings EInvoiceSending[]
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, invoiceNumber])
+  @@index([companyId, status, issueDate])
+  @@index([userId])
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────
+
+model AuditLog {
+  id               String   @id @default(cuid())
+  userId           String?
+  companyId        String?
+  performedByUserId String?
+  action           String
+  entityType       String
+  entityId         String
+  changes          Json?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  company          Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  performedByUser  User?    @relation("PerformedByUser", fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([companyId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([performedByUserId])
+}
+
+// ─── BACKUP ───────────────────────────────────────────────────────
+
+model Backup {
+  id            String   @id @default(cuid())
+  userId        String?
+  userEmail     String?                          // denormalized: tenant owner email for quick reference in DB dashboards
+  triggerType   String
+  backupType    String
+  scope         String   @default("tenant")   // "tenant" = tenant-specific JSON snapshot
+  filePath      String
+  fileSize      Int
+  sha256        String?
+  status        String   @default("completed")
+  errorMessage  String?
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId     String
+  companyName   String?                          // denormalized: company name for quick reference in DB dashboards
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, backupType])
+  @@index([companyId, createdAt])
+  @@index([companyId, scope])
+  @@index([userId])
+  @@index([backupType])
+  @@index([status])
+}
+
+// ─── CHART OF ACCOUNTS ────────────────────────────────────────────
+
+model Account {
+  id          String      @id @default(cuid())
+  number      String
+  name        String
+  nameEn      String?
+  type        AccountType
+  group       AccountGroup
+  description String?
+  isActive    Boolean     @default(true)
+  isSystem    Boolean     @default(false)
+  // FASE 2: Standardkontoplan mapping
+  publicStandardNumber String?  // SKAT offentlig standardkontonummer (0-9xxx)
+  postingGuide       String?  // Brugerdefineret konteringsvejledning per konto
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  journalLines  JournalEntryLine[]
+  budgetEntries  BudgetEntry[]
+  transactions   Transaction[]
+  standardMappings StandardAccountMapping[]
+  companyId     String
+  company       Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, number])
+  @@index([companyId, type])
+  @@index([companyId, group])
+  @@index([userId, type])
+  @@index([companyId, publicStandardNumber])
+}
+
+// ─── STANDARD ACCOUNT MAPPING (FASE 2) ────────────────────────────
+
+model StandardAccountMapping {
+  id                    String   @id @default(cuid())
+  companyId             String
+  accountId             String   // FSR-konto (brugerens egen konto)
+  standardAccountNumber String   // SKAT offentlig standardkontonummer
+  standardAccountName   String   // Navn på standardkonto
+  mappingType           String   @default("manual") // "auto" | "manual" | "none"
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  account  Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, accountId])
+  @@index([companyId])
+  @@index([companyId, standardAccountNumber])
+  @@index([accountId])
+}
+
+// ─── JOURNAL ENTRIES ──────────────────────────────────────────────
+
+model JournalEntry {
+  id          String             @id @default(cuid())
+  date        DateTime
+  description String
+  reference   String?
+  status      JournalEntryStatus @default(DRAFT)
+  cancelled   Boolean            @default(false)
+  cancelReason String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  userId      String?
+  user        User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  lines       JournalEntryLine[]
+  documents   Document[]
+  companyId   String
+  company     Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, date])
+  @@index([companyId, status, date])
+  @@index([userId, date])
+}
+
+model JournalEntryLine {
+  id             String        @id @default(cuid())
+  journalEntryId String
+  companyId      String       // Denormalized from JournalEntry for direct query performance
+  accountId      String
+  debit          Decimal       @db.Decimal(18, 2) @default(0)
+  credit         Decimal       @db.Decimal(18, 2) @default(0)
+  vatCode        VATCode?
+  description    String?
+  createdAt      DateTime      @default(now())
+  journalEntry   JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  account        Account       @relation(fields: [accountId], references: [id])
+  bankMatches    BankStatementLine[]
+
+  @@index([journalEntryId])
+  @@index([companyId, accountId])
+  @@index([accountId])
+}
+
+// ─── CONTACTS ─────────────────────────────────────────────────────
+
+model Contact {
+  id          String      @id @default(cuid())
+  name        String
+  cvrNumber   String?
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  postalCode  String?
+  country     String      @default("Danmark")
+  type        ContactType @default(CUSTOMER)
+  notes       String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  invoices    Invoice[]
+  companyId   String
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, type])
+  @@index([companyId, cvrNumber])
+  @@index([userId, type])
+}
+
+// ─── FISCAL PERIODS ───────────────────────────────────────────────
+
+model FiscalPeriod {
+  id          String       @id @default(cuid())
+  year        Int
+  month       Int
+  status      PeriodStatus @default(OPEN)
+  lockedAt    DateTime?
+  lockedBy    String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId   String
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, year, month])
+  @@index([companyId, year])
+  @@index([companyId, status])
+}
+
+// ─── BANK STATEMENTS ──────────────────────────────────────────────
+
+model BankStatement {
+  id               String                @id @default(cuid())
+  bankAccount      String
+  startDate        DateTime
+  endDate          DateTime
+  openingBalance   Decimal              @db.Decimal(18, 2)
+  closingBalance   Decimal              @db.Decimal(18, 2)
+  fileName         String?
+  importDate       DateTime              @default(now())
+  importSource     String?
+  reconciled       Boolean               @default(false)
+  reconciledAt     DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  userId           String?
+  bankConnectionId String?
+  user             User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bankConnection   BankConnection?       @relation(fields: [bankConnectionId], references: [id])
+  lines            BankStatementLine[]
+  companyId        String
+  company          Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, bankAccount])
+  @@index([companyId, startDate])
+  @@index([bankConnectionId])
+}
+
+model BankStatementLine {
+  id                   String              @id @default(cuid())
+  bankStatementId      String
+  companyId            String               // Denormalized from BankStatement for direct query performance
+  date                 DateTime
+  description          String
+  reference            String?
+  amount               Decimal              @db.Decimal(18, 2)
+  balance              Decimal              @db.Decimal(18, 2)
+  reconciliationStatus ReconciliationStatus @default(UNMATCHED)
+  matchedJournalLineId String?
+  matchedAt            DateTime?
+  matchConfidence      Float?
+  matchMethod          String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  bankStatement        BankStatement       @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
+  matchedJournalLine   JournalEntryLine?   @relation(fields: [matchedJournalLineId], references: [id])
+
+  @@index([bankStatementId])
+  @@index([companyId, date])
+  @@index([reconciliationStatus])
+  @@index([matchedJournalLineId])
+}
+
+// ─── DOCUMENTS ────────────────────────────────────────────────────
+
+model Document {
+  id              String        @id @default(cuid())
+  journalEntryId  String
+  companyId        String       // Denormalized from JournalEntry for direct query performance
+  fileName        String
+  fileType        String
+  fileSize        Int
+  filePath        String
+  description     String?
+  createdAt       DateTime      @default(now())
+  journalEntry    JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+
+  @@index([journalEntryId])
+  @@index([companyId])
+}
+
+// ─── RECURRING ENTRIES ────────────────────────────────────────────
+
+model RecurringEntry {
+  id            String             @id @default(cuid())
+  name          String
+  description   String
+  frequency     RecurringFrequency
+  status        RecurringStatus    @default(ACTIVE)
+  startDate     DateTime
+  endDate       DateTime?
+  nextExecution DateTime
+  lastExecuted  DateTime?
+  lines         Json
+  reference     String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  userId        String?
+  user          User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId     String
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
+  @@index([companyId, nextExecution])
+  @@index([userId, status])
+}
+
+// ─── BUDGETS ──────────────────────────────────────────────────────
+
+model Budget {
+  id          String       @id @default(cuid())
+  name        String
+  year        Int
+  notes       String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  entries     BudgetEntry[]
+  companyId   String
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, year])
+  @@index([companyId])
+  @@index([userId])
+}
+
+model BudgetEntry {
+  id        String   @id @default(cuid())
+  budgetId  String
+  companyId  String   // Denormalized from Budget for direct query performance
+  accountId String
+  january   Decimal   @db.Decimal(18, 2) @default(0)
+  february  Decimal   @db.Decimal(18, 2) @default(0)
+  march     Decimal   @db.Decimal(18, 2) @default(0)
+  april     Decimal   @db.Decimal(18, 2) @default(0)
+  may       Decimal   @db.Decimal(18, 2) @default(0)
+  june      Decimal   @db.Decimal(18, 2) @default(0)
+  july      Decimal   @db.Decimal(18, 2) @default(0)
+  august    Decimal   @db.Decimal(18, 2) @default(0)
+  september Decimal   @db.Decimal(18, 2) @default(0)
+  october   Decimal   @db.Decimal(18, 2) @default(0)
+  november  Decimal   @db.Decimal(18, 2) @default(0)
+  december  Decimal   @db.Decimal(18, 2) @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  budget    Budget   @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  account   Account  @relation(fields: [accountId], references: [id])
+
+  @@unique([budgetId, accountId])
+  @@index([budgetId])
+  @@index([companyId])
+  @@index([accountId])
+}
+
+// ─── EMAIL LOG ────────────────────────────────────────────────────
+
+model EmailLog {
+  id           String   @id @default(cuid())
+  to           String
+  subject      String
+  template     String   // verification | password-reset | invitation | owner-notification
+  status       String   @default("sent") // sent | failed | dev-logged
+  errorMessage String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  companyId    String?  // optional tenant association
+
+  @@index([to])
+  @@index([template])
+  @@index([status])
+  @@index([createdAt])
+  @@index([companyId])
+}
+
+// ─── BANK CONNECTIONS ─────────────────────────────────────────────
+
+model BankConnection {
+  id                String               @id @default(cuid())
+  bankName          String
+  provider          String
+  registrationNumber String?
+  accountNumber     String
+  iban              String?
+  accountName       String?
+  currentBalance    Decimal?        @db.Decimal(18, 2)
+  lastSyncAt        DateTime?
+  nextSyncAt        DateTime?
+  syncFrequency     String               @default("daily")
+  status            BankConnectionStatus @default(PENDING)
+  consentId         String?
+  consentExpiresAt  DateTime?
+  accessToken       String?
+  refreshToken      String?
+  retryCount        Int                  @default(0)
+  lastError         String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  userId            String?
+  user              User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  syncs             BankConnectionSync[]
+  bankStatements    BankStatement[]
+  companyId         String
+  company           Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, accountNumber])
+  @@index([companyId, status])
+  @@index([companyId, provider])
+  @@index([consentId])
+  @@index([nextSyncAt])
+}
+
+model BankConnectionSync {
+  id               String     @id @default(cuid())
+  bankConnectionId String
+  companyId        String       // Denormalized from BankConnection for direct query performance
+  status           SyncStatus @default(PENDING)
+  startedAt        DateTime   @default(now())
+  completedAt      DateTime?
+  transactionsFound Int       @default(0)
+  transactionsNew   Int       @default(0)
+  transactionsDup   Int       @default(0)
+  matchedCount      Int       @default(0)
+  errorMessage      String?
+  errorCode         String?
+  rawData          String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  bankConnection   BankConnection @relation(fields: [bankConnectionId], references: [id], onDelete: Cascade)
+
+  @@index([bankConnectionId])
+  @@index([companyId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// ─── HERMES AI AGENT ──────────────────────────────────────────
+
+model HermesAgent {
+  id               String   @id @default(cuid())
+  companyId         String   @unique
+  enabled          Boolean  @default(false) // App Owner enables Hermes for this tenant
+  dataAccessEnabled Boolean  @default(false) // Tenant owner opts in to sharing accounting data
+  personality       String   @default("professional") // professional | friendly | concise
+  greeting          String?
+  systemPrompt      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  reminders AgentReminder[]
+  messages  AgentMessage[]
+}
+
+model AgentReminder {
+  id          String   @id @default(cuid())
+  agentId     String
+  title       String
+  description String?
+  dueDate     DateTime?
+  status      String   @default("pending") // pending | completed | dismissed
+  createdAt   DateTime @default(now())
+
+  agent       HermesAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model AgentMessage {
+  id        String   @id @default(cuid())
+  agentId   String
+  role      String   // "user" | "assistant"
+  content   String
+  createdAt DateTime @default(now())
+
+  agent     HermesAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt])
+}
+
+// ─── NOTIFICATION READ STATE ──────────────────────────────────
+// Tracks which in-app notifications a user has dismissed / read.
+// This ensures read state syncs across devices and browser instances.
+
+model NotificationRead {
+  id              String   @id @default(cuid())
+  userId          String
+  notificationId  String   // Deterministic ID from the notification source (e.g. "overdue-abc123", "vat-deadline")
+  readAt          DateTime @default(now())
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationId])
+  @@index([userId])
+  @@index([readAt])
+}
+
+// ─── RECEIVED E-INVOICES (FASE 3) ──────────────────────────────
+// Stores incoming OIOUBL / Peppol BIS Billing 3.0 invoices and credit notes.
+// Each record holds the raw XML, parsed data, and workflow status.
+
+model ReceivedInvoice {
+  id              String                 @id @default(cuid())
+
+  // Supplier (sender) information — extracted from XML
+  supplierName    String
+  supplierCvr     String?                // CVR or VAT number
+  supplierEmail   String?
+  supplierPhone   String?
+  supplierAddress String?
+  supplierCity    String?
+  supplierCountry String?                // ISO country code
+
+  // Invoice identification — from XML
+  invoiceNumber   String                 // cbc:ID
+  issueDate       DateTime               // cbc:IssueDate
+  dueDate         DateTime?              // cbc:DueDate (not present for credit notes)
+  currencyCode    String                 @default("DKK") // cbc:DocumentCurrencyCode
+
+  // Classification
+  format          EInvoiceFormat         @default(OIOUBL)
+  documentType    EInvoiceType           @default(INVOICE)
+  customizationId String?                // cbc:CustomizationID
+  profileId       String?                // cbc:ProfileID
+
+  // Line items — stored as JSON for flexibility
+  // Shape: [{ id, description, quantity, unitCode, unitPrice, vatPercent, vatCategoryCode, lineAmount }]
+  lineItems       Json
+  lineCount       Int                    @default(0)
+
+  // Totals — extracted from XML
+  taxExclusiveAmount  Decimal   @db.Decimal(18, 2) @default(0)
+  taxAmount           Decimal   @db.Decimal(18, 2) @default(0)
+  taxInclusiveAmount  Decimal   @db.Decimal(18, 2) @default(0)
+  payableAmount       Decimal   @db.Decimal(18, 2) @default(0)
+
+  // Payment info — extracted from XML
+  paymentMeansCode   String?               // e.g., "30" for credit transfer
+  paymentAccountId   String?               // IBAN or bank account
+
+  // Original XML — stored for reference and re-processing
+  rawXml          String                 // Original XML content
+
+  // Workflow
+  status          ReceivedInvoiceStatus @default(RECEIVED)
+  rejectionReason String?                // User-provided reason if rejected
+  approvedBy      String?                // userId who approved
+  approvedAt      DateTime?
+  postedBy        String?                // userId who posted to journal
+  postedAt        DateTime?
+  journalEntryId  String?                // JournalEntry created from this e-invoice
+
+  // Response XML — generated after receiving
+  responseXml     String?                // Application Response / Message Level Response XML
+  responseType   String?                // "APPLICATION_RESPONSE" | "MESSAGE_LEVEL_RESPONSE" | "INVOICE_RESPONSE"
+
+  // Validation
+  validationErrors  String?              // JSON array of errors from parsing
+  validationWarnings String?             // JSON array of warnings
+
+  // Meta
+  notes           String?                // User notes
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  userId          String?                // User who received/imported
+  companyId       String
+  company         Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, invoiceNumber])    // Prevent duplicate invoice numbers within a tenant
+  @@index([companyId, status])
+  @@index([companyId, issueDate])
+  @@index([companyId, supplierCvr])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ─── VAT SUBMISSION (FASE 5) ──────────────────────────────────
+// Tracks VAT report submissions to Skattestyrelsen (Danish Tax Authority).
+// Supports quarterly reporting with OAuth2 authentication.
+
+enum VATSubmissionStatus {
+  DRAFT       // Prepared but not yet submitted
+  SUBMITTED   // Successfully sent to Skattestyrelsen
+  ACCEPTED    // Acknowledged by Skattestyrelsen
+  REJECTED    // Rejected by Skattestyrelsen
+  ERROR       // Transmission error
+}
+
+enum VATReportingPeriod {
+  Q1  // January – March
+  Q2  // April – June
+  Q3  // July – September
+  Q4  // October – December
+  YEARLY // Full year (for annual reporting)
+}
+
+model VATSubmission {
+  id              String              @id @default(cuid())
+
+  // Period identification
+  year            Int                 // e.g., 2026
+  period          VATReportingPeriod  // Q1, Q2, Q3, Q4, YEARLY
+  periodFrom      DateTime            // Start of reporting period
+  periodTo        DateTime            // End of reporting period
+
+  // VAT data snapshot (frozen at submission time)
+ totalOutputVAT  Decimal             @db.Decimal(18, 2) @default(0)
+  totalInputVAT   Decimal             @db.Decimal(18, 2) @default(0)
+  netVATPayable   Decimal             @db.Decimal(18, 2) @default(0)
+  vatDataJson     Json                // Full VAT breakdown at time of submission
+
+  // Submission tracking
+  status          VATSubmissionStatus @default(DRAFT)
+  submittedAt     DateTime?
+  submittedBy     String?             // userId who submitted
+  referenceId     String?             // Skattestyrelsen reference/receipt number
+  responseXml     String?             // Response from Skattestyrelsen
+  errorMessage    String?
+  errorCode       String?
+
+  // Meta
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  companyId       String
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  submittedByUser User?               @relation(fields: [submittedBy], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, year, period])
+  @@index([companyId, status])
+  @@index([companyId, year])
+  @@index([submittedAt])
+}
+
+// ─── E-INVOICE SENDINGS (FASE 4) ──────────────────────────────
+// Tracks each attempt to send an outgoing e-invoice via NemHandel or Peppol.
+// Supports retry logic, status tracking, and full audit trail.
+
+model EInvoiceSending {
+  id              String              @id @default(cuid())
+
+  // What is being sent
+  invoiceId       String              // FK to Invoice
+  invoice         Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  // Channel and format
+  channel         EInvoiceSendChannel
+  format          EInvoiceFormat      // OIOUBL | PEPPOL_BIS
+
+  // Recipient
+  recipientName   String
+  recipientCvr    String?
+  recipientEAN    String?             // GLN/EAN (alternative to CVR)
+  recipientEndpointId String?         // Full endpoint ID with scheme
+
+  // Status tracking
+  status          EInvoiceSendStatus  @default(PENDING)
+  sentAt          DateTime?           // When the transmission started
+  deliveredAt     DateTime?           // When delivery confirmation received
+  acceptedAt      DateTime?           // When recipient acknowledged
+
+  // Error handling
+  errorCode       String?             // Machine-readable error code
+  errorMessage    String?             // Human-readable error message
+  retryCount      Int                 @default(0)
+  maxRetries      Int                 @default(3)
+  nextRetryAt     DateTime?           // Scheduled retry timestamp
+
+  // Tracking
+  messageId       String?             // Message ID from NemHandel/Peppol network
+  responseXml     String?             // Response XML from the network/receiver
+
+  // Audit
+  sentBy          String              // userId who initiated the send
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  companyId       String
+  company         Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, status])
+  @@index([invoiceId])
+  @@index([companyId, channel])
+  @@index([companyId, createdAt])
+  @@index([sentBy])
+  @@index([nextRetryAt])
+}

@@ -1,0 +1,125 @@
+# AlphaFlow — Caddy Reverse Proxy Configuration
+#
+# This file configures Caddy as a reverse proxy for the Next.js app
+# and the TokenPay Access Service mini-service.
+# Caddy automatically handles HTTPS certificates via Let's Encrypt.
+#
+# === PRODUCTION CONFIG (domain-based, HTTPS) ===
+# Replace the domain below with your actual domain.
+
+alphaflow.dk, www.alphaflow.dk {
+    # Force HTTPS — redirect HTTP to HTTPS
+    # (Caddy does this automatically, but explicit for clarity)
+
+# ─── Notification WebSocket Service (port 3001) ───────────────────
+    # Routes requests with ?XTransformPort=3001 to the notification WS service.
+    # Supports both Socket.IO polling (HTTP) and WebSocket upgrades.
+    @notification-ws {
+        query XTransformPort=3001
+    }
+    handle @notification-ws {
+        reverse_proxy localhost:3001 {
+            header_up Host {host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+   # ─── Hermes Agent Socket.IO Service (port 3004) ───────────────
+    # Routes requests with ?XTransformPort=3004 to the Hermes AI agent.
+    # Supports both Socket.IO polling (HTTP) and WebSocket upgrades.
+    @hermes-agent {
+        query XTransformPort=3004
+    }
+    handle @hermes-agent {
+        reverse_proxy localhost:3004 {
+            header_up Host {host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # ─── TokenPay Access Service (port 3100) ───────────────────────
+    # Routes requests with ?XTransformPort=3100 to the TokenPay service
+    @tokenpay {
+        query XTransformPort=3100
+    }
+    handle @tokenpay {
+        reverse_proxy localhost:3100 {
+            header_up Host {host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # ─── AlphaFlow (Next.js, port 3000) — default fallback ──────────
+    handle {
+        reverse_proxy localhost:3000 {
+            header_up Host {host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Security headers
+    header {
+        # HSTS — tell browsers to always use HTTPS (1 year)
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+
+        # Prevent MIME type sniffing
+        X-Content-Type-Options "nosniff"
+
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Permissions policy — disable unnecessary browser features
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+
+    # Gzip compression
+    encode gzip zstd
+
+    # Logging
+    log {
+        output file /var/log/caddy/alphaflow-access.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+    }
+}
+
+# === DEVELOPMENT CONFIG (port-based gateway) ===
+# Uncomment this block for local development only.
+# Do NOT use both blocks at the same time.
+
+# :80 {
+#     @transform_port_query {
+#         query XTransformPort=*
+#     }
+#     handle @transform_port_query {
+#         reverse_proxy localhost:{query.XTransformPort} {
+#             header_up Host {host}
+#             header_up X-Forwarded-For {remote_host}
+#             header_up X-Forwarded-Proto {scheme}
+#             header_up X-Real-IP {remote_host}
+#         }
+#     }
+#     handle {
+#         reverse_proxy localhost:3000 {
+#             header_up Host {host}
+#             header_up X-Forwarded-For {remote_host}
+#             header_up X-Forwarded-Proto {scheme}
+#             header_up X-Real-IP {remote_host}
+#         }
+#     }
+# }
