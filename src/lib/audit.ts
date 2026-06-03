@@ -56,7 +56,8 @@ export type EntityType =
   | 'Invitation'
   | 'UserCompany'
   | 'System'
-  | 'EInvoiceSending';
+  | 'EInvoiceSending'
+  | 'VATSubmission';
 
 interface AuditOptions {
   action: AuditAction;
