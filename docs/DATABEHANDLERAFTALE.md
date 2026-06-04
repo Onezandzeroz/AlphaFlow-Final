@@ -26,7 +26,7 @@ Denne databehandleraftale er udarbejdet i forbindelse med AlphaFlows anmeldelse 
 
 | Felt | Oplysninger |
 |------|-------------|
-| **Virksomhedsnavn** | AlphaAi |
+| **Virksomhedsnavn** | AlphaAi Consult ApS |
 | **CVR-nummer** | [Indsættes ved anmeldelse] |
 | **Adresse** | [Indsættes ved anmeldelse] |
 | **Postnummer/by** | [Indsættes ved anmeldelse] |
@@ -80,7 +80,7 @@ Behandlingen omfatter udelukkende:
 
 ### 2.3 Begrænsninger
 
-AlphaAi behandler udelukkende data i overensstemmelse med kundens skriftlige instrukser og inden for de rammer, der er fastsat af dansk lovgivning, herunder Bogføringsloven og GDPR. AlphaAi behandler ikke data til egne formål uden forudgående skriftlig samtykke fra kunden.
+AlphaAi Consult ApS behandler udelukkende data i overensstemmelse med kundens skriftlige instrukser og inden for de rammer, der er fastsat af dansk lovgivning, herunder Bogføringsloven og GDPR. AlphaAi Consult ApS behandler ikke data til egne formål uden forudgående skriftlig samtykke fra kunden.
 
 ---
 
@@ -109,7 +109,7 @@ Kunden skal sikre, at alle medarbejdere og andre, der har adgang til AlphaFlow:
 
 ### 3.3 AlphaAis instruksberettigelse
 
-AlphaAi har ret til at udstede tekniske instrukser til kunden vedrørende:
+AlphaAi Consult ApS har ret til at udstede tekniske instrukser til kunden vedrørende:
 
 - Nødvendige opdateringer af systemet
 - Sikkerhedsmæssige tiltag (f.eks. påbud om aktivering af 2FA)
@@ -119,7 +119,7 @@ AlphaAi har ret til at udstede tekniske instrukser til kunden vedrørende:
 
 ## § 4 Tekniske sikkerhedsforholdsregler
 
-AlphaFlow implementerer følgende tekniske og organisatoriske sikkerhedsforholdsregler jf. GDPR art. 32 og Bogføringslovens krav til it-sikkerhed:
+AlphaFlow (Platformen) implementerer følgende tekniske og organisatoriske sikkerhedsforholdsregler jf. GDPR art. 32 og Bogføringslovens krav til it-sikkerhed:
 
 ### 4.1 Kryptering af data i hvile (Data at Rest)
 
@@ -197,11 +197,11 @@ AlphaAi anvender følgende underleverandører i forbindelse med databehandlingen
 
 ### 5.3 Ændringer af underleverandører
 
-AlphaAi forpligter sig til at underrette kunden senest **30 dage før** iværksættelse af væsentlige ændringer i brugen af underleverandører. Kunden har ret til at indsigte i skiftet, såfremt det berører behandlingen af personoplysninger.
+AlphaAi Consult ApS forpligter sig til at underrette kunden senest **30 dage før** iværksættelse af væsentlige ændringer i brugen af underleverandører. Kunden har ret til at indsigte i skiftet, såfremt det berører behandlingen af personoplysninger.
 
 ### 5.4 Yderligere underleverandører
 
-Følgende tjenester kan anvendes af kunden via AlphaFlow-systemets funktioner, men er ikke underleverandører for AlphaAi:
+Følgende tjenester kan anvendes af kunden via AlphaFlow-systemets funktioner, men er ikke underleverandører for AlphaAi Consult ApS:
 
 | Tjeneste | Beskrivelse |
 |----------|-------------|
@@ -501,11 +501,11 @@ Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i
 
 | Felt | Underskrift |
 |------|-------------|
-| **Virksomhedsnavn** | AlphaAi |
-| **Underskrevet af** | _________________________________ |
-| **Funktion** | _________________________________ |
-| **Dato og sted** | _________________________________ |
-| **CVR-nummer** | _________________________________ |
+| **Virksomhedsnavn** | AlphaAi Consult ApS |
+| **Underskrevet af** | Jess Christoffersen|
+| **Funktion** | Direktør|
+| **Dato og sted** | 04/06/2026|
+| **CVR-nummer** | 46312058|
 
 ### Databehandler — Kunde
 

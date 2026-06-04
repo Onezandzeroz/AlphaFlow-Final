@@ -5,7 +5,7 @@
 **Dokumenttype:** Tredjeparts IT-sikkerhedsdokumentation
 **Version:** 2.0
 **Dato:** 2025
-**Ansvarlig:** AlphaFlow
+**Ansvarlig:** AlphaAi Consult ApS
 **Gældende krav:** Bogføringsloven §15, BEK nr. 98 af 23. januar 2025 — krav D5, D6 og N23
 
 ---
@@ -183,7 +183,7 @@ Neon understøtter **Point-in-Time Recovery**, som gør det muligt at gendanne d
 
 Neon tilbyder en offentligt tilgængelig **Data Processing Agreement (DPA)** for alle kunder. DPA'en er tilgængelig på:
 
-> **https://neon.tech/legal/dpa** *(opdateret 2025)*
+> **https://neon.com/DPA** *(opdateret 2025)*
 
 Neons DPA opfylder kravene i **EU's forordning om databeskyttelse (GDPR)**, art. 28, og dækker:
 
@@ -211,7 +211,7 @@ Neons DPA opfylder kravene i **EU's forordning om databeskyttelse (GDPR)**, art.
 
 Neon offentliggør en liste over underdatabehandlere, som opdateres løbende. Listen er tilgængelig på:
 
-> **https://neon.tech/legal/subprocessors**
+> **https://neon.com/subprocessors**
 
 AlphaFlow overvåger denne liste og sikrer, at alle underdatabehandlere opretholder et tilstrækkeligt beskyttelsesniveau i overensstemmelse med GDPR art. 28(3)(4).
 
@@ -393,7 +393,7 @@ Før hver gendannelse oprettes automatisk en **pre-restore safety backup** for a
 | **Lag 4: Backup-filkryptering** | AlphaFlow | AES-256-GCM kryptering af backup-filer før lagring på IONOS VPS |
 | **Lag 5: Lokal backup-lagring (IONOS VPS)** | IONOS | Backup-arkiver lagret på IONOS VPS i EU med C5 + IT-Grundschutz certificering |
 
-Disse fem lag er teknologisk uafhængige — et fejl i ét lag kompromitterer ikke de øvrige.
+Disse fem lag er teknologisk uafhængige — en fejl i ét lag kompromitterer ikke de øvrige.
 
 > **Bemærkning vedr. lokal backup-lagring:** AlphaFlows backup-filer lagres på en IONOS VPS (Virtual Private Server), der fungerer som applikationsserver og lokal backup-lagring. IONOS er den første europæiske cloud-udbyder med både **C5 (BSI Cloud Computing Compliance)** og **IT-Grundschutz**-certificeringer. Alle IONOS-datacentre er beliggende i Europa, hvilket sikrer fuld GDPR-compliance og at ingen data overføres til tredjelande. Backup-filer er desuden krypteret med AES-256-GCM før lagring i Tenant-Backup/ folderen på IONOS VPS.
 

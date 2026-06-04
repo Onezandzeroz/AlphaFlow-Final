@@ -9,7 +9,7 @@
 | **Dokumenttype** | Intern kontrolrapport / Compliance-rapport |
 | **Systemnavn** | AlphaFlow (alphaflow.dk) |
 | **Dokumentversion** | 2.0 |
-| **Udarbejdet dato** | 2025 |
+| **Udarbejdet dato** | 04/06/2026 |
 | **Gyldighedsområde** | AlphaFlow produktionsmiljø |
 | **Myndighed** | Erhvervsstyrelsen (Virk.dk) |
 | **Formål** | Godkendelse af digitalt regnskabssystem i henhold til Bogføringsloven |
@@ -1632,14 +1632,14 @@ Ved skift af regnskabsudbyder sikrer AlphaFlow:
 
 | Felt | Indhold |
 |------|---------|
-| **Udarbejdet af** | AlphaFlow systemudvikling |
-| **Dato** | 2025 |
+| **Udarbejdet af** | AlphaAi Consult ApS |
+| **Dato** | 2026 |
 | **Version** | 2.0 |
 | **Ændringer v1.0 → v2.0** | Tilføjet afsnit 13–18: TOF/MFA, Standardkontoplan, E-faktura modtagelse/fremsendelse, Årsregnskab, Fremmedvaluta. Opdateret compliance matrix (13 → 38 krav). |
 | **Næste revision** | Ved væsentlige systemændringer eller lovændringer |
 
 ---
 
-*Dette dokument udgør AlphaFlows intern kontrolrapport og compliance-dokumentation, udarbejdet til brug for Erhvervsstyrelsens godkendelse af AlphaFlow som digitalt regnskabssystem i henhold til Bogføringsloven (LBK nr. 1316 af 14/08/2023) og Bekendtgørelse om digitalisering af regnskabsmateriale.*
+*Dette dokument udgør AlphaAi Consult ApS intern kontrolrapport og compliance-dokumentation, udarbejdet til brug for Erhvervsstyrelsens registrering og godkendelse af AlphaFlow som digitalt regnskabssystem i henhold til Bogføringsloven (LBK nr. 1316 af 14/08/2023) og Bekendtgørelse om digitalisering af regnskabsmateriale.*
 
-*Alle oplysninger i dette dokument er baseret på den faktiske implementering i produktionskoden og er verificeret mod kildekoden.*
+*Alle oplysninger i dette dokument er baseret på den faktiske implementering i produktionskoden og er verificerbar mod kildekoden.*

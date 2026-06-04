@@ -1,9 +1,9 @@
 # Beredskabsplan — AlphaFlow
 
-**AlphaAi ApS**
-**CVR: [Indtast CVR-nummer]**
+**AlphaAi Consult ApS**
+**CVR: [46312058]**
 **Dokumentversion:** 2.0
-**Dato:** 2025
+**Dato:** 04/06/2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 
 ---
@@ -509,7 +509,7 @@ Alle beredskabstests dokumenteres med:
 
 | Rolle | Navn | Telefon | E-mail | Backup-kontakt |
 |-------|------|---------|--------|---------------|
-| System Administrator | [Indsæt navn] | [Indsæt nr.] | [Indsæt e-mail] | [Indsæt navn] |
+| System Administrator | [Jess Christoffersen] | [61736076] | [alphaaiconsult@gmail.com] | [Indsæt navn] |
 | Technical Lead | [Indsæt navn] | [Indsæt nr.] | [Indsæt e-mail] | [Indsæt navn] |
 | Compliance Officer | [Indsæt navn] | [Indsæt nr.] | [Indsæt e-mail] | [Indsæt navn] |
 | Direktør | [Indsæt navn] | [Indsæt nr.] | [Indsæt e-mail] | [Indsæt navn] |
@@ -567,21 +567,21 @@ Ved incidents der påvirker kunder:
 
 | Version | Dato | Ændringer | Forfatter |
 |---------|------|----------|-----------|
-| 1.0 | 2025 | Første udgave | AlphaAi ApS |
-| 2.0 | 2025 | Opdateret med konkrete kode-referencer, RTO/RPO-beregninger og 6 incidentscenarier | AlphaAi ApS |
-| 2.1 | 2025 | Tilføjet IONOS VPS som applikationsserver/backup-lagring, AES-256-GCM backup-kryptering, dekryptering i restore-flow | AlphaAi ApS |
+| 1.0 | 2025 | Første udgave | AlphaAi Consult ApS |
+| 2.0 | 2025 | Opdateret med konkrete kode-referencer, RTO/RPO-beregninger og 6 incidentscenarier | AlphaAi Consult ApS |
+| 2.1 | 2025 | Tilføjet IONOS VPS som applikationsserver/backup-lagring, AES-256-GCM backup-kryptering, dekryptering i restore-flow | AlphaAi Consult ApS |
 
 ### 8.4 Godkendelse
 
 | Rolle | Navn | Dato | Underskrift |
 |------|------|------|-------------|
-| Direktør | | | |
+| Direktør |Jess Christoffersen |04/06/2026 | |
 | Compliance Officer | | | |
 | System Administrator | | | |
 | Technical Lead | | | |
 
 ---
 
-*Dette dokument er udarbejdet af AlphaAi ApS som del af compliance-dokumentationen til Erhvervsstyrelsens anmeldelse af AlphaFlow som standard bogføringssystem.*
+*Dette dokument er udarbejdet af AlphaAi Consult ApS som del af compliance-dokumentationen til Erhvervsstyrelsens anmeldelse af AlphaFlow som standard bogføringssystem.*
 
 *Beredskabsplanen testes kvartalsvis og opdateres årligt eller ved væsentlige ændringer i systemarkitekturen.*
