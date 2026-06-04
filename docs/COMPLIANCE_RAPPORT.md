@@ -121,18 +121,21 @@ AlphaFlow anvender virksomhedsbaseret tenant-isolering (company-based multi-tena
 
 ### 2.3 Datamodel
 
-Systemets datamodel består af 23 Prisma-modeller organiseret omkring virksomhedens regnskabsdata:
+Systemets datamodel består af 31 Prisma-modeller organiseret omkring virksomhedens regnskabsdata:
 
 | Kategori | Modeller |
 |----------|----------|
 | **Kerne** | Company, User, UserCompany, Session, Invitation |
 | **Regnskab** | Transaction, Invoice, JournalEntry, JournalEntryLine |
-| **Kontoplan** | Account, Contact |
+| **Kontoplan** | Account, StandardAccountMapping, Contact |
 | **Periode** | FiscalPeriod, Budget, BudgetEntry |
 | **Bank** | BankStatement, BankStatementLine, BankConnection, BankConnectionSync |
 | **Automatisering** | RecurringEntry |
+| **E-faktura** | ReceivedInvoice, EInvoiceSending |
+| **Moms** | VATSubmission |
+| **AI-assistent** | HermesAgent, AgentReminder, AgentMessage |
 | **Dokumentation** | Document |
-| **System** | AuditLog, Backup, EmailLog |
+| **System** | AuditLog, Backup, EmailLog, NotificationRead |
 
 Herudover definerer systemet 15 enums, herunder:
 
@@ -772,6 +775,9 @@ Hver backup indeholder virksomhedens komplette regnskabsdata som JSON-filer i et
 | `recurring-entries.json` | Gentagende poster |
 | `bank-statements.json` | Kontoudtog og linjer |
 | `bank-connections.json` | Bankforbindelser (uden tokens) |
+| `received-invoices.json` | Modtagne e-fakturaer (OIOUBL/Peppol, inkl. rå XML) |
+| `vat-submissions.json` | Momsindberetninger til Skattestyrelsen |
+| `einvoice-sendings.json` | E-faktura fremsendelser med status |
 | `members.json` | Medlemskaber og roller |
 
 ### 9.3 Integritetskontrol
