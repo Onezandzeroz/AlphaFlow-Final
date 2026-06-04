@@ -410,16 +410,19 @@ async function createTenantSnapshotZip(companyId: string, zipOutputPath: string)
         })), null, 2), { name: 'vat-submissions.json' });
 
         archive.append(JSON.stringify(eInvoiceSendings.map((es) => ({
-          invoiceId: es.invoiceId, channel: es.channel, status: es.status,
-          recipientEndpointId: es.recipientEndpointId, recipientName: es.recipientName,
+          invoiceId: es.invoiceId, channel: es.channel, format: es.format,
+          status: es.status,
+          recipientName: es.recipientName, recipientCvr: es.recipientCvr,
+          recipientEAN: es.recipientEAN, recipientEndpointId: es.recipientEndpointId,
           sentAt: es.sentAt?.toISOString() ?? null,
           deliveredAt: es.deliveredAt?.toISOString() ?? null,
           acceptedAt: es.acceptedAt?.toISOString() ?? null,
-          failedAt: es.failedAt?.toISOString() ?? null,
+          messageId: es.messageId,
           errorMessage: es.errorMessage, errorCode: es.errorCode,
           retryCount: es.retryCount, maxRetries: es.maxRetries,
           nextRetryAt: es.nextRetryAt?.toISOString() ?? null,
-          responseXml: es.responseXml, responseType: es.responseType,
+          responseXml: es.responseXml,
+          sentBy: es.sentBy, companyId: es.companyId,
           createdAt: es.createdAt.toISOString(), updatedAt: es.updatedAt.toISOString(),
           _invoiceRef: es.invoiceId,
           _ref: es.id,
