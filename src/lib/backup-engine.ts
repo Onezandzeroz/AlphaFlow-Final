@@ -34,6 +34,13 @@ import {
   BankConnectionStatus,
   SyncStatus,
   CompanyRole,
+  ReceivedInvoiceStatus,
+  EInvoiceFormat,
+  EInvoiceType,
+  EInvoiceSendChannel,
+  EInvoiceSendStatus,
+  VATSubmissionStatus,
+  VATReportingPeriod,
 } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
@@ -135,6 +142,9 @@ export async function calculateChecksum(filePath: string): Promise<string> {
  *   bank-statements.json   - Bank statements with lines
  *   bank-connections.json  - Bank connections with syncs
  *   members.json           - Team membership
+ *   received-invoices.json - Received e-invoices
+ *   vat-submissions.json   - VAT submissions
+ *   einvoice-sendings.json - E-invoice sending records
  */
 async function createTenantSnapshotZip(companyId: string, zipOutputPath: string): Promise<void> {
   return new Promise<void>((resolve, reject) => {
@@ -183,8 +193,11 @@ async function createTenantSnapshotZip(companyId: string, zipOutputPath: string)
         include: { syncs: true },
         orderBy: [{ createdAt: 'desc' }],
       }),
+      db.receivedInvoice.findMany({ where: { companyId }, orderBy: [{ createdAt: 'desc' }] }),
+      db.vATSubmission.findMany({ where: { companyId }, orderBy: [{ createdAt: 'desc' }] }),
+      db.eInvoiceSending.findMany({ where: { companyId }, orderBy: [{ createdAt: 'desc' }] }),
     ])
-      .then(([company, accounts, contacts, transactions, invoices, journalEntries, fiscalPeriods, budgets, recurringEntries, bankStatements, members, bankConnections]) => {
+      .then(([company, accounts, contacts, transactions, invoices, journalEntries, fiscalPeriods, budgets, recurringEntries, bankStatements, members, bankConnections, receivedInvoices, vatSubmissions, eInvoiceSendings]) => {
         // Build and add manifest.json
         const manifest = {
           version: 2,
@@ -205,6 +218,9 @@ async function createTenantSnapshotZip(companyId: string, zipOutputPath: string)
             bankStatements: bankStatements.length,
             bankConnections: bankConnections.length,
             members: members.length,
+            receivedInvoices: receivedInvoices.length,
+            vatSubmissions: vatSubmissions.length,
+            eInvoiceSendings: eInvoiceSendings.length,
           },
         };
         archive.append(JSON.stringify(manifest, null, 2), { name: 'manifest.json' });
@@ -351,6 +367,63 @@ async function createTenantSnapshotZip(companyId: string, zipOutputPath: string)
           email: m.user.email, role: m.role,
           joinedAt: m.joinedAt?.toISOString() ?? null, invitedBy: m.invitedBy,
         })), null, 2), { name: 'members.json' });
+
+        archive.append(JSON.stringify(receivedInvoices.map((ri) => ({
+          supplierName: ri.supplierName, supplierCvr: ri.supplierCvr, supplierEmail: ri.supplierEmail,
+          supplierPhone: ri.supplierPhone, supplierAddress: ri.supplierAddress,
+          supplierCity: ri.supplierCity, supplierCountry: ri.supplierCountry,
+          invoiceNumber: ri.invoiceNumber,
+          issueDate: ri.issueDate.toISOString().split('T')[0],
+          dueDate: ri.dueDate ? ri.dueDate.toISOString().split('T')[0] : null,
+          currencyCode: ri.currencyCode,
+          format: ri.format, documentType: ri.documentType,
+          customizationId: ri.customizationId, profileId: ri.profileId,
+          lineItems: ri.lineItems, lineCount: ri.lineCount,
+          taxExclusiveAmount: ri.taxExclusiveAmount, taxAmount: ri.taxAmount,
+          taxInclusiveAmount: ri.taxInclusiveAmount, payableAmount: ri.payableAmount,
+          paymentMeansCode: ri.paymentMeansCode, paymentAccountId: ri.paymentAccountId,
+          rawXml: ri.rawXml,
+          status: ri.status, rejectionReason: ri.rejectionReason,
+          approvedBy: ri.approvedBy, approvedAt: ri.approvedAt?.toISOString() ?? null,
+          postedBy: ri.postedBy, postedAt: ri.postedAt?.toISOString() ?? null,
+          journalEntryId: ri.journalEntryId,
+          responseXml: ri.responseXml, responseType: ri.responseType,
+          validationErrors: ri.validationErrors, validationWarnings: ri.validationWarnings,
+          notes: ri.notes,
+          createdAt: ri.createdAt.toISOString(), updatedAt: ri.updatedAt.toISOString(),
+          userId: ri.userId,
+          _ref: ri.id,
+        })), null, 2), { name: 'received-invoices.json' });
+
+        archive.append(JSON.stringify(vatSubmissions.map((vs) => ({
+          year: vs.year, period: vs.period,
+          periodFrom: vs.periodFrom.toISOString().split('T')[0],
+          periodTo: vs.periodTo.toISOString().split('T')[0],
+          totalOutputVAT: vs.totalOutputVAT, totalInputVAT: vs.totalInputVAT,
+          netVATPayable: vs.netVATPayable, vatDataJson: vs.vatDataJson,
+          status: vs.status,
+          submittedAt: vs.submittedAt?.toISOString() ?? null,
+          submittedBy: vs.submittedBy, referenceId: vs.referenceId,
+          responseXml: vs.responseXml, errorMessage: vs.errorMessage, errorCode: vs.errorCode,
+          createdAt: vs.createdAt.toISOString(), updatedAt: vs.updatedAt.toISOString(),
+          _ref: vs.id,
+        })), null, 2), { name: 'vat-submissions.json' });
+
+        archive.append(JSON.stringify(eInvoiceSendings.map((es) => ({
+          invoiceId: es.invoiceId, channel: es.channel, status: es.status,
+          recipientEndpointId: es.recipientEndpointId, recipientName: es.recipientName,
+          sentAt: es.sentAt?.toISOString() ?? null,
+          deliveredAt: es.deliveredAt?.toISOString() ?? null,
+          acceptedAt: es.acceptedAt?.toISOString() ?? null,
+          failedAt: es.failedAt?.toISOString() ?? null,
+          errorMessage: es.errorMessage, errorCode: es.errorCode,
+          retryCount: es.retryCount, maxRetries: es.maxRetries,
+          nextRetryAt: es.nextRetryAt?.toISOString() ?? null,
+          responseXml: es.responseXml, responseType: es.responseType,
+          createdAt: es.createdAt.toISOString(), updatedAt: es.updatedAt.toISOString(),
+          _invoiceRef: es.invoiceId,
+          _ref: es.id,
+        })), null, 2), { name: 'einvoice-sendings.json' });
 
         archive.finalize();
       })
@@ -584,6 +657,10 @@ async function restoreTenantSnapshot(
       await tx.document.deleteMany({ where: { journalEntry: { companyId } } });
       await tx.bankConnectionSync.deleteMany({ where: { bankConnection: { companyId } } });
 
+      await tx.eInvoiceSending.deleteMany({ where: { invoice: { companyId } } });
+      await tx.vATSubmission.deleteMany({ where: { companyId } });
+      await tx.receivedInvoice.deleteMany({ where: { companyId } });
+
       await tx.bankStatement.deleteMany({ where: { companyId } });
       await tx.bankConnection.deleteMany({ where: { companyId } });
       await tx.recurringEntry.deleteMany({ where: { companyId } });
@@ -695,6 +772,10 @@ export async function restoreBackupFromBuffer(
       await tx.journalEntryLine.deleteMany({ where: { journalEntry: { companyId } } });
       await tx.document.deleteMany({ where: { journalEntry: { companyId } } });
       await tx.bankConnectionSync.deleteMany({ where: { bankConnection: { companyId } } });
+
+      await tx.eInvoiceSending.deleteMany({ where: { invoice: { companyId } } });
+      await tx.vATSubmission.deleteMany({ where: { companyId } });
+      await tx.receivedInvoice.deleteMany({ where: { companyId } });
 
       await tx.bankStatement.deleteMany({ where: { companyId } });
       await tx.bankConnection.deleteMany({ where: { companyId } });
@@ -1113,6 +1194,122 @@ async function importTenantDataFromZip(
       imported++;
     }
     counts.members = imported;
+  }
+
+  // Received invoices
+  const riFile = zip.file('received-invoices.json');
+  if (riFile) {
+    const riData = JSON.parse(await riFile.async('string')) as Array<Record<string, unknown>>;
+    for (const ri of riData) {
+      await tx.receivedInvoice.create({
+        data: {
+          companyId,
+          userId: (ri.userId as string) ?? null,
+          supplierName: ri.supplierName as string,
+          supplierCvr: (ri.supplierCvr as string) ?? null,
+          supplierEmail: (ri.supplierEmail as string) ?? null,
+          supplierPhone: (ri.supplierPhone as string) ?? null,
+          supplierAddress: (ri.supplierAddress as string) ?? null,
+          supplierCity: (ri.supplierCity as string) ?? null,
+          supplierCountry: (ri.supplierCountry as string) ?? null,
+          invoiceNumber: ri.invoiceNumber as string,
+          issueDate: new Date(ri.issueDate as string),
+          dueDate: ri.dueDate ? new Date(ri.dueDate as string) : null,
+          currencyCode: (ri.currencyCode as string) ?? 'DKK',
+          format: (ri.format as EInvoiceFormat) ?? 'OIOUBL',
+          documentType: (ri.documentType as EInvoiceType) ?? 'INVOICE',
+          customizationId: (ri.customizationId as string) ?? null,
+          profileId: (ri.profileId as string) ?? null,
+          lineItems: ri.lineItems ?? [],
+          lineCount: (ri.lineCount as number) ?? 0,
+          taxExclusiveAmount: (ri.taxExclusiveAmount as number) ?? 0,
+          taxAmount: (ri.taxAmount as number) ?? 0,
+          taxInclusiveAmount: (ri.taxInclusiveAmount as number) ?? 0,
+          payableAmount: (ri.payableAmount as number) ?? 0,
+          paymentMeansCode: (ri.paymentMeansCode as string) ?? null,
+          paymentAccountId: (ri.paymentAccountId as string) ?? null,
+          rawXml: ri.rawXml as string,
+          status: (ri.status as ReceivedInvoiceStatus) ?? 'RECEIVED',
+          rejectionReason: (ri.rejectionReason as string) ?? null,
+          approvedBy: (ri.approvedBy as string) ?? null,
+          approvedAt: ri.approvedAt ? new Date(ri.approvedAt as string) : null,
+          postedBy: (ri.postedBy as string) ?? null,
+          postedAt: ri.postedAt ? new Date(ri.postedAt as string) : null,
+          journalEntryId: (ri.journalEntryId as string) ?? null,
+          responseXml: (ri.responseXml as string) ?? null,
+          responseType: (ri.responseType as string) ?? null,
+          validationErrors: (ri.validationErrors as string) ?? null,
+          validationWarnings: (ri.validationWarnings as string) ?? null,
+          notes: (ri.notes as string) ?? null,
+        },
+      });
+    }
+    counts.receivedInvoices = riData.length;
+  }
+
+  // VAT submissions
+  const vsFile = zip.file('vat-submissions.json');
+  if (vsFile) {
+    const vsData = JSON.parse(await vsFile.async('string')) as Array<Record<string, unknown>>;
+    for (const vs of vsData) {
+      await tx.vATSubmission.create({
+        data: {
+          companyId,
+          year: vs.year as number,
+          period: vs.period as VATReportingPeriod,
+          periodFrom: new Date(vs.periodFrom as string),
+          periodTo: new Date(vs.periodTo as string),
+          totalOutputVAT: (vs.totalOutputVAT as number) ?? 0,
+          totalInputVAT: (vs.totalInputVAT as number) ?? 0,
+          netVATPayable: (vs.netVATPayable as number) ?? 0,
+          vatDataJson: vs.vatDataJson ?? {},
+          status: (vs.status as VATSubmissionStatus) ?? 'DRAFT',
+          submittedAt: vs.submittedAt ? new Date(vs.submittedAt as string) : null,
+          submittedBy: (vs.submittedBy as string) ?? null,
+          referenceId: (vs.referenceId as string) ?? null,
+          responseXml: (vs.responseXml as string) ?? null,
+          errorMessage: (vs.errorMessage as string) ?? null,
+          errorCode: (vs.errorCode as string) ?? null,
+        },
+      });
+    }
+    counts.vatSubmissions = vsData.length;
+  }
+
+  // E-invoice sendings
+  const esFile = zip.file('einvoice-sendings.json');
+  if (esFile) {
+    const esData = JSON.parse(await esFile.async('string')) as Array<Record<string, unknown>>;
+    for (const es of esData) {
+      // Look up the invoice by _ref to get the new ID
+      let invoiceId: string | null = null;
+      if (es._invoiceRef as string) {
+        const inv = await tx.invoice.findFirst({ where: { companyId, id: es._invoiceRef as string } });
+        if (inv) invoiceId = inv.id;
+      }
+      await tx.eInvoiceSending.create({
+        data: {
+          companyId,
+          invoiceId: invoiceId ?? (es.invoiceId as string) ?? null,
+          channel: (es.channel as EInvoiceSendChannel) ?? 'NEMHANDEL_OIOUBL',
+          status: (es.status as EInvoiceSendStatus) ?? 'PENDING',
+          recipientEndpointId: (es.recipientEndpointId as string) ?? null,
+          recipientName: (es.recipientName as string) ?? null,
+          sentAt: es.sentAt ? new Date(es.sentAt as string) : null,
+          deliveredAt: es.deliveredAt ? new Date(es.deliveredAt as string) : null,
+          acceptedAt: es.acceptedAt ? new Date(es.acceptedAt as string) : null,
+          failedAt: es.failedAt ? new Date(es.failedAt as string) : null,
+          errorMessage: (es.errorMessage as string) ?? null,
+          errorCode: (es.errorCode as string) ?? null,
+          retryCount: (es.retryCount as number) ?? 0,
+          maxRetries: (es.maxRetries as number) ?? 3,
+          nextRetryAt: es.nextRetryAt ? new Date(es.nextRetryAt as string) : null,
+          responseXml: (es.responseXml as string) ?? null,
+          responseType: (es.responseType as string) ?? null,
+        },
+      });
+    }
+    counts.eInvoiceSendings = esData.length;
   }
 
   return counts;
