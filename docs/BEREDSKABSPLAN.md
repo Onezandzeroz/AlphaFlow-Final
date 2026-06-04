@@ -30,7 +30,7 @@ Denne beredskabsplan beskriver AlphaFlows procedurer for forebyggelse, registrer
 - Bogføringsdata altid kan gendannes i overensstemmelse med **Bogføringslovens § 10-12**
 - **5-års opbevaringspligt** opretholdes selv ved kritiske hændelser
 - Systemets tilgængelighed genetableres inden for definerede tidsrammer
-- Alle hændelser dokumenteres i uforanderlig audit trail (`src/lib/audit.ts`)
+- Alle hændelser dokumenteres i uforanderlig audit trail (`src/lib/audit.ts`), beskyttet mod ændring/sletning på databaseniveau af PostgreSQL-triggere (`prisma/audit-immutability.sql`)
 
 ### 1.2 Lovgrundlag
 
@@ -172,7 +172,7 @@ Denne plan dækker:
 **Beskrivelse:** Systemet er inficeret med ransomware eller malware, der truer med at kryptere eller slette data.
 
 **Forebyggelse:**
-- Uforanderlig audit trail (`src/lib/audit.ts`) — kan aldrig slettes eller ændres
+- Uforanderlig audit trail (`src/lib/audit.ts` + `prisma/audit-immutability.sql`) — kan aldrig slettes eller ændres, håndhævet på både applikations- og databaseniveau
 - AES-256-GCM kryptering af følsomme data (`src/lib/crypto.ts`)
 - Krypterede backups (AES-256-GCM krypterede ZIP-arkiver lagret på IONOS VPS i EU)
 - IONOS VPS med C5 (BSI) og IT-Grundschutz certificering sikrer backup-lagring i EU
@@ -556,11 +556,12 @@ Ved incidents der påvirker kunder:
 |-----------|-----|---------|
 | Backup motor | `src/lib/backup-engine.ts` | Opret/restore backups, SHA-256 verificering |
 | Backup scheduler | `src/lib/backup-scheduler.ts` | Automatiske hourly/daily/weekly/monthly backups |
-| Audit trail | `src/lib/audit.ts` | Uforanderlig logging af alle hændelser |
+| Audit trail | `src/lib/audit.ts` + `prisma/audit-immutability.sql` | Uforanderlig logging af alle hændelser (applikations- og databaseniveau)
 | Kryptering | `src/lib/crypto.ts` | AES-256-GCM kryptering af følsomme data |
 | RBAC | `src/lib/rbac.ts` | 5 roller, 23 permissions |
 | 2FA | `src/lib/two-factor.ts` | TOTP-baseret to-faktor autentificering |
 | Process management | `ecosystem.config.js` | PM2 konfiguration (auto-restart, memory limit) |
+| Audit immutability | `prisma/audit-immutability.sql` | PostgreSQL-triggere der forhindrer UPDATE/DELETE på AuditLog |
 | Reverse proxy | `Caddyfile` | Caddy TLS-terminering og sikkerhedshoveder |
 
 ### 8.3 Dokumentrevision
@@ -570,6 +571,7 @@ Ved incidents der påvirker kunder:
 | 1.0 | 2025 | Første udgave | AlphaAi Consult ApS |
 | 2.0 | 2025 | Opdateret med konkrete kode-referencer, RTO/RPO-beregninger og 6 incidentscenarier | AlphaAi Consult ApS |
 | 2.1 | 2025 | Tilføjet IONOS VPS som applikationsserver/backup-lagring, AES-256-GCM backup-kryptering, dekryptering i restore-flow | AlphaAi Consult ApS |
+| 2.2 | 2025 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere), ændret FK onDelete fra SetNull til Restrict | AlphaAi Consult ApS |
 
 ### 8.4 Godkendelse
 

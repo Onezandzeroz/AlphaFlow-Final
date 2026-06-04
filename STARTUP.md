@@ -91,6 +91,13 @@ Then push the Prisma schema to your Neon database:
 bun run db:push
 ```
 
+Apply the AuditLog database-level immutability triggers (required for Bogføringsloven §10-12 compliance):
+
+```bash
+# Apply PostgreSQL triggers that prevent UPDATE/DELETE on AuditLog
+bun run audit-immutable
+```
+
 ### 1.4. TokenBay Access — Local SQLite Database
 
 The mini-service uses its **own separate local SQLite database** — completely independent from the host app's PostgreSQL.
@@ -225,6 +232,12 @@ Push the schema to your Neon database:
 
 ```bash
 bun run db:push
+```
+
+Apply the AuditLog database-level immutability triggers:
+
+```bash
+bun run audit-immutable
 ```
 
 See [SMTP Provider Examples](#31-smtp-provider-examples) below for provider-specific settings.
@@ -809,6 +822,7 @@ Before going live, ensure:
 
 - [ ] `.env` is configured with a valid `DATABASE_URL` pointing to your Neon PostgreSQL database
 - [ ] `bun run db:push` succeeded (schema pushed to Neon)
+- [ ] `bun run audit-immutable` succeeded (AuditLog immutability triggers applied)
 - [ ] Stale SQLite files were removed (`rm -f mini-services/tokenpay-access-service/data/access.db*`)
 - [ ] `.env` is configured with real SMTP credentials (not using dev mode)
 - [ ] `APP_URL` matches your public domain (https)

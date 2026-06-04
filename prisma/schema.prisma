@@ -460,6 +460,17 @@ model Invoice {
 }
 
 // ─── AUDIT LOG ────────────────────────────────────────────────────
+//
+// DATABASE-LEVEL IMMUTABILITY:
+// PostgreSQL triggers (see prisma/audit-immutability.sql) prevent
+// UPDATE and DELETE on this table at the database level.
+// This enforces Bogføringsloven §10-12 beyond application-level controls.
+//
+// Foreign keys use onDelete: Restrict — you cannot delete a User or
+// Company that has AuditLog entries. This is intentional: the audit
+// trail must preserve references for the 5-year retention period.
+//
+// Deployment: bun run scripts/apply-audit-immutability.ts
 
 model AuditLog {
   id               String   @id @default(cuid())
@@ -473,9 +484,14 @@ model AuditLog {
   metadata         Json?
   createdAt        DateTime @default(now())
 
-  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  company          Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  performedByUser  User?    @relation("PerformedByUser", fields: [performedByUserId], references: [id], onDelete: SetNull)
+  // onDelete: Restrict — prevents deletion of referenced User/Company
+  // when AuditLog entries exist. This is required by Bogføringsloven §10-12
+  // to maintain an immutable audit trail for 5 years.
+  // NOTE: If a user requests GDPR Art. 17 deletion, the 5-year bookkeeping
+  // retention obligation takes precedence per GDPR Art. 17(3)(c).
+  user             User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  company          Company? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  performedByUser  User?    @relation("PerformedByUser", fields: [performedByUserId], references: [id], onDelete: Restrict)
 
   @@index([userId])
   @@index([companyId, createdAt])

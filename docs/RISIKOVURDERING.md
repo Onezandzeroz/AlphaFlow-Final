@@ -299,14 +299,14 @@ Nedenstående matrix viser alle identificerede trusler med konsekvens-, sandsynl
 | 8 | T-CF3 | Session hijacking | 2 | 1 | **2** | 🟢 Lav | Secure session-håndtering (session.ts); HSTS forbidding HTTP; 2FA kræver ekstra faktor; rate limiting (rate-limit.ts) |
 | 9 | T-CF4 | Kompromitteret adgangskode | 3 | 2 | **6** | 🟡 Middel | bcrypt 12 rounds (password.ts); 2FA/TOTP som ekstra faktor (two-factor.ts); login rate limiting |
 | 10 | T-CF5 | Lækage af krypteringsnøgler | 5 | 1 | **5** | 🟡 Middel | ENCRYPTION_KEY kun i miljøvariabel (aldrig i database/codebase); access-guard.ts for API-beskyttelse |
-| 11 | T-IG1 | Uberettiget ændring af data | 3 | 1 | **3** | 🟢 Lav | RBAC med 23 permissioner (rbac.ts); requirePermission() i alle mutation-endpoints; immutable audit trail (audit.ts); 2FA forhindrer uautoriseret adgang |
+| 11 | T-IG1 | Uberettiget ændring af data | 3 | 1 | **3** | 🟢 Lav | RBAC med 23 permissioner (rbac.ts); requirePermission() i alle mutation-endpoints; immutable audit trail med database-level triggers (audit.ts + audit-immutability.sql); onDelete: Restrict forhindrer sletning af refererede brugere/virksomheder; 2FA forhindrer uautoriseret adgang |
 | 12 | T-IG2 | Datakorruption via softwarefejl | 3 | 2 | **6** | 🟡 Middel | Automatiske backups (hourly/daily/weekly/monthly); SHA-256 checksum-verificering ved restore; atomic database-transaktioner |
 | 13 | T-IG3 | Malware/ransomware | 4 | 1 | **4** | 🟢 Lav | Automatiske backups med SHA-256; restore muligt fra clean snapshot; minimal attack surface (kun Caddy eksponeret) |
 | 14 | T-IG4 | SQL injection / XSS | 3 | 1 | **3** | 🟢 Lav | Prisma ORM parameteriserer alle queries; Next.js auto-escapes JSX; security headers (X-XSS-Protection, X-Content-Type-Options) |
 | 15 | T-IG5 | Manipulerede valutakurser | 2 | 1 | **2** | 🟢 Lav | ECB reference rates (officiel EU-kilde); response-validering i currency-utils.ts; 1-time cache; fallback til DKK |
-| 16 | T-PD1 | GDPR-breach | 4 | 1 | **4** | 🟢 Lav | TLS 1.3; AES-256-GCM; RBAC med tenant-isolation; audit trail; 2FA; data eksport/sletning |
+| 16 | T-PD1 | GDPR-breach | 4 | 1 | **4** | 🟢 Lav | TLS 1.3; AES-256-GCM; RBAC med tenant-isolation; audit trail med database-level immutability; 2FA; data eksport/sletning |
 | 17 | T-PD2 | Manglende ret til sletning | 2 | 1 | **2** | 🟢 Lav | `/api/auth/delete-account` endpoint; tenant-eksport (`export-tenant`) for portabilitet; sletning af user-data i alle tabeller |
-| 18 | T-PD3 | Cross-tenant adgang (persondata) | 4 | 1 | **4** | 🟢 Lav | `companyScope()` i alle queries; `tenantFilter()` med demo-company block; oversight read-only mode; audit trail log |
+| 18 | T-PD3 | Cross-tenant adgang (persondata) | 4 | 1 | **4** | 🟢 Lav | `companyScope()` i alle queries; `tenantFilter()` med demo-company block; oversight read-only mode; audit trail log med database-level immutability |
 
 ---
 
@@ -344,8 +344,8 @@ Alle eksisterende tekniske og organisatoriske kontroller er dokumenteret nedenfo
 
 | Kontrol ID | Kontrol | Reference | Beskrivelse |
 |------------|---------|-----------|-------------|
-| **K-AT1** | Immutable Audit Log | `src/lib/audit.ts` | Uforanderlig log af alle ændringer til regnskabsdata (bogføringslov §10-12). 13+ event-typer: CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, BACKUP_CREATE, BACKUP_RESTORE, BACKUP_DELETE, SESSION_INVALIDATE, DATA_RESET. Alle events inkluderer userId, companyId, entityType, entityId, before/after values, IP, userAgent. |
-| **K-AT2** | Audit på alle mutation-endpoints | Alle API routes i `src/app/api/` | Alle POST/PUT/DELETE API routes kalder `auditLog()` eller hjælpefunktionerne `auditCreate()`, `auditUpdate()`, `auditCancel()`, `auditDeleteAttempt()`. |
+| **K-AT1** | Immutable Audit Log (dobbelte beskyttelseslag) | `src/lib/audit.ts` + `prisma/audit-immutability.sql` | Uforanderlig log af alle ændringer til regnskabsdata (bogføringslov §10-12). Immutability håndhæves på **to uafhængige niveauer**: **1) Applikationsniveau:** `audit.ts` eksporterer kun CREATE-funktioner — ingen update/delete. API route (`audit-logs/route.ts`) eksponerer kun GET-endpoints. **2) Databaseniveau:** PostgreSQL-triggere (`prisma/audit-immutability.sql`) forhindrer UPDATE og DELETE på "AuditLog"-tabellen fuldstændigt. Selv en database-administrator eller kompromitteret forbindelse kan ikke ændre eller slette audit-poster. Fremmednøgler bruger `onDelete: Restrict` — brugere og virksomheder med audit-poster kan ikke slettes (5-års opbevaringspligt jf. Bogføringsloven §12 forrang over GDPR Art. 17(3)(c)). 21+ event-typer: CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, BACKUP_CREATE, BACKUP_RESTORE, BACKUP_DELETE, SESSION_INVALIDATE, DATA_RESET, OVERSIGHT, TWO_FACTOR_SETUP_STARTED, TWO_FACTOR_ACTIVATED, TWO_FACTOR_DISABLED, TWO_FACTOR_BACKUP_CODES_REGENERATED, TWO_FACTOR_TENANT_TOGGLE, LOGIN_2FA_VERIFIED. Alle events inkluderer userId, companyId, entityType, entityId, before/after values, IP, userAgent. |
+| **K-AT2** | Audit på alle mutation-endpoints | Alle API routes i `src/app/api/` | Alle POST/PUT/DELETE API routes kalder `auditLog()` eller hjælpefunktionerne `auditCreate()`, `auditUpdate()`, `auditCancel()`, `auditDeleteAttempt()`. Audit-poster er beskyttet mod ændring/sletning af PostgreSQL-triggere (se K-AT1). |
 
 ### 6.5 Backup og Gendannelse
 
@@ -459,6 +459,7 @@ Alle ændringer i risikovurderingen dokumenteres i tabelform:
 |------|---------|---------------|-----------|
 | 1. juli 2025 | Første version (v2.0) af IT-risikovurdering | System anmeldelse til Erhvervsstyrelsen | AlphaAi |
 | 2025 | Tilføjet IONOS VPS som tredjepartsrisiko (C5 + IT-Grundschutz, EU-hosted), opdateret backup-kryptering til AES-256-GCM | IONOS VPS tilføjet som leverandør | AlphaAi |
+| 2025 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere i K-AT1), opdateret FK onDelete fra SetNull til Restrict | Compliance-review: audit trail var kun beskyttet på applikationsniveau | AlphaAi |
 
 ---
 
@@ -476,7 +477,7 @@ Denne IT-risikovurdering har identificeret og vurderet **18 specifikke trusler**
    - **Krypteringslag:** AES-256-GCM (følsomme data), bcrypt 12 rounds (adgangskoder)
    - **Autentificeringslag:** 2FA/TOTP + session management + rate limiting
    - **Autorisationslag:** RBAC med 5 roller, 23 permissioner, tenant isolation i alle queries
-   - **Auditlag:** Uforanderlig log af alle ændringer (bogføringslov §10-12)
+   - **Auditlag:** Uforanderlig log af alle ændringer (bogføringslov §10-12) — **håndhævet på både applikations- og databaseniveau** via PostgreSQL-triggere der forhindrer UPDATE/DELETE på AuditLog-tabellen
    - **Gendannelseslag:** Automatiske backups (hourly/daily/weekly/monthly), SHA-256 verificering, atomic restore
 
 3. **Compliance:** Systemets kontroller opfylder kravene i:

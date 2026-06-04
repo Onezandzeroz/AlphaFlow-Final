@@ -5,6 +5,23 @@
  * All changes to accounting data must be logged immutably.
  * Entries can never be deleted or modified.
  *
+ * IMMUTABILITY IS ENFORCED AT TWO LEVELS:
+ *
+ * 1. Application level: This module exports only CREATE functions.
+ *    No update or delete functions are exposed.
+ *    The API route (audit-logs/route.ts) exposes only GET endpoints.
+ *
+ * 2. Database level: PostgreSQL triggers (prisma/audit-immutability.sql)
+ *    prevent UPDATE and DELETE on the "AuditLog" table entirely.
+ *    Even a database administrator or compromised connection cannot
+ *    modify or delete audit entries.
+ *    Deployment: bun run scripts/apply-audit-immutability.ts
+ *
+ * Additionally, foreign keys use onDelete: Restrict, preventing deletion
+ * of Users or Companies that have AuditLog entries (Bogføringsloven §12
+ * 5-year retention obligation takes precedence over GDPR Art. 17 deletion
+ * requests per GDPR Art. 17(3)(c)).
+ *
  * Every CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN, LOGOUT action
  * is recorded with full before/after values.
  */
