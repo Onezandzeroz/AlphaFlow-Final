@@ -1,0 +1,135 @@
+// PM2 Ecosystem Configuration for AlphaFlow + Mini Services
+// Usage: pm2 start ecosystem.config.js
+//
+// PREREQUISITES:
+//   1. bun run build
+//   2. bun run db:push
+//   3. cd mini-services/tokenpay-access-service && bun install
+//   4. cd mini-services/hermes-agent && bun install   (runs prisma generate via postinstall)
+//
+// After config changes: pm2 delete all && pm2 start ecosystem.config.js
+//
+// Services:
+//   1. alphaflow          — Next.js app on port 3000
+//   2. notification-ws    — Notification WebSocket Service on port 3001
+//   3. hermes-agent       — Hermes AI Agent Socket.IO service on port 3004
+//   4. tokenpay-access    — TokenPay Access Service on port 3100
+
+module.exports = {
+  apps: [
+    // ─── AlphaFlow (Next.js) ───────────────────────────────────────
+    {
+      name: 'alphaflow',
+      script: 'node_modules/.bin/next',
+      args: 'start -p 3000',
+      // Set cwd to YOUR project root on the server
+      // e.g. '/home/ubuntu/alphaflow' or '/var/www/alphaflow'
+      cwd: process.cwd(),
+      env: {
+        NODE_ENV: 'production',
+        // DATABASE_URL is loaded from .env.local — make sure it's set!
+        // Example: postgresql://neondb_owner:xxx@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require
+      },
+      // CRITICAL: Must use fork mode — cluster mode breaks Bun interpreter
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      // Memory limit — restart if exceeding 1.5GB
+      max_memory_restart: '1500M',
+      // Logging
+      error_file: './logs/error.log',
+      out_file: './logs/out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      merge_logs: true,
+    },
+
+// ─── Hermes Agent Service (Bun + Socket.IO) ─────────────────────
+    {
+      name: 'hermes-agent',
+      script: 'index.ts',
+      cwd: `${process.cwd()}/mini-services/hermes-agent`,
+      interpreter: 'bun',
+      env: {
+        NODE_ENV: 'production',
+        // DATABASE_URL is inherited from root .env via dotenv in the service code
+        // If not auto-loaded, set it here explicitly:
+        //DATABASE_URL: '',
+      },
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      // Memory limit — Socket.IO + LLM streaming, 512MB should be plenty
+      max_memory_restart: '512M',
+      // Logging
+      error_file: './logs/hermes-agent-error.log',
+      out_file: './logs/hermes-agent-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      merge_logs: true,
+    },
+
+    // ─── TokenPay Access Service (Bun + Hono) ──────────────────────
+    {
+      name: 'tokenpay-access',
+      script: 'index.ts',
+      cwd: `${process.cwd()}/mini-services/tokenpay-access-service`,
+      interpreter: 'bun',
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3100',
+        // API_SHARED_KEY must match TOKENPAY_API_KEY in the host app's .env
+        API_SHARED_KEY: '',
+        // Webhook callback URL — the host app's endpoint for access change events
+        HOST_CALLBACK_URL: 'https://alphaflow.dk/api/tokenpay/callback',
+        // SQLite database path for the access service
+        DATABASE_PATH: './data/access.db',
+        // AES-256-GCM key (64-char hex) shared with TokenBay-ZIPProof for .tbkey decryption.
+        // This MUST match the PROOF_ENCRYPTION_KEY in the root .env file and in TokenBay-ZIPProof.
+        // Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+        // NOTE: pm2 reads env vars from this file — it does NOT inherit from the root .env.
+        PROOF_ENCRYPTION_KEY: '', // <-- SET YOUR KEY HERE (or use pm2 set)
+      },
+      // CRITICAL: Must use fork mode — cluster mode breaks Bun and SQLite.
+      // Bun does not support Node.js cluster module, and multiple workers
+      // cannot share a single SQLite database file (WAL locking conflict).
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      // Memory limit — lighter service, 256MB is plenty
+      max_memory_restart: '256M',
+      // Logging
+      error_file: './logs/tokenpay-access-error.log',
+      out_file: './logs/tokenpay-access-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      merge_logs: true,
+    },
+
+    // ─── Notification WebSocket Service (Bun + Socket.IO) ──────────
+    {
+      name: 'notification-ws',
+      script: 'index.ts',
+      cwd: `${process.cwd()}/mini-services/notification-ws-service`,
+      interpreter: 'bun',
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3001',
+      },
+      // Single instance — Socket.IO state is in-memory
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      max_memory_restart: '128M',
+      error_file: './logs/notification-ws-error.log',
+      out_file: './logs/notification-ws-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      merge_logs: true,
+    },
+  ],
+};
