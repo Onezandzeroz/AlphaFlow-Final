@@ -204,7 +204,7 @@ Trusler er kategoriseret i fire hovedkategorier baseret på CIKA (Confidentialit
 | Sikkerhedsbreach på VPS | 5 | 1 | C5 + IT-Grundschutz certificering, DDoS-beskyttelse, 2FA/brute-force beskyttelse, SSH-nøgler |
 | Tab af backup-data | 4 | 1 | AES-256-GCM kryptering af backup-filer, SHA-256 checksum, Neon PITR som alternativ kilde |
 | Dataoverførsel til tredjelande | 5 | 1 | Alle IONOS-datacentre i Europa, DPA indgået, fuld GDPR-compliance |
-| DDoS angreb | 3 | 2 | IONOS automatisk DDoS-detektion og blokering, Caddy rate limiting |
+| DDoS angreb | 3 | 2 | IONOS automatisk DDoS-detektion og blokering, Caddy rate limiting (`rate_limit` direktiv), applikations-level rate limiting (rate-limit.ts) |
 
 ### 4.3 Caddy (Reverse Proxy / TLS)
 
@@ -290,7 +290,7 @@ Nedenstående matrix viser alle identificerede trusler med konsekvens-, sandsynl
 | # | Trussel ID | Trusselbeskrivelse | K (1-5) | S (1-5) | Restrisiko | Klasse | Eksisterende kontrol |
 |---|-----------|--------------------|---------|---------|-------------|--------|---------------------|
 | 1 | T-AV1 | Servernedetid | 3 | 2 | **6** | 🟡 Middel | PM2 process management med auto-restart; cron health monitoring; backup-scheduler per-tenant overvågning |
-| 2 | T-AV2 | DDoS-angreb | 2 | 2 | **4** | 🟢 Lav | Caddy reverse proxy fungerer som rate-limiter; HSTS forhindrer downgrade-angreb |
+| 2 | T-AV2 | DDoS-angreb | 2 | 2 | **4** | 🟢 Lav | Caddy reverse proxy med rate limiting (Caddyfile); IONOS automatisk DDoS-detektion; HSTS forhindrer downgrade-angreb; applikations-level rate limiting (rate-limit.ts) på følsomme endpoints |
 | 3 | T-AV3 | Databasefejl (Neon) | 3 | 1 | **3** | 🟢 Lav | Neon SOC 2 Type II; sslmode=require; connection retry i Prisma client |
 | 4 | T-AV4 | Fil-system fejl | 2 | 1 | **2** | 🟢 Lav | Backup scheduler overvåger diskplads; cleanup cron fjerner expired backups dagligt |
 | 5 | T-AV5 | Backup-fiasko | 2 | 1 | **2** | 🟢 Lav | Per-tenant cron health monitoring (idle/pending/healthy/unhealthy); dedup-tracking; pre-restore safety backup |
@@ -298,7 +298,7 @@ Nedenstående matrix viser alle identificerede trusler med konsekvens-, sandsynl
 | 7 | T-CF2 | Insider-trussel (cross-tenant) | 4 | 1 | **4** | 🟢 Lav | Alle 89+ API routes scoped af `companyScope()`/`tenantFilter()` i rbac.ts; oversight-mode mutation block; 23 RBAC-permissioner |
 | 8 | T-CF3 | Session hijacking | 2 | 1 | **2** | 🟢 Lav | Secure session-håndtering (session.ts); HSTS forbidding HTTP; 2FA kræver ekstra faktor; rate limiting (rate-limit.ts) |
 | 9 | T-CF4 | Kompromitteret adgangskode | 3 | 2 | **6** | 🟡 Middel | bcrypt 12 rounds (password.ts); 2FA/TOTP som ekstra faktor (two-factor.ts); login rate limiting |
-| 10 | T-CF5 | Lækage af krypteringsnøgler | 5 | 1 | **5** | 🟡 Middel | ENCRYPTION_KEY kun i miljøvariabel (aldrig i database/codebase); access-guard.ts for API-beskyttelse |
+| 10 | T-CF5 | Lækage af krypteringsnøgler | 5 | 1 | **5** | 🟡 Middel | ENCRYPTION_KEY kun i miljøvariabel (aldrig i database/codebase); server-miljøisolering (.env) forhindrer kode-adgang til nøglen; RBAC + 2FA beskytter administrative funktioner |
 | 11 | T-IG1 | Uberettiget ændring af data | 3 | 1 | **3** | 🟢 Lav | RBAC med 23 permissioner (rbac.ts); requirePermission() i alle mutation-endpoints; immutable audit trail med database-level triggers (audit.ts + audit-immutability.sql); onDelete: Restrict forhindrer sletning af refererede brugere/virksomheder; 2FA forhindrer uautoriseret adgang |
 | 12 | T-IG2 | Datakorruption via softwarefejl | 3 | 2 | **6** | 🟡 Middel | Automatiske backups (hourly/daily/weekly/monthly); SHA-256 checksum-verificering ved restore; atomic database-transaktioner |
 | 13 | T-IG3 | Malware/ransomware | 4 | 1 | **4** | 🟢 Lav | Automatiske backups med SHA-256; restore muligt fra clean snapshot; minimal attack surface (kun Caddy eksponeret) |
@@ -318,7 +318,7 @@ Alle eksisterende tekniske og organisatoriske kontroller er dokumenteret nedenfo
 
 | Kontrol ID | Kontrol | Reference | Beskrivelse |
 |------------|---------|-----------|-------------|
-| **K-NT1** | TLS 1.3 + HSTS | `Caddyfile` (linje 69–87) | Caddy konfigurerer automatisk TLS 1.3 via Let's Encrypt. HSTS med `max-age=31536000; includeSubDomains; preload` tvinger HTTPS for alle fremtidige anmodninger. |
+| **K-NT1** | TLS 1.2 (minimum) + TLS 1.3 (preferred) + HSTS | `Caddyfile` (linje 68–73, 75–93) | Caddy konfigurerer eksplicit minimum TLS 1.2 med TLS 1.3 som preferred protocol via `tls { protocols tls1.2 tls1.3 }` direktiv. TLS-certifikater håndteres automatisk via Let's Encrypt (ACME). HSTS med `max-age=31536000; includeSubDomains; preload` tvinger HTTPS for alle fremtidige anmodninger. |
 | **K-NT2** | Security Headers | `Caddyfile` (linje 69–87) | X-Frame-Options (SAMEORIGIN), X-Content-Type-Options (nosniff), X-XSS-Protection (1; mode=block), Referrer-Policy (strict-origin-when-cross-origin), Permissions-Policy (camera/microphone/geolocation=deaktiveret). |
 | **K-NT3** | Database Transport Kryptering | Prisma `DATABASE_URL` | `sslmode=require` sikrer at al kommunikation mellem applikation og Neon PostgreSQL er TLS-krypteret. |
 
@@ -376,7 +376,7 @@ Alle eksisterende tekniske og organisatoriske kontroller er dokumenteret nedenfo
 
 | Kontrol ID | Kontrol | Reference | Beskrivelse |
 |------------|---------|-----------|-------------|
-| **K-RL1** | Rate Limiting | `src/lib/rate-limit.ts` | Rate limiting på følsomme endpoints (login, 2FA, password reset). Forhindrer brute-force og DoS-angreb på authentication. |
+| **K-RL1** | Rate Limiting (to lag) | `src/lib/rate-limit.ts` + `Caddyfile` (rate_limit direktiv) | **Lag 1 — Caddy (infrastructure):** Global rate limiting per IP i Caddyfile (`rate_limit` direktiv) — 100 req/min generelt, 30 req/min for API-zoner. Persistenter på tværs af server-genstarter. Beskytter mod DDoS og volumetriske angreb før de når applikationen. **Lag 2 — Applikation (granulær):** In-memory rate limiting (`rate-limit.ts`) på specifikke følsomme endpoints (login, 2FA, password reset) med finere grænser. Begrænsning: in-memory Store nulstilles ved server-genstart og gælder kun for single-instance drift. |
 | **K-RL2** | API Error Handler | `src/lib/api-error-handler.ts` | Centraliseret fejlhåndtering der forhindrer lækage af interne detaljer i API-responser. |
 
 ---
@@ -460,6 +460,7 @@ Alle ændringer i risikovurderingen dokumenteres i tabelform:
 | 1. juli 2025 | Første version (v2.0) af IT-risikovurdering | System anmeldelse til Erhvervsstyrelsen | AlphaAi |
 | 2025 | Tilføjet IONOS VPS som tredjepartsrisiko (C5 + IT-Grundschutz, EU-hosted), opdateret backup-kryptering til AES-256-GCM | IONOS VPS tilføjet som leverandør | AlphaAi |
 | 2025 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere i K-AT1), opdateret FK onDelete fra SetNull til Restrict | Compliance-review: audit trail var kun beskyttet på applikationsniveau | AlphaAi |
+| 04/06/2026 | Rettet T-CF5: fjernet fejlagtig access-guard.ts reference; tilføjet eksplicit TLS 1.2/1.3 konfiguration i Caddyfile (K-NT1); tilføjet Caddy rate limiting (K-RL1); præciseret in-memory begrænsning i rate-limit.ts | Compliance-review: dokumentation matchede ikke faktisk konfiguration | AlphaAi |
 
 ---
 

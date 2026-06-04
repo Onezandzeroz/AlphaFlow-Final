@@ -2,7 +2,7 @@
 
 **AlphaAi Consult ApS**
 **CVR: [46312058]**
-**Dokumentversion:** 2.0
+**Dokumentversion:** 2.2
 **Dato:** 04/06/2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 
@@ -203,16 +203,17 @@ Denne plan dækker:
 **Beskrivelse:** AlphaFlow er under Distributed Denial of Service angreb, der gør systemet utilgængeligt.
 
 **Forebyggelse:**
-- Caddy reverse proxy med automatisk rate limiting
+- Caddy reverse proxy med konfigureret rate limiting (`rate_limit` direktiv i Caddyfile: 100 req/min generelt, 30 req/min API)
+- Applikations-level rate limiting (`src/lib/rate-limit.ts`) på følsomme endpoints (login, 2FA, password reset)
 - Neon PostgreSQL med indbygget DDoS-beskyttelse (via AWS Shield)
-- Cloudflare CDN-beskyttelse (via Neons infrastruktur)
+- IONOS VPS med automatisk DDoS-detektion og blokering
 - Efficiente API-routes med minimal computation per request
 
 **Forløb:**
 
 | Trin | Handling | Ansvarlig | Tidsramme |
 |------|---------|-----------|----------|
-| 1 | Aktivér rate limiting i Caddy (hvis ikke allerede aktiv) | SysAdmin | 5 min |
+| 1 | Caddy rate limiting er altid aktiv — verificer at den fungerer (tjek Caddy logs for 429-responser) | SysAdmin | 5 min |
 | 2 | Bloker mistænkelige IP-adresser via Caddy / firewall | SysAdmin | 10 min |
 | 3 | Kontakt hosting-udbyder (Neon/AWS) for yderligere DDoS-mitigation | SysAdmin | 15 min |
 | 4 | Overvåg systemets tilgængelighed og responstid | SysAdmin | Løbende |
@@ -568,10 +569,10 @@ Ved incidents der påvirker kunder:
 
 | Version | Dato | Ændringer | Forfatter |
 |---------|------|----------|-----------|
-| 1.0 | 2025 | Første udgave | AlphaAi Consult ApS |
-| 2.0 | 2025 | Opdateret med konkrete kode-referencer, RTO/RPO-beregninger og 6 incidentscenarier | AlphaAi Consult ApS |
-| 2.1 | 2025 | Tilføjet IONOS VPS som applikationsserver/backup-lagring, AES-256-GCM backup-kryptering, dekryptering i restore-flow | AlphaAi Consult ApS |
-| 2.2 | 2025 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere), ændret FK onDelete fra SetNull til Restrict | AlphaAi Consult ApS |
+| 1.0 | 04/06/2026 | Første udgave | AlphaAi Consult ApS |
+| 2.0 | 04/06/2026 | Opdateret med konkrete kode-referencer, RTO/RPO-beregninger og 6 incidentscenarier | AlphaAi Consult ApS |
+| 2.1 | 04/06/2026 | Tilføjet IONOS VPS som applikationsserver/backup-lagring, AES-256-GCM backup-kryptering, dekryptering i restore-flow | AlphaAi Consult ApS |
+| 2.2 | 04/06/2026 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere), ændret FK onDelete fra SetNull til Restrict, Caddy rate limiting og eksplicit TLS-konfiguration | AlphaAi Consult ApS |
 
 ### 8.4 Godkendelse
 

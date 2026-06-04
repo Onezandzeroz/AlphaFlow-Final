@@ -65,6 +65,37 @@ alphaflow.dk, www.alphaflow.dk {
         }
     }
 
+    # TLS configuration — minimum TLS 1.2, preferred TLS 1.3
+    # This ensures compliance with Danish bookkeeping law security requirements
+    # and aligns with documentation in RISIKOVURDERING.md (K-NT1).
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
+    # Rate limiting — first defense layer against brute force and DDoS
+    # Complements application-level rate limiting in src/lib/rate-limit.ts
+    # (which is in-memory, per-endpoint, with finer granularity).
+    # Caddy-level rate limiting persists across app restarts.
+    rate_limit {
+        zone static_zone {
+            key    {remote_host}
+            events 100
+            window 1m
+        }
+        zone api_zone {
+            key    {remote_host}
+            events 30
+            window 1m
+        }
+    }
+
+    # TLS configuration — minimum TLS 1.2, preferred TLS 1.3
+    # This ensures compliance with Danish bookkeeping law security requirements
+    # and aligns with documentation in RISIKOVURDERING.md (K-NT1).
+    tls {
+        protocols tls1.2 tls1.3
+    }
+
     # Security headers
     header {
         # HSTS — tell browsers to always use HTTPS (1 year)

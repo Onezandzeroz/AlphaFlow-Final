@@ -3,6 +3,18 @@
  *
  * Protects authentication endpoints from brute force attacks.
  * Uses a sliding window counter approach.
+ *
+ * NOTE: This is an in-memory implementation with inherent limitations:
+ * - Rate limits reset on server restart (an attacker could provoke a restart)
+ * - Limits apply only to the current single instance (no cross-instance coordination)
+ *
+ * These limitations are mitigated by Caddy-level rate limiting (see Caddyfile
+ * `rate_limit` directive) which persists across restarts and serves as the
+ * first defense layer. This in-memory module provides finer-grained limits
+ * on sensitive endpoints (login, 2FA, password reset) as a second layer.
+ *
+ * For multi-instance deployments, consider migrating to a persistent store
+ * (Redis, database-backed) for this layer.
  */
 
 interface RateLimitEntry {
