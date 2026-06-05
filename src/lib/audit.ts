@@ -5,7 +5,7 @@
  * All changes to accounting data must be logged immutably.
  * Entries can never be deleted or modified.
  *
- * IMMUTABILITY IS ENFORCED AT TWO LEVELS:
+ * IMMUTABILITY IS ENFORCED AT THREE LEVELS:
  *
  * 1. Application level: This module exports only CREATE functions.
  *    No update or delete functions are exposed.
@@ -16,6 +16,13 @@
  *    Even a database administrator or compromised connection cannot
  *    modify or delete audit entries.
  *    Deployment: bun run scripts/apply-audit-immutability.ts
+ *
+ * 3. Account deactivation: Instead of hard-deleting users (which would
+ *    cascade-delete audit logs), account deletion deactivates the user
+ *    (sets deactivatedAt timestamp). All data and audit logs are preserved.
+ *    Login is blocked for deactivated accounts (login/route.ts + session.ts).
+ *    This prevents audit trail destruction via cascade deletion.
+ *    See: src/app/api/auth/delete-account/route.ts
  *
  * Additionally, foreign keys use onDelete: Restrict, preventing deletion
  * of Users or Companies that have AuditLog entries (Bogføringsloven §12
@@ -50,7 +57,8 @@ export type AuditAction =
   | 'TWO_FACTOR_DISABLED'
   | 'TWO_FACTOR_BACKUP_CODES_REGENERATED'
   | 'TWO_FACTOR_TENANT_TOGGLE'
-  | 'LOGIN_2FA_VERIFIED';
+  | 'LOGIN_2FA_VERIFIED'
+  | 'ACCOUNT_DEACTIVATED';
 
 export type EntityType =
   | 'User'

@@ -339,6 +339,13 @@ model User {
   twoFactorEnabled      Boolean   @default(false)
   twoFactorEnabledAt     DateTime?
 
+  // Account deactivation — replaces hard deletion to preserve audit trail
+  // per Bogføringsloven §10-12 (5-year retention obligation takes precedence
+  // over GDPR Art. 17 deletion requests per GDPR Art. 17(3)(c)).
+  // A deactivated user cannot log in, but all their data and audit logs are preserved.
+  deactivatedAt          DateTime?          // Null = active account. Set = account deactivated at this timestamp.
+  deactivationReason     String?            // 'self_request' | 'admin_action' | 'sole_company_cleanup'
+
   createdAt              DateTime           @default(now())
   updatedAt              DateTime           @updatedAt
 

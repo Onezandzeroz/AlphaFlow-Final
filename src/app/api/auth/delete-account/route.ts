@@ -9,22 +9,34 @@ import { auditLog } from '@/lib/audit';
 /**
  * DELETE /api/auth/delete-account
  *
- * Permanently deletes the user account and ALL associated data.
- * No remnants remain — every trace of the user is removed.
+ * Deactivates the user account instead of permanently deleting it.
  *
- * Order of operations:
- *   1. Destroy all sessions
- *   2. Delete invitations sent by this user
- *   3. Delete pending invitations targeting this user's email
- *   4. Delete audit logs where this user performed an action on someone else
- *   5. Find all companies where the user is a member
- *   6. For companies where the user is the SOLE member → delete the company
- *      (cascades: all company data, remaining memberships, etc.)
- *   7. Delete the user (cascade handles: transactions, invoices, accounts,
- *      journal entries, contacts, fiscal periods, bank statements,
- *      bank connections, recurring entries, budgets, backups,
- *      user-company memberships, and user-authored audit logs)
- *   8. Clear cookies
+ * This design is mandated by Bogføringsloven §10-12, which requires a 5-year
+ * immutable audit trail. Hard-deleting a user (and their audit logs via cascade)
+ * would violate both:
+ *   - The Bookkeeping Act's retention obligation
+ *   - GDPR Art. 17(3)(c) exemption where EU/national law overrides the right
+ *     to erasure
+ *   - The immutability guarantees documented in audit.ts and enforced by
+ *     PostgreSQL triggers (prisma/audit-immutability.sql)
+ *
+ * Deactivation flow:
+ *   1. Destroy all active sessions (immediate lockout)
+ *   2. Set deactivatedAt timestamp on the User record
+ *   3. For companies where the user is the SOLE member:
+ *      - Mark company as inactive (isActive = false) but preserve all data
+ *   4. Delete only non-accounting, non-audit data:
+ *      - Pending invitations sent by this user
+ *      - Pending invitations targeting this user's email
+ *   5. Record audit log of the deactivation
+ *   6. Clear cookies
+ *
+ * Data that is PRESERVED (never deleted):
+ *   - User record (with deactivatedAt set)
+ *   - All AuditLog entries
+ *   - All accounting data (transactions, invoices, journal entries, etc.)
+ *   - Company records (marked inactive if sole member)
+ *   - Backup history
  */
 export async function DELETE(request: Request) {
   try {
@@ -37,100 +49,111 @@ export async function DELETE(request: Request) {
     const oversightBlocked = blockOversightMutation(ctx);
     if (oversightBlocked) return oversightBlocked;
 
-    // Verify user exists
+    // Verify user exists and is not already deactivated
     const existingUser = await db.user.findUnique({
       where: { id: ctx.id },
-      select: { id: true, email: true },
+      select: { id: true, email: true, deactivatedAt: true },
     });
     if (!existingUser) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+    if (existingUser.deactivatedAt) {
+      return NextResponse.json({ error: 'Account is already deactivated' }, { status: 400 });
     }
 
     const userId = ctx.id;
     const userEmail = existingUser.email;
 
-    // Audit log BEFORE any deletion
+    // Audit log BEFORE any changes
     await auditLog({
-      action: 'DELETE_ATTEMPT',
+      action: 'ACCOUNT_DEACTIVATED',
       entityType: 'User',
       entityId: userId,
       companyId: ctx.activeCompanyId,
       userId,
-      metadata: { email: userEmail, reason: 'self_account_deletion', timestamp: new Date().toISOString() },
+      metadata: {
+        email: userEmail,
+        reason: 'self_request',
+        timestamp: new Date().toISOString(),
+      },
     });
 
-    logger.info(`[DELETE_ACCOUNT] Starting complete removal for user ${userId} (${userEmail})`);
+    logger.info(`[DEACTIVATE_ACCOUNT] Starting deactivation for user ${userId} (${userEmail})`);
 
     // ─── Step 1: Destroy all sessions ────────────────────────────────────
     await destroyAllUserSessions(userId);
+    logger.info(`[DEACTIVATE_ACCOUNT] Destroyed all sessions for user ${userId}`);
 
-    // ─── Step 2: Delete invitations sent by this user ────────────────────
-    const sentInvitations = await db.invitation.deleteMany({
-      where: { invitedBy: userId },
+    // ─── Step 2: Deactivate the user account ─────────────────────────────
+    await db.user.update({
+      where: { id: userId },
+      data: {
+        deactivatedAt: new Date(),
+        deactivationReason: 'self_request',
+      },
     });
-    logger.info(`[DELETE_ACCOUNT] Deleted ${sentInvitations.count} invitations sent by user`);
+    logger.info(`[DEACTIVATE_ACCOUNT] Marked user ${userId} as deactivated`);
 
-    // ─── Step 3: Delete pending invitations targeting this user's email ──
-    const receivedInvitations = await db.invitation.deleteMany({
-      where: { email: userEmail, status: 'PENDING' },
-    });
-    logger.info(`[DELETE_ACCOUNT] Deleted ${receivedInvitations.count} pending invitations for ${userEmail}`);
-
-    // ─── Step 4: Remove audit logs where this user performed actions ─────
-    const performedAudits = await db.auditLog.deleteMany({
-      where: { performedByUserId: userId },
-    });
-    logger.info(`[DELETE_ACCOUNT] Deleted ${performedAudits.count} performed-by audit logs`);
-
-    // ─── Step 5: Find all companies the user belongs to ──────────────────
+    // ─── Step 3: Handle companies where user is sole member ──────────────
     const memberships = await db.userCompany.findMany({
       where: { userId },
       select: { companyId: true },
     });
-    const companyIds = memberships.map(m => m.companyId);
 
-    // ─── Step 6: Delete orphaned companies (sole member) ─────────────────
-    for (const companyId of companyIds) {
+    for (const { companyId } of memberships) {
       const memberCount = await db.userCompany.count({
         where: { companyId },
       });
 
       if (memberCount <= 1) {
-        // User is the only member — delete the entire company (cascade removes everything)
-        // Also clean up any remaining invitations for this company
-        await db.invitation.deleteMany({ where: { companyId } });
-
-        // Remove sessions pointing to this company
-        await db.session.deleteMany({
-          where: {
-            OR: [
-              { activeCompanyId: companyId },
-              { oversightCompanyId: companyId },
-            ],
-          },
+        // User is the only member — mark company as inactive (preserve all data)
+        await db.company.update({
+          where: { id: companyId },
+          data: { isActive: false },
         });
+        logger.info(`[DEACTIVATE_ACCOUNT] Marked orphaned company ${companyId} as inactive`);
 
-        await db.company.delete({ where: { id: companyId } });
-        logger.info(`[DELETE_ACCOUNT] Deleted orphaned company ${companyId}`);
+        // Audit log the company deactivation
+        await auditLog({
+          action: 'UPDATE',
+          entityType: 'Company',
+          entityId: companyId,
+          companyId,
+          userId,
+          changes: { isActive: { old: true, new: false } },
+          metadata: { reason: 'sole_member_deactivated', deactivatedUserId: userId },
+        });
       }
     }
 
-    // ─── Step 7: Delete the user (cascade handles all user-owned data) ───
-    await db.user.delete({ where: { id: userId } });
+    // ─── Step 4: Clean up non-accounting, non-audit data ─────────────────
+    // Only delete invitations — these are transient, not accounting records.
+    // Audit logs are NEVER deleted per Bogføringsloven §10-12.
 
-    // ─── Step 8: Clear cookies ───────────────────────────────────────────
+    const sentInvitations = await db.invitation.deleteMany({
+      where: { invitedBy: userId },
+    });
+    logger.info(`[DEACTIVATE_ACCOUNT] Deleted ${sentInvitations.count} invitations sent by user`);
+
+    const receivedInvitations = await db.invitation.deleteMany({
+      where: { email: userEmail, status: 'PENDING' },
+    });
+    logger.info(`[DEACTIVATE_ACCOUNT] Deleted ${receivedInvitations.count} pending invitations for ${userEmail}`);
+
+    // ─── Step 5: Clear cookies ───────────────────────────────────────────
     const cookieStore = await cookies();
     cookieStore.delete('session');
     cookieStore.delete('userId');
 
-    logger.info(`[DELETE_ACCOUNT] Complete removal finished for user ${userId}`);
+    logger.info(`[DEACTIVATE_ACCOUNT] Deactivation complete for user ${userId}`);
 
     return NextResponse.json({
       success: true,
-      message: 'Account and all associated data permanently deleted',
+      message: 'Account deactivated. All accounting data and audit logs are preserved per Bogføringsloven §10-12.',
+      deactivated: true,
     });
   } catch (error) {
-    logger.error('Failed to delete account:', error);
-    return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 });
+    logger.error('Failed to deactivate account:', error);
+    return NextResponse.json({ error: 'Failed to deactivate account' }, { status: 500 });
   }
 }

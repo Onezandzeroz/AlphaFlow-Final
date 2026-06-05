@@ -45,6 +45,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Block login for deactivated accounts (Bogføringsloven §10-12: account preserved, access revoked)
+    if (user.deactivatedAt) {
+      logger.warn(`[AUTH] Login attempt on deactivated account: ${user.email}, IP: ${getClientIp(request)}`);
+      return NextResponse.json(
+        { error: 'This account has been deactivated. Contact support if you believe this is an error.' },
+        { status: 403 }
+      );
+    }
+
     // Verify password
     const valid = await verifyPassword(password, user.password);
     if (!valid) {

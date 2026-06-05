@@ -2,7 +2,7 @@
 
 **AlphaAi Consult ApS**
 **CVR: [46312058]**
-**Dokumentversion:** 2.2
+**Dokumentversion:** 2.3
 **Dato:** 04/06/2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 
@@ -172,7 +172,7 @@ Denne plan dækker:
 **Beskrivelse:** Systemet er inficeret med ransomware eller malware, der truer med at kryptere eller slette data.
 
 **Forebyggelse:**
-- Uforanderlig audit trail (`src/lib/audit.ts` + `prisma/audit-immutability.sql`) — kan aldrig slettes eller ændres, håndhævet på både applikations- og databaseniveau
+- Uforanderlig audit trail (`src/lib/audit.ts` + `prisma/audit-immutability.sql`) — kan aldrig slettes eller ændres, håndhævet på både applikations- og databaseniveau. Kontodeaktivering i stedet for sletning sikrer at audit trails aldrig fjernes via cascade-sletning.
 - AES-256-GCM kryptering af følsomme data (`src/lib/crypto.ts`)
 - Krypterede backups (AES-256-GCM krypterede ZIP-arkiver lagret på IONOS VPS i EU)
 - IONOS VPS med C5 (BSI) og IT-Grundschutz certificering sikrer backup-lagring i EU
@@ -573,6 +573,7 @@ Ved incidents der påvirker kunder:
 | 2.0 | 04/06/2026 | Opdateret med konkrete kode-referencer, RTO/RPO-beregninger og 6 incidentscenarier | AlphaAi Consult ApS |
 | 2.1 | 04/06/2026 | Tilføjet IONOS VPS som applikationsserver/backup-lagring, AES-256-GCM backup-kryptering, dekryptering i restore-flow | AlphaAi Consult ApS |
 | 2.2 | 04/06/2026 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere), ændret FK onDelete fra SetNull til Restrict, Caddy rate limiting og eksplicit TLS-konfiguration | AlphaAi Consult ApS |
+| 2.3 | 04/06/2026 | Ændret kontosletning til kontodeaktivering (bevarer audit trail per Bogføringsloven §10-12); tilføjet deactivatedAt/deactivationReason i User schema; blokerer login for deaktiverede konti | AlphaAi Consult ApS |
 
 ### 8.4 Godkendelse
 

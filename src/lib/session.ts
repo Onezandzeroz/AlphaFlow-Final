@@ -135,6 +135,7 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
           businessName: true,
           isSuperDev: true,
           demoModeEnabled: true,
+          deactivatedAt: true,
         },
       },
       activeCompany: {
@@ -155,6 +156,13 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
   });
 
   if (!session) return null;
+
+  // Block access for deactivated accounts — session is invalidated immediately
+  if (session.user.deactivatedAt) {
+    // Destroy this session so it can't be reused
+    await db.session.delete({ where: { id: session.id } });
+    return null;
+  }
 
   // Check if session expired
   if (session.expiresAt < new Date()) {
