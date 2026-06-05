@@ -82,6 +82,7 @@ export type EntityType =
   | 'UserCompany'
   | 'System'
   | 'EInvoiceSending'
+  | 'ReceivedInvoice'
   | 'VATSubmission';
 
 interface AuditOptions {

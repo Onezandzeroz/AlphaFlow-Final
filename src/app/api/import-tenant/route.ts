@@ -137,6 +137,9 @@ export async function POST(request: NextRequest) {
     const recurringEntries = await readJson('recurring-entries') as Array<Record<string, any>>;
     const bankStatements = await readJson('bank-statements') as Array<Record<string, any>>;
     const members = await readJson('members') as Array<Record<string, any>>;
+    const receivedInvoices = await readJson('received-invoices') as Array<Record<string, any>>;
+    const vatSubmissions = await readJson('vat-submissions') as Array<Record<string, any>>;
+    const eInvoiceSendings = await readJson('einvoice-sendings') as Array<Record<string, any>>;
 
     // Validate that we have at least some data to import
     if (accounts.length === 0 && transactions.length === 0 && journalEntries.length === 0 && invoices.length === 0) {
@@ -186,6 +189,9 @@ export async function POST(request: NextRequest) {
       const scope = { companyId };
 
       // 1a. Delete all existing tenant data (respecting FK order)
+      await tx.eInvoiceSending.deleteMany({ where: scope });
+      await tx.vATSubmission.deleteMany({ where: scope });
+      await tx.receivedInvoice.deleteMany({ where: scope });
       await tx.bankStatementLine.deleteMany({
         where: { bankStatement: { companyId } },
       });
@@ -610,6 +616,108 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // ─── Import Received Invoices ───
+      for (const ri of receivedInvoices) {
+        await tx.receivedInvoice.create({
+          data: {
+            supplierName: String(ri.supplierName),
+            supplierCvr: ri.supplierCvr ?? null,
+            supplierEmail: ri.supplierEmail ?? null,
+            supplierPhone: ri.supplierPhone ?? null,
+            supplierAddress: ri.supplierAddress ?? null,
+            supplierCity: ri.supplierCity ?? null,
+            supplierCountry: ri.supplierCountry ?? null,
+            invoiceNumber: String(ri.invoiceNumber),
+            issueDate: new Date(String(ri.issueDate)),
+            dueDate: ri.dueDate ? new Date(String(ri.dueDate)) : null,
+            currencyCode: ri.currencyCode || 'DKK',
+            format: (ri.format as never) || 'OIOUBL',
+            documentType: (ri.documentType as never) || 'INVOICE',
+            customizationId: ri.customizationId ?? null,
+            profileId: ri.profileId ?? null,
+            lineItems: ri.lineItems ?? [],
+            lineCount: Number(ri.lineCount ?? 0),
+            taxExclusiveAmount: Number(ri.taxExclusiveAmount ?? 0),
+            taxAmount: Number(ri.taxAmount ?? 0),
+            taxInclusiveAmount: Number(ri.taxInclusiveAmount ?? 0),
+            payableAmount: Number(ri.payableAmount ?? 0),
+            paymentMeansCode: ri.paymentMeansCode ?? null,
+            paymentAccountId: ri.paymentAccountId ?? null,
+            rawXml: String(ri.rawXml ?? ''),
+            status: (ri.status as never) || 'RECEIVED',
+            rejectionReason: ri.rejectionReason ?? null,
+            approvedBy: ri.approvedBy ?? null,
+            approvedAt: ri.approvedAt ? new Date(String(ri.approvedAt)) : null,
+            postedBy: ri.postedBy ?? null,
+            postedAt: ri.postedAt ? new Date(String(ri.postedAt)) : null,
+            journalEntryId: null, // Journal entry references are not remapped — invoice may need re-posting
+            responseXml: ri.responseXml ?? null,
+            responseType: ri.responseType ?? null,
+            validationErrors: ri.validationErrors ?? null,
+            validationWarnings: ri.validationWarnings ?? null,
+            notes: ri.notes ?? null,
+            userId: ri.userId ?? userId,
+            companyId,
+          },
+        });
+      }
+
+      // ─── Import VAT Submissions ───
+      for (const vs of vatSubmissions) {
+        await tx.vATSubmission.create({
+          data: {
+            year: Number(vs.year),
+            period: (vs.period as never) || 'Q1',
+            periodFrom: new Date(String(vs.periodFrom)),
+            periodTo: new Date(String(vs.periodTo)),
+            totalOutputVAT: Number(vs.totalOutputVAT ?? 0),
+            totalInputVAT: Number(vs.totalInputVAT ?? 0),
+            netVATPayable: Number(vs.netVATPayable ?? 0),
+            vatDataJson: vs.vatDataJson ?? {},
+            status: (vs.status as never) || 'DRAFT',
+            submittedAt: vs.submittedAt ? new Date(String(vs.submittedAt)) : null,
+            submittedBy: vs.submittedBy ?? null,
+            referenceId: vs.referenceId ?? null,
+            responseXml: vs.responseXml ?? null,
+            errorMessage: vs.errorMessage ?? null,
+            errorCode: vs.errorCode ?? null,
+            companyId,
+          },
+        });
+      }
+
+      // ─── Import E-Invoice Sendings ───
+      for (const es of eInvoiceSendings) {
+        const resolvedInvoiceId = es._invoiceRef
+          ? (invoiceMap.get(String(es._invoiceRef)) ?? String(es.invoiceId ?? ''))
+          : String(es.invoiceId ?? '');
+
+        await tx.eInvoiceSending.create({
+          data: {
+            invoiceId: resolvedInvoiceId,
+            channel: (es.channel as never) || 'NEMHANDEL_OIOUBL',
+            format: (es.format as never) || 'OIOUBL',
+            recipientName: String(es.recipientName ?? 'Ukendt'),
+            recipientCvr: es.recipientCvr ?? null,
+            recipientEAN: es.recipientEAN ?? null,
+            recipientEndpointId: es.recipientEndpointId ?? null,
+            status: (es.status as never) || 'PENDING',
+            sentAt: es.sentAt ? new Date(String(es.sentAt)) : null,
+            deliveredAt: es.deliveredAt ? new Date(String(es.deliveredAt)) : null,
+            acceptedAt: es.acceptedAt ? new Date(String(es.acceptedAt)) : null,
+            messageId: es.messageId ?? null,
+            errorCode: es.errorCode ?? null,
+            errorMessage: es.errorMessage ?? null,
+            retryCount: Number(es.retryCount ?? 0),
+            maxRetries: Number(es.maxRetries ?? 3),
+            nextRetryAt: es.nextRetryAt ? new Date(String(es.nextRetryAt)) : null,
+            responseXml: es.responseXml ?? null,
+            sentBy: es.sentBy ?? userId,
+            companyId,
+          },
+        });
+      }
+
       // ─── Restore Team Members (UserCompany) ───
       let restoredMembers = 0;
       if (Array.isArray(members) && members.length > 0) {
@@ -668,6 +776,9 @@ export async function POST(request: NextRequest) {
           recurringEntries: recurringEntries.length,
           bankStatements: bankStatements.length,
           members: restoredMembers,
+          receivedInvoices: receivedInvoices.length,
+          vatSubmissions: vatSubmissions.length,
+          eInvoiceSendings: eInvoiceSendings.length,
         },
         filesRestored,
         filesSkipped,

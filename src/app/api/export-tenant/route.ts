@@ -42,6 +42,9 @@ export async function GET(request: NextRequest) {
       recurringEntries,
       bankStatements,
       members,
+      receivedInvoices,
+      vatSubmissions,
+      eInvoiceSendings,
     ] = await Promise.all([
       db.company.findUnique({ where: { id: companyId } }),
       db.account.findMany({
@@ -96,6 +99,18 @@ export async function GET(request: NextRequest) {
         where: { companyId },
         include: { user: { select: { email: true } } },
         orderBy: [{ joinedAt: 'asc' }],
+      }),
+      db.receivedInvoice.findMany({
+        where: scope,
+        orderBy: [{ createdAt: 'desc' }],
+      }),
+      db.vATSubmission.findMany({
+        where: scope,
+        orderBy: [{ year: 'desc' }, { period: 'asc' }],
+      }),
+      db.eInvoiceSending.findMany({
+        where: scope,
+        orderBy: [{ createdAt: 'desc' }],
       }),
     ]);
 
@@ -375,6 +390,63 @@ export async function GET(request: NextRequest) {
         joinedAt: m.joinedAt?.toISOString() ?? null,
         invitedBy: m.invitedBy,
       })),
+
+      receivedInvoices: receivedInvoices.map((ri) => ({
+        supplierName: ri.supplierName, supplierCvr: ri.supplierCvr, supplierEmail: ri.supplierEmail,
+        supplierPhone: ri.supplierPhone, supplierAddress: ri.supplierAddress,
+        supplierCity: ri.supplierCity, supplierCountry: ri.supplierCountry,
+        invoiceNumber: ri.invoiceNumber,
+        issueDate: ri.issueDate.toISOString().split('T')[0],
+        dueDate: ri.dueDate ? ri.dueDate.toISOString().split('T')[0] : null,
+        currencyCode: ri.currencyCode,
+        format: ri.format, documentType: ri.documentType,
+        customizationId: ri.customizationId, profileId: ri.profileId,
+        lineItems: ri.lineItems, lineCount: ri.lineCount,
+        taxExclusiveAmount: ri.taxExclusiveAmount, taxAmount: ri.taxAmount,
+        taxInclusiveAmount: ri.taxInclusiveAmount, payableAmount: ri.payableAmount,
+        paymentMeansCode: ri.paymentMeansCode, paymentAccountId: ri.paymentAccountId,
+        rawXml: ri.rawXml,
+        status: ri.status, rejectionReason: ri.rejectionReason,
+        approvedBy: ri.approvedBy, approvedAt: ri.approvedAt?.toISOString() ?? null,
+        postedBy: ri.postedBy, postedAt: ri.postedAt?.toISOString() ?? null,
+        journalEntryId: ri.journalEntryId,
+        responseXml: ri.responseXml, responseType: ri.responseType,
+        validationErrors: ri.validationErrors, validationWarnings: ri.validationWarnings,
+        notes: ri.notes,
+        userId: ri.userId,
+        _ref: ri.id,
+      })),
+
+      vatSubmissions: vatSubmissions.map((vs) => ({
+        year: vs.year, period: vs.period,
+        periodFrom: vs.periodFrom.toISOString().split('T')[0],
+        periodTo: vs.periodTo.toISOString().split('T')[0],
+        totalOutputVAT: vs.totalOutputVAT, totalInputVAT: vs.totalInputVAT,
+        netVATPayable: vs.netVATPayable, vatDataJson: vs.vatDataJson,
+        status: vs.status,
+        submittedAt: vs.submittedAt?.toISOString() ?? null,
+        submittedBy: vs.submittedBy, referenceId: vs.referenceId,
+        responseXml: vs.responseXml, errorMessage: vs.errorMessage, errorCode: vs.errorCode,
+        _ref: vs.id,
+      })),
+
+      eInvoiceSendings: eInvoiceSendings.map((es) => ({
+        invoiceId: es.invoiceId, channel: es.channel, format: es.format,
+        status: es.status,
+        recipientName: es.recipientName, recipientCvr: es.recipientCvr,
+        recipientEAN: es.recipientEAN, recipientEndpointId: es.recipientEndpointId,
+        sentAt: es.sentAt?.toISOString() ?? null,
+        deliveredAt: es.deliveredAt?.toISOString() ?? null,
+        acceptedAt: es.acceptedAt?.toISOString() ?? null,
+        messageId: es.messageId,
+        errorMessage: es.errorMessage, errorCode: es.errorCode,
+        retryCount: es.retryCount, maxRetries: es.maxRetries,
+        nextRetryAt: es.nextRetryAt?.toISOString() ?? null,
+        responseXml: es.responseXml,
+        sentBy: es.sentBy,
+        _invoiceRef: es.invoiceId,
+        _ref: es.id,
+      })),
     };
 
     // Build file contents map if includeFiles is enabled
@@ -419,6 +491,9 @@ export async function GET(request: NextRequest) {
       bankStatements: bankStatements.length,
       bankStatementLines: bankStatements.reduce((s, bs) => s + bs.lines.length, 0),
       members: members.length,
+      receivedInvoices: receivedInvoices.length,
+      vatSubmissions: vatSubmissions.length,
+      eInvoiceSendings: eInvoiceSendings.length,
       files: includeFiles ? {
         total: filesIndex.length,
         size: totalFilesSize,
