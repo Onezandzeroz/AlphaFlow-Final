@@ -352,7 +352,7 @@ Alle eksisterende tekniske og organisatoriske kontroller er dokumenteret nedenfo
 | Kontrol ID | Kontrol | Reference | Beskrivelse |
 |------------|---------|-----------|-------------|
 | **K-BK1** | Automatiske Backups | `src/lib/backup-engine.ts`, `src/lib/backup-scheduler.ts` | Fire niveauer: hourly (minut 5, hver time), daily (kl. 02:15), weekly (mandag kl. 03:30), monthly (1. kl. 04:00). Tenant-snapshot som ZIP med struktureret JSON. **AES-256-GCM filkryptering** af backup-ZIP før lagring på IONOS VPS. SHA-256 checksum. Lagret på IONOS VPS i EU (C5 + IT-Grundschutz cert.). |
-| **K-BK2** | Retention Policy | `src/lib/backup-engine.ts` (linje 76–82) | Hourly: 24 backups (25 timer), Daily: 30 backups (31 dage), Weekly: 52 backups (53 dage), Monthly: 60 backups (1 år), Manual: 999 backups (90 dage). Automated cleanup dagligt kl. 03:00. |
+| **K-BK2** | Retention Policy | `src/lib/backup-engine.ts` (linje 76–82) | Hourly: 24 backups (25 timer), Daily: 30 backups (31 dage), Weekly: 52 backups (53 dage), Monthly: 60 backups (5 år, Bogføringsloven §12), Manual: 999 backups (90 dage). Automated cleanup dagligt kl. 03:00. |
 | **K-BK3** | Backup Restore med Verificering | `src/lib/backup-engine.ts` (`restoreBackup()`) | SHA-256 checksum-validering før restore. Pre-restore safety backup oprettes automatisk. Atomic database-transaktion (rollback ved fejl). 10-minut timeout for store restores. |
 | **K-BK4** | Per-Tenant Cron Health | `src/lib/backup-scheduler.ts` (`getCronHealth()`) | Uafhængig overvågning per tenant: idle/pending/healthy/unhealthy. Tracker consecutive errors. Overlever server-genstarter via database-hydratering. |
 | **K-BK5** | Data Eksport (Portabilitet) | `src/app/api/export-tenant/route.ts` | Portabel JSON-eksport med GUID, SHA-256 checksum. Alle tenant-data i ét samlet format til brug ved systemskift. |
@@ -462,6 +462,7 @@ Alle ændringer i risikovurderingen dokumenteres i tabelform:
 | 2025 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere i K-AT1), opdateret FK onDelete fra SetNull til Restrict | Compliance-review: audit trail var kun beskyttet på applikationsniveau | AlphaAi |
 | 04/06/2026 | Rettet T-CF5: fjernet fejlagtig access-guard.ts reference; tilføjet eksplicit TLS 1.2/1.3 konfiguration i Caddyfile (K-NT1); tilføjet Caddy rate limiting (K-RL1); præciseret in-memory begrænsning i rate-limit.ts | Compliance-review: dokumentation matchede ikke faktisk konfiguration | AlphaAi |
 | 04/06/2026 | Ændret kontosletning til kontodeaktivering (K-AT1 niveau 3); tilføjet ACCOUNT_DEACTIVATED audit event; opdateret T-PD1 og T-PD2 til at afspejle deaktivering i stedet for sletning; tilføjet deactivatedAt/deactivationReason felter i User schema | Compliance-review: delete-account slettede audit logs i strid med Bogføringsloven §10-12 | AlphaAi |
+| 04/06/2026 | Rettet monthly backup retention fra 365 dage (1 år) til 1825 dage (5 år) i backup-engine.ts og K-BK2; opdateret BEREDSKABSPLAN retention-tabel | Compliance-review: monthly retention var 1 år, ikke 5 år som dokumenteret | AlphaAi |
 
 ---
 

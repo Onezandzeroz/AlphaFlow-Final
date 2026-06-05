@@ -85,7 +85,7 @@ const RETENTION = {
   hourly:  { count: 24, expiresMs: 25 * 60 * 60 * 1000 },         // 25 hours
   daily:   { count: 30, expiresMs: 31 * 24 * 60 * 60 * 1000 },     // 31 days
   weekly:  { count: 52, expiresMs: 53 * 24 * 60 * 60 * 1000 },     // 53 days
-  monthly: { count: 60, expiresMs: 365 * 24 * 60 * 60 * 1000 },    // 1 year
+  monthly: { count: 60, expiresMs: 5 * 365 * 24 * 60 * 60 * 1000 },   // 5 years (Bogføringsloven §12)
   manual:  { count: 999, expiresMs: 90 * 24 * 60 * 60 * 1000 },    // 90 days
 } as const;
 
@@ -481,7 +481,7 @@ export async function createBackup(
     const encStats = fs.statSync(encPath);
 
     // Calculate expiry
-    const expiresMs = RETENTION[backupType]?.expiresMs || 365 * 24 * 60 * 60 * 1000;
+    const expiresMs = RETENTION[backupType]?.expiresMs || 5 * 365 * 24 * 60 * 60 * 1000;
     const expiresAt = new Date(Date.now() + expiresMs);
 
     // Save backup record in database

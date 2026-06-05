@@ -2,7 +2,7 @@
 
 **AlphaAi Consult ApS**
 **CVR: [46312058]**
-**Dokumentversion:** 2.3
+**Dokumentversion:** 2.4
 **Dato:** 04/06/2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 
@@ -367,7 +367,7 @@ Backups udføres automatisk via `src/lib/backup-scheduler.ts` med følgende tids
 | Hourly | 24 | 25 timer |
 | Daily | 30 | 31 dage |
 | Weekly | 52 | 53 dage (~1 år) |
-| Monthly | 60 | 365 dage (5-års retention via månedlige) |
+| Monthly | 60 | 1825 dage (5 år, Bogføringsloven §12) |
 | Manual | 999 | 90 dage |
 
 > **5-års opbevaring:** Bogføringslovens krav om 5-års opbevaring opfyldes ved 60 månedlige backups (60 måneder = 5 år). Den første dag i hver måned gemmes en komplet tenant-snapshot, som bevares i 60 måneder.
@@ -574,6 +574,7 @@ Ved incidents der påvirker kunder:
 | 2.1 | 04/06/2026 | Tilføjet IONOS VPS som applikationsserver/backup-lagring, AES-256-GCM backup-kryptering, dekryptering i restore-flow | AlphaAi Consult ApS |
 | 2.2 | 04/06/2026 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere), ændret FK onDelete fra SetNull til Restrict, Caddy rate limiting og eksplicit TLS-konfiguration | AlphaAi Consult ApS |
 | 2.3 | 04/06/2026 | Ændret kontosletning til kontodeaktivering (bevarer audit trail per Bogføringsloven §10-12); tilføjet deactivatedAt/deactivationReason i User schema; blokerer login for deaktiverede konti | AlphaAi Consult ApS |
+| 2.4 | 04/06/2026 | Rettet monthly backup retention fra 365 dage (1 år) til 1825 dage (5 år) — overholder nu Bogføringsloven §12's 5-års opbevaringspligt | AlphaAi Consult ApS |
 
 ### 8.4 Godkendelse
 
