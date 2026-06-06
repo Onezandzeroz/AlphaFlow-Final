@@ -39,7 +39,7 @@ export const POST = withGuard(routeConfig['/api/company/toggle-2fa'].POST!, asyn
 
     // Fetch the company
     const company = await db.company.findUnique({
-      where: { id: ctx.activeCompanyId },
+      where: { id: ctx.activeCompanyId! },
       select: {
         id: true,
         name: true,

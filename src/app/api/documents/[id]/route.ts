@@ -10,9 +10,9 @@ import { withGuard } from '@/lib/route-guard';
 // GET - Get document metadata and serve the file
 export const GET = withGuard(
   { auth: true, requireCompany: true },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
 
       // Fetch document with journal entry to verify ownership
       const document = await db.document.findUnique({
@@ -77,9 +77,9 @@ export const GET = withGuard(
 // DELETE - Remove a document (permanent delete)
 export const DELETE = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
 
       // Verify ownership via journal entry
       const document = await db.document.findUnique({

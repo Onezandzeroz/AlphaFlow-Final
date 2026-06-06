@@ -10,9 +10,9 @@ import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 // POST /api/invoices/[id]/send — Generate PDF, send email, mark as SENT
 export const POST = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const body = await request.json();
       const { subject, message, language } = body as {
         subject?: string;

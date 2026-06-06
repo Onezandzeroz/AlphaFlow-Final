@@ -11,7 +11,7 @@ const guard = routeConfig['/api/company/einvoice-settings'];
 // GET /api/company/einvoice-settings — Get company e-invoice settings
 export const GET = withGuard(guard.GET!, async (request, ctx) => {
   try {
-    const settings = await getCompanyEInvoiceSettings(ctx.activeCompanyId);
+    const settings = await getCompanyEInvoiceSettings(ctx.activeCompanyId!);
 
     return NextResponse.json({ settings });
   } catch (error) {
@@ -52,13 +52,13 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       );
     }
 
-    const settings = await updateCompanyEInvoiceSettings(ctx.activeCompanyId, updateData);
+    const settings = await updateCompanyEInvoiceSettings(ctx.activeCompanyId!, updateData);
 
     // Audit trail for settings update
     await auditCreate(
       ctx.id,
       'Company' as never,
-      ctx.activeCompanyId,
+      ctx.activeCompanyId!,
       { action: 'einvoice_settings_update', changes: updateData },
       requestMetadata(request),
       ctx.activeCompanyId

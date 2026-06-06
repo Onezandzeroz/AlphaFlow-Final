@@ -7,9 +7,9 @@ import { logger } from '@/lib/logger';
 /**
  * GET /api/companies/[id]/members — List all members of a company
  */
-export const GET = withGuard(routeConfig['/api/companies/[id]/members'].GET!, async (request, ctx, segmentData) => {
+export const GET = withGuard(routeConfig['/api/companies/[id]/members'].GET!, async (request, ctx, context) => {
   try {
-    const companyId = segmentData?.id as string;
+    const { id: companyId } = await context.params as { id: string };
 
     // Verify user belongs to this company (or is SuperDev)
     const membership = await db.userCompany.findUnique({

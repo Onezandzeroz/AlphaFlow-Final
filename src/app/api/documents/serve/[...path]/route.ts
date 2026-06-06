@@ -8,12 +8,12 @@ import { withGuard } from '@/lib/route-guard';
 // GET /api/documents/serve/[...path] - Serve document files with authentication
 export const GET = withGuard(
   { auth: true, requireCompany: true },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
       const userId = ctx.id;
 
-      const resolvedParams = await (segmentData as { params: Promise<{ path: string[] }> }).params;
-      const filePathFromUrl = resolvedParams.path.join('/');
+      const { path: filePathParts } = await context.params as { path: string[] };
+      const filePathFromUrl = filePathParts.join('/');
 
       if (!filePathFromUrl) {
         return NextResponse.json({ error: 'No file path provided' }, { status: 400 });

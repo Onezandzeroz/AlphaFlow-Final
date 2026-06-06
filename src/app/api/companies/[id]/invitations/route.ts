@@ -25,9 +25,9 @@ function generateInvitePassword(): string {
 const guard = routeConfig['/api/companies/[id]/invitations'];
 
 // GET /api/companies/[id]/invitations - List invitations
-export const GET = withGuard(guard.GET!, async (request, ctx, segmentData) => {
+export const GET = withGuard(guard.GET!, async (request, ctx, context) => {
   try {
-    const companyId = segmentData?.id as string;
+    const { id: companyId } = await context.params as { id: string };
 
     const invitations = await db.invitation.findMany({
       where: { companyId, status: 'PENDING' },
@@ -51,9 +51,9 @@ export const GET = withGuard(guard.GET!, async (request, ctx, segmentData) => {
 });
 
 // POST /api/companies/[id]/invitations - Send invitation
-export const POST = withGuard(guard.POST!, async (request, ctx, segmentData) => {
+export const POST = withGuard(guard.POST!, async (request, ctx, context) => {
   try {
-    const companyId = segmentData?.id as string;
+    const { id: companyId } = await context.params as { id: string };
     const { email, role } = await request.json();
 
     // Look up company for invitation email

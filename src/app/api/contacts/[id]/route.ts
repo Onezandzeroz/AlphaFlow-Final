@@ -5,14 +5,12 @@ import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 
-type SegmentParams = { params: Promise<{ id: string }> };
-
 // GET - Get a single contact
 export const GET = withGuard(
   { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as SegmentParams).params;
+      const { id } = await context.params as { id: string };
 
       const contact = await db.contact.findFirst({
         where: { id, ...tenantFilter(ctx) },
@@ -36,9 +34,9 @@ export const GET = withGuard(
 // PUT - Update a contact
 export const PUT = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as SegmentParams).params;
+      const { id } = await context.params as { id: string };
       const body = await request.json();
       const { name, cvrNumber, email, phone, address, city, postalCode, country, type, notes, isActive } = body;
 
@@ -92,9 +90,9 @@ export const PUT = withGuard(
 // DELETE - Soft-delete (set isActive=false)
 export const DELETE = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_DELETE] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as SegmentParams).params;
+      const { id } = await context.params as { id: string };
 
       const existing = await db.contact.findFirst({
         where: { id, ...tenantFilter(ctx) },

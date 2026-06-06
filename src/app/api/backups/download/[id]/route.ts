@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { calculateChecksum } from '@/lib/backup-engine';
 import { decryptFile } from '@/lib/crypto';
 import { logger } from '@/lib/logger';
+import { Permission } from '@/lib/rbac';
 import fs from 'fs';
 import path from 'path';
 import { rmSync } from 'fs';
@@ -13,9 +14,9 @@ import { withGuard } from '@/lib/route-guard';
  */
 export const GET = withGuard(
   { auth: true, requireCompany: true, permissions: [Permission.BACKUP_CREATE] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const companyId = ctx.activeCompanyId!;
 
       // Verify the backup belongs to this company

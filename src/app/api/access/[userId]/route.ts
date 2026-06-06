@@ -4,9 +4,9 @@ import { checkOwnerAccess } from '@/lib/access-guard';
 import { withGuard } from '@/lib/route-guard';
 
 // GET /api/access/[userId]
-export const GET = withGuard({ auth: true }, async (request, ctx, segmentData) => {
+export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
   try {
-    const userId = segmentData?.userId as string;
+    const { userId } = await context.params as { userId: string };
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
     }

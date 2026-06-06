@@ -13,9 +13,9 @@ import { withGuard } from '@/lib/route-guard';
 // POST /api/invoices/[id]/oioubl/validate — Validate an Invoice against Peppol BIS Billing 3.0
 export const POST = withGuard(
   { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
 
       // demo filter now included in tenantFilter
 

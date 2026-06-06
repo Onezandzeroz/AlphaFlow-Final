@@ -8,9 +8,9 @@ import { withGuard } from '@/lib/route-guard';
 // PUT - Lock/unlock a fiscal period
 export const PUT = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.PERIOD_OPEN] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const { searchParams } = new URL(request.url);
       const action = searchParams.get('action');
 

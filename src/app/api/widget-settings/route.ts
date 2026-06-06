@@ -75,7 +75,7 @@ function normalizeSettings(raw: unknown): { visibility: Record<string, boolean>;
 
 export const GET = withGuard({ auth: true }, async (request: NextRequest, ctx) => {
   const company = await db.company.findUnique({
-    where: { id: ctx.activeCompanyId },
+    where: { id: ctx.activeCompanyId! },
     select: { dashboardWidgets: true, name: true },
   });
 
@@ -96,7 +96,7 @@ export const GET = withGuard({ auth: true }, async (request: NextRequest, ctx) =
     // This is a lazy migration — it happens automatically on first load.
     if (normalized.isStale) {
       await db.company.update({
-        where: { id: ctx.activeCompanyId },
+        where: { id: ctx.activeCompanyId! },
         data: { dashboardWidgets: Prisma.JsonNull },
       }).catch(() => {}); // ignore — non-critical
     }
@@ -203,13 +203,13 @@ export const PUT = withGuard({
 
   // Capture old widgets for audit
   const companyBefore = await db.company.findUnique({
-    where: { id: ctx.activeCompanyId },
+    where: { id: ctx.activeCompanyId! },
     select: { dashboardWidgets: true },
   });
   const oldWidgets = companyBefore?.dashboardWidgets ?? null;
 
   await db.company.update({
-    where: { id: ctx.activeCompanyId },
+    where: { id: ctx.activeCompanyId! },
     data: { dashboardWidgets: payload },
   });
 
@@ -217,7 +217,7 @@ export const PUT = withGuard({
   await auditUpdate(
     ctx.id,
     'CompanyInfo',
-    ctx.activeCompanyId,
+    ctx.activeCompanyId!,
     { dashboardWidgets: oldWidgets },
     { dashboardWidgets: newWidgets },
     requestMetadata(request),

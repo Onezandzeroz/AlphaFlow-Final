@@ -6,10 +6,9 @@ import { logger } from '@/lib/logger';
 import { auditCancel, requestMetadata } from '@/lib/audit';
 
 // DELETE /api/companies/[id]/invitations/[inviteId] - Revoke invitation
-export const DELETE = withGuard(routeConfig['/api/companies/[id]/invitations/[inviteId]'].DELETE!, async (request, ctx, segmentData) => {
+export const DELETE = withGuard(routeConfig['/api/companies/[id]/invitations/[inviteId]'].DELETE!, async (request, ctx, context) => {
   try {
-    const companyId = segmentData?.id as string;
-    const inviteId = segmentData?.inviteId as string;
+    const { id: companyId, inviteId } = await context.params as { id: string; inviteId: string };
 
     const invitation = await db.invitation.findFirst({
       where: { id: inviteId, companyId },

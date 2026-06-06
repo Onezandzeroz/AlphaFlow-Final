@@ -1,22 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { auditUpdate, auditCancel, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 
-type RouteContext = {
-  params: Promise<{ id: string }>;
-};
-
 // GET - Get a single account
 export const GET = withGuard({
   auth: true,
   requireCompany: true,
   permissions: [Permission.DATA_READ],
-}, async (request: NextRequest, ctx, segmentData) => {
+}, async (request, ctx, context) => {
   try {
-    const { id } = await (segmentData as unknown as RouteContext).params;
+    const { id } = await context.params as { id: string };
 
     const account = await db.account.findFirst({
       where: { id, ...tenantFilter(ctx) },
@@ -44,9 +40,9 @@ export const PUT = withGuard({
   blockDemo: true,
   requireTokenPay: true,
   permissions: [Permission.DATA_EDIT],
-}, async (request: NextRequest, ctx, segmentData) => {
+}, async (request, ctx, context) => {
   try {
-    const { id } = await (segmentData as unknown as RouteContext).params;
+    const { id } = await context.params as { id: string };
     const body = await request.json();
     const { number, name, nameEn, type, group, description, isActive, postingGuide } = body;
 
@@ -108,9 +104,9 @@ export const DELETE = withGuard({
   blockDemo: true,
   requireTokenPay: true,
   permissions: [Permission.DATA_DELETE],
-}, async (request: NextRequest, ctx, segmentData) => {
+}, async (request, ctx, context) => {
   try {
-    const { id } = await (segmentData as unknown as RouteContext).params;
+    const { id } = await context.params as { id: string };
 
     const existing = await db.account.findFirst({
       where: { id, ...tenantFilter(ctx) },

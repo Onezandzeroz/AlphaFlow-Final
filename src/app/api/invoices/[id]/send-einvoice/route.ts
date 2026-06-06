@@ -11,7 +11,7 @@ const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoice
 // POST /api/invoices/[id]/send-einvoice — Queue an e-invoice send via OIOUBL or Peppol
 export const POST = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
       // Rate limit: 5 sends per minute per IP
       const clientIp = getClientIp(request);
@@ -27,7 +27,7 @@ export const POST = withGuard(
         );
       }
 
-      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const body = await request.json();
       const { channel } = body as { channel?: string };
 

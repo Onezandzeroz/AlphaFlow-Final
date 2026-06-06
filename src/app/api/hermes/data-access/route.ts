@@ -23,7 +23,7 @@ export const POST = withGuard(routeConfig['/api/hermes/data-access'].POST!, asyn
 
     // Check that Hermes is enabled for this company
     const hermesAgent = await db.hermesAgent.findUnique({
-      where: { companyId: ctx.activeCompanyId },
+      where: { companyId: ctx.activeCompanyId! },
       select: {
         id: true,
         enabled: true,
@@ -48,7 +48,7 @@ export const POST = withGuard(routeConfig['/api/hermes/data-access'].POST!, asyn
     // Update the dataAccessEnabled flag
     const previousDataAccess = hermesAgent.dataAccessEnabled;
     const updatedAgent = await db.hermesAgent.update({
-      where: { companyId: ctx.activeCompanyId },
+      where: { companyId: ctx.activeCompanyId! },
       data: { dataAccessEnabled: enabled },
       select: { id: true, dataAccessEnabled: true },
     });

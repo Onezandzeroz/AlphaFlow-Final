@@ -12,7 +12,7 @@ const guard = routeConfig['/api/company'];
 export const GET = withGuard(guard.GET!, async (request, ctx) => {
   try {
     const company = await db.company.findUnique({
-      where: { id: ctx.activeCompanyId },
+      where: { id: ctx.activeCompanyId! },
     });
 
     // Auto-fix stale currentYear: if the DB value doesn't match the actual year,
@@ -173,7 +173,7 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
     } = body;
 
     const existing = await db.company.findUnique({
-      where: { id: ctx.activeCompanyId },
+      where: { id: ctx.activeCompanyId! },
     });
     if (!existing) {
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
@@ -196,7 +196,7 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
     const oldData: Record<string, unknown> = { companyName: existing.name, cvrNumber: existing.cvrNumber };
 
     const company = await db.company.update({
-      where: { id: ctx.activeCompanyId },
+      where: { id: ctx.activeCompanyId! },
       data: {
         ...(logo !== undefined && { logo }),
         ...(companyName && { name: companyName }),
@@ -328,9 +328,9 @@ export const DELETE = withGuard(guard.DELETE!, async (request, ctx) => {
     await auditLog({
       action: 'DATA_RESET',
       entityType: 'System',
-      entityId: ctx.activeCompanyId,
+      entityId: ctx.activeCompanyId!,
       userId: ctx.id,
-      companyId: ctx.activeCompanyId,
+      companyId: ctx.activeCompanyId!,
       metadata: requestMetadata(request),
     });
 

@@ -9,9 +9,9 @@ import { withGuard } from '@/lib/route-guard';
 // POST - Trigger manual sync for a bank connection
 export const POST = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_SYNC] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
 
       const connection = await db.bankConnection.findFirst({
         where: { id, ...tenantFilter(ctx) },

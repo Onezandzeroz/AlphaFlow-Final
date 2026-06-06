@@ -8,9 +8,9 @@ import { withGuard } from '@/lib/route-guard';
 // GET - Get single bank connection
 export const GET = withGuard(
   { auth: true, requireCompany: true, permissions: [Permission.BANK_CONNECT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
 
       const connection = await db.bankConnection.findFirst({
         where: { id, ...tenantFilter(ctx) },
@@ -49,9 +49,9 @@ export const GET = withGuard(
 // DELETE - Delete a bank connection (revoke consent)
 export const DELETE = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
 
       const connection = await db.bankConnection.findFirst({
         where: { id, ...tenantFilter(ctx) },
@@ -95,9 +95,9 @@ export const DELETE = withGuard(
 // PATCH - Update connection settings
 export const PATCH = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const body = await request.json();
       const { syncFrequency, accountName } = body;
 

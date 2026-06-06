@@ -18,9 +18,9 @@ import { withGuard } from '@/lib/route-guard';
 
 export const GET = withGuard(
   { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
 
       const invoice = await db.receivedInvoice.findFirst({
         where: { id, ...tenantFilter(ctx) },
@@ -46,9 +46,9 @@ export const GET = withGuard(
 
 export const PUT = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const body = await request.json();
       const { action, reason } = body;
 
@@ -291,6 +291,9 @@ export const PUT = withGuard(
           journalEntry,
         });
       }
+
+      // Unreachable: action is validated above, but TypeScript needs this
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     } catch (error) {
       logger.error('Update received invoice error:', error);
       return NextResponse.json(
@@ -305,9 +308,9 @@ export const PUT = withGuard(
 
 export const DELETE = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_DELETE] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const companyId = ctx.activeCompanyId!;
 
       const existing = await db.receivedInvoice.findFirst({

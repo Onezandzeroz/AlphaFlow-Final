@@ -8,9 +8,9 @@ import { auditUpdate, auditDeleteAttempt, requestMetadata } from '@/lib/audit';
 const guard = routeConfig['/api/companies/[id]/members/[userId]'];
 
 // GET /api/companies/[id]/members/[userId] - Get member info
-export const GET = withGuard(guard.GET!, async (request, ctx, segmentData) => {
+export const GET = withGuard(guard.GET!, async (request, ctx, context) => {
   try {
-    const companyId = segmentData?.id as string;
+    const { id: companyId } = await context.params as { id: string };
 
     // Verify user belongs to this company
     const membership = await db.userCompany.findUnique({
@@ -47,10 +47,9 @@ export const GET = withGuard(guard.GET!, async (request, ctx, segmentData) => {
 });
 
 // PUT /api/companies/[id]/members/[userId] - Change member role
-export const PUT = withGuard(guard.PUT!, async (request, ctx, segmentData) => {
+export const PUT = withGuard(guard.PUT!, async (request, ctx, context) => {
   try {
-    const companyId = segmentData?.id as string;
-    const targetUserId = segmentData?.userId as string;
+    const { id: companyId, userId: targetUserId } = await context.params as { id: string; userId: string };
     const { role } = await request.json();
 
     if (!role || !['OWNER', 'ADMIN', 'ACCOUNTANT', 'VIEWER', 'AUDITOR'].includes(role)) {
@@ -94,10 +93,9 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx, segmentData) => {
 });
 
 // DELETE /api/companies/[id]/members/[userId] - Remove member
-export const DELETE = withGuard(guard.DELETE!, async (request, ctx, segmentData) => {
+export const DELETE = withGuard(guard.DELETE!, async (request, ctx, context) => {
   try {
-    const companyId = segmentData?.id as string;
-    const targetUserId = segmentData?.userId as string;
+    const { id: companyId, userId: targetUserId } = await context.params as { id: string; userId: string };
 
     // Don't allow removing yourself
     if (ctx.id === targetUserId) {

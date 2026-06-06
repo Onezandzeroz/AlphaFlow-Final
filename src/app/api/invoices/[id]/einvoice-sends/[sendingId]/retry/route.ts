@@ -8,7 +8,7 @@ import { withGuard } from '@/lib/route-guard';
 // POST /api/invoices/[id]/einvoice-sends/[sendingId]/retry — Retry a failed e-invoice send
 export const POST = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
       // Rate limit: 3 retries per minute per IP
       const clientIp = getClientIp(request);
@@ -24,7 +24,7 @@ export const POST = withGuard(
         );
       }
 
-      const { id, sendingId } = await (segmentData as unknown as { params: Promise<{ id: string; sendingId: string }> }).params;
+      const { id, sendingId } = await context.params as { id: string; sendingId: string };
 
       const result = await retryEInvoiceSend(sendingId);
 

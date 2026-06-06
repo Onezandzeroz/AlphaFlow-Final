@@ -11,7 +11,7 @@ import { logger } from '@/lib/logger';
  */
 export const GET = withGuard(routeConfig['/api/company/export-info'].GET!, async (request, ctx) => {
   try {
-    const companyId = ctx.activeCompanyId;
+    const companyId = ctx.activeCompanyId!;
 
     // Fetch export audit logs (filter for exportGuid in-memory since Prisma JSON null filtering is strict)
     const exportLogs = await db.auditLog.findMany({

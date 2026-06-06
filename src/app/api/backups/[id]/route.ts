@@ -12,9 +12,9 @@ import fs from 'fs';
  */
 export const POST = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, requireTokenPay: true, permissions: [Permission.BACKUP_RESTORE] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const companyId = ctx.activeCompanyId!;
       const userId = ctx.id;
 
@@ -67,9 +67,9 @@ export const POST = withGuard(
  */
 export const DELETE = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, requireTokenPay: true, permissions: [Permission.BACKUP_CREATE] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const companyId = ctx.activeCompanyId!;
 
       // Verify the backup belongs to this company

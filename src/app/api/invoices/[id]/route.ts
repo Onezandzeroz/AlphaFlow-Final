@@ -10,9 +10,9 @@ import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 // GET /api/invoices/[id] - Get a specific invoice
 export const GET = withGuard(
   { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
 
       const invoice = await db.invoice.findFirst({
         where: { id, ...tenantFilter(ctx) },
@@ -334,9 +334,9 @@ async function cancelJournalEntries(
 // PUT /api/invoices/[id] - Update invoice (e.g., change status) — with audit trail
 export const PUT = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const { id } = await context.params as { id: string };
       const body = await request.json();
 
       const existing = await db.invoice.findFirst({

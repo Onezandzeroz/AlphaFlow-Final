@@ -7,14 +7,12 @@ import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { generateVoucherNumber } from '@/lib/voucher-number';
 
-type SegmentParams = { params: Promise<{ id: string }> };
-
 // GET - Get a single journal entry with lines
 export const GET = withGuard(
   { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as SegmentParams).params;
+      const { id } = await context.params as { id: string };
 
       // demo filter now included in tenantFilter
       const entry = await db.journalEntry.findFirst({
@@ -46,9 +44,9 @@ export const GET = withGuard(
 // PUT - Update a journal entry (only DRAFT entries can be edited)
 export const PUT = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as SegmentParams).params;
+      const { id } = await context.params as { id: string };
       const body = await request.json();
       const { date, description, reference, status, lines } = body;
 
@@ -211,9 +209,9 @@ export const PUT = withGuard(
 // DELETE - Cancel a journal entry (only DRAFT entries can be cancelled)
 export const DELETE = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_CANCEL] },
-  async (request, ctx, segmentData) => {
+  async (request, ctx, context) => {
     try {
-      const { id } = await (segmentData as unknown as SegmentParams).params;
+      const { id } = await context.params as { id: string };
       const { searchParams } = new URL(request.url);
       const reason = searchParams.get('reason') || 'Cancelled via DELETE request';
 

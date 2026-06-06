@@ -5,9 +5,9 @@ import { db } from '@/lib/db';
 import { withGuard } from '@/lib/route-guard';
 
 // GET /api/access/[userId]/status
-export const GET = withGuard({ auth: true }, async (request, ctx, segmentData) => {
+export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
   try {
-    const userId = segmentData?.userId as string;
+    const { userId } = await context.params as { userId: string };
     if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
     // ─── Owner bypass: AlphaAi owner always has read_write ───

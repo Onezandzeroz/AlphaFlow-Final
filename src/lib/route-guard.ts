@@ -22,8 +22,9 @@
  *   blockDemo: true,
  *   requireTokenPay: true,
  *   permissions: [Permission.DATA_CREATE],
- * }, async (request, ctx) => {
+ * }, async (request, ctx, context) => {
  *   // ctx is fully validated — just write business logic
+ *   // For dynamic routes, access params via: const { id } = await context.params;
  *   const data = await db.transaction.create({
  *     ...body,
  *     companyId: ctx.activeCompanyId,
@@ -41,7 +42,15 @@ import {
   requireNotDemoCompany,
 } from '@/lib/rbac';
 import { requireTokenPayAccess } from '@/lib/tokenpay';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+
+// ─── Next.js 16 Route Context Type ──────────────────────────────
+
+/**
+ * Next.js 16 route handler context — params is now a Promise.
+ * Each route file receives this as the second argument from Next.js.
+ */
+export type RouteSegmentContext = { params: Promise<Record<string, string | string[]>> };
 
 // ─── Guard Configuration ──────────────────────────────────────
 
@@ -114,7 +123,7 @@ export const WEBHOOK: GuardConfig = {
  */
 async function executeGuard(
   config: GuardConfig,
-  request: Request
+  request: NextRequest
 ): Promise<{ ctx: AuthContext | null; error: NextResponse | null }> {
   // 1. Authentication
   const ctx = await getAuthContext(request);
@@ -202,10 +211,10 @@ async function executeGuard(
 type RouteHandlerContext = AuthContext;
 
 type RouteHandler = (
-  request: Request,
+  request: NextRequest,
   ctx: RouteHandlerContext,
-  segmentData?: Record<string, string | string[]>
-) => Promise<NextResponse>;
+  context: RouteSegmentContext
+) => Promise<Response>;
 
 /**
  * Wrap an API route handler with enforced guard checks.
@@ -215,19 +224,19 @@ type RouteHandler = (
  * If all checks pass, the handler receives the validated AuthContext.
  *
  * @param config - Guard configuration declaring required protections
- * @param handler - Business logic handler receiving (request, ctx, segmentData)
- * @returns Next.js route handler function
+ * @param handler - Business logic handler receiving (request, ctx, context)
+ * @returns Next.js 16 route handler function with correct signature
  */
 export function withGuard(
   config: GuardConfig,
   handler: RouteHandler
-): (request: Request, segmentData?: Record<string, string | string[]>) => Promise<NextResponse> {
-  return async (request: Request, segmentData?: Record<string, string | string[]>) => {
+): (request: NextRequest, context: RouteSegmentContext) => Promise<Response> {
+  return async (request: NextRequest, context: RouteSegmentContext) => {
     const { ctx, error } = await executeGuard(config, request);
     if (error) return error;
 
     // For auth: false / 'optional', ctx might be null — handler must handle that
     // For auth: true, ctx is guaranteed non-null
-    return handler(request, ctx as RouteHandlerContext, segmentData);
+    return handler(request, ctx as RouteHandlerContext, context);
   };
 }

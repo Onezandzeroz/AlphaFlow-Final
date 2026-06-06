@@ -10,7 +10,7 @@ import { logger } from '@/lib/logger';
 export const GET = withGuard(routeConfig['/api/hermes/config'].GET!, async (request, ctx) => {
   try {
     const hermesAgent = await db.hermesAgent.findUnique({
-      where: { companyId: ctx.activeCompanyId },
+      where: { companyId: ctx.activeCompanyId! },
       select: {
         enabled: true,
         dataAccessEnabled: true,

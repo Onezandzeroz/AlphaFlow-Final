@@ -8,13 +8,13 @@ import { logger } from '@/lib/logger';
 // POST /api/company/einvoice-register — Register company in NemHandelsregisteret
 export const POST = withGuard(routeConfig['/api/company/einvoice-register'].POST!, async (request, ctx) => {
   try {
-    const result = await registerNemHandel(ctx.activeCompanyId, ctx.id);
+    const result = await registerNemHandel(ctx.activeCompanyId!, ctx.id);
 
     // Audit trail for registration
     await auditCreate(
       ctx.id,
       'Company' as never,
-      ctx.activeCompanyId,
+      ctx.activeCompanyId!,
       {
         action: 'nemhandel_registration',
         registrationNo: result.registrationNo,
