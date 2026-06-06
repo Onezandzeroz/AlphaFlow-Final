@@ -1,35 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 import { tokenpay } from '@/lib/tokenpay';
 
 interface TrialInfo {
-  /** At least one member has active read_write access (trial or proof-based) */
   isActive: boolean;
-  /** Earliest expiry across all active members (ISO string), null if none active */
   earliestExpiry: string | null;
-  /** Number of members with active read_write access */
   activeMembers: number;
 }
 
 /**
  * GET /api/oversight/tenants — List all tenants for the App Owner oversight view.
- *
- * Only accessible by isSuperDev users (AlphaAi App Owner).
- * Returns all companies with member counts, trial status, and basic info.
  */
-export async function GET(request: NextRequest) {
+export const GET = withGuard(routeConfig['/api/oversight/tenants'].GET!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!ctx.isSuperDev) {
-      return NextResponse.json({ error: 'Forbidden: App Owner access required' }, { status: 403 });
-    }
-
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search')?.trim() || '';
     const page = Math.max(1, Number(searchParams.get('page') || 1));
@@ -136,4 +122,4 @@ export async function GET(request: NextRequest) {
     logger.error('List oversight tenants error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

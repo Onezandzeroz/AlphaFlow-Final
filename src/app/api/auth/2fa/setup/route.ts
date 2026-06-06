@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
@@ -9,21 +8,13 @@ import {
   encryptSecret,
   generateQRCodeDataURL,
 } from '@/lib/two-factor';
+import { withGuard } from '@/lib/route-guard';
 
 /**
  * POST /api/auth/2fa/setup
- *
- * Initiates 2FA setup for the authenticated user.
- * Generates a new TOTP secret and QR code, but does NOT enable 2FA yet.
- * The user must verify a code (via /activate) to complete setup.
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
     // Rate limiting: max 5 setup attempts per minute per user
     const clientIp = getClientIp(request);
     const { allowed } = rateLimit(`2fa-setup:${ctx.id}:${clientIp}`, {
@@ -61,14 +52,13 @@ export async function POST(request: NextRequest) {
     // Generate new TOTP secret (plain text)
     const plainSecret = generateTOTPSecret();
 
-    // Encrypt and store the secret (don't enable yet — user must verify a code)
+    // Encrypt and store the secret
     const encryptedSecret = encryptSecret(plainSecret);
 
     await db.user.update({
       where: { id: ctx.id },
       data: {
         twoFactorSecret: encryptedSecret,
-        // Keep twoFactorEnabled = false until the user verifies a code
       },
     });
 
@@ -88,7 +78,6 @@ export async function POST(request: NextRequest) {
     logger.info(`[2FA] Setup started for user ${ctx.id} (${ctx.email})`);
 
     // Return the plain secret (needed for QR display / manual entry)
-    // This is the ONLY time the plain secret is ever sent to the client
     return NextResponse.json({
       secret: plainSecret,
       qrCodeDataUrl,
@@ -100,4 +89,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

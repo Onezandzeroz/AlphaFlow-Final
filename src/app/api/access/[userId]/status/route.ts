@@ -1,23 +1,13 @@
-// ═══════════════════════════════════════════════════════════════
-// GET /api/access/[userId]/status
-//
-// Proxy: Full user status via the TokenPay service.
-//
-// OWNER BYPASS: The AlphaAi app owner always gets read_write status
-// without needing a proof file.
-// ═══════════════════════════════════════════════════════════════
-
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { tokenpay } from '@/lib/tokenpay';
 import { checkOwnerStatus } from '@/lib/access-guard';
 import { db } from '@/lib/db';
+import { withGuard } from '@/lib/route-guard';
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
-) {
+// GET /api/access/[userId]/status
+export const GET = withGuard({ auth: true }, async (request, ctx, segmentData) => {
   try {
-    const { userId } = await params;
+    const userId = segmentData?.userId as string;
     if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
     // ─── Owner bypass: AlphaAi owner always has read_write ───
@@ -43,4 +33,4 @@ export async function GET(
     const message = error instanceof Error ? error.message : 'Status check failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

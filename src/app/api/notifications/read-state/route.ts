@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
@@ -9,13 +9,8 @@ import { logger } from '@/lib/logger';
  * Returns the set of notification IDs that the current user has marked as read.
  * Used by the NotificationCenter to sync read state across devices.
  */
-export async function GET() {
+export const GET = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const reads = await db.notificationRead.findMany({
       where: { userId: ctx.id },
       select: { notificationId: true },
@@ -29,4 +24,4 @@ export async function GET() {
     logger.error('Failed to fetch notification read state:', error);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
-}
+});

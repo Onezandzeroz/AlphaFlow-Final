@@ -1,26 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { blockOversightMutation } from '@/lib/rbac';
-import { logger } from '@/lib/logger';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { auditLog, requestMetadata } from '@/lib/audit';
+import { logger } from '@/lib/logger';
 
 // POST /api/company/switch - Switch active company for current session
-export async function POST(request: NextRequest) {
+export const POST = withGuard(routeConfig['/api/company/switch'].POST!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Block company switching while in oversight mode
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
     const { companyId } = await request.json();
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 });
@@ -105,4 +92,4 @@ export async function POST(request: NextRequest) {
     logger.error('Switch company error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

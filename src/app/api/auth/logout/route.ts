@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
-import { destroySession, getAuthContext } from '@/lib/session';
+import { destroySession } from '@/lib/session';
 import { auditAuth, requestMetadata } from '@/lib/audit';
 import { cookies } from 'next/headers';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
 
-export async function POST(request: Request) {
+export const POST = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
     const cookieStore = await cookies();
 
     // Destroy session from cookie
@@ -32,4 +31,4 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
-}
+});

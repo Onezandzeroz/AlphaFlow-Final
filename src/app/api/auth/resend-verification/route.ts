@@ -4,9 +4,10 @@ import { sendVerificationEmail } from '@/lib/email-service';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
+import { withGuard } from '@/lib/route-guard';
 
 // POST /api/auth/resend-verification — Resend verification email (unauthenticated)
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
   try {
     const clientIp = getClientIp(request);
     const { allowed } = rateLimit(`resend-verify:${clientIp}`, {
@@ -34,16 +35,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
-      // Don't reveal whether the email exists — return generic success
       return NextResponse.json({ success: true });
     }
 
-    // SuperDev never needs verification
     if (user.isSuperDev) {
       return NextResponse.json({ success: true });
     }
 
-    // Already verified
     if (user.emailVerified) {
       return NextResponse.json({ success: true });
     }
@@ -71,7 +69,7 @@ export async function POST(request: NextRequest) {
       select: { companyId: true },
     });
 
-    // Send verification email — fire-and-forget so SMTP latency doesn't block the response
+    // Send verification email — fire-and-forget
     sendVerificationEmail(
       user.email,
       token,
@@ -92,4 +90,4 @@ export async function POST(request: NextRequest) {
     logger.error('Resend verification error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

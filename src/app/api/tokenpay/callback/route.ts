@@ -1,39 +1,17 @@
-// ═══════════════════════════════════════════════════════════════
-// TokenPay Webhook Callback Handler
-// ═══════════════════════════════════════════════════════════════
-//
-// The TokenPay Access Service POSTs to this URL whenever
-// a user's access level changes.
-//
-// Events:
-//   access.granted  — User uploaded a valid proof, access upgraded
-//   access.revoked  — Escrow expired or admin override, access downgraded
-//   access.expiring — 7 days before escrow expiry (warning)
-//
-// OWNER PROTECTION: The AlphaAi app owner can NEVER be downgraded.
-// Any revocation webhook for the owner is intercepted and reversed
-// by immediately re-overriding their access back to read_write.
-//
-// Security: Every callback includes an X-TokenPay-Signature header
-// (HMAC-SHA256) that you verify with your shared API key.
-//
-
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
 import { tokenpay, type WebhookPayload } from '@/lib/tokenpay';
 import { auditLog } from '@/lib/audit';
 import { db } from '@/lib/db';
 import { isAlphaAiOwner, ensureOwnerAccess } from '@/lib/access-guard';
+import { withGuard } from '@/lib/route-guard';
 
 const WEBHOOK_SECRET = process.env.TOKENPAY_API_KEY || 'tokenpay-dev-key-2026';
 
 /**
  * POST /api/tokenpay/callback
- *
- * Receives webhook callbacks from the TokenPay Access Service.
- * Verify the signature, then update your app's state.
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
   try {
     // 1. Read the raw body for signature verification
     const rawBody = await request.text();
@@ -63,25 +41,20 @@ export async function POST(request: NextRequest) {
     console.error('[TokenPay Callback] Error:', error);
     return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
-}
+});
 
 /**
- * Handle webhook events — customize this for your app.
- *
- * OWNER PROTECTION: If the target user is the AlphaAi owner and
- * the event is a revocation, the downgrade is immediately reversed.
+ * Handle webhook events
  */
 async function handleWebhookEvent(payload: WebhookPayload): Promise<void> {
   switch (payload.event) {
     case 'access.granted':
-      // User gained access — enable features in your app
       console.log(
         `[TokenPay] Access GRANTED: ${payload.userId} ` +
         `${payload.previousLevel} → ${payload.newLevel} ` +
         `(reason: ${payload.reason})`
       );
 
-      // Log to AlphaFlow audit trail
       try {
         await auditLog({
           action: 'UPDATE',
@@ -108,9 +81,6 @@ async function handleWebhookEvent(payload: WebhookPayload): Promise<void> {
       break;
 
     case 'access.revoked':
-      // ─── OWNER PROTECTION ───────────────────────────────────────
-      // The AlphaAi owner can NEVER lose access. If this revocation
-      // targets the owner, immediately restore read_write.
       if (await isAlphaAiOwner(payload.userId)) {
         console.log(
           `[AccessGuard] BLOCKED revocation of AlphaAi owner ${payload.userId}. ` +
@@ -142,19 +112,16 @@ async function handleWebhookEvent(payload: WebhookPayload): Promise<void> {
           console.error('[AccessGuard] Audit log failed for owner protection:', auditError);
         }
 
-        // Re-override the owner's access back to read_write
         await ensureOwnerAccess(payload.userId);
         break;
       }
 
-      // Normal revocation flow for non-owner users
       console.log(
         `[TokenPay] Access REVOKED: ${payload.userId} ` +
         `${payload.previousLevel} → ${payload.newLevel} ` +
         `(reason: ${payload.reason})`
       );
 
-      // Log to AlphaFlow audit trail
       try {
         await auditLog({
           action: 'UPDATE',
@@ -181,8 +148,6 @@ async function handleWebhookEvent(payload: WebhookPayload): Promise<void> {
       break;
 
     case 'access.expiring':
-      // ─── OWNER PROTECTION ───────────────────────────────────────
-      // Owner never expires — skip expiry warnings for owner
       if (await isAlphaAiOwner(payload.userId)) {
         console.log(
           `[AccessGuard] Skipped expiry warning for AlphaAi owner ${payload.userId}. ` +
@@ -191,17 +156,10 @@ async function handleWebhookEvent(payload: WebhookPayload): Promise<void> {
         break;
       }
 
-      // Access expiring soon — remind user to renew
       console.log(
         `[TokenPay] Access EXPIRING SOON: ${payload.userId} ` +
         `(level: ${payload.newLevel})`
       );
-
-      // ─── YOUR CODE HERE ───────────────────────────────
-      // Example: Send renewal reminder email
-      // await sendEmail(payload.userId, 'renewal_reminder', {
-      //   currentLevel: payload.newLevel,
-      // });
       break;
   }
 }

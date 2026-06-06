@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
+import { tenantFilter, Permission } from '@/lib/rbac';
 
 /**
  * Danish keyword → account mapping for smart categorization.
@@ -126,22 +125,15 @@ function categorizeDescription(
  *    Body: { descriptions: string[] }
  *    Response: { results: Array<{ description, suggestions, hasMatch }> }
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_EDIT],
+}, async (request: NextRequest, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
     const body = await request.json();
     const { description, descriptions } = body as { description?: string; descriptions?: string[] };
 
@@ -227,4 +219,4 @@ export async function POST(request: NextRequest) {
     logger.error('AI categorize API error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

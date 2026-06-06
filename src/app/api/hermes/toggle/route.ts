@@ -1,39 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { blockOversightMutation } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 
 /**
  * POST /api/hermes/toggle
- *
- * Enables or disables Hermes for a specific company.
- * ONLY available to isSuperDev users (App Owner).
- *
- * Body: { companyId: string, enabled: boolean }
- *
- * Response: { "success": true, "enabled": true }
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Require SuperDev (App Owner) access
-    if (!ctx.isSuperDev) {
-      return NextResponse.json(
-        { error: 'Forbidden: App Owner access required' },
-        { status: 403 }
-      );
-    }
-
-    // Block oversight mutations
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
     // Parse request body
     const body = await request.json();
     const { companyId, enabled } = body as { companyId?: string; enabled?: boolean };
@@ -101,4 +77,4 @@ export async function POST(request: NextRequest) {
     logger.error('[HERMES TOGGLE] Failed to toggle Hermes:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

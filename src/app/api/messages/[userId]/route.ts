@@ -1,20 +1,11 @@
-// ═══════════════════════════════════════════════════════════════
-// GET /api/messages/[userId]
-//
-// Proxy: Get messages for a user from the TokenPay service.
-//
-// Response: { messages: [...], unreadCount: number }
-// ═══════════════════════════════════════════════════════════════
-
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { tokenpay } from '@/lib/tokenpay';
+import { withGuard } from '@/lib/route-guard';
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
-) {
+// GET /api/messages/[userId]
+export const GET = withGuard({ auth: true }, async (request, ctx, segmentData) => {
   try {
-    const { userId } = await params;
+    const userId = segmentData?.userId as string;
     if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
     const result = await tokenpay.getMessages(userId);
@@ -24,4 +15,4 @@ export async function GET(
     const message = error instanceof Error ? error.message : 'Failed to fetch messages';
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

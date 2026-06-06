@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
@@ -12,22 +11,14 @@ import {
   hashBackupCode,
   encryptBackupCodes,
 } from '@/lib/two-factor';
+import { withGuard } from '@/lib/route-guard';
 
 /**
  * POST /api/auth/2fa/activate
- *
- * Verifies the user's TOTP code and activates 2FA.
- * On success, generates and returns backup codes (only shown once).
- * On failure, the pending secret remains stored for retry.
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
-    // Rate limiting: max 10 verification attempts per minute per user
+    // Rate limiting
     const clientIp = getClientIp(request);
     const { allowed } = rateLimit(`2fa-activate:${ctx.id}:${clientIp}`, {
       maxRequests: 10,
@@ -66,7 +57,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Already enabled
     if (user.twoFactorEnabled) {
       return NextResponse.json(
         { error: '2FA is already enabled.' },
@@ -125,4 +115,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

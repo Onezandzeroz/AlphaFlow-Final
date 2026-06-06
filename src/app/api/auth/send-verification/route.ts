@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { sendVerificationEmail } from '@/lib/email-service';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
+import { withGuard } from '@/lib/route-guard';
 
 // POST /api/auth/send-verification — Re-send email verification link
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     // SuperDev (AlphaAi) never needs to verify email
     if (ctx.isSuperDev) {
       return NextResponse.json({ error: 'AppOwner does not need email verification' }, { status: 400 });
@@ -54,7 +49,7 @@ export async function POST(request: NextRequest) {
       data: { emailVerificationToken: token },
     });
 
-    // Send verification email — fire-and-forget so SMTP latency doesn't block the response
+    // Send verification email — fire-and-forget
     sendVerificationEmail(user.email, token, 'da', ctx.activeCompanyId ?? undefined)
       .then((result) => {
         if (!result.success) {
@@ -72,4 +67,4 @@ export async function POST(request: NextRequest) {
     logger.error('Send verification error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

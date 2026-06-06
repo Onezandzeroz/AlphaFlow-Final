@@ -1,27 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 
 /**
  * GET /api/companies/[id]/members — List all members of a company
- *
- * Requires MEMBERS_VIEW permission (≥ ADMIN).
- * SuperDev in oversight mode can also view.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withGuard(routeConfig['/api/companies/[id]/members'].GET!, async (request, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const forbidden = requirePermission(ctx, Permission.MEMBERS_VIEW);
-    if (forbidden) return forbidden;
-
-    const { id: companyId } = await params;
+    const companyId = segmentData?.id as string;
 
     // Verify user belongs to this company (or is SuperDev)
     const membership = await db.userCompany.findUnique({
@@ -55,4 +43,4 @@ export async function GET(
     logger.error('List members error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

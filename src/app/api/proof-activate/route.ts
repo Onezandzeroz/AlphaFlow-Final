@@ -1,16 +1,9 @@
-// ═══════════════════════════════════════════════════════════════
-// POST /api/proof-activate
-//
-// Proxy: Activates a previously uploaded proof by proofId.
-//
-// Body: { userId: string, proofId: string }
-// Response: { success: true, tier: string, expiresAt: string }
-// ═══════════════════════════════════════════════════════════════
-
 import { NextRequest, NextResponse } from 'next/server';
 import { tokenpay } from '@/lib/tokenpay';
+import { withGuard } from '@/lib/route-guard';
 
-export async function POST(request: NextRequest) {
+// POST /api/proof-activate
+export const POST = withGuard({ auth: true }, async (request) => {
   try {
     const body = await request.json();
     const { userId, proofId } = body;
@@ -29,4 +22,4 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Proof activation failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

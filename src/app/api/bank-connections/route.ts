@@ -1,219 +1,202 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { getProvider, getAvailableBanks } from '@/lib/bank-providers';
-import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { tenantFilter, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
 import { encryptOrNull, decryptOrNull } from '@/lib/crypto';
 
 // GET - List bank connections or available banks
-export async function GET(request: NextRequest) {
-  try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+export const GET = withGuard(
+  { auth: true, requireCompany: true, permissions: [Permission.BANK_CONNECT] },
+  async (request, ctx) => {
+    try {
+      const { searchParams } = new URL(request.url);
+      const action = searchParams.get('action');
 
-    const { searchParams } = new URL(request.url);
-    const action = searchParams.get('action');
+      // List available banks
+      if (action === 'banks') {
+        return NextResponse.json({ banks: getAvailableBanks() });
+      }
 
-    // List available banks
-    if (action === 'banks') {
-      return NextResponse.json({ banks: getAvailableBanks() });
-    }
-
-    // List user's bank connections
-    
-    const connections = await db.bankConnection.findMany({
-      where: {
-        ...tenantFilter(ctx),
-      },
-      include: {
-        syncs: {
-          orderBy: { startedAt: 'desc' },
-          take: 3,
+      // List user's bank connections
+      
+      const connections = await db.bankConnection.findMany({
+        where: {
+          ...tenantFilter(ctx),
         },
-        bankStatements: {
-          orderBy: { startDate: 'desc' },
-          take: 1,
-          include: {
-            lines: {
-              where: { reconciliationStatus: 'UNMATCHED' },
-              take: 0,
+        include: {
+          syncs: {
+            orderBy: { startedAt: 'desc' },
+            take: 3,
+          },
+          bankStatements: {
+            orderBy: { startDate: 'desc' },
+            take: 1,
+            include: {
+              lines: {
+                where: { reconciliationStatus: 'UNMATCHED' },
+                take: 0,
+              },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      });
 
-    // Add computed fields
-    const enriched = connections.map(conn => ({
-      ...conn,
-      unmatchedCount: conn.bankStatements.reduce(
-        (sum, stmt) => sum + (stmt as any).lines?.length || 0,
-        0
-      ),
-      recentSyncs: conn.syncs,
-    }));
+      // Add computed fields
+      const enriched = connections.map(conn => ({
+        ...conn,
+        unmatchedCount: conn.bankStatements.reduce(
+          (sum, stmt) => sum + (stmt as any).lines?.length || 0,
+          0
+        ),
+        recentSyncs: conn.syncs,
+      }));
 
-    return NextResponse.json({ connections: enriched });
-  } catch (error) {
-    logger.error('List bank connections error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+      return NextResponse.json({ connections: enriched });
+    } catch (error) {
+      logger.error('List bank connections error:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
   }
-}
+);
 
 // POST - Create a new bank connection
-export async function POST(request: NextRequest) {
-  try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const body = await request.json();
-    const {
-      bankName,
-      provider,
-      registrationNumber,
-      accountNumber,
-      iban,
-      accountName,
-      syncFrequency = 'daily',
-    } = body;
-
-    if (!bankName || !provider || !accountNumber) {
-      return NextResponse.json(
-        { error: 'Missing required fields: bankName, provider, accountNumber' },
-        { status: 400 }
-      );
-    }
-
-    
-    // Check for duplicate account
-    const existing = await db.bankConnection.findFirst({
-      where: {
-        ...tenantFilter(ctx),
-        accountNumber,
-      },
-    });
-
-    if (existing) {
-      return NextResponse.json(
-        { error: 'En bankforbindelse med dette kontonummer findes allerede' },
-        { status: 409 }
-      );
-    }
-
-    // Get the provider
-    const bankProvider = getProvider(provider);
-    if (!bankProvider) {
-      return NextResponse.json(
-        { error: `Ukendt bankudbyder: ${provider}` },
-        { status: 400 }
-      );
-    }
-
-    // Initiate consent
-    const consentResult = await bankProvider.initiateConsent({
-      registrationNumber: registrationNumber || '',
-      accountNumber,
-      iban,
-    });
-
-    // Calculate next sync time
-    const now = new Date();
-    const nextSyncAt = new Date(now);
-    if (syncFrequency === 'hourly') {
-      nextSyncAt.setHours(nextSyncAt.getHours() + 1);
-    } else if (syncFrequency === 'daily') {
-      nextSyncAt.setDate(nextSyncAt.getDate() + 1);
-      nextSyncAt.setHours(6, 0, 0, 0); // 6 AM next day
-    }
-    // manual = no auto sync
-
-    // AES-256-GCM encryption for tokens at rest
-    const encryptToken = (token: string) => encryptOrNull(token) ?? '';
-
-    // For real banks with pending consent, don't schedule auto-sync until authorized
-    const isActiveConsent = consentResult.status === 'active';
-    const effectiveNextSyncAt = isActiveConsent && syncFrequency !== 'manual' ? nextSyncAt : null;
-
-    const connection = await db.bankConnection.create({
-      data: {
+export const POST = withGuard(
+  { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
+  async (request, ctx) => {
+    try {
+      const body = await request.json();
+      const {
         bankName,
         provider,
-        registrationNumber: registrationNumber || null,
+        registrationNumber,
         accountNumber,
-        iban: iban || null,
-        accountName: accountName || null,
-        syncFrequency,
-        status: isActiveConsent ? 'ACTIVE' : 'PENDING',
-        consentId: consentResult.consentId,
-        consentExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days default
-        accessToken: consentResult.consentId ? encryptOrNull(consentResult.consentId) : null,
-        nextSyncAt: effectiveNextSyncAt,
-        userId: ctx.id,
-        companyId: ctx.activeCompanyId!,
-      },
-    });
+        iban,
+        accountName,
+        syncFrequency = 'daily',
+      } = body;
 
-    await auditCreate(
-      ctx.id,
-      'BankConnection',
-      connection.id,
-      {
-        bankName,
-        provider,
+      if (!bankName || !provider || !accountNumber) {
+        return NextResponse.json(
+          { error: 'Missing required fields: bankName, provider, accountNumber' },
+          { status: 400 }
+        );
+      }
+
+      
+      // Check for duplicate account
+      const existing = await db.bankConnection.findFirst({
+        where: {
+          ...tenantFilter(ctx),
+          accountNumber,
+        },
+      });
+
+      if (existing) {
+        return NextResponse.json(
+          { error: 'En bankforbindelse med dette kontonummer findes allerede' },
+          { status: 409 }
+        );
+      }
+
+      // Get the provider
+      const bankProvider = getProvider(provider);
+      if (!bankProvider) {
+        return NextResponse.json(
+          { error: `Ukendt bankudbyder: ${provider}` },
+          { status: 400 }
+        );
+      }
+
+      // Initiate consent
+      const consentResult = await bankProvider.initiateConsent({
+        registrationNumber: registrationNumber || '',
         accountNumber,
-        status: connection.status,
-      },
-      requestMetadata(request),
-      ctx.activeCompanyId
-    );
+        iban,
+      });
 
-    // If demo provider and active, do an initial sync
-    if (bankProvider.isDemo && connection.status === 'ACTIVE') {
-      const syncResult = await performSync(connection.id, ctx.id);
+      // Calculate next sync time
+      const now = new Date();
+      const nextSyncAt = new Date(now);
+      if (syncFrequency === 'hourly') {
+        nextSyncAt.setHours(nextSyncAt.getHours() + 1);
+      } else if (syncFrequency === 'daily') {
+        nextSyncAt.setDate(nextSyncAt.getDate() + 1);
+        nextSyncAt.setHours(6, 0, 0, 0); // 6 AM next day
+      }
+      // manual = no auto sync
+
+      // For real banks with pending consent, don't schedule auto-sync until authorized
+      const isActiveConsent = consentResult.status === 'active';
+      const effectiveNextSyncAt = isActiveConsent && syncFrequency !== 'manual' ? nextSyncAt : null;
+
+      const connection = await db.bankConnection.create({
+        data: {
+          bankName,
+          provider,
+          registrationNumber: registrationNumber || null,
+          accountNumber,
+          iban: iban || null,
+          accountName: accountName || null,
+          syncFrequency,
+          status: isActiveConsent ? 'ACTIVE' : 'PENDING',
+          consentId: consentResult.consentId,
+          consentExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days default
+          accessToken: consentResult.consentId ? encryptOrNull(consentResult.consentId) : null,
+          nextSyncAt: effectiveNextSyncAt,
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId!,
+        },
+      });
+
+      await auditCreate(
+        ctx.id,
+        'BankConnection',
+        connection.id,
+        {
+          bankName,
+          provider,
+          accountNumber,
+          status: connection.status,
+        },
+        requestMetadata(request),
+        ctx.activeCompanyId
+      );
+
+      // If demo provider and active, do an initial sync
+      if (bankProvider.isDemo && connection.status === 'ACTIVE') {
+        const syncResult = await performSync(connection.id, ctx.id);
+        return NextResponse.json(
+          { connection, initialSync: syncResult },
+          { status: 201 }
+        );
+      }
+
+      // For real banks: return the consent redirect URL
+      // Include connection_id in the redirect so the callback can update the connection
+      let consentRedirect = consentResult.redirectUrl || null;
+      if (consentRedirect && !consentRedirect.includes('connection_id')) {
+        const separator = consentRedirect.includes('?') ? '&' : '?';
+        consentRedirect = `${consentRedirect}${separator}connection_id=${connection.id}`;
+      }
+
       return NextResponse.json(
-        { connection, initialSync: syncResult },
+        {
+          connection,
+          consentRedirect,
+          sandboxMode: consentResult.sandboxMode || false,
+        },
         { status: 201 }
       );
+    } catch (error) {
+      logger.error('Create bank connection error:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
-
-    // For real banks: return the consent redirect URL
-    // Include connection_id in the redirect so the callback can update the connection
-    let consentRedirect = consentResult.redirectUrl || null;
-    if (consentRedirect && !consentRedirect.includes('connection_id')) {
-      const separator = consentRedirect.includes('?') ? '&' : '?';
-      consentRedirect = `${consentRedirect}${separator}connection_id=${connection.id}`;
-    }
-
-    return NextResponse.json(
-      {
-        connection,
-        consentRedirect,
-        sandboxMode: consentResult.sandboxMode || false,
-      },
-      { status: 201 }
-    );
-  } catch (error) {
-    logger.error('Create bank connection error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+);
 
 // Helper: Perform sync for a bank connection
 async function performSync(connectionId: string, userId: string) {

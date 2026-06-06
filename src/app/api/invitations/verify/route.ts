@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { logger } from '@/lib/logger';
 
 // GET /api/invitations/verify?token=xxx - Verify invitation token
-export async function GET(request: NextRequest) {
+export const GET = withGuard({ auth: true }, async (request: NextRequest, ctx) => {
   try {
     const { searchParams } = new URL(request.url);
     const token = searchParams.get('token');
@@ -53,4 +53,4 @@ export async function GET(request: NextRequest) {
     logger.error('Verify invitation error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

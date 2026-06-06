@@ -1,21 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { logger } from '@/lib/logger';
+import { withGuard } from '@/lib/route-guard';
 
 /**
  * GET /api/auth/2fa/status
- *
- * Returns the user's 2FA status and company-level 2FA requirement.
- * Used by the frontend to determine which UI to show (setup, manage, etc.).
  */
-export async function GET(request: NextRequest) {
+export const GET = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
     // Fetch user 2FA status
     const user = await db.user.findUnique({
       where: { id: ctx.id },
@@ -47,7 +39,7 @@ export async function GET(request: NextRequest) {
       twoFactorEnabled: user.twoFactorEnabled,
       hasBackupCodes: !!user.twoFactorBackupCodes,
       companyRequiresTwoFactor,
-      isSuperDev: ctx.isSuperDev, // Frontend can use this to show/hide bypass UI
+      isSuperDev: ctx.isSuperDev,
     });
   } catch (error) {
     logger.error('[2FA] Status error:', error);
@@ -56,4 +48,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

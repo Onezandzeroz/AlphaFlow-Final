@@ -1,41 +1,34 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { auditUpdate, auditCreate, auditLog, requestMetadata } from '@/lib/audit';
 import { VATCode } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { tenantFilter, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // GET /api/invoices/[id] - Get a specific invoice
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export const GET = withGuard(
+  { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
+  async (request, ctx, segmentData) => {
+    try {
+      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+
+      const invoice = await db.invoice.findFirst({
+        where: { id, ...tenantFilter(ctx) },
+      });
+
+      if (!invoice) {
+        return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({ invoice });
+    } catch (error) {
+      logger.error('Failed to fetch invoice:', error);
+      return NextResponse.json({ error: 'Failed to fetch invoice' }, { status: 500 });
     }
-
-    const { id } = await params;
-
-    
-    const invoice = await db.invoice.findFirst({
-      where: { id, ...tenantFilter(ctx) },
-    });
-
-    if (!invoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ invoice });
-  } catch (error) {
-    logger.error('Failed to fetch invoice:', error);
-    return NextResponse.json({ error: 'Failed to fetch invoice' }, { status: 500 });
   }
-}
+);
 
 // ─── Helper: Get effective companyId for data creation ───────────────
 function effectiveCompanyId(ctx: { activeCompanyId: string | null; isOversightMode: boolean }): string {
@@ -339,194 +332,179 @@ async function cancelJournalEntries(
 }
 
 // PUT /api/invoices/[id] - Update invoice (e.g., change status) — with audit trail
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+export const PUT = withGuard(
+  { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
+  async (request, ctx, segmentData) => {
+    try {
+      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const body = await request.json();
 
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const { id } = await params;
-    const body = await request.json();
-
-    
-    const existing = await db.invoice.findFirst({
-      where: { id, ...tenantFilter(ctx) },
-    });
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
-    }
-
-    const previousStatus = existing.status;
-    const newStatus = body.status;
-
-    // ─── Recalculate totals from lineItems (same logic as POST) ────
-    let subtotal: number | undefined;
-    let vatTotal: number | undefined;
-    let total: number | undefined;
-
-    if (Array.isArray(body.lineItems) && body.lineItems.length > 0) {
-      subtotal = body.lineItems.reduce((sum: number, item: { quantity: number; unitPrice: number }) => {
-        return sum + (Number(item.quantity) * Number(item.unitPrice));
-      }, 0);
-
-      vatTotal = body.lineItems.reduce((sum: number, item: { quantity: number; unitPrice: number; vatPercent: number }) => {
-        return sum + ((Number(item.quantity) * Number(item.unitPrice) * Number(item.vatPercent)) / 100);
-      }, 0);
-
-      total = subtotal! + vatTotal!;
-    }
-
-    // Build old/new data for audit
-    const oldData: Record<string, unknown> = {
-      status: previousStatus,
-      notes: existing.notes,
-      lineItems: existing.lineItems,
-      subtotal: existing.subtotal,
-      vatTotal: existing.vatTotal,
-      total: existing.total,
-      issueDate: existing.issueDate,
-      dueDate: existing.dueDate,
-    };
-    const newData: Record<string, unknown> = {};
-    if (newStatus) newData.status = newStatus;
-    if (body.notes !== undefined) newData.notes = body.notes;
-    if (body.customerName !== undefined) newData.customerName = body.customerName;
-    if (body.customerAddress !== undefined) newData.customerAddress = body.customerAddress;
-    if (body.customerEmail !== undefined) newData.customerEmail = body.customerEmail;
-    if (body.customerPhone !== undefined) newData.customerPhone = body.customerPhone;
-    if (body.customerCvr !== undefined) newData.customerCvr = body.customerCvr;
-    if (body.lineItems !== undefined) newData.lineItems = body.lineItems;
-    if (subtotal !== undefined) newData.subtotal = subtotal;
-    if (vatTotal !== undefined) newData.vatTotal = vatTotal;
-    if (total !== undefined) newData.total = total;
-    if (body.issueDate) newData.issueDate = body.issueDate;
-    if (body.dueDate) newData.dueDate = body.dueDate;
-
-    // Update the invoice
-    const invoice = await db.invoice.update({
-      where: { id },
-      data: {
-        ...(newStatus && { status: newStatus }),
-        ...(body.notes !== undefined && { notes: body.notes }),
-        ...(body.customerName !== undefined && { customerName: body.customerName }),
-        ...(body.customerAddress !== undefined && { customerAddress: body.customerAddress }),
-        ...(body.customerEmail !== undefined && { customerEmail: body.customerEmail }),
-        ...(body.customerPhone !== undefined && { customerPhone: body.customerPhone }),
-        ...(body.customerCvr !== undefined && { customerCvr: body.customerCvr }),
-        ...(body.lineItems && { lineItems: body.lineItems }),
-        ...(subtotal !== undefined && { subtotal }),
-        ...(vatTotal !== undefined && { vatTotal }),
-        ...(total !== undefined && { total }),
-        ...(body.issueDate && { issueDate: new Date(body.issueDate) }),
-        ...(body.dueDate && { dueDate: new Date(body.dueDate) }),
-      },
-    });
-
-    // Audit log
-    await auditUpdate(ctx.id, 'Invoice', id, oldData, newData, requestMetadata(request), ctx.activeCompanyId);
-
-    const accrualRef = existing.invoiceNumber;
-    const cashRef = `${existing.invoiceNumber}-IND`;
-
-    // ─── STATUS TRANSITION: DRAFT → SENT ────────────────────────────
-    // Create accrual journal entry (double-entry bookkeeping only)
-    // This follows the accrual principle (periodiseringsprincippet):
-    // Revenue is recognized when the invoice is sent, not when paid.
-    if (newStatus === 'SENT' && previousStatus === 'DRAFT') {
-      // Create accrual journal entry if none exists
-      const existingJE = await db.journalEntry.findFirst({
-        where: {
-          ...tenantFilter(ctx),
-          reference: accrualRef,
-          cancelled: false,
-        },
+      const existing = await db.invoice.findFirst({
+        where: { id, ...tenantFilter(ctx) },
       });
-      if (!existingJE) {
-        await createAccrualJournalEntry(ctx, existing);
-      }
-    }
 
-    // ─── STATUS TRANSITION: → PAID ──────────────────────────────────
-    // Create cash receipt journal entry (Debit: Bank, Credit: Receivables)
-    // Also ensure accrual entry exists (covers DRAFT → PAID edge case
-    // and existing SENT invoices from before the accrual-on-SENT code change)
-    if (newStatus === 'PAID' && previousStatus !== 'PAID') {
-      const paymentDate = new Date(); // Today as payment date
-
-      // Ensure accrual entry exists (covers DRAFT → PAID and old SENT → PAID)
-      const existingAccrualJE = await db.journalEntry.findFirst({
-        where: {
-          ...tenantFilter(ctx),
-          reference: accrualRef,
-          cancelled: false,
-        },
-      });
-      if (!existingAccrualJE) {
-        await createAccrualJournalEntry(ctx, existing);
+      if (!existing) {
+        return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
       }
 
+      const previousStatus = existing.status;
+      const newStatus = body.status;
+
+      // ─── Recalculate totals from lineItems (same logic as POST) ────
+      let subtotal: number | undefined;
+      let vatTotal: number | undefined;
+      let total: number | undefined;
+
+      if (Array.isArray(body.lineItems) && body.lineItems.length > 0) {
+        subtotal = body.lineItems.reduce((sum: number, item: { quantity: number; unitPrice: number }) => {
+          return sum + (Number(item.quantity) * Number(item.unitPrice));
+        }, 0);
+
+        vatTotal = body.lineItems.reduce((sum: number, item: { quantity: number; unitPrice: number; vatPercent: number }) => {
+          return sum + ((Number(item.quantity) * Number(item.unitPrice) * Number(item.vatPercent)) / 100);
+        }, 0);
+
+        total = subtotal! + vatTotal!;
+      }
+
+      // Build old/new data for audit
+      const oldData: Record<string, unknown> = {
+        status: previousStatus,
+        notes: existing.notes,
+        lineItems: existing.lineItems,
+        subtotal: existing.subtotal,
+        vatTotal: existing.vatTotal,
+        total: existing.total,
+        issueDate: existing.issueDate,
+        dueDate: existing.dueDate,
+      };
+      const newData: Record<string, unknown> = {};
+      if (newStatus) newData.status = newStatus;
+      if (body.notes !== undefined) newData.notes = body.notes;
+      if (body.customerName !== undefined) newData.customerName = body.customerName;
+      if (body.customerAddress !== undefined) newData.customerAddress = body.customerAddress;
+      if (body.customerEmail !== undefined) newData.customerEmail = body.customerEmail;
+      if (body.customerPhone !== undefined) newData.customerPhone = body.customerPhone;
+      if (body.customerCvr !== undefined) newData.customerCvr = body.customerCvr;
+      if (body.lineItems !== undefined) newData.lineItems = body.lineItems;
+      if (subtotal !== undefined) newData.subtotal = subtotal;
+      if (vatTotal !== undefined) newData.vatTotal = vatTotal;
+      if (total !== undefined) newData.total = total;
+      if (body.issueDate) newData.issueDate = body.issueDate;
+      if (body.dueDate) newData.dueDate = body.dueDate;
+
+      // Update the invoice
+      const invoice = await db.invoice.update({
+        where: { id },
+        data: {
+          ...(newStatus && { status: newStatus }),
+          ...(body.notes !== undefined && { notes: body.notes }),
+          ...(body.customerName !== undefined && { customerName: body.customerName }),
+          ...(body.customerAddress !== undefined && { customerAddress: body.customerAddress }),
+          ...(body.customerEmail !== undefined && { customerEmail: body.customerEmail }),
+          ...(body.customerPhone !== undefined && { customerPhone: body.customerPhone }),
+          ...(body.customerCvr !== undefined && { customerCvr: body.customerCvr }),
+          ...(body.lineItems && { lineItems: body.lineItems }),
+          ...(subtotal !== undefined && { subtotal }),
+          ...(vatTotal !== undefined && { vatTotal }),
+          ...(total !== undefined && { total }),
+          ...(body.issueDate && { issueDate: new Date(body.issueDate) }),
+          ...(body.dueDate && { dueDate: new Date(body.dueDate) }),
+        },
+      });
+
+      // Audit log
+      await auditUpdate(ctx.id, 'Invoice', id, oldData, newData, requestMetadata(request), ctx.activeCompanyId);
+
+      const accrualRef = existing.invoiceNumber;
+      const cashRef = `${existing.invoiceNumber}-IND`;
+
+      // ─── STATUS TRANSITION: DRAFT → SENT ────────────────────────────
+      // Create accrual journal entry (double-entry bookkeeping only)
+      // This follows the accrual principle (periodiseringsprincippet):
+      // Revenue is recognized when the invoice is sent, not when paid.
+      if (newStatus === 'SENT' && previousStatus === 'DRAFT') {
+        // Create accrual journal entry if none exists
+        const existingJE = await db.journalEntry.findFirst({
+          where: {
+            ...tenantFilter(ctx),
+            reference: accrualRef,
+            cancelled: false,
+          },
+        });
+        if (!existingJE) {
+          await createAccrualJournalEntry(ctx, existing);
+        }
+      }
+
+      // ─── STATUS TRANSITION: → PAID ──────────────────────────────────
       // Create cash receipt journal entry (Debit: Bank, Credit: Receivables)
-      const existingCashJE = await db.journalEntry.findFirst({
-        where: {
-          ...tenantFilter(ctx),
-          reference: cashRef,
-          cancelled: false,
-        },
-      });
-      if (!existingCashJE) {
-        await createCashReceiptJournalEntry(ctx, existing, paymentDate);
+      // Also ensure accrual entry exists (covers DRAFT → PAID edge case
+      // and existing SENT invoices from before the accrual-on-SENT code change)
+      if (newStatus === 'PAID' && previousStatus !== 'PAID') {
+        const paymentDate = new Date(); // Today as payment date
+
+        // Ensure accrual entry exists (covers DRAFT → PAID and old SENT → PAID)
+        const existingAccrualJE = await db.journalEntry.findFirst({
+          where: {
+            ...tenantFilter(ctx),
+            reference: accrualRef,
+            cancelled: false,
+          },
+        });
+        if (!existingAccrualJE) {
+          await createAccrualJournalEntry(ctx, existing);
+        }
+
+        // Create cash receipt journal entry (Debit: Bank, Credit: Receivables)
+        const existingCashJE = await db.journalEntry.findFirst({
+          where: {
+            ...tenantFilter(ctx),
+            reference: cashRef,
+            cancelled: false,
+          },
+        });
+        if (!existingCashJE) {
+          await createCashReceiptJournalEntry(ctx, existing, paymentDate);
+        }
       }
-    }
 
-    // ─── STATUS TRANSITION: PAID → SENT ─────────────────────────────
-    // Cancel ONLY the cash receipt entry (reference = invoiceNumber-IND)
-    // Keep the accrual entry (invoice is still outstanding)
-    if (previousStatus === 'PAID' && newStatus === 'SENT') {
-      await cancelJournalEntries(
-        ctx,
-        [cashRef],
-        `Faktura ${existing.invoiceNumber} ændret fra BETALT til SENDT – indbetaling annulleret`,
-      );
-      // Do NOT cancel accrual — invoice is still sent/outstanding
-    }
+      // ─── STATUS TRANSITION: PAID → SENT ─────────────────────────────
+      // Cancel ONLY the cash receipt entry (reference = invoiceNumber-IND)
+      // Keep the accrual entry (invoice is still outstanding)
+      if (previousStatus === 'PAID' && newStatus === 'SENT') {
+        await cancelJournalEntries(
+          ctx,
+          [cashRef],
+          `Faktura ${existing.invoiceNumber} ændret fra BETALT til SENDT – indbetaling annulleret`,
+        );
+        // Do NOT cancel accrual — invoice is still sent/outstanding
+      }
 
-    // ─── STATUS TRANSITION: PAID → DRAFT / CANCELLED ────────────────
-    // Cancel BOTH the cash receipt entry AND the accrual entry
-    if (previousStatus === 'PAID' && newStatus && newStatus !== 'PAID' && newStatus !== 'SENT') {
-      await cancelJournalEntries(
-        ctx,
-        [accrualRef, cashRef],
-        `Faktura ${existing.invoiceNumber} ændret fra BETALT til ${newStatus}`,
-      );
-    }
+      // ─── STATUS TRANSITION: PAID → DRAFT / CANCELLED ────────────────
+      // Cancel BOTH the cash receipt entry AND the accrual entry
+      if (previousStatus === 'PAID' && newStatus && newStatus !== 'PAID' && newStatus !== 'SENT') {
+        await cancelJournalEntries(
+          ctx,
+          [accrualRef, cashRef],
+          `Faktura ${existing.invoiceNumber} ændret fra BETALT til ${newStatus}`,
+        );
+      }
 
-    // ─── STATUS TRANSITION: SENT → DRAFT / CANCELLED ────────────────
-    // Cancel the accrual entry (invoice no longer outstanding)
-    if (previousStatus === 'SENT' && newStatus && newStatus !== 'SENT' && newStatus !== 'PAID') {
-      await cancelJournalEntries(
-        ctx,
-        [accrualRef],
-        `Faktura ${existing.invoiceNumber} ændret fra SENDT til ${newStatus}`,
-      );
-    }
+      // ─── STATUS TRANSITION: SENT → DRAFT / CANCELLED ────────────────
+      // Cancel the accrual entry (invoice no longer outstanding)
+      if (previousStatus === 'SENT' && newStatus && newStatus !== 'SENT' && newStatus !== 'PAID') {
+        await cancelJournalEntries(
+          ctx,
+          [accrualRef],
+          `Faktura ${existing.invoiceNumber} ændret fra SENDT til ${newStatus}`,
+        );
+      }
 
-    return NextResponse.json({ invoice });
-  } catch (error) {
-    logger.error('Failed to update invoice:', error);
-    return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 });
+      return NextResponse.json({ invoice });
+    } catch (error) {
+      logger.error('Failed to update invoice:', error);
+      return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 });
+    }
   }
-}
+);

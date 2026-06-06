@@ -3,9 +3,10 @@ import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/password';
 import { destroyAllUserSessions } from '@/lib/session';
 import { logger } from '@/lib/logger';
+import { withGuard } from '@/lib/route-guard';
 
 // POST /api/auth/reset-password — Reset password with token (public)
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
   try {
     const { token, password } = await request.json();
 
@@ -36,7 +37,6 @@ export async function POST(request: NextRequest) {
 
     // Check if token has expired
     if (user.resetPasswordExpires && user.resetPasswordExpires < new Date()) {
-      // Clear expired token
       await db.user.update({
         where: { id: user.id },
         data: {
@@ -70,4 +70,4 @@ export async function POST(request: NextRequest) {
     logger.error('Reset password error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

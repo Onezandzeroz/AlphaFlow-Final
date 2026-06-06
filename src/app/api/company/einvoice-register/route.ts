@@ -1,31 +1,13 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, blockOversightMutation, requireNotDemoCompany, Permission } from '@/lib/rbac';
+import { NextResponse } from 'next/server';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { registerNemHandel } from '@/lib/einvoice-sender';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 
 // POST /api/company/einvoice-register — Register company in NemHandelsregisteret
-export async function POST(request: NextRequest) {
+export const POST = withGuard(routeConfig['/api/company/einvoice-register'].POST!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const forbidden = requirePermission(ctx, Permission.COMPANY_EDIT_SETTINGS);
-    if (forbidden) return forbidden;
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json({ error: 'No active company' }, { status: 400 });
-    }
-
     const result = await registerNemHandel(ctx.activeCompanyId, ctx.id);
 
     // Audit trail for registration
@@ -56,4 +38,4 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Kunne ikke registrere virksomhed i NemHandelsregisteret';
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

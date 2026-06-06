@@ -1,24 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, tenantFilter, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { auditCreate, auditUpdate, auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { notifyOwner } from '@/lib/notify-owner';
 
+const guard = routeConfig['/api/company'];
+
 // GET /api/company - Get active company info
-export async function GET(request: NextRequest) {
+export const GET = withGuard(guard.GET!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json({ companyInfo: null });
-    }
-
     const company = await db.company.findUnique({
       where: { id: ctx.activeCompanyId },
     });
@@ -68,25 +60,11 @@ export async function GET(request: NextRequest) {
     logger.error('Failed to fetch company info:', error);
     return NextResponse.json({ error: 'Failed to fetch company info' }, { status: 500 });
   }
-}
+});
 
 // POST /api/company - Create a new company
-export async function POST(request: NextRequest) {
+export const POST = withGuard(guard.POST!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
     const body = await request.json();
     const {
       logo, companyName, address, phone, email, cvrNumber, invoicePrefix,
@@ -182,32 +160,11 @@ export async function POST(request: NextRequest) {
     logger.error('Failed to create company:', error);
     return NextResponse.json({ error: 'Failed to create company' }, { status: 500 });
   }
-}
+});
 
 // PUT /api/company - Update active company info
-export async function PUT(request: NextRequest) {
+export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const forbidden = requirePermission(ctx, Permission.COMPANY_EDIT_SETTINGS);
-    if (forbidden) return forbidden;
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json({ error: 'No active company' }, { status: 400 });
-    }
-
     const body = await request.json();
     const {
       logo, companyName, address, phone, email, cvrNumber, invoicePrefix,
@@ -308,7 +265,7 @@ export async function PUT(request: NextRequest) {
     logger.error('Failed to update company:', error);
     return NextResponse.json({ error: 'Failed to update company' }, { status: 500 });
   }
-}
+});
 
 // ─── Email Builder ──────────────────────────────────────────────────
 
@@ -365,29 +322,8 @@ function buildCompanyCompleteEmail(
 }
 
 // DELETE /api/company - Reset all data (with audit trail)
-export async function DELETE(request: NextRequest) {
+export const DELETE = withGuard(guard.DELETE!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const forbidden = requirePermission(ctx, Permission.COMPANY_DELETE);
-    if (forbidden) return forbidden;
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json({ error: 'No active company' }, { status: 400 });
-    }
-
     // Audit the data reset BEFORE it happens
     await auditLog({
       action: 'DATA_RESET',
@@ -398,6 +334,7 @@ export async function DELETE(request: NextRequest) {
       metadata: requestMetadata(request),
     });
 
+    const { tenantFilter } = await import('@/lib/rbac');
     const filter = tenantFilter(ctx);
 
     // Cancel all transactions (soft-delete)
@@ -417,4 +354,4 @@ export async function DELETE(request: NextRequest) {
     logger.error('Failed to clear data:', error);
     return NextResponse.json({ error: 'Failed to clear data' }, { status: 500 });
   }
-}
+});

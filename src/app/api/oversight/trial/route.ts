@@ -1,33 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 import { grantTrial } from '@/lib/tokenpay';
 import { tokenpay } from '@/lib/tokenpay';
 
 /**
  * POST /api/oversight/trial — Set or cancel trial for all members of a company.
- *
- * Only accessible by isSuperDev users (AlphaAi App Owner).
- *
- * Body:
- *   { companyId: string, action: 'set', days: 30 | 60 }
- *   { companyId: string, action: 'cancel' }
- *
- * Response:
- *   { success: true, affected: number, results: [...] }
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard(routeConfig['/api/oversight/trial'].POST!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!ctx.isSuperDev) {
-      return NextResponse.json({ error: 'Forbidden: App Owner access required' }, { status: 403 });
-    }
-
     const body = await request.json();
     const { companyId, action, days } = body as {
       companyId?: string;
@@ -94,4 +77,4 @@ export async function POST(request: NextRequest) {
     logger.error('Oversight trial management error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

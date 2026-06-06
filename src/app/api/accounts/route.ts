@@ -1,26 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { AccountType, AccountGroup } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { tenantFilter, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
 
 // GET - List all accounts for the authenticated user
-export async function GET(request: NextRequest) {
+export const GET = withGuard({
+  auth: true,
+  requireCompany: true,
+  permissions: [Permission.DATA_READ],
+}, async (request: NextRequest, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const typeFilter = searchParams.get('type');
     const groupFilter = searchParams.get('group');
 
-    // Get demo mode filter
-    
     const where: Record<string, unknown> = { ...tenantFilter(ctx) };
     if (typeFilter && Object.values(AccountType).includes(typeFilter as AccountType)) {
       where.type = typeFilter;
@@ -42,25 +38,18 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 // POST - Create a new account
-export async function POST(request: NextRequest) {
+export const POST = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_CREATE],
+}, async (request: NextRequest, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
     const body = await request.json();
     const { number, name, nameEn, type, group, description } = body;
 
@@ -86,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check number uniqueness per user (within the same demo context)
-        const existing = await db.account.findFirst({
+    const existing = await db.account.findFirst({
       where: { ...tenantFilter(ctx), number },
     });
     if (existing) {
@@ -126,4 +115,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

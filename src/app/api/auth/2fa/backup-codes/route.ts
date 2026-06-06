@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
@@ -12,20 +11,13 @@ import {
   hashBackupCode,
   encryptBackupCodes,
 } from '@/lib/two-factor';
+import { withGuard } from '@/lib/route-guard';
 
 /**
  * GET /api/auth/2fa/backup-codes
- *
- * Returns whether the user currently has backup codes stored.
- * Does NOT return the actual codes.
  */
-export async function GET(request: NextRequest) {
+export const GET = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
     const user = await db.user.findUnique({
       where: { id: ctx.id },
       select: { twoFactorBackupCodes: true },
@@ -45,23 +37,14 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 /**
  * POST /api/auth/2fa/backup-codes
- *
- * Regenerates backup codes after verifying the current TOTP code.
- * SuperDev users bypass verification.
- * Returns the new plain backup codes (only shown once).
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
-    // Rate limiting: max 5 regeneration attempts per minute per user
+    // Rate limiting
     const clientIp = getClientIp(request);
     const { allowed } = rateLimit(`2fa-backup-regen:${ctx.id}:${clientIp}`, {
       maxRequests: 5,
@@ -157,4 +140,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

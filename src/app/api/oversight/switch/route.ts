@@ -1,27 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 
 /**
  * POST /api/oversight/switch — Switch to oversight mode for a specific tenant.
- *
- * Only accessible by isSuperDev (AlphaAi App Owner).
- * Sets oversightCompanyId on the session, logs an OVERSIGHT audit entry.
- * All data will be scoped to the chosen tenant in read-only mode.
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard(routeConfig['/api/oversight/switch'].POST!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!ctx.isSuperDev) {
-      return NextResponse.json({ error: 'Forbidden: App Owner access required' }, { status: 403 });
-    }
-
     const { companyId } = await request.json();
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 });
@@ -99,4 +87,4 @@ export async function POST(request: NextRequest) {
     logger.error('Switch oversight error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

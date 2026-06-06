@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { AccountType, AccountGroup } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission, type AuthContext } from '@/lib/rbac';
+import { tenantFilter, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import type { AuthContext } from '@/lib/session';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -37,55 +38,53 @@ const LONG_TERM_LIABILITY_GROUPS: AccountGroup[] = [AccountGroup.LONG_TERM_DEBT]
 const EQUITY_GROUPS: AccountGroup[] = [AccountGroup.SHARE_CAPITAL, AccountGroup.RETAINED_EARNINGS];
 
 // GET - Financial Reports
-export async function GET(request: NextRequest) {
-  try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+export const GET = withGuard(
+  { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
+  async (request, ctx) => {
+    try {
+      const { searchParams } = new URL(request.url);
+      const type = searchParams.get('type');
+      const fromStr = searchParams.get('from');
+      const toStr = searchParams.get('to');
 
-    const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type');
-    const fromStr = searchParams.get('from');
-    const toStr = searchParams.get('to');
+      if (!type || (!['income-statement', 'balance-sheet'].includes(type))) {
+        return NextResponse.json(
+          { error: 'Missing or invalid type parameter. Must be "income-statement" or "balance-sheet".' },
+          { status: 400 }
+        );
+      }
 
-    if (!type || (!['income-statement', 'balance-sheet'].includes(type))) {
+      if (!toStr) {
+        return NextResponse.json(
+          { error: 'Missing required query parameter: to (date in YYYY-MM-DD format)' },
+          { status: 400 }
+        );
+      }
+
+      const toDate = new Date(toStr);
+      toDate.setHours(23, 59, 59, 999);
+
+      if (isNaN(toDate.getTime())) {
+        return NextResponse.json(
+          { error: 'Invalid to date format. Use YYYY-MM-DD.' },
+          { status: 400 }
+        );
+      }
+
+      if (type === 'income-statement') {
+        return generateIncomeStatement(ctx, fromStr, toStr, toDate);
+      } else {
+        return generateBalanceSheet(ctx, toStr, toDate);
+      }
+    } catch (error) {
+      logger.error('Reports error:', error);
       return NextResponse.json(
-        { error: 'Missing or invalid type parameter. Must be "income-statement" or "balance-sheet".' },
-        { status: 400 }
+        { error: 'Internal server error' },
+        { status: 500 }
       );
     }
-
-    if (!toStr) {
-      return NextResponse.json(
-        { error: 'Missing required query parameter: to (date in YYYY-MM-DD format)' },
-        { status: 400 }
-      );
-    }
-
-    const toDate = new Date(toStr);
-    toDate.setHours(23, 59, 59, 999);
-
-    if (isNaN(toDate.getTime())) {
-      return NextResponse.json(
-        { error: 'Invalid to date format. Use YYYY-MM-DD.' },
-        { status: 400 }
-      );
-    }
-
-    if (type === 'income-statement') {
-      return generateIncomeStatement(ctx, fromStr, toStr, toDate);
-    } else {
-      return generateBalanceSheet(ctx, toStr, toDate);
-    }
-  } catch (error) {
-    logger.error('Reports error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
   }
-}
+);
 
 // ─── Income Statement (Resultatopgørelse) ───────────────────────────
 
@@ -111,7 +110,7 @@ async function generateIncomeStatement(
   }
 
   // Fetch POSTED, non-cancelled journal entries in the period
-    const entries = await db.journalEntry.findMany({
+  const entries = await db.journalEntry.findMany({
     where: {
       ...tenantFilter(ctx),
       status: 'POSTED',
@@ -144,8 +143,6 @@ async function generateIncomeStatement(
   }
 
   // Calculate natural balance per group
-  // Revenue: credit - debit (normal balance is credit)
-  // Expense: debit - credit (normal balance is debit)
   function getGroupBalance(group: string, isRevenue: boolean): number {
     const data = groupMap.get(group);
     if (!data) return 0;
@@ -254,7 +251,7 @@ async function generateBalanceSheet(
   });
 
   // Also fetch all active accounts to ensure we include zero-balance accounts
-    const allAccounts = await db.account.findMany({
+  const allAccounts = await db.account.findMany({
     where: { ...tenantFilter(ctx), isActive: true },
   });
 

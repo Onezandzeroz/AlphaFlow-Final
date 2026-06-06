@@ -1,38 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 
 /**
  * GET /api/hermes/config
- *
- * Returns the Hermes agent configuration for the current user's active company.
- * Available to all authenticated users (VIEWER+).
- *
- * Response:
- * {
- *   "hermesConfig": {
- *     "enabled": false,
- *     "dataAccessEnabled": false,
- *     "personality": "professional",
- *     "greeting": null
- *   }
- * }
  */
-export async function GET(request: NextRequest) {
+export const GET = withGuard(routeConfig['/api/hermes/config'].GET!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json(
-        { error: 'No active company selected. Please select a company.' },
-        { status: 400 }
-      );
-    }
-
     const hermesAgent = await db.hermesAgent.findUnique({
       where: { companyId: ctx.activeCompanyId },
       select: {
@@ -56,4 +32,4 @@ export async function GET(request: NextRequest) {
     logger.error('[HERMES CONFIG] Failed to fetch Hermes config:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

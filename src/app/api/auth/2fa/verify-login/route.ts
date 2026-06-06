@@ -15,17 +15,14 @@ import {
   isValidTOTPFormat,
   isValidBackupCodeFormat,
 } from '@/lib/two-factor';
+import { withGuard } from '@/lib/route-guard';
 
 /**
  * POST /api/auth/2fa/verify-login
  *
- * Verifies a TOTP code or backup code during the login flow.
  * NO session required — the user is in the 2FA challenge step of login.
- * On success, creates a session and sets the session cookie.
- *
- * Body: { email: string, code: string, backupCode?: string }
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
   try {
     // Rate limiting: max 10 verification attempts per minute per IP
     const clientIp = getClientIp(request);
@@ -89,7 +86,6 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user || !user.twoFactorEnabled) {
-      // Don't reveal whether the user exists or has 2FA enabled
       return NextResponse.json(
         { error: 'Invalid verification code' },
         { status: 401 }
@@ -175,7 +171,7 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: isHttps,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
+      maxAge: 60 * 60 * 24 * 7,
       path: '/',
     });
 
@@ -263,7 +259,7 @@ export async function POST(request: NextRequest) {
         demoModeEnabled: user.demoModeEnabled ?? false,
         isSuperDev: user.isSuperDev,
         hasAppOwner,
-        isFirstLogin: false, // Not first login (they passed 2FA, so they've logged in before)
+        isFirstLogin: false,
         activeCompanyId,
         activeCompanyRole,
         isDemoCompany,
@@ -287,4 +283,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

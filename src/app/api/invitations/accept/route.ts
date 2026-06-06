@@ -1,25 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { logger } from '@/lib/logger';
-import { blockOversightMutation } from '@/lib/rbac';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 
 // POST /api/invitations/accept - Accept invitation
-export async function POST(request: NextRequest) {
+export const POST = withGuard({
+  auth: true,
+  blockOversight: true,
+  requireTokenPay: true,
+}, async (request: NextRequest, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Authentication required to accept invitation' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
     const { token } = await request.json();
     if (!token) {
       return NextResponse.json({ error: 'Token is required' }, { status: 400 });
@@ -98,4 +89,4 @@ export async function POST(request: NextRequest) {
     logger.error('Accept invitation error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

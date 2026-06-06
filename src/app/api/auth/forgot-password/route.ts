@@ -4,9 +4,10 @@ import { sendPasswordResetEmail } from '@/lib/email-service';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
+import { withGuard } from '@/lib/route-guard';
 
 // POST /api/auth/forgot-password — Request password reset (public)
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
   try {
     const { email } = await request.json();
 
@@ -44,7 +45,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Send password reset email — fire-and-forget so SMTP latency doesn't block the response
+      // Send password reset email — fire-and-forget
       sendPasswordResetEmail(user.email, token, 'da')
         .then((result) => {
           if (!result.success) {
@@ -63,4 +64,4 @@ export async function POST(request: NextRequest) {
     // Still return success to prevent email enumeration
     return NextResponse.json({ message: 'If the email exists, a reset link has been sent' });
   }
-}
+});

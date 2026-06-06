@@ -1,24 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
+import { withGuard } from '@/lib/route-guard';
 
 /**
  * POST /api/auth/promote-superdev
- *
- * Promotes the current user to SuperDev (AlphaAi App Owner).
- *
- * Safety guard: only works if NO other SuperDev exists in the system.
- * This prevents accidental or unauthorized promotion after initial setup.
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     // Guard: Only users belonging to a company named "AlphaAi" can become App Owner
     if (ctx.activeCompanyName !== 'AlphaAi') {
       return NextResponse.json(
@@ -75,4 +65,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

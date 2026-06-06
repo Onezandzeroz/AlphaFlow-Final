@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { withGuard } from '@/lib/route-guard';
 
 // POST /api/auth/verify-email — Verify email with token (public)
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
   try {
     const body = await request.json();
     const { token } = body;
@@ -51,4 +52,4 @@ export async function POST(request: NextRequest) {
     logger.error('[VERIFY-EMAIL] Error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, Permission, blockOversightMutation } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
@@ -11,36 +11,9 @@ import { logger } from '@/lib/logger';
  *
  * Toggles the company-level 2FA requirement.
  * Requires COMPANY_EDIT_SETTINGS permission.
- *
- * When enabling: checks that ALL users in the tenant have 2FA enabled.
- *   If not, returns error with list of non-compliant users.
- *
- * When disabling: simply sets twoFactorRequired = false.
- *
- * Body: { enabled: boolean }
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard(routeConfig['/api/company/toggle-2fa'].POST!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
-    // Require COMPANY_EDIT_SETTINGS permission
-    const denied = requirePermission(ctx, Permission.COMPANY_EDIT_SETTINGS);
-    if (denied) return denied;
-
-    // Block oversight mutations
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json(
-        { error: 'No active company selected' },
-        { status: 400 }
-      );
-    }
-
     // Rate limiting
     const clientIp = getClientIp(request);
     const { allowed } = rateLimit(`toggle-2fa:${ctx.id}:${clientIp}`, {
@@ -166,4 +139,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

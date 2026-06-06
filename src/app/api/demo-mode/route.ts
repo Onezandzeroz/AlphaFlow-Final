@@ -1,23 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext, SESSION_COOKIE_NAME } from '@/lib/session';
-import { blockOversightMutation } from '@/lib/rbac';
+import { SESSION_COOKIE_NAME } from '@/lib/session';
 import { seedDemoCompany } from '@/lib/seed-demo-company';
 import { logger } from '@/lib/logger';
 import { cookies } from 'next/headers';
 import { auditLog, requestMetadata } from '@/lib/audit';
+import { withGuard } from '@/lib/route-guard';
 
 // ─── GET: Check demo mode status ──────────────────────────────────
 
-export async function GET(request: NextRequest) {
+export const GET = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // ctx.isDemoCompany is now verified against the demo company's CVR number
-    // (see session.ts getAuthContext), so it's safe to use directly.
     const isDemoCompany = ctx.isDemoCompany;
 
     return NextResponse.json({
@@ -32,20 +25,15 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 // ─── POST: Enter / Exit demo mode ─────────────────────────────────
 
-export async function POST(request: NextRequest) {
+export const POST = withGuard({
+  auth: true,
+  blockOversight: true,
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
     const body = await request.json();
     const { action } = body as { action: 'enter' | 'exit' | 'reseed' };
 
@@ -56,9 +44,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Reseed demo company (any user, destructive) ────────────
+    // ── Reseed demo company ────────────
     if (action === 'reseed') {
-
       const demoCompany = await db.company.findFirst({
         where: { isDemo: true, isActive: true, cvrNumber: '29876543' },
       });
@@ -66,7 +53,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Demo company not found' }, { status: 404 });
       }
 
-      // Delete all demo data in dependency order (child → parent)
       await db.$transaction([
         db.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: demoCompany.id } } }),
         db.journalEntry.deleteMany({ where: { companyId: demoCompany.id } }),
@@ -83,7 +69,6 @@ export async function POST(request: NextRequest) {
         db.bankConnection.deleteMany({ where: { companyId: demoCompany.id } }),
       ]);
 
-      // Re-seed with corrected data
       await seedDemoCompany(demoCompany.id, ctx.id);
 
       logger.info('[Demo Mode] Reseeded demo company:', demoCompany.id);
@@ -100,19 +85,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Demo company reseeded successfully' });
     }
 
-    // ── Get current session token for updating activeCompanyId ──
+    // ── Get current session token ──
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
     if (action === 'enter') {
-      // ── Enter demo mode ──────────────────────────────────────
-
-      // ctx.isDemoCompany is now verified against the demo company's CVR number
-      // (see session.ts getAuthContext), so if it's true, we're already in the demo company.
-      // Even when already in demo mode, we ALWAYS re-seed to guarantee fresh data.
-      // The demo seed is fast and idempotent — stale data is worse than a brief delay.
-
-      // Find the shared demo company (identified by CVR number)
+      // Find the shared demo company
       let demoCompany = await db.company.findFirst({
         where: {
           isActive: true,
@@ -122,14 +100,12 @@ export async function POST(request: NextRequest) {
       let demoCompanyId: string;
 
       if (!demoCompany) {
-        // Inherit AppOwner widget defaults for the demo company
         const appOwnerCompany = await db.company.findUnique({
           where: { name: 'AlphaAi' },
           select: { dashboardWidgets: true },
         });
         const inheritedWidgets = appOwnerCompany?.dashboardWidgets as Record<string, unknown> | undefined;
 
-        // Create the shared demo company
         demoCompany = await db.company.create({
           data: {
             name: 'Nordisk Erhverv ApS',
@@ -156,21 +132,11 @@ export async function POST(request: NextRequest) {
         });
 
         demoCompanyId = demoCompany.id;
-
-        // We need a system user ID for seeding — use the current user
-        const systemUserId = ctx.id;
-
-        // Seed the demo company data
-        await seedDemoCompany(demoCompanyId, systemUserId);
-
+        await seedDemoCompany(demoCompanyId, ctx.id);
         logger.info('[Demo Mode] Created and seeded demo company:', demoCompanyId);
       } else {
-        // Demo company already exists — ensure data is up-to-date by re-seeding.
-        // The seed engine is deterministic and fast; this guarantees fresh,
-        // correct data regardless of when the company was first created.
         demoCompanyId = demoCompany.id;
 
-        // Delete all existing demo data in dependency order (child → parent)
         await db.$transaction([
           db.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: demoCompany.id } } }),
           db.journalEntry.deleteMany({ where: { companyId: demoCompany.id } }),
@@ -187,9 +153,7 @@ export async function POST(request: NextRequest) {
           db.bankConnection.deleteMany({ where: { companyId: demoCompany.id } }),
         ]);
 
-        // Re-seed with fresh, corrected data
         await seedDemoCompany(demoCompanyId, ctx.id);
-
         logger.info('[Demo Mode] Re-seeded existing demo company:', demoCompanyId);
       }
 
@@ -205,7 +169,7 @@ export async function POST(request: NextRequest) {
           data: {
             userId: ctx.id,
             companyId: demoCompanyId,
-            role: 'VIEWER', // Read-only role — writes are blocked by isDemoCompany guard
+            role: 'VIEWER',
           },
         });
       }
@@ -220,7 +184,6 @@ export async function POST(request: NextRequest) {
         ? (user.userPrefs as Record<string, unknown>)
         : {};
 
-      // Only save the original company ID if we're not already in demo
       if (ctx.activeCompanyId && !currentPrefs.originalCompanyId) {
         currentPrefs.originalCompanyId = ctx.activeCompanyId;
         await db.user.update({
@@ -237,7 +200,6 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Set demoModeEnabled on the User model
       await db.user.update({
         where: { id: ctx.id },
         data: { demoModeEnabled: true },
@@ -264,7 +226,6 @@ export async function POST(request: NextRequest) {
 
     // ── Exit demo mode ──────────────────────────────────────────
 
-    // If not in the demo company, just clear the flag
     if (!ctx.isDemoCompany) {
       await db.user.update({
         where: { id: ctx.id },
@@ -290,7 +251,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Read the user's original company ID from userPrefs
     const user = await db.user.findUnique({
       where: { id: ctx.id },
       select: { userPrefs: true },
@@ -299,7 +259,6 @@ export async function POST(request: NextRequest) {
     const prefs = user?.userPrefs ? (user.userPrefs as Record<string, any>) : {};
     let originalCompanyId: string | null = (prefs.originalCompanyId as string) ?? null;
 
-    // If no original company ID, find the user's first non-demo company
     if (!originalCompanyId) {
       const firstNonDemoCompany = await db.userCompany.findFirst({
         where: {
@@ -312,7 +271,6 @@ export async function POST(request: NextRequest) {
       originalCompanyId = firstNonDemoCompany?.companyId ?? null;
     }
 
-    // Validate the original company still exists and is active
     if (originalCompanyId) {
       const originalCompany = await db.company.findUnique({
         where: { id: originalCompanyId },
@@ -320,7 +278,6 @@ export async function POST(request: NextRequest) {
       });
 
       if (!originalCompany || !originalCompany.isActive) {
-        // Original company is gone, find another non-demo company
         const fallback = await db.userCompany.findFirst({
           where: {
             userId: ctx.id,
@@ -333,7 +290,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update session's activeCompanyId back to the original company
     if (token && originalCompanyId) {
       await db.session.update({
         where: { token },
@@ -341,7 +297,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Set demoModeEnabled = false
     await db.user.update({
       where: { id: ctx.id },
       data: { demoModeEnabled: false },
@@ -357,7 +312,6 @@ export async function POST(request: NextRequest) {
       metadata: requestMetadata(request),
     });
 
-    // Clear the originalCompanyId from userPrefs
     if (prefs.originalCompanyId) {
       delete prefs.originalCompanyId;
       await db.user.update({
@@ -366,7 +320,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get the active company name for the response
     let activeCompanyName: string | null = null;
     if (originalCompanyId) {
       const company = await db.company.findUnique({
@@ -390,4 +343,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

@@ -1,26 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { auditCreate, auditUpdate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
-import {
-  requirePermission,
-  tenantFilter,
-  Permission,
-  blockOversightMutation,
-  requireNotDemoCompany,
-} from '@/lib/rbac';
+import { tenantFilter, Permission } from '@/lib/rbac';
 import { getStandardAccount } from '@/lib/standard-chart-of-accounts';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { withGuard } from '@/lib/route-guard';
 
 // GET - List all standard account mappings for the current company
-export async function GET(request: NextRequest) {
+export const GET = withGuard({
+  auth: true,
+  requireCompany: true,
+  permissions: [Permission.DATA_READ],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const mappings = await db.standardAccountMapping.findMany({
       where: { companyId: ctx.activeCompanyId! },
       include: {
@@ -48,28 +40,18 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 // PUT - Bulk upsert standard account mappings
-export async function PUT(request: NextRequest) {
+export const PUT = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_EDIT],
+}, async (request: NextRequest, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const permDenied = requirePermission(ctx, Permission.DATA_EDIT);
-    if (permDenied) return permDenied;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
     const body = await request.json();
     const { mappings } = body as {
       mappings: Array<{ accountId: string; standardAccountNumber: string }>;
@@ -178,4 +160,4 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

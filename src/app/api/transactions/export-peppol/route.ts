@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
 import { logger } from '@/lib/logger';
 import {
   generateOIOUBL,
@@ -10,14 +10,14 @@ import {
   getVATCategoryCode,
   type OIOUBLInvoiceData,
 } from '@/lib/oioubl-generator';
-import { requirePermission, tenantFilter, companyScope, Permission } from '@/lib/rbac';
+import { tenantFilter, Permission } from '@/lib/rbac';
 
-export async function GET(request: NextRequest) {
+export const GET = withGuard({
+  auth: true,
+  requireCompany: true,
+  permissions: [Permission.REPORTS_EXPORT],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
     const userId = ctx.id;
     
     const { searchParams } = new URL(request.url);
@@ -128,4 +128,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

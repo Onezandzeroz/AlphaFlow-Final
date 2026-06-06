@@ -1,25 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { auditUpdate, auditCancel, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { tenantFilter, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
 // GET - Get a single account
-export async function GET(request: NextRequest, context: RouteContext) {
+export const GET = withGuard({
+  auth: true,
+  requireCompany: true,
+  permissions: [Permission.DATA_READ],
+}, async (request: NextRequest, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { id } = await context.params;
-    // demo filter now included in tenantFilter
+    const { id } = await (segmentData as unknown as RouteContext).params;
 
     const account = await db.account.findFirst({
       where: { id, ...tenantFilter(ctx) },
@@ -37,29 +34,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
       { status: 500 }
     );
   }
-}
+});
 
 // PUT - Update an account (prevent updating number)
-export async function PUT(request: NextRequest, context: RouteContext) {
+export const PUT = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_EDIT],
+}, async (request: NextRequest, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const { id } = await context.params;
+    const { id } = await (segmentData as unknown as RouteContext).params;
     const body = await request.json();
     const { number, name, nameEn, type, group, description, isActive, postingGuide } = body;
-    // demo filter now included in tenantFilter
 
     const existing = await db.account.findFirst({
       where: { id, ...tenantFilter(ctx) },
@@ -109,27 +98,19 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       { status: 500 }
     );
   }
-}
+});
 
 // DELETE - Soft-delete (set isActive=false, isSystem accounts cannot be deleted)
-export async function DELETE(request: NextRequest, context: RouteContext) {
+export const DELETE = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_DELETE],
+}, async (request: NextRequest, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const { id } = await context.params;
-    // demo filter now included in tenantFilter
+    const { id } = await (segmentData as unknown as RouteContext).params;
 
     const existing = await db.account.findFirst({
       where: { id, ...tenantFilter(ctx) },
@@ -168,4 +149,4 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       { status: 500 }
     );
   }
-}
+});

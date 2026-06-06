@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { seedChartOfAccounts } from '@/lib/seed-chart-of-accounts';
 import { JournalEntryStatus, VATCode } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation } from '@/lib/rbac';
+import { tenantFilter, companyScope, Permission } from '@/lib/rbac';
 import { auditLog } from '@/lib/audit';
+import { withGuard } from '@/lib/route-guard';
 
 // ─── Demo Data Constants ──────────────────────────────────────────
 
@@ -1754,19 +1753,14 @@ async function seedDemoData(userId: string): Promise<Record<string, number>> {
 
 // ─── Route Handler ────────────────────────────────────────────────
 
-export async function POST(request: NextRequest) {
+export const POST = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_CREATE],
+}, async (request: NextRequest, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
     // Check if demo data already exists
     const existingDemoTransactions = await db.transaction.count({
       where: { ...tenantFilter(ctx) },
@@ -1826,4 +1820,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

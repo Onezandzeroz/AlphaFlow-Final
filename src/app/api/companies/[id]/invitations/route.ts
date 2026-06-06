@@ -1,13 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { sendInvitationEmail } from '@/lib/email-service';
 import { hashPassword } from '@/lib/password';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
 import { auditCreate, requestMetadata } from '@/lib/audit';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
 
 /** Generate a readable 12-char password: mix of upper, lower, digits */
 function generateInvitePassword(): string {
@@ -23,19 +22,12 @@ function generateInvitePassword(): string {
   return pw;
 }
 
+const guard = routeConfig['/api/companies/[id]/invitations'];
+
 // GET /api/companies/[id]/invitations - List invitations
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const GET = withGuard(guard.GET!, async (request, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const forbidden = requirePermission(ctx, Permission.MEMBERS_VIEW);
-    if (forbidden) return forbidden;
-
-    const { id: companyId } = await params;
+    const companyId = segmentData?.id as string;
 
     const invitations = await db.invitation.findMany({
       where: { companyId, status: 'PENDING' },
@@ -56,30 +48,12 @@ export async function GET(
     logger.error('List invitations error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});
 
 // POST /api/companies/[id]/invitations - Send invitation
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export const POST = withGuard(guard.POST!, async (request, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const forbidden = requirePermission(ctx, Permission.MEMBERS_INVITE);
-    if (forbidden) return forbidden;
-
-    const { id: companyId } = await params;
+    const companyId = segmentData?.id as string;
     const { email, role } = await request.json();
 
     // Look up company for invitation email
@@ -241,4 +215,4 @@ export async function POST(
     logger.error('Create invitation error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

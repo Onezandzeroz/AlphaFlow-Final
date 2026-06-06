@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 
@@ -18,13 +18,8 @@ const WS_SERVICE_PORT = process.env.NOTIFICATION_WS_PORT || '3001';
  *   - notificationIds: Array of deterministic notification IDs to mark as read.
  *     Pass all current notification IDs to "mark all as read".
  */
-export async function POST(request: Request) {
+export const POST = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const body = await request.json();
     const notificationIds: string[] = body.notificationIds;
 
@@ -70,7 +65,7 @@ export async function POST(request: Request) {
     logger.error('Failed to mark notifications as read:', error);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
-}
+});
 
 /**
  * Notify the notification WebSocket service (port 3001) to broadcast

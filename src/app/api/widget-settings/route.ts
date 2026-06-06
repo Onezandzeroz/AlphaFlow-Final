@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
 import { DASHBOARD_WIDGETS, getDefaultVisibilityMap, getDefaultSizesMap, WIDGET_DEFAULTS_VERSION } from '@/lib/dashboard-widget-definitions';
 import { WidgetSize } from '@/lib/dashboard-widget-definitions';
@@ -74,12 +73,7 @@ function normalizeSettings(raw: unknown): { visibility: Record<string, boolean>;
 
 // ── GET ────────────────────────────────────────────────────────────
 
-export async function GET(request: NextRequest) {
-  const ctx = await getAuthContext(request);
-  if (!ctx || !ctx.activeCompanyId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export const GET = withGuard({ auth: true }, async (request: NextRequest, ctx) => {
   const company = await db.company.findUnique({
     where: { id: ctx.activeCompanyId },
     select: { dashboardWidgets: true, name: true },
@@ -130,24 +124,15 @@ export async function GET(request: NextRequest) {
   const isAppOwner = ctx.isSuperDev && ctx.activeCompanyName === 'AlphaAi';
 
   return NextResponse.json({ widgets: visibility, order, sizes, positions, isAppOwner });
-}
+});
 
 // ── PUT ────────────────────────────────────────────────────────────
 
-export async function PUT(request: NextRequest) {
-  const ctx = await getAuthContext(request);
-  if (!ctx || !ctx.activeCompanyId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // AppOwner/SuperDev can edit demo company data; others cannot
-  if (ctx.isOversightMode || (ctx.isDemoCompany && !ctx.isSuperDev)) {
-    return NextResponse.json(
-      { error: 'Read-only — cannot modify widget settings in this context' },
-      { status: 403 },
-    );
-  }
-
+export const PUT = withGuard({
+  auth: true,
+  blockOversight: true,
+  blockDemo: true,
+}, async (request: NextRequest, ctx) => {
   const body = await request.json();
   const { widgets, order, sizes, positions } = body as {
     widgets: Record<string, boolean>;
@@ -240,4 +225,4 @@ export async function PUT(request: NextRequest) {
   );
 
   return NextResponse.json({ success: true });
-}
+});

@@ -1,36 +1,24 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, Permission } from '@/lib/rbac';
+import { NextResponse } from 'next/server';
 import { getInvoiceSendHistory } from '@/lib/einvoice-sender';
 import { logger } from '@/lib/logger';
+import { Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
 
 // GET /api/invoices/[id]/einvoice-sends — Get send history for an invoice
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export const GET = withGuard(
+  { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
+  async (request, ctx, segmentData) => {
+    try {
+      const { id } = await (segmentData as unknown as { params: Promise<{ id: string }> }).params;
+      const history = await getInvoiceSendHistory(id, ctx.activeCompanyId!);
+
+      return NextResponse.json({ einvoiceSends: history });
+    } catch (error) {
+      logger.error('[EINVOICE_SENDS_API] Failed to fetch e-invoice send history:', error);
+      return NextResponse.json(
+        { error: 'Kunne ikke hente e-faktura afsendelseshistorik' },
+        { status: 500 }
+      );
     }
-
-    const forbidden = requirePermission(ctx, Permission.DATA_READ);
-    if (forbidden) return forbidden;
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json({ error: 'No active company' }, { status: 400 });
-    }
-
-    const { id } = await params;
-    const history = await getInvoiceSendHistory(id, ctx.activeCompanyId);
-
-    return NextResponse.json({ einvoiceSends: history });
-  } catch (error) {
-    logger.error('[EINVOICE_SENDS_API] Failed to fetch e-invoice send history:', error);
-    return NextResponse.json(
-      { error: 'Kunne ikke hente e-faktura afsendelseshistorik' },
-      { status: 500 }
-    );
   }
-}
+);

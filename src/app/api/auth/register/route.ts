@@ -6,8 +6,9 @@ import { auditAuth, requestMetadata } from '@/lib/audit';
 import { sendVerificationEmail } from '@/lib/email-service';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
+import { withGuard } from '@/lib/route-guard';
 
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
   try {
     // Rate limiting: max 3 registrations per minute per IP
     const clientIp = getClientIp(request);
@@ -63,10 +64,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine company name and check uniqueness BEFORE creating the user
-    // to avoid orphaned user records on company name collision
     const companyName = businessName || normalizedEmail.split('@')[0];
 
-    // Enforce unique company name — no two tenants may share a name
     const existingCompany = await db.company.findFirst({
       where: { name: companyName },
     });
@@ -94,7 +93,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Inherit AppOwner widget defaults (AlphaAi company) for new tenant companies
+    // Inherit AppOwner widget defaults for new tenant companies
     const appOwnerCompany = await db.company.findUnique({
       where: { name: 'AlphaAi' },
       select: { dashboardWidgets: true },
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Send verification email — fire-and-forget so SMTP latency doesn't block the response
+    // Send verification email — fire-and-forget
     const verificationToken = crypto.randomBytes(32).toString('hex');
     await db.user.update({
       where: { id: user.id },
@@ -143,21 +142,9 @@ export async function POST(request: NextRequest) {
         logger.warn('Failed to send verification email during registration:', emailError);
       });
 
-    // NOTE: We do NOT auto-seed the chart of accounts here.
-    // The onboarding flow (Step 2) lets the user explicitly seed their accounts,
-    // so the onboarding progress correctly starts at 0/4 for new users.
-    // Seeding is available via /api/accounts/seed or the Chart of Accounts page.
-
-    // NOTE: We do NOT create a session here.
-    // The user must verify their email before they can log in.
-    // The register form shows a "check your email" screen instead.
-
-    // (Notification to app owner is sent on first complete company save — see PUT /api/company)
-
     // Audit registration
     await auditAuth(user.id, 'REGISTER', requestMetadata(request), company.id);
 
-    // Return success — the client will show "check your email" screen
     return NextResponse.json({
       success: true,
       email: user.email,
@@ -170,4 +157,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

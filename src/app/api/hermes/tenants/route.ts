@@ -1,37 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 
 /**
  * GET /api/hermes/tenants
- *
- * Returns all companies with their Hermes enabled status.
- * ONLY available to isSuperDev users (App Owner).
- *
- * Response:
- * {
- *   "tenants": [
- *     { "companyId": "...", "companyName": "...", "hermesEnabled": false, "dataAccessEnabled": false },
- *     ...
- *   ]
- * }
  */
-export async function GET(request: NextRequest) {
+export const GET = withGuard(routeConfig['/api/hermes/tenants'].GET!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Require SuperDev (App Owner) access
-    if (!ctx.isSuperDev) {
-      return NextResponse.json(
-        { error: 'Forbidden: App Owner access required' },
-        { status: 403 }
-      );
-    }
-
     // Query all companies with their HermesAgent
     const companies = await db.company.findMany({
       include: {
@@ -57,4 +34,4 @@ export async function GET(request: NextRequest) {
     logger.error('[HERMES TENANTS] Failed to list Hermes tenants:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

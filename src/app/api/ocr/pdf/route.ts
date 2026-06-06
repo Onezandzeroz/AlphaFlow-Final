@@ -1,21 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withGuard } from '@/lib/route-guard';
+import { Permission } from '@/lib/rbac';
 import path from 'path';
 import type { VisionMultimodalContentItem } from 'z-ai-web-dev-sdk';
 
 /**
  * POST /api/ocr/pdf
  * Uses AI vision (VLM) to extract structured data from purchase documents.
- * For PDFs: renders pages to images first, then sends to VLM.
- * For images: sends directly to VLM.
- *
- * Runtime dependencies (not bundled — loaded from node_modules):
- *   - pdfjs-dist@3.11.174: PDF parsing & rendering
- *   - canvas: Node.js canvas for page rendering
  */
 export const maxDuration = 60;
 
 async function getPdfjsLib(): Promise<any> {
-  // webpackIgnore: true → resolved at runtime from node_modules
   return await import(/* webpackIgnore: true */ 'pdfjs-dist/build/pdf.js' as string);
 }
 
@@ -23,7 +18,14 @@ async function getCanvas() {
   return await import(/* webpackIgnore: true */ 'canvas' as string);
 }
 
-export async function POST(request: NextRequest) {
+export const POST = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_CREATE],
+}, async (request) => {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -45,7 +47,6 @@ export async function POST(request: NextRequest) {
     let pageImages: string[] = [];
 
     if (isPdf) {
-      // ── PDF: Render pages to images using pdfjs-dist v3 + node-canvas ──
       const pdfjsLib = await getPdfjsLib();
       const nodeCanvas = await getCanvas();
 
@@ -55,9 +56,6 @@ export async function POST(request: NextRequest) {
 
       pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
 
-      // canvasFactory: tells pdfjs-dist v3 how to create Canvas objects in Node.js.
-      // All internal canvas creation (including for inline images) routes through
-      // node-canvas, avoiding any need for DOM globals.
       const canvasFactory = {
         create(width: number, height: number) {
           const canvas = nodeCanvas.createCanvas(width, height);
@@ -97,7 +95,6 @@ export async function POST(request: NextRequest) {
 
       console.log(`[OCR] Rendered ${pageImages.length} PDF pages to images`);
     } else {
-      // ── Image: Convert directly to data URL ──
       const mimeType = file.type || 'image/png';
       pageImages.push(`data:${mimeType};base64,${base64}`);
     }
@@ -152,7 +149,6 @@ Rules:
     const resultContent = response.choices[0]?.message?.content || '';
     console.log(`[OCR] VLM response (${resultContent.length} chars): ${resultContent.substring(0, 150)}...`);
 
-    // Parse JSON from response
     let parsed: {
       amount: number | null;
       date: string | null;
@@ -178,7 +174,6 @@ Rules:
       });
     }
 
-    // Build raw lines for compatibility
     const rawLines: string[] = [];
     if (parsed.description) rawLines.push(parsed.description);
     if (parsed.amount) rawLines.push(`Total: ${parsed.amount} ${parsed.currency || 'DKK'}`);
@@ -211,4 +206,4 @@ Rules:
       { status: 500 }
     );
   }
-}
+});

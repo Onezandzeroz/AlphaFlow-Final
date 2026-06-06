@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, Permission } from '@/lib/rbac';
+import { NextResponse } from 'next/server';
 import { getExchangeRate, getLatestExchangeRates } from '@/lib/currency-utils';
 import { logger } from '@/lib/logger';
+import { withGuard } from '@/lib/route-guard';
 
 /**
  * GET /api/exchange-rate
@@ -15,89 +14,84 @@ import { logger } from '@/lib/logger';
  *   { rate, date, source } for single rate
  *   { rates, date, source } for bulk request
  */
-export async function GET(request: NextRequest) {
-  try {
-    const ctx = await getAuthContext(request);
-    if (!ctx || !ctx.activeCompanyId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+export const GET = withGuard(
+  { auth: true },
+  async (request, _ctx) => {
+    try {
+      const { searchParams } = new URL(request.url);
+      const from = searchParams.get('from')?.toUpperCase().trim();
+      const to = searchParams.get('to')?.toUpperCase().trim();
+      const currenciesParam = searchParams.get('currencies')?.toUpperCase().trim();
 
-    const denied = requirePermission(ctx, Permission.DATA_READ);
-    if (denied) return denied;
+      // Bulk mode: return all rates for a set of currencies from DKK
+      if (currenciesParam) {
+        const requestedCurrencies = currenciesParam.split(',').map((c) => c.trim()).filter(Boolean);
+        const allRates = await getLatestExchangeRates();
 
-    const { searchParams } = new URL(request.url);
-    const from = searchParams.get('from')?.toUpperCase().trim();
-    const to = searchParams.get('to')?.toUpperCase().trim();
-    const currenciesParam = searchParams.get('currencies')?.toUpperCase().trim();
+        if (!allRates) {
+          return NextResponse.json({
+            rates: null,
+            date: null,
+            source: 'unavailable',
+            message: 'Exchange rate API is temporarily unavailable. You can enter rates manually.',
+          });
+        }
 
-    // Bulk mode: return all rates for a set of currencies from DKK
-    if (currenciesParam) {
-      const requestedCurrencies = currenciesParam.split(',').map((c) => c.trim()).filter(Boolean);
-      const allRates = await getLatestExchangeRates();
+        // Build response with only the requested currencies
+        const filteredRates: Record<string, number> = {};
+        for (const currency of requestedCurrencies) {
+          if (currency === 'DKK') {
+            // DKK to DKK is always 1
+            filteredRates['DKK'] = 1;
+          } else if (allRates.rates[currency] != null) {
+            // Return "how many DKK per 1 unit of foreign"
+            const rawRate = allRates.rates[currency];
+            if (rawRate !== 0) {
+              filteredRates[currency] = Number((1 / rawRate).toFixed(6));
+            }
+          }
+        }
 
-      if (!allRates) {
         return NextResponse.json({
-          rates: null,
-          date: null,
+          rates: filteredRates,
+          date: allRates.date,
+          source: allRates.source,
+        });
+      }
+
+      // Single rate mode: from → to
+      if (!from || !to) {
+        return NextResponse.json(
+          { error: 'Missing required parameters: from and to, or currencies' },
+          { status: 400 }
+        );
+      }
+
+      const rate = await getExchangeRate(from, to);
+
+      if (rate === null) {
+        const allRates = await getLatestExchangeRates();
+        return NextResponse.json({
+          rate: null,
+          date: allRates?.date ?? null,
           source: 'unavailable',
           message: 'Exchange rate API is temporarily unavailable. You can enter rates manually.',
         });
       }
 
-      // Build response with only the requested currencies
-      const filteredRates: Record<string, number> = {};
-      for (const currency of requestedCurrencies) {
-        if (currency === 'DKK') {
-          // DKK to DKK is always 1
-          filteredRates['DKK'] = 1;
-        } else if (allRates.rates[currency] != null) {
-          // Return "how many DKK per 1 unit of foreign"
-          const rawRate = allRates.rates[currency];
-          if (rawRate !== 0) {
-            filteredRates[currency] = Number((1 / rawRate).toFixed(6));
-          }
-        }
-      }
+      const allRates = await getLatestExchangeRates();
 
       return NextResponse.json({
-        rates: filteredRates,
-        date: allRates.date,
-        source: allRates.source,
+        rate: Number(rate.toFixed(6)),
+        date: allRates?.date ?? null,
+        source: allRates?.source ?? 'frankfurter-api',
       });
-    }
-
-    // Single rate mode: from → to
-    if (!from || !to) {
+    } catch (error) {
+      logger.error('Exchange rate fetch failed:', error);
       return NextResponse.json(
-        { error: 'Missing required parameters: from and to, or currencies' },
-        { status: 400 }
+        { error: 'Failed to fetch exchange rate' },
+        { status: 500 }
       );
     }
-
-    const rate = await getExchangeRate(from, to);
-
-    if (rate === null) {
-      const allRates = await getLatestExchangeRates();
-      return NextResponse.json({
-        rate: null,
-        date: allRates?.date ?? null,
-        source: 'unavailable',
-        message: 'Exchange rate API is temporarily unavailable. You can enter rates manually.',
-      });
-    }
-
-    const allRates = await getLatestExchangeRates();
-
-    return NextResponse.json({
-      rate: Number(rate.toFixed(6)),
-      date: allRates?.date ?? null,
-      source: allRates?.source ?? 'frankfurter-api',
-    });
-  } catch (error) {
-    logger.error('Exchange rate fetch failed:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch exchange rate' },
-      { status: 500 }
-    );
   }
-}
+);

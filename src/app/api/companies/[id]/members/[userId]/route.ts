@@ -1,25 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, Permission, blockOversightMutation } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
-import crypto from 'crypto';
 import { auditUpdate, auditDeleteAttempt, requestMetadata } from '@/lib/audit';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
 
-// GET /api/companies/[id]/members - List members of a company
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+const guard = routeConfig['/api/companies/[id]/members/[userId]'];
+
+// GET /api/companies/[id]/members/[userId] - Get member info
+export const GET = withGuard(guard.GET!, async (request, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const forbidden = requirePermission(ctx, Permission.MEMBERS_VIEW);
-    if (forbidden) return forbidden;
-
-    const { id: companyId } = await params;
+    const companyId = segmentData?.id as string;
 
     // Verify user belongs to this company
     const membership = await db.userCompany.findUnique({
@@ -53,27 +44,13 @@ export async function GET(
     logger.error('List members error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});
 
 // PUT /api/companies/[id]/members/[userId] - Change member role
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; userId: string }> }
-) {
+export const PUT = withGuard(guard.PUT!, async (request, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const forbidden = requirePermission(ctx, Permission.MEMBERS_CHANGE_ROLE);
-    if (forbidden) return forbidden;
-
-    const { id: companyId, userId: targetUserId } = await params;
+    const companyId = segmentData?.id as string;
+    const targetUserId = segmentData?.userId as string;
     const { role } = await request.json();
 
     if (!role || !['OWNER', 'ADMIN', 'ACCOUNTANT', 'VIEWER', 'AUDITOR'].includes(role)) {
@@ -114,27 +91,13 @@ export async function PUT(
     logger.error('Change member role error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});
 
 // DELETE /api/companies/[id]/members/[userId] - Remove member
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; userId: string }> }
-) {
+export const DELETE = withGuard(guard.DELETE!, async (request, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const forbidden = requirePermission(ctx, Permission.MEMBERS_REMOVE);
-    if (forbidden) return forbidden;
-
-    const { id: companyId, userId: targetUserId } = await params;
+    const companyId = segmentData?.id as string;
+    const targetUserId = segmentData?.userId as string;
 
     // Don't allow removing yourself
     if (ctx.id === targetUserId) {
@@ -166,4 +129,4 @@ export async function DELETE(
     logger.error('Remove member error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

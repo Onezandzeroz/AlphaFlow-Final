@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/session';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
+import { withGuard } from '@/lib/route-guard';
 
-export async function GET() {
+export const GET = withGuard({ auth: 'optional' }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext();
     if (!ctx) {
       return NextResponse.json({ user: null });
     }
@@ -74,4 +73,4 @@ export async function GET() {
     logger.error('Get user error:', error);
     return NextResponse.json({ user: null });
   }
-}
+});

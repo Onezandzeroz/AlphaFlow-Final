@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hashPassword, verifyPassword, needsRehash } from '@/lib/password';
-import { createSession, getAuthContext } from '@/lib/session';
+import { createSession } from '@/lib/session';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { auditAuth, requestMetadata } from '@/lib/audit';
 import { cookies } from 'next/headers';
 import { logger } from '@/lib/logger';
+import { withGuard } from '@/lib/route-guard';
 
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
   try {
     // Rate limiting: max 5 login attempts per minute per IP
     const clientIp = getClientIp(request);
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Block login for deactivated accounts (Bogføringsloven §10-12: account preserved, access revoked)
+    // Block login for deactivated accounts
     if (user.deactivatedAt) {
       logger.warn(`[AUTH] Login attempt on deactivated account: ${user.email}, IP: ${getClientIp(request)}`);
       return NextResponse.json(
@@ -57,7 +58,6 @@ export async function POST(request: NextRequest) {
     // Verify password
     const valid = await verifyPassword(password, user.password);
     if (!valid) {
-      // Resolve the user's first company for audit context
       const userCompanyForAudit = await db.userCompany.findFirst({
         where: { userId: user.id },
         select: { companyId: true },
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // SuperDev (AlphaAi) is ALWAYS auto-verified — never requires email verification
+    // SuperDev (AlphaAi) is ALWAYS auto-verified
     if (user.isSuperDev && !user.emailVerified) {
       await db.user.update({
         where: { id: user.id },
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Detect first login: check if user has any previous sessions
+    // Detect first login
     const previousSessionCount = await db.session.count({
       where: { userId: user.id },
     });
@@ -101,11 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ─── Two-Factor Authentication check ──────────────────────────
-    // SuperDev users bypass 2FA entirely
     if (user.twoFactorEnabled && !user.isSuperDev) {
-      // Password verified — but 2FA is required. Stop here and prompt for 2FA code.
-      // The client should redirect to the 2FA verification step.
-      // The actual session will be created in /api/auth/2fa/verify-login
       logger.info(`[AUTH] 2FA required for user: ${user.email}`);
       return NextResponse.json({
         requiresTwoFactor: true,
@@ -113,7 +109,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Create secure session (auto-sets activeCompanyId from user's first company)
+    // Create secure session
     const token = await createSession(user.id, request);
 
     // Set session cookie
@@ -123,12 +119,11 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: isHttps,
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 1 week
+      maxAge: 60 * 60 * 24 * 7,
       path: '/',
     });
 
     // Audit successful login
-    // Resolve activeCompanyId from the session just created
     const sessionForAudit = await db.session.findUnique({
       where: { token },
       select: { activeCompanyId: true },
@@ -136,8 +131,6 @@ export async function POST(request: NextRequest) {
     await auditAuth(user.id, 'LOGIN', requestMetadata(request), sessionForAudit?.activeCompanyId ?? null);
 
     // ─── Auto-accept pending invitations ────────────────────────────
-    // When an invited user logs in for the first time, auto-accept any
-    // pending invitations and switch their active company to the invited tenant.
     const pendingInvitations = await db.invitation.findMany({
       where: { email: user.email, status: 'PENDING' },
       include: { company: { select: { id: true, name: true } } },
@@ -161,7 +154,6 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Create membership in the invited tenant
       await db.userCompany.create({
         data: {
           userId: user.id,
@@ -177,7 +169,6 @@ export async function POST(request: NextRequest) {
 
       logger.info(`[LOGIN] Auto-accepted invitation for ${user.email} → ${inv.company.name} as ${inv.role}`);
 
-      // Remember the first accepted invitation to switch to it
       if (!acceptedInvitation) {
         acceptedInvitation = {
           companyId: inv.companyId,
@@ -187,7 +178,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // If we accepted an invitation, switch active company to the invited tenant
     if (acceptedInvitation) {
       await db.session.update({
         where: { token },
@@ -221,7 +211,6 @@ export async function POST(request: NextRequest) {
       activeCompanyName = userCompany?.company.name ?? null;
     }
 
-    // Fetch user's companies for the selector
     const companies = await db.userCompany.findMany({
       where: { userId: user.id },
       include: {
@@ -237,19 +226,16 @@ export async function POST(request: NextRequest) {
       orderBy: { joinedAt: 'asc' },
     });
 
-    // Check if any App Owner exists in the system
     const existingAppOwner = await db.user.findFirst({
       where: { isSuperDev: true },
       select: { id: true },
     });
     const hasAppOwner = existingAppOwner !== null;
 
-    // Append "- App-owner" to company name when user is SuperDev and company is AlphaAi
     const displayCompanyName = (user.isSuperDev && activeCompanyName === 'AlphaAi')
       ? 'AlphaAi - App-owner'
       : activeCompanyName;
 
-    // SuperDev is always reported as verified to the client
     const effectiveEmailVerified = user.isSuperDev ? true : (user.emailVerified ?? false);
 
     return NextResponse.json({
@@ -284,4 +270,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

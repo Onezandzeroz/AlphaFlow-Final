@@ -1,19 +1,9 @@
-// ═══════════════════════════════════════════════════════════════
-// POST /api/proof-upload
-//
-// Proxy: Uploads an encrypted .tbkey proof file via the TokenPay service.
-// The proof is user-agnostic (bearer instrument) — userId is optional.
-//
-// Content-Type: multipart/form-data
-// Fields: proofFile (File — .tbkey), userId (string, optional)
-//
-// Response: { success, proofId, status, tier?, expiresAt?, filename, manifest }
-// ═══════════════════════════════════════════════════════════════
-
 import { NextRequest, NextResponse } from 'next/server';
 import { tokenpay } from '@/lib/tokenpay';
+import { withGuard } from '@/lib/route-guard';
 
-export async function POST(request: NextRequest) {
+// POST /api/proof-upload
+export const POST = withGuard({ auth: true }, async (request) => {
   try {
     const formData = await request.formData();
     const userId = formData.get('userId') as string | null;
@@ -33,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Re-build FormData for the service (boundary will be re-set by fetch)
+    // Re-build FormData for the service
     const serviceFormData = new FormData();
     if (userId) {
       serviceFormData.append('userId', userId);
@@ -47,4 +37,4 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Proof upload failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

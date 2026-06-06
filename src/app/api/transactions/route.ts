@@ -1,24 +1,21 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { auditCreate, auditUpdate, auditCancel, auditDeleteAttempt, requestMetadata } from '@/lib/audit';
+import { withGuard } from '@/lib/route-guard';
+import { auditCreate, auditUpdate, auditCancel, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { TransactionType, Prisma, VATCode } from '@prisma/client';
-import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { tenantFilter, Permission } from '@/lib/rbac';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { enrichTransactionsWithVAT } from '@/lib/vat-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // GET - Fetch all non-cancelled transactions for the logged-in user
-export async function GET(request: NextRequest) {
+export const GET = withGuard({
+  auth: true,
+  requireCompany: true,
+  permissions: [Permission.DATA_READ],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    
     const transactions = await db.transaction.findMany({
       where: { ...tenantFilter(ctx), cancelled: false },
       orderBy: { date: 'desc' },
@@ -60,25 +57,18 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 // POST - Create a new transaction
-export async function POST(request: NextRequest) {
+export const POST = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_CREATE],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
     const body = await request.json();
     const { type, date, amount, description, vatPercent, receiptImage, accountId } = body;
 
@@ -227,25 +217,18 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 // PUT - Update a transaction (e.g., attach receipt) — with audit trail
-export async function PUT(request: NextRequest) {
+export const PUT = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_EDIT],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
     const body = await request.json();
     const { id, receiptImage } = body;
 
@@ -306,26 +289,19 @@ export async function PUT(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 // DELETE - Soft-delete (cancel) a transaction — NOT a hard delete
 // Per bogføringsloven, transactions must be preserved (cancelled, not deleted)
-export async function DELETE(request: NextRequest) {
+export const DELETE = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  blockDemo: true,
+  requireTokenPay: true,
+  permissions: [Permission.DATA_DELETE],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const reason = searchParams.get('reason') || 'User requested cancellation';
@@ -377,4 +353,4 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

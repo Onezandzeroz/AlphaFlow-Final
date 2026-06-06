@@ -1,25 +1,12 @@
-// ═══════════════════════════════════════════════════════════════
-// GET /api/access/[userId]
-//
-// Proxy: Checks a user's access level via the TokenPay service.
-// Call this from your client-side components.
-//
-// OWNER BYPASS: The AlphaAi app owner (isSuperDev + AlphaAi company)
-// always gets read_write access without needing a proof file.
-//
-// Response: { userId, accessLevel, accessExpiry, daysRemaining, isExpired }
-// ═══════════════════════════════════════════════════════════════
-
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { tokenpay } from '@/lib/tokenpay';
 import { checkOwnerAccess } from '@/lib/access-guard';
+import { withGuard } from '@/lib/route-guard';
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ userId: string }> }
-) {
+// GET /api/access/[userId]
+export const GET = withGuard({ auth: true }, async (request, ctx, segmentData) => {
   try {
-    const { userId } = await params;
+    const userId = segmentData?.userId as string;
     if (!userId) {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
     }
@@ -38,4 +25,4 @@ export async function GET(
     const message = error instanceof Error ? error.message : 'Access check failed';
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

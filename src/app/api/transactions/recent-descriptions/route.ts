@@ -1,18 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission } from '@/lib/rbac';
+import { tenantFilter, Permission } from '@/lib/rbac';
 
 // GET - Fetch recent unique transaction descriptions for suggestions
-export async function GET(request: NextRequest) {
+export const GET = withGuard({
+  auth: true,
+  requireCompany: true,
+  permissions: [Permission.DATA_READ],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    
     // Get the 20 most recent non-cancelled transactions
     const recentTx = await db.transaction.findMany({
       where: { ...tenantFilter(ctx), cancelled: false },
@@ -41,4 +39,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

@@ -1,28 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 
 /**
  * GET /api/company/export-info
  *
- * Returns export history and statistics for the current company:
- *   - Total number of exports
- *   - Last export date
- *   - Data volume (accounts, transactions, journal entries, etc.)
- *   - Recent export audit entries with GUIDs and checksums
+ * Returns export history and statistics for the current company.
  */
-export async function GET(request: NextRequest) {
+export const GET = withGuard(routeConfig['/api/company/export-info'].GET!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx || !ctx.activeCompanyId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const denied = requirePermission(ctx, Permission.DATA_READ);
-    if (denied) return denied;
-
     const companyId = ctx.activeCompanyId;
 
     // Fetch export audit logs (filter for exportGuid in-memory since Prisma JSON null filtering is strict)
@@ -100,4 +88,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

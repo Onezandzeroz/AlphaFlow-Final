@@ -1,26 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, blockOversightMutation, requireNotDemoCompany, Permission } from '@/lib/rbac';
+import { NextResponse } from 'next/server';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { getCompanyEInvoiceSettings, updateCompanyEInvoiceSettings } from '@/lib/einvoice-sender';
 import type { CompanyEInvoiceConfig } from '@/lib/einvoice-sender';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 
+const guard = routeConfig['/api/company/einvoice-settings'];
+
 // GET /api/company/einvoice-settings — Get company e-invoice settings
-export async function GET(request: NextRequest) {
+export const GET = withGuard(guard.GET!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const forbidden = requirePermission(ctx, Permission.COMPANY_VIEW_SETTINGS);
-    if (forbidden) return forbidden;
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json({ error: 'No active company' }, { status: 400 });
-    }
-
     const settings = await getCompanyEInvoiceSettings(ctx.activeCompanyId);
 
     return NextResponse.json({ settings });
@@ -31,29 +21,11 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 // PUT /api/company/einvoice-settings — Update company e-invoice settings
-export async function PUT(request: NextRequest) {
+export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const forbidden = requirePermission(ctx, Permission.COMPANY_EDIT_SETTINGS);
-    if (forbidden) return forbidden;
-
-    if (!ctx.activeCompanyId) {
-      return NextResponse.json({ error: 'No active company' }, { status: 400 });
-    }
-
     const body = await request.json();
 
     // Validate that the body contains at least one known field
@@ -104,4 +76,4 @@ export async function PUT(request: NextRequest) {
     const message = error instanceof Error ? error.message : 'Kunne ikke opdatere e-faktura indstillinger';
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

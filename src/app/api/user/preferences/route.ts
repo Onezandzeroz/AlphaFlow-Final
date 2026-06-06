@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { requirePermission, tenantFilter, companyScope, Permission, blockOversightMutation } from '@/lib/rbac';
+import { Permission } from '@/lib/rbac';
 import { VALID_VAT_PERCENTAGES } from '@/lib/vat-utils';
 import { auditUpdate } from '@/lib/audit';
 
@@ -25,13 +24,12 @@ const VALID_CURRENCY_FORMATS = ['full', 'no-decimals', 'compact'];
 
 // ── GET ────────────────────────────────────────────────────────────
 
-export async function GET() {
+export const GET = withGuard({
+  auth: true,
+  requireCompany: true,
+  permissions: [Permission.COMPANY_VIEW_SETTINGS],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const record = await db.user.findUnique({
       where: { id: ctx.id },
       select: { sidebarPrefs: true, userPrefs: true },
@@ -52,23 +50,18 @@ export async function GET() {
     logger.error('Get user preferences error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});
 
 // ── PUT ────────────────────────────────────────────────────────────
 
-export async function PUT(request: NextRequest) {
+export const PUT = withGuard({
+  auth: true,
+  requireCompany: true,
+  blockOversight: true,
+  requireTokenPay: true,
+  permissions: [Permission.COMPANY_EDIT_SETTINGS],
+}, async (request: NextRequest, ctx) => {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
     const body = await request.json();
     const { expandedSections, theme, compactMode, currencyFormat, defaultVatRate, defaultPaymentTerms, fiscalYearStart } = body;
 
@@ -186,4 +179,4 @@ export async function PUT(request: NextRequest) {
     logger.error('Save user preferences error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

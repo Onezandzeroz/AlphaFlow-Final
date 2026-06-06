@@ -1,16 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 
 // GET /api/companies - List user's companies
-export async function GET(request: NextRequest) {
+export const GET = withGuard(routeConfig['/api/companies'].GET!, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const memberships = await db.userCompany.findMany({
       where: { userId: ctx.id },
       include: {
@@ -46,4 +42,4 @@ export async function GET(request: NextRequest) {
     logger.error('List companies error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

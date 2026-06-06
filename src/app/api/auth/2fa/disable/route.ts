@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
@@ -9,21 +8,14 @@ import {
   verifyTOTP,
   isValidTOTPFormat,
 } from '@/lib/two-factor';
+import { withGuard } from '@/lib/route-guard';
 
 /**
  * POST /api/auth/2fa/disable
- *
- * Disables 2FA for the authenticated user after verifying the current TOTP code.
- * SuperDev users bypass 2FA requirements and can disable without a code.
  */
-export async function POST(request: NextRequest) {
+export const POST = withGuard({ auth: true }, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-    }
-
-    // Rate limiting: max 5 disable attempts per minute per user
+    // Rate limiting
     const clientIp = getClientIp(request);
     const { allowed } = rateLimit(`2fa-disable:${ctx.id}:${clientIp}`, {
       maxRequests: 5,
@@ -129,4 +121,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

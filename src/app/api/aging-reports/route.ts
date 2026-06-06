@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { AccountGroup } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { companyScope, type AuthContext } from '@/lib/rbac';
+import { companyScope, Permission } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import type { AuthContext } from '@/lib/session';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -213,49 +214,47 @@ function fifoAgeItems(
 
 // ─── GET - Generate Aging Report ────────────────────────────────────
 
-export async function GET(request: NextRequest) {
-  try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+export const GET = withGuard(
+  { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
+  async (request, ctx) => {
+    try {
+      const { searchParams } = new URL(request.url);
+      const type = searchParams.get('type');
+      const asOfStr = searchParams.get('asOf');
 
-    const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type');
-    const asOfStr = searchParams.get('asOf');
+      // Validate type parameter
+      if (!type || (!['receivables', 'payables'].includes(type))) {
+        return NextResponse.json(
+          { error: 'Missing or invalid type parameter. Must be "receivables" or "payables".' },
+          { status: 400 }
+        );
+      }
 
-    // Validate type parameter
-    if (!type || (!['receivables', 'payables'].includes(type))) {
+      // Determine asOf date (defaults to today)
+      const asOf = asOfStr ? new Date(asOfStr) : new Date();
+      asOf.setHours(23, 59, 59, 999);
+
+      if (isNaN(asOf.getTime())) {
+        return NextResponse.json(
+          { error: 'Invalid asOf date format. Use YYYY-MM-DD.' },
+          { status: 400 }
+        );
+      }
+
+      if (type === 'receivables') {
+        return generateReceivablesAging(ctx, asOf, asOfStr || formatDate(new Date()));
+      } else {
+        return generatePayablesAging(ctx, asOf, asOfStr || formatDate(new Date()));
+      }
+    } catch (error) {
+      logger.error('Aging reports error:', error);
       return NextResponse.json(
-        { error: 'Missing or invalid type parameter. Must be "receivables" or "payables".' },
-        { status: 400 }
+        { error: 'Internal server error' },
+        { status: 500 }
       );
     }
-
-    // Determine asOf date (defaults to today)
-    const asOf = asOfStr ? new Date(asOfStr) : new Date();
-    asOf.setHours(23, 59, 59, 999);
-
-    if (isNaN(asOf.getTime())) {
-      return NextResponse.json(
-        { error: 'Invalid asOf date format. Use YYYY-MM-DD.' },
-        { status: 400 }
-      );
-    }
-
-    if (type === 'receivables') {
-      return generateReceivablesAging(ctx, asOf, asOfStr || formatDate(new Date()));
-    } else {
-      return generatePayablesAging(ctx, asOf, asOfStr || formatDate(new Date()));
-    }
-  } catch (error) {
-    logger.error('Aging reports error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
   }
-}
+);
 
 // ─── Receivables Aging (Debitorrapport) ─────────────────────────────
 

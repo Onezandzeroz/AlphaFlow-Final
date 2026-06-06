@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
+import { withGuard } from '@/lib/route-guard';
 import { logger } from '@/lib/logger';
-import { tenantFilter } from '@/lib/rbac';
+import { tenantFilter, Permission } from '@/lib/rbac';
 import {
   enrichTransactionsWithVAT,
   enrichInvoicesWithVAT,
@@ -10,13 +10,12 @@ import {
   r2,
 } from '@/lib/vat-utils';
 
-export async function GET(request: NextRequest) {
+export const GET = withGuard({
+  auth: true,
+  requireCompany: true,
+  permissions: [Permission.REPORTS_EXPORT],
+}, async (request, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
     const { searchParams } = new URL(request.url);
     const month = searchParams.get('month');
 
@@ -194,4 +193,4 @@ export async function GET(request: NextRequest) {
     logger.error('Export error:', error);
     return NextResponse.json({ error: 'Failed to export transactions' }, { status: 500 });
   }
-}
+});

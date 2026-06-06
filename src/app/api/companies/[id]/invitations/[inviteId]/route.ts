@@ -1,33 +1,15 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
-import { requirePermission, Permission, blockOversightMutation, requireNotDemoCompany } from '@/lib/rbac';
+import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 import { auditCancel, requestMetadata } from '@/lib/audit';
-import { requireTokenPayAccess } from '@/lib/tokenpay';
 
 // DELETE /api/companies/[id]/invitations/[inviteId] - Revoke invitation
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; inviteId: string }> }
-) {
+export const DELETE = withGuard(routeConfig['/api/companies/[id]/invitations/[inviteId]'].DELETE!, async (request, ctx, segmentData) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const oversightBlocked = blockOversightMutation(ctx);
-    if (oversightBlocked) return oversightBlocked;
-
-    const accessDenied = await requireTokenPayAccess(ctx.id);
-    if (accessDenied) return accessDenied;
-
-    const demoBlocked = requireNotDemoCompany(ctx);
-    if (demoBlocked) return demoBlocked;
-
-    const forbidden = requirePermission(ctx, Permission.MEMBERS_INVITE);
-    if (forbidden) return forbidden;
-
-    const { id: companyId, inviteId } = await params;
+    const companyId = segmentData?.id as string;
+    const inviteId = segmentData?.inviteId as string;
 
     const invitation = await db.invitation.findFirst({
       where: { id: inviteId, companyId },
@@ -50,4 +32,4 @@ export async function DELETE(
     logger.error('Revoke invitation error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
-}
+});

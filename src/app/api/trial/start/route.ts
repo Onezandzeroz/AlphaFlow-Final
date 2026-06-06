@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
-import { getAuthContext } from '@/lib/session';
 import { grantTrial } from '@/lib/tokenpay';
 import { logger } from '@/lib/logger';
 import { auditLog, requestMetadata } from '@/lib/audit';
@@ -16,21 +16,13 @@ import { auditLog, requestMetadata } from '@/lib/audit';
 //   - SuperDev users and demo companies are not eligible.
 //   - Users who already have active read_write access are not eligible.
 
-export async function POST(request: NextRequest) {
+export const POST = withGuard({
+  auth: true,
+  blockOversight: true,
+  blockDemo: true,
+}, async (request: NextRequest, ctx) => {
   try {
-    const ctx = await getAuthContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Block demo companies and super devs
-    if (ctx.isDemoCompany) {
-      return NextResponse.json(
-        { error: 'Demo companies cannot start a trial' },
-        { status: 403 },
-      );
-    }
-
+    // SuperDev users don't need a trial
     if (ctx.isSuperDev) {
       return NextResponse.json(
         { error: 'App owner does not need a trial' },
@@ -95,4 +87,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
+});
