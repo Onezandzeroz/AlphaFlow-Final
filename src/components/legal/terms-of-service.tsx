@@ -350,7 +350,7 @@ c) Lovvalg: Disse Vilkår reguleres af og fortolkes i overensstemmelse med dansk
   contact: {
     heading: 'AlphaAI Consult ApS',
     company: 'AlphaAI Consult ApS',
-    address: 'Skelagervej 124\n8200 Aarhus N\nDanmark',
+    address: 'Skelagervej 124C\n8200 Aarhus N\nDanmark',
     cvr: 'CVR-nr.: 46312058',
     email: 'alphaaiconsult@gmail.com',
     website: 'www.alphaflow.dk',

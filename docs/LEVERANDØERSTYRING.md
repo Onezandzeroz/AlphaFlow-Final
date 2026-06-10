@@ -1,9 +1,9 @@
 # Leverandørdokumentation — AlphaFlow
 
 **AlphaAi ApS**
-**CVR: [Indtast CVR-nummer]**
+**CVR: 46312058**
 **Dokumentversion:** 2.0
-**Dato:** 2025
+**Dato:** 08.06.2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 
 ---
