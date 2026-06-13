@@ -35,6 +35,8 @@ import {
   Globe,
   ShieldCheck,
   Settings,
+  Link2,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -78,6 +80,10 @@ interface EInvoiceConfig {
   peppolAs4Id: string | null;
   registrationNo: string | null;
   autoSendOnFinalize: boolean;
+  storecoveConnected?: boolean;
+  storecoveApiKeyId?: string | null;
+  storecoveLegalEntityId?: number | null;
+  storecoveConnectedAt?: string | null;
 }
 
 interface SendEInvoiceDialogProps {
@@ -291,7 +297,7 @@ export function SendEInvoiceDialog({
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{isDa ? 'Kanal' : 'Channel'}</span>
                       <Badge variant="outline" className="text-[10px] px-2 border-emerald-300 dark:border-emerald-700">
-                        {sendResult.channel === 'OIOUBL' ? 'OIOUBL (NemHandel)' : 'Peppol BIS'}
+                        {sendResult.channel === 'OIOUBL' ? 'OIOUBL (NemHandel)' : sendResult.channel === 'STORECOVE' ? 'Storecove (Peppol+NemHandel)' : 'Peppol BIS'}
                       </Badge>
                     </div>
                     {sendResult.messageId && (
@@ -363,6 +369,18 @@ export function SendEInvoiceDialog({
                         <span>OIOUBL ({isDa ? 'NemHandel' : 'NemHandel'})</span>
                       </div>
                     </SelectItem>
+                    <SelectItem value="STORECOVE">
+                      <div className="flex items-center gap-2">
+                        <Link2 className="h-3.5 w-3.5 text-violet-500" />
+                        <span>Storecove ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
+                        {einvoiceConfig?.storecoveConnected && (
+                          <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[8px] px-1 py-0">
+                            <Zap className="h-2.5 w-2.5" />
+                            {isDa ? 'FORBINDET' : 'LIVE'}
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
                     <SelectItem value="PEPPOL">
                       <div className="flex items-center gap-2">
                         <Globe className="h-3.5 w-3.5 text-blue-500" />
@@ -376,10 +394,22 @@ export function SendEInvoiceDialog({
                     ? (isDa
                       ? 'OIOUBL-format via NemHandel-netværket. Standard for offentlige danske institutioner.'
                       : 'OIOUBL format via NemHandel network. Standard for Danish public institutions.')
-                    : (isDa
-                      ? 'Peppol BIS Billing 3.0-format. International e-fakturastandard.'
-                      : 'Peppol BIS Billing 3.0 format. International e-invoicing standard.')}
+                    : channel === 'STORECOVE'
+                      ? (isDa
+                        ? 'Automatisk levering via Storecove Access Point. Sendes til både Peppol og NemHandel.'
+                        : 'Automatic delivery via Storecove Access Point. Routed to both Peppol and NemHandel.')
+                      : (isDa
+                        ? 'Peppol BIS Billing 3.0-format. International e-fakturastandard.'
+                        : 'Peppol BIS Billing 3.0 format. International e-invoicing standard.'))}
                 </p>
+                {channel === 'STORECOVE' && !einvoiceConfig?.storecoveConnected && (
+                  <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-2 mt-1.5 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    {isDa
+                      ? 'Storecove er ikke forbundet. Afsendelse vil bruge simulationstilstand. Forbind Storecove i indstillinger.'
+                      : 'Storecove is not connected. Sending will use simulation mode. Connect Storecove in settings.'}
+                  </div>
+                )}
               </div>
             )}
 

@@ -154,7 +154,6 @@ enum EInvoiceType {
 enum EInvoiceSendChannel {
   NEMHANDEL_OIOUBL  // OIOUBL via NemHandel network
   PEPPOL_BIS        // Peppol BIS Billing 3.0 via Access Point
-  STORECOVE         // Peppol BIS Billing 3.0 via Storecove Access Point
 }
 
 enum EInvoiceSendStatus {
@@ -236,13 +235,6 @@ model Company {
   einvoiceRegistrationNo   String?             // NemHandelsregisteret registration number
   einvoiceRegisteredAt     DateTime?           // When registered in NemHandelsregisteret
   einvoiceAutoSendOnFinalize Boolean           @default(false) // Auto-send when invoice is finalized
-
-  // Storecove Access Point integration (Peppol delivery)
-  storecoveConnected       Boolean             @default(false) // Whether Storecove API is configured
-  storecoveApiKeyId        String?             // Storecove API key ID (last 4 chars stored for identification)
-  storecoveLegalEntityId   Int?                // Storecove legal entity ID for this company
-  storecoveConnectedAt     DateTime?           // When Storecove was connected
-  storecoveLastTestedAt    DateTime?           // Last successful connection test
 
   // Meta
   isDemo               Boolean  @default(false)  // Demo company flag — only the shared demo company should be true
@@ -1154,10 +1146,6 @@ model EInvoiceSending {
   // Tracking
   messageId       String?             // Message ID from NemHandel/Peppol network
   responseXml     String?             // Response XML from the network/receiver
-
-  // Storecove-specific tracking
-  storecoveSubmissionId String?      // Storecove submission ID (for status polling)
-  storecoveStorecoveId String?       // Storecove internal ID (numeric, stored as string)
 
   // Audit
   sentBy          String              // userId who initiated the send

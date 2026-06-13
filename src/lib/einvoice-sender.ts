@@ -26,6 +26,7 @@ import { logger } from '@/lib/logger';
 import { auditLog } from '@/lib/audit';
 import { generateOIOUBL, type OIOUBLInvoiceData } from '@/lib/oioubl-generator';
 import { NemHandelClient } from '@/lib/nemhandel-client';
+import { storecoveClient, StorecoveClient } from '@/lib/storecove-client';
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -54,6 +55,8 @@ export interface EInvoiceSending {
   createdAt: string;
   updatedAt: string;
   companyId: string;
+  storecoveSubmissionId: string | null;
+  storecoveStorecoveId: string | null;
 }
 
 /** Serializable company e-invoice configuration */
@@ -66,6 +69,11 @@ export interface CompanyEInvoiceConfig {
   registrationNo: string | null;
   registeredAt: string | null;
   autoSendOnFinalize: boolean;
+  // Storecove
+  storecoveConnected: boolean;
+  storecoveApiKeyId: string | null;
+  storecoveLegalEntityId: number | null;
+  storecoveConnectedAt: string | null;
 }
 
 // ─── CONSTANTS ─────────────────────────────────────────────────────
@@ -102,6 +110,8 @@ function channelToFormat(channel: EInvoiceSendChannel): EInvoiceFormat {
       return EInvoiceFormat.OIOUBL;
     case EInvoiceSendChannel.PEPPOL_BIS:
       return EInvoiceFormat.PEPPOL_BIS;
+    case EInvoiceSendChannel.STORECOVE:
+      return EInvoiceFormat.PEPPOL_BIS;
     default:
       return EInvoiceFormat.OIOUBL;
   }
@@ -134,6 +144,8 @@ function serializeSending(record: {
   createdAt: Date;
   updatedAt: Date;
   companyId: string;
+  storecoveSubmissionId: string | null;
+  storecoveStorecoveId: string | null;
 }): EInvoiceSending {
   return {
     id: record.id,
@@ -159,6 +171,8 @@ function serializeSending(record: {
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     companyId: record.companyId,
+    storecoveSubmissionId: record.storecoveSubmissionId,
+    storecoveStorecoveId: record.storecoveStorecoveId,
   };
 }
 
@@ -296,6 +310,8 @@ export async function queueEInvoiceSend(params: {
         bankName: true,
         bankAccount: true,
         bankIban: true,
+        storecoveConnected: true,
+        storecoveLegalEntityId: true,
       },
     });
 
@@ -431,6 +447,8 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
             einvoiceEnabled: true,
             einvoiceEndpointId: true,
             einvoiceGLN: true,
+            storecoveConnected: true,
+            storecoveLegalEntityId: true,
           },
         },
       },
@@ -474,9 +492,51 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
       xmlLength: xmlContent.length,
     });
 
-    // 5. Send via NemHandelClient (currently simulated)
-    const recipientCvr = sending.recipientCvr || sending.company.cvrNumber;
-    const result = await nemHandelClient.sendInvoice(xmlContent, recipientCvr);
+    // 5. Send via appropriate access point
+    let result: { success: boolean; messageId?: string; errorCode?: string; errorMessage?: string; responseXml?: string };
+
+    if (sending.channel === EInvoiceSendChannel.STORECOVE || 
+        (sending.channel === EInvoiceSendChannel.PEPPOL_BIS && sending.company.storecoveConnected)) {
+      // ── Storecove Access Point ──
+      const parsedEndpoint = sending.recipientEndpointId
+        ? StorecoveClient.parseEndpointId(sending.recipientEndpointId)
+        : null;
+      
+      const storecoveResult = await storecoveClient.submitInvoice(xmlContent, {
+        legalEntityId: sending.company.storecoveLegalEntityId ?? undefined,
+        receiverScheme: parsedEndpoint?.scheme,
+        receiverIdentifier: parsedEndpoint?.identifier,
+        routeToNemhandel: sending.channel === EInvoiceSendChannel.STORECOVE,
+      });
+
+      result = {
+        success: storecoveResult.success,
+        messageId: storecoveResult.messageId,
+        errorCode: storecoveResult.errorCode,
+        errorMessage: storecoveResult.errorMessage,
+      };
+
+      // Store Storecove tracking IDs
+      if (storecoveResult.success) {
+        await db.eInvoiceSending.update({
+          where: { id: sendingId },
+          data: {
+            storecoveSubmissionId: storecoveResult.submissionId,
+            storecoveStorecoveId: storecoveResult.storecoveId,
+          },
+        });
+      }
+
+      logger.info('[EINVOICE_SEND] Submitted via Storecove Access Point', {
+        sendingId,
+        storecoveSubmissionId: storecoveResult.submissionId,
+        channel: sending.channel,
+      });
+    } else {
+      // ── NemHandel Client (legacy/simulation) ──
+      const recipientCvr = sending.recipientCvr || sending.company.cvrNumber;
+      result = await nemHandelClient.sendInvoice(xmlContent, recipientCvr);
+    }
 
     // 6. Handle result
     if (result.success) {
@@ -788,6 +848,10 @@ export async function getCompanyEInvoiceSettings(
       einvoiceRegistrationNo: true,
       einvoiceRegisteredAt: true,
       einvoiceAutoSendOnFinalize: true,
+      storecoveConnected: true,
+      storecoveApiKeyId: true,
+      storecoveLegalEntityId: true,
+      storecoveConnectedAt: true,
     },
   });
 
@@ -804,6 +868,10 @@ export async function getCompanyEInvoiceSettings(
     registrationNo: company.einvoiceRegistrationNo ?? null,
     registeredAt: company.einvoiceRegisteredAt?.toISOString() ?? null,
     autoSendOnFinalize: company.einvoiceAutoSendOnFinalize,
+    storecoveConnected: company.storecoveConnected,
+    storecoveApiKeyId: company.storecoveApiKeyId,
+    storecoveLegalEntityId: company.storecoveLegalEntityId,
+    storecoveConnectedAt: company.storecoveConnectedAt?.toISOString() ?? null,
   };
 }
 
@@ -843,6 +911,12 @@ export async function updateCompanyEInvoiceSettings(
   if (settings.autoSendOnFinalize !== undefined) {
     updateData.einvoiceAutoSendOnFinalize = settings.autoSendOnFinalize;
   }
+  if (settings.storecoveConnected !== undefined) {
+    updateData.storecoveConnected = settings.storecoveConnected;
+  }
+  if (settings.storecoveLegalEntityId !== undefined) {
+    updateData.storecoveLegalEntityId = settings.storecoveLegalEntityId;
+  }
 
   // Get old settings for audit trail
   const oldSettings = await getCompanyEInvoiceSettings(companyId);
@@ -860,6 +934,10 @@ export async function updateCompanyEInvoiceSettings(
       einvoiceRegistrationNo: true,
       einvoiceRegisteredAt: true,
       einvoiceAutoSendOnFinalize: true,
+      storecoveConnected: true,
+      storecoveApiKeyId: true,
+      storecoveLegalEntityId: true,
+      storecoveConnectedAt: true,
     },
   });
 
@@ -872,6 +950,10 @@ export async function updateCompanyEInvoiceSettings(
     registrationNo: company.einvoiceRegistrationNo ?? null,
     registeredAt: company.einvoiceRegisteredAt?.toISOString() ?? null,
     autoSendOnFinalize: company.einvoiceAutoSendOnFinalize,
+    storecoveConnected: company.storecoveConnected,
+    storecoveApiKeyId: company.storecoveApiKeyId,
+    storecoveLegalEntityId: company.storecoveLegalEntityId,
+    storecoveConnectedAt: company.storecoveConnectedAt?.toISOString() ?? null,
   };
 
   logger.info('[EINVOICE_SETTINGS] Updated company e-invoice settings', {

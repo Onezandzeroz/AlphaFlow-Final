@@ -6,9 +6,9 @@ import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 
-const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoiceSendChannel.PEPPOL_BIS];
+const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoiceSendChannel.PEPPOL_BIS, EInvoiceSendChannel.STORECOVE];
 
-// POST /api/invoices/[id]/send-einvoice — Queue an e-invoice send via OIOUBL or Peppol
+// POST /api/invoices/[id]/send-einvoice — Queue an e-invoice send via OIOUBL, Peppol, or Storecove
 export const POST = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
   async (request, ctx, context) => {
