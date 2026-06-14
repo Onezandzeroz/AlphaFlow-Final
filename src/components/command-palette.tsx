@@ -66,7 +66,8 @@ type View =
   | 'cash-flow'
   | 'recurring'
   | 'budget'
-  | 'settings';
+  | 'settings'
+  | 'settings-edelivery';
 
 export interface CommandPaletteProps {
   open: boolean;

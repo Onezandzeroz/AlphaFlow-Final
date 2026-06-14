@@ -63,6 +63,7 @@ type View =
   | 'budget'
   | 'settings'
   | 'settings-company'
+  | 'settings-edelivery'
   | 'annual-report';
 
 interface NavItemDef {
