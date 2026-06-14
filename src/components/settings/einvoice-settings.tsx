@@ -223,8 +223,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
       if (!res.ok) {
         const isAccess = await handleMutationError(res, isDa ? 'Forbind Storecove' : 'Connect Storecove');
         if (isAccess) { setIsConnectingStorecove(false); return; }
-        const data = await res.json();
-        throw new Error(data.error || (isDa ? 'Forbindelse fejlede' : 'Connection failed'));
+        return; // handleMutationError already showed error toast
       }
 
       const data = await res.json();
@@ -342,8 +341,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
           isDa ? 'Gem e-faktura indstillinger' : 'Save e-invoice settings',
         );
         if (isAccess) { setIsSaving(false); return; }
-        const data = await res.json();
-        throw new Error(data.error || (isDa ? 'Kunne ikke gemme' : 'Failed to save'));
+        return; // handleMutationError already showed error toast
       }
 
       toast.success(
@@ -383,8 +381,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
           isDa ? 'Tilmeld NemHandelsregisteret' : 'Register with NemHandelsregisteret',
         );
         if (isAccess) { setIsRegistering(false); return; }
-        const data = await res.json();
-        throw new Error(data.error || (isDa ? 'Tilmelding fejlede' : 'Registration failed'));
+        return; // handleMutationError already showed error toast
       }
 
       const data = await res.json();
