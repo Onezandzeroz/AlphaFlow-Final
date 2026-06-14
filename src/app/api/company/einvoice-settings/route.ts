@@ -52,6 +52,54 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       );
     }
 
+    // ── Validation: cannot enable e-invoicing without a valid endpointId ──
+    if (updateData.enabled === true) {
+      // Get current settings to check endpointId if not being updated in this request
+      const currentSettings = await getCompanyEInvoiceSettings(ctx.activeCompanyId!);
+      const endpointId = updateData.endpointId ?? currentSettings.endpointId;
+
+      if (!endpointId || !endpointId.trim()) {
+        return NextResponse.json(
+          { error: 'Kan ikke aktivere e-faktura uden et EndpointID. Angiv et EndpointID (f.eks. 0184:CVR-nummer).' },
+          { status: 400 }
+        );
+      }
+
+      // Validate endpointId format: must contain scheme:identifier (e.g., "0184:12345678")
+      const parts = endpointId.split(':');
+      if (parts.length !== 2 || !parts[0].trim() || !parts[1].trim()) {
+        return NextResponse.json(
+          { error: 'Ugyldigt EndpointID-format. Brug format: scheme:identifier (f.eks. 0184:12345678).' },
+          { status: 400 }
+        );
+      }
+
+      // Validate CVR number in endpointId (if scheme is 0184 = DK CVR)
+      if (parts[0] === '0184' && !/^\d{8}$/.test(parts[1].trim())) {
+        return NextResponse.json(
+          { error: 'Ugyldigt CVR-nummer i EndpointID. Et dansk CVR-nummer skal være præcis 8 cifre.' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ── Validation: endpointId format if provided ──
+    if (updateData.endpointId !== undefined && updateData.endpointId !== null && updateData.endpointId.trim() !== '') {
+      const epParts = updateData.endpointId.split(':');
+      if (epParts.length !== 2 || !epParts[0].trim() || !epParts[1].trim()) {
+        return NextResponse.json(
+          { error: 'Ugyldigt EndpointID-format. Brug format: scheme:identifier (f.eks. 0184:12345678).' },
+          { status: 400 }
+        );
+      }
+      if (epParts[0] === '0184' && !/^\d{8}$/.test(epParts[1].trim())) {
+        return NextResponse.json(
+          { error: 'Ugyldigt CVR-nummer i EndpointID. Et dansk CVR-nummer skal være præcis 8 cifre.' },
+          { status: 400 }
+        );
+      }
+    }
+
     const settings = await updateCompanyEInvoiceSettings(ctx.activeCompanyId!, updateData);
 
     // Audit trail for settings update

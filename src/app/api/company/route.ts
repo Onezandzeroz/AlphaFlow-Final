@@ -53,6 +53,11 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       currentYear: company.currentYear,
       isDemo: company.isDemo,
       updatedAt: company.updatedAt,
+      // E-invoice / eDelivery fields for onboarding status detection
+      einvoiceEnabled: company.einvoiceEnabled,
+      einvoiceRegistrationNo: company.einvoiceRegistrationNo,
+      einvoiceEndpointId: company.einvoiceEndpointId,
+      storecoveConnected: company.storecoveConnected,
     } : null;
 
     return NextResponse.json({ companyInfo });

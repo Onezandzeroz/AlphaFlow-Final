@@ -223,6 +223,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   const [isSeeding, setIsSeeding] = useState(false);
   const [hasCompanyInfo, setHasCompanyInfo] = useState(false);
   const [hasAccounts, setHasAccounts] = useState(false);
+  const [hasEInvoiceSetup, setHasEInvoiceSetup] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [demoModeEnabled, setDemoModeEnabled] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | null>(null);
@@ -461,8 +462,12 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
           const hasAddress = !!info.address?.trim();
           const hasBank = !!info.bankName?.trim() || !!info.bankAccount?.trim();
           setHasCompanyInfo(hasCvr || hasAddress || hasBank);
+          // E-invoice / eDelivery step: considered done when e-invoicing is enabled
+          // AND the company is registered in NemHandelsregisteret (has a registration number)
+          setHasEInvoiceSetup(!!info.einvoiceEnabled && !!info.einvoiceRegistrationNo?.trim());
         } else {
           setHasCompanyInfo(false);
+          setHasEInvoiceSetup(false);
         }
       }
 
@@ -628,11 +633,11 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   // Auto-reset onboarding if it was dismissed but never actually completed
   // (no company info AND no accounts = fresh/incomplete state)
   useEffect(() => {
-    if (!isLoading && onboardingDismissed && !hasCompanyInfo && !hasAccounts && !hasDoubleEntryData) {
+    if (!isLoading && onboardingDismissed && !hasCompanyInfo && !hasAccounts && !hasDoubleEntryData && !hasEInvoiceSetup) {
       setOnboardingDismissed(false);
       localStorage.removeItem('alphaflow-onboarding-dismissed');
     }
-  }, [isLoading, onboardingDismissed, hasCompanyInfo, hasAccounts, hasDoubleEntryData]);
+  }, [isLoading, onboardingDismissed, hasCompanyInfo, hasAccounts, hasDoubleEntryData, hasEInvoiceSetup]);
 
   const isEmptyState = !isLoading && !hasDoubleEntryData && !onboardingDismissed;
 
@@ -671,7 +676,24 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
       iconColor: 'text-[#10b981] dark:text-[#34d399]',
       completeGradient: 'from-[#22c55e] to-[#4ade80]',
     },
-  ], [hasCompanyInfo, hasAccounts, onNavigate, language]);
+    {
+      step: 3,
+      key: 'edelivery',
+      title: language === 'da' ? 'eLevering / eFaktura' : 'eDelivery / e-Invoice',
+      description: language === 'da' ? 'Aktiver e-faktura og registrer i NemHandel' : 'Enable e-invoicing and register with NemHandel',
+      detail: language === 'da'
+        ? 'NemHandel eDelivery g\u00f8r det muligt at sende og modtage e-fakturaer direkte fra AlphaFlow \u2014 uden manuel upload. Registrer din virksomhed i NemHandelsregisteret og forbind en Access Point udbyder (f.eks. Storecove) for automatisk levering via Peppol-netv\u00e6rket.'
+        : 'NemHandel eDelivery enables sending and receiving e-invoices directly from AlphaFlow \u2014 no manual upload needed. Register your company in NemHandelsregisteret and connect an Access Point provider (e.g. Storecove) for automatic delivery via the Peppol network.',
+      bgImage: undefined,
+      icon: Zap,
+      done: hasEInvoiceSetup,
+      action: () => onNavigate?.('settings-edelivery'),
+      gradient: 'from-[#8b5cf6] to-[#a78bfa]',
+      iconBg: 'bg-[#f5f3ff] dark:bg-[#2e1065]',
+      iconColor: 'text-[#8b5cf6] dark:text-[#a78bfa]',
+      completeGradient: 'from-[#22c55e] to-[#4ade80]',
+    },
+  ], [hasCompanyInfo, hasAccounts, hasEInvoiceSetup, onNavigate, language]);
 
   const completedSteps = onboardingSteps.filter(s => s.done).length;
 
@@ -723,7 +745,8 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   }, [onOnboardingStepDoneConsumed]);
 
   useEffect(() => {
-    if (onboardingStepJustDone === 2 && completedSteps === onboardingSteps.length && !isLoading) {
+    // Show completion overlay when the LAST step is done
+    if (onboardingStepJustDone === onboardingSteps.length && completedSteps === onboardingSteps.length && !isLoading) {
       // Show the mobile overlay (desktop ignores it via lg:hidden)
       setShowCompletionOverlay(true);
       // Desktop fallback: dismiss after 2.5 s if the overlay hasn't fired
@@ -733,8 +756,8 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
       }, 3000);
       return () => clearTimeout(timer);
     }
-    // Consume the flag if step 1 was done (no auto-dismiss needed)
-    if (onboardingStepJustDone === 1 && !isLoading) {
+    // Consume the flag if an earlier step was done (no auto-dismiss needed)
+    if (onboardingStepJustDone > 0 && onboardingStepJustDone < onboardingSteps.length && !isLoading) {
       onOnboardingStepDoneConsumed?.();
     }
   }, [onboardingStepJustDone, completedSteps, onboardingSteps.length, isLoading, onOnboardingStepDoneConsumed, handleOnboardingComplete]);
@@ -1394,7 +1417,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                           )}
                         </div>
                         <span className={`text-xs font-bold ${step.done ? 'text-[#22c55e] dark:text-[#4ade80]' : 'text-[#ef4444] dark:text-[#f87171]'}`}>
-                          {step.done ? (language === 'da' ? 'Færdig' : 'Done') : `${step.step}/2`}
+                          {step.done ? (language === 'da' ? 'Færdig' : 'Done') : `${step.step}/${onboardingSteps.length}`}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">

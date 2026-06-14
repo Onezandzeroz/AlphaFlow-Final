@@ -34,6 +34,7 @@ import { PosteringerPage } from '@/components/transactions/posteringer-page';
 import { BudgetPage } from '@/components/budget/budget-page';
 import { CompanySettingsPage } from '@/components/settings/company-settings-page';
 import { SettingsPage } from '@/components/settings/settings-page';
+import { EInvoiceSettingsPage } from '@/components/settings/einvoice-settings-page';
 import { useScannerStore } from '@/lib/scanner-store';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useSwipeNavigation } from '@/lib/use-swipe-navigation';
@@ -42,9 +43,9 @@ import { ReceiptScanner } from '@/components/scanner/ReceiptScanner';
 import { TermsOfServicePage } from '@/components/legal/terms-of-service';
 import { AnnualReportPage } from '@/components/annual-report/annual-report-page';
 
-type View = 'dashboard' | 'transactions' | 'vat-report' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'settings' | 'settings-company' | 'annual-report';
+type View = 'dashboard' | 'transactions' | 'vat-report' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
 
-const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'vat-report', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'year-end', 'aging', 'cash-flow', 'recurring', 'budget', 'settings', 'settings-company', 'annual-report'];
+const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'vat-report', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'year-end', 'aging', 'cash-flow', 'recurring', 'budget', 'settings', 'settings-company', 'settings-edelivery', 'annual-report'];
 
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
 function getInitialView(): View {
@@ -602,6 +603,8 @@ export default function Home() {
         return <SettingsPage user={user} onNavigate={(navView) => navigateToView(navView as View)} />;
       case 'settings-company':
         return <CompanySettingsPage user={user} onNavigate={(navView) => navigateToView(navView as View)} />;
+      case 'settings-edelivery':
+        return <EInvoiceSettingsPage user={user} onNavigate={(navView) => { if (isCurrent) setOnboardingStepJustDone(3); navigateToView(navView as View); }} />;
       case 'annual-report':
         return <AnnualReportPage user={user} />;
       default:

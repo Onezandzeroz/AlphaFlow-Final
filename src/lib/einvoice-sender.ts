@@ -2,7 +2,7 @@
  * E-Invoice Send Management Library
  *
  * Core abstraction for sending outgoing e-invoices via NemHandel
- * and Peppol BIS Billing 3.0 networks.
+ * eDelivery and Peppol BIS Billing 3.0 networks.
  *
  * Provides:
  * - Queueing e-invoice sends with automatic format detection
@@ -11,11 +11,20 @@
  * - Cancel pending sends
  * - Full send history tracking
  * - Company e-invoice configuration management
- * - NemHandelsregisteret registration (simulated)
+ * - NemHandel eDelivery registration (via Storecove Access Point)
+ *
+ * NemHandel eDelivery (since 2023 transition):
+ * - Follows Peppol AS4 specifications with Danish extensions
+ * - MitID Erhverv certificate required (handled by Storecove)
+ * - Receiving AP performs schema + schematron validation
+ * - MLR/AR mandatory if schematron validation fails
+ * - Uses eDelivery SML (EC) + NHR SMP (Nemhandelsregisteret)
+ * - All senders must be capable of receiving MLR/AR
  *
  * Dependencies:
  * - Prisma (PostgreSQL via Neon) for persistence
- * - NemHandelClient for network communication (currently simulated)
+ * - NemHandelClient for NHR/SMP lookup and simulation
+ * - StorecoveClient for Peppol + NemHandel eDelivery submission
  * - generateOIOUBL for XML invoice generation
  * - auditLog for immutable audit trail (Danish Bookkeeping Law §10-12)
  */
@@ -353,6 +362,18 @@ export async function queueEInvoiceSend(params: {
     const recipientCvr = invoice.customerCvr;
     const recipientEndpointId = recipientCvr ? `0184:${recipientCvr}` : null;
 
+    // 3b. Validate that the recipient has a CVR number for Peppol/NemHandel routing
+    if (!recipientCvr || !recipientCvr.trim()) {
+      throw new Error(
+        'Kunden har intet CVR-nummer. For at sende en e-faktura via Peppol/NemHandel skal kunden have et gyldigt CVR-nummer. Tilføj CVR-nummeret på kunden før du sender.'
+      );
+    }
+    if (!/^\d{8}$/.test(recipientCvr.trim())) {
+      throw new Error(
+        `Kundens CVR-nummer "${recipientCvr}" er ugyldigt. Et dansk CVR-nummer skal være præcis 8 cifre.`
+      );
+    }
+
     // 4. Determine format based on channel
     const format = channelToFormat(channel);
 
@@ -497,7 +518,13 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
 
     if (sending.channel === EInvoiceSendChannel.STORECOVE || 
         (sending.channel === EInvoiceSendChannel.PEPPOL_BIS && sending.company.storecoveConnected)) {
-      // ── Storecove Access Point ──
+      // ── Storecove Access Point (Peppol + NemHandel eDelivery) ──
+      // When routeToNemhandel is true, Storecove handles:
+      //   - MitID Erhverv certificate signing (required by NemHandel)
+      //   - AS4 transmission to receiving AP
+      //   - Schema validation at receiving AP (required before transport ack)
+      //   - Schematron validation before forwarding downstream
+      //   - MLR/AR response if schematron validation fails
       const parsedEndpoint = sending.recipientEndpointId
         ? StorecoveClient.parseEndpointId(sending.recipientEndpointId)
         : null;
@@ -533,7 +560,10 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         channel: sending.channel,
       });
     } else {
-      // ── NemHandel Client (legacy/simulation) ──
+      // ── NemHandel Client (simulation only — use Storecove for production) ──
+      // The NemHandelClient is used for NHR/SMP participant lookup and
+      // simulation mode only. For production NemHandel eDelivery,
+      // always use the Storecove channel which handles AS4/MitID.
       const recipientCvr = sending.recipientCvr || sending.company.cvrNumber;
       result = await nemHandelClient.sendInvoice(xmlContent, recipientCvr);
     }
@@ -965,11 +995,19 @@ export async function updateCompanyEInvoiceSettings(
 }
 
 /**
- * Register a company in NemHandelsregisteret.
+ * Register a company in Nemhandelsregisteret (NHR).
  *
  * Validates that the company has a CVR number and generates
- * an endpoint ID if not already set. Then calls the NemHandelClient
- * to perform the registration (currently simulated).
+ * an endpoint ID if not already set. Registration in NHR makes
+ * the company discoverable via the NemHandel eDelivery SMP.
+ *
+ * Note: For NemHandel eDelivery, senders MUST also register as
+ * receivers of MLR/AR (Message Level Response / Application Response),
+ * as the receiving AP is required to return MLR/AR if schematron
+ * validation fails.
+ *
+ * Currently simulated — in production, registration is handled
+ * through the NHR portal or via Storecove onboarding.
  *
  * On success, stores the registration number and timestamp
  * on the Company record.
