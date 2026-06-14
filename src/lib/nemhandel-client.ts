@@ -469,7 +469,7 @@ export class NemHandelClient {
         : 'Schematron validation failed at receiving AP (simulated). MLR/AR has been returned to sender.',
       schemaValidated: true,
       schematronValidated: schematronPassed,
-      mlrResponse: schemotronPassed ? undefined : 'MLR-REJECTED-SCHEMATRON',
+      mlrResponse: schematronPassed ? undefined : 'MLR-REJECTED-SCHEMATRON',
     };
   }
 
