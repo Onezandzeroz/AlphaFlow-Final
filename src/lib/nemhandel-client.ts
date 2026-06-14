@@ -464,7 +464,7 @@ export class NemHandelClient {
     return {
       status: schematronPassed ? 'ACCEPTED' : 'REJECTED',
       deliveredAt: schematronPassed ? new Date().toISOString() : undefined,
-      rejectionReason: schemotronPassed
+      rejectionReason: schematronPassed
         ? undefined
         : 'Schematron validation failed at receiving AP (simulated). MLR/AR has been returned to sender.',
       schemaValidated: true,
