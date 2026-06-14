@@ -52,7 +52,7 @@
  */
 
 import { logger } from '@/lib/logger';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -562,7 +562,7 @@ export class StorecoveClient {
         return false;
       }
 
-      return crypto.timingSafeEqual(bufferA, bufferB);
+      return timingSafeEqual(bufferA, bufferB);
     } catch (error) {
       logger.error('[STORECOVE] Webhook verification error:', error);
       return false;
