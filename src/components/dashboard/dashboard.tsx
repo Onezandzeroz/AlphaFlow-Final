@@ -757,7 +757,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
       return () => clearTimeout(timer);
     }
     // Consume the flag if an earlier step was done (no auto-dismiss needed)
-    if (onboardingStepJustDone > 0 && onboardingStepJustDone < onboardingSteps.length && !isLoading) {
+    if (onboardingStepJustDone != null && onboardingStepJustDone > 0 && onboardingStepJustDone < onboardingSteps.length && !isLoading) {
       onOnboardingStepDoneConsumed?.();
     }
   }, [onboardingStepJustDone, completedSteps, onboardingSteps.length, isLoading, onOnboardingStepDoneConsumed, handleOnboardingComplete]);
