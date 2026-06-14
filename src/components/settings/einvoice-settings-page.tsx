@@ -4,7 +4,7 @@ import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { PageHeader } from '@/components/shared/page-header';
 import { EInvoiceSettings } from '@/components/settings/einvoice-settings';
-import { Zap } from 'lucide-react';
+
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -30,8 +30,7 @@ export function EInvoiceSettingsPage({ user, onNavigate }: EInvoiceSettingsPageP
         description={language === 'da'
           ? 'Konfigurer afsendelse af e-fakturaer via NemHandel og Peppol'
           : 'Configure e-invoice sending via NemHandel and Peppol'}
-        icon={Zap}
-        onBack={() => onNavigate?.('dashboard')}
+        action={null}
       />
       <EInvoiceSettings user={user} />
     </div>
