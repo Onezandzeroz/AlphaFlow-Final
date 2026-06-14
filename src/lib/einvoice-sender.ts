@@ -78,6 +78,7 @@ export interface CompanyEInvoiceConfig {
   registrationNo: string | null;
   registeredAt: string | null;
   autoSendOnFinalize: boolean;
+  deliveryMode: 'manual' | 'automatic' | null;
   // Storecove
   storecoveConnected: boolean;
   storecoveApiKeyId: string | null;
@@ -878,6 +879,7 @@ export async function getCompanyEInvoiceSettings(
       einvoiceRegistrationNo: true,
       einvoiceRegisteredAt: true,
       einvoiceAutoSendOnFinalize: true,
+      einvoiceDeliveryMode: true,
       storecoveConnected: true,
       storecoveApiKeyId: true,
       storecoveLegalEntityId: true,
@@ -898,6 +900,7 @@ export async function getCompanyEInvoiceSettings(
     registrationNo: company.einvoiceRegistrationNo ?? null,
     registeredAt: company.einvoiceRegisteredAt?.toISOString() ?? null,
     autoSendOnFinalize: company.einvoiceAutoSendOnFinalize,
+    deliveryMode: (company.einvoiceDeliveryMode as 'manual' | 'automatic' | null) ?? null,
     storecoveConnected: company.storecoveConnected,
     storecoveApiKeyId: company.storecoveApiKeyId,
     storecoveLegalEntityId: company.storecoveLegalEntityId,
@@ -941,6 +944,9 @@ export async function updateCompanyEInvoiceSettings(
   if (settings.autoSendOnFinalize !== undefined) {
     updateData.einvoiceAutoSendOnFinalize = settings.autoSendOnFinalize;
   }
+  if (settings.deliveryMode !== undefined) {
+    updateData.einvoiceDeliveryMode = settings.deliveryMode;
+  }
   if (settings.storecoveConnected !== undefined) {
     updateData.storecoveConnected = settings.storecoveConnected;
   }
@@ -964,6 +970,7 @@ export async function updateCompanyEInvoiceSettings(
       einvoiceRegistrationNo: true,
       einvoiceRegisteredAt: true,
       einvoiceAutoSendOnFinalize: true,
+      einvoiceDeliveryMode: true,
       storecoveConnected: true,
       storecoveApiKeyId: true,
       storecoveLegalEntityId: true,
@@ -980,6 +987,7 @@ export async function updateCompanyEInvoiceSettings(
     registrationNo: company.einvoiceRegistrationNo ?? null,
     registeredAt: company.einvoiceRegisteredAt?.toISOString() ?? null,
     autoSendOnFinalize: company.einvoiceAutoSendOnFinalize,
+    deliveryMode: (company.einvoiceDeliveryMode as 'manual' | 'automatic' | null) ?? null,
     storecoveConnected: company.storecoveConnected,
     storecoveApiKeyId: company.storecoveApiKeyId,
     storecoveLegalEntityId: company.storecoveLegalEntityId,

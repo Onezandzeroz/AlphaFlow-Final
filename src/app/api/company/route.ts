@@ -57,6 +57,7 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       einvoiceEnabled: company.einvoiceEnabled,
       einvoiceRegistrationNo: company.einvoiceRegistrationNo,
       einvoiceEndpointId: company.einvoiceEndpointId,
+      einvoiceDeliveryMode: company.einvoiceDeliveryMode,
       storecoveConnected: company.storecoveConnected,
     } : null;
 

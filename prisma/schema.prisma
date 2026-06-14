@@ -236,6 +236,7 @@ model Company {
   einvoiceRegistrationNo   String?             // NemHandelsregisteret registration number
   einvoiceRegisteredAt     DateTime?           // When registered in NemHandelsregisteret
   einvoiceAutoSendOnFinalize Boolean           @default(false) // Auto-send when invoice is finalized
+  einvoiceDeliveryMode      String?             // 'manual' or 'automatic' — null = not yet chosen
 
   // Storecove Access Point integration (Peppol delivery)
   storecoveConnected       Boolean             @default(false) // Whether Storecove API is configured

@@ -3,7 +3,18 @@
  *
  * Validates generated OIOUBL XML against Peppol BIS Billing 3.0 rules
  * before submission to the Peppol network. This is a lightweight pre-check
- * — not a full XSD schema validation.
+ * — not a full XSD schema or schematron validation.
+ *
+ * NemHandel eDelivery Note:
+ * When routing to NemHandel eDelivery, the receiving Access Point will
+ * perform mandatory schema validation (XSD) as part of the AS4
+ * transmission process. If schema validation fails, the transmission
+ * is rejected. If schematron validation fails after schema validation,
+ * a Message Level Response (MLR) / Application Response (AR) MUST be
+ * returned to the sender.
+ *
+ * This pre-validation catches common errors that would cause the
+ * receiving AP to reject the invoice, reducing failed transmissions.
  */
 
 export interface ValidationResult {
@@ -292,6 +303,35 @@ export function validateOIOUBL(xml: string): ValidationResult {
     if (typeCode !== '380' && typeCode !== '381' && typeCode !== '384' && typeCode !== '389') {
       warnings.push(`InvoiceTypeCode "${typeCode}" is not standard. Expected 380 (Commercial invoice), 381 (Credit note), 384 (Corrected invoice), or 389 (Self-billed invoice).`);
     }
+  }
+
+  // ── 10b. NemHandel eDelivery checks ────────────────────────────────
+
+  // NemHandel eDelivery requires the receiving AP to perform schema
+  // validation as part of AS4 transmission. Pre-check common issues
+  // that would cause the receiving AP to reject the invoice.
+
+  // Check that supplier endpoint ID uses the correct scheme
+  const supplierEndpointScheme = xml.match(/cac:AccountingSupplierParty[\s\S]*?cbc:EndpointID[^>]*@schemeID="([^"]+)"/);
+  if (supplierEndpointScheme && supplierEndpointScheme[1] !== '0184') {
+    warnings.push(
+      `Supplier EndpointID scheme is "${supplierEndpointScheme[1]}" — NemHandel eDelivery typically requires scheme "0184" (Danish CVR).`
+    );
+  }
+
+  // Check that customer endpoint ID uses the correct scheme
+  const customerEndpointScheme = xml.match(/cac:AccountingCustomerParty[\s\S]*?cbc:EndpointID[^>]*@schemeID="([^"]+)"/);
+  if (customerEndpointScheme && customerEndpointScheme[1] !== '0184') {
+    warnings.push(
+      `Customer EndpointID scheme is "${customerEndpointScheme[1]}" — NemHandel eDelivery typically requires scheme "0184" (Danish CVR).`
+    );
+  }
+
+  // Warn about OIOUBL 3.0 forthcoming changes
+  if (xml.includes('urn:oioubl:invoice:1.0') || xml.includes('urn:oioubl:creditnote:1.0')) {
+    warnings.push(
+      'OIOUBL 1.0 profiles detected. OIOUBL 3.0 is forthcoming with updated profiles and choreographies. Current profiles remain valid until OIOUBL 3.0 is released.'
+    );
   }
 
   // ── 11. Invoice ID ──────────────────────────────────────────────────

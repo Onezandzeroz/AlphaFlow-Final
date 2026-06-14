@@ -36,6 +36,7 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       'gln',
       'peppolAs4Id',
       'autoSendOnFinalize',
+      'deliveryMode',
     ];
 
     const updateData: Partial<CompanyEInvoiceConfig> = {};
@@ -52,15 +53,26 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       );
     }
 
-    // ── Validation: cannot enable e-invoicing without a valid endpointId ──
-    if (updateData.enabled === true) {
-      // Get current settings to check endpointId if not being updated in this request
-      const currentSettings = await getCompanyEInvoiceSettings(ctx.activeCompanyId!);
+    // ── Validation: deliveryMode ──
+    if (updateData.deliveryMode !== undefined && updateData.deliveryMode !== null) {
+      if (updateData.deliveryMode !== 'manual' && updateData.deliveryMode !== 'automatic') {
+        return NextResponse.json(
+          { error: 'Ugyldig leveringstilstand. Brug "manual" eller "automatic".' },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ── Validation: cannot enable e-invoicing (automatic mode) without a valid endpointId ──
+    const currentSettings = await getCompanyEInvoiceSettings(ctx.activeCompanyId!);
+    const deliveryMode = updateData.deliveryMode ?? currentSettings.deliveryMode;
+
+    if (updateData.enabled === true || deliveryMode === 'automatic') {
       const endpointId = updateData.endpointId ?? currentSettings.endpointId;
 
       if (!endpointId || !endpointId.trim()) {
         return NextResponse.json(
-          { error: 'Kan ikke aktivere e-faktura uden et EndpointID. Angiv et EndpointID (f.eks. 0184:CVR-nummer).' },
+          { error: 'Kan ikke aktivere automatisk e-faktura uden et EndpointID. Angiv et EndpointID (f.eks. 0184:CVR-nummer).' },
           { status: 400 }
         );
       }

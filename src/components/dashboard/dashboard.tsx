@@ -462,9 +462,9 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
           const hasAddress = !!info.address?.trim();
           const hasBank = !!info.bankName?.trim() || !!info.bankAccount?.trim();
           setHasCompanyInfo(hasCvr || hasAddress || hasBank);
-          // E-invoice / eDelivery step: considered done when e-invoicing is enabled
-          // AND the company is registered in NemHandelsregisteret (has a registration number)
-          setHasEInvoiceSetup(!!info.einvoiceEnabled && !!info.einvoiceRegistrationNo?.trim());
+          // E-invoice / eDelivery step: considered done when deliveryMode is set
+          // (either 'manual' = user chose manual download, or 'automatic' = fully configured)
+          setHasEInvoiceSetup(!!info.einvoiceDeliveryMode);
         } else {
           setHasCompanyInfo(false);
           setHasEInvoiceSetup(false);
