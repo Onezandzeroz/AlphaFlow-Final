@@ -390,17 +390,12 @@ export function SendEInvoiceDialog({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {channel === 'OIOUBL'
-                    ? (isDa
-                      ? 'OIOUBL-format via NemHandel-netværket. Standard for offentlige danske institutioner.'
-                      : 'OIOUBL format via NemHandel network. Standard for Danish public institutions.')
-                    : channel === 'STORECOVE'
-                      ? (isDa
-                        ? 'Automatisk levering via Storecove Access Point. Sendes til både Peppol og NemHandel.'
-                        : 'Automatic delivery via Storecove Access Point. Routed to both Peppol and NemHandel.')
-                      : (isDa
-                        ? 'Peppol BIS Billing 3.0-format. International e-fakturastandard.'
-                        : 'Peppol BIS Billing 3.0 format. International e-invoicing standard.'))}
+                  {channel === 'OIOUBL' && isDa && 'OIOUBL-format via NemHandel-netværket. Standard for offentlige danske institutioner.'}
+                  {channel === 'OIOUBL' && !isDa && 'OIOUBL format via NemHandel network. Standard for Danish public institutions.'}
+                  {channel === 'STORECOVE' && isDa && 'Automatisk levering via Storecove Access Point. Sendes til både Peppol og NemHandel.'}
+                  {channel === 'STORECOVE' && !isDa && 'Automatic delivery via Storecove Access Point. Routed to both Peppol and NemHandel.'}
+                  {channel !== 'OIOUBL' && channel !== 'STORECOVE' && isDa && 'Peppol BIS Billing 3.0-format. International e-fakturastandard.'}
+                  {channel !== 'OIOUBL' && channel !== 'STORECOVE' && !isDa && 'Peppol BIS Billing 3.0 format. International e-invoicing standard.'}
                 </p>
                 {channel === 'STORECOVE' && !einvoiceConfig?.storecoveConnected && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-2 mt-1.5 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
