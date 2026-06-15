@@ -6,6 +6,7 @@ import { useTranslation } from '@/lib/use-translation';
 import { useScannerStore } from '@/lib/scanner-store';
 import { TransactionsPage } from '@/components/transactions/transactions-page';
 import { RecurringEntriesPage } from '@/components/recurring-entries/recurring-entries-page';
+import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
 import { PageHeader } from '@/components/shared/page-header';
 import { AddTransactionForm } from '@/components/transaction/add-transaction-form';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Receipt, RefreshCw, Plus } from 'lucide-react';
+import { Receipt, RefreshCw, Plus, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 
@@ -24,7 +25,7 @@ type PageView = 'list' | 'create';
 
 interface PosteringerPageProps {
   user: any; // User type from auth-store
-  defaultTab?: 'transactions' | 'recurring';
+  defaultTab?: 'transactions' | 'recurring' | 'einvoice';
 }
 
 export function PosteringerPage({ user, defaultTab = 'transactions' }: PosteringerPageProps) {
@@ -32,7 +33,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   const { t } = useTranslation();
   const isDa = language === 'da';
   const { guardWriteAccess } = useWriteAccessGuard(user);
-  const [activeTab, setActiveTab] = useState<'transactions' | 'recurring'>(defaultTab);
+  const [activeTab, setActiveTab] = useState<'transactions' | 'recurring' | 'einvoice'>(defaultTab);
   const [currentView, setCurrentView] = useState<PageView>('list');
   const [isMobileDialogOpen, setIsMobileDialogOpen] = useState(false);
   // ── Viewport detection (lg = 1024px) ──
@@ -130,6 +131,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   const tabs = [
     { id: 'transactions' as const, labelDa: 'Alle posteringer', labelEn: 'All Transactions', icon: Receipt },
     { id: 'recurring' as const, labelDa: 'Gentagende posteringer', labelEn: 'Recurring Entries', icon: RefreshCw },
+    { id: 'einvoice' as const, labelDa: 'E-faktura Indbakke', labelEn: 'E-Invoice Inbox', icon: Inbox },
   ];
 
   // ── Full-page create form (desktop) ──
@@ -208,8 +210,8 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
           <PageHeader
             title={isDa ? 'Indkøb & Kvittering' : 'Purchases & Receipts'}
             description={isDa
-              ? 'Registrer køb og vedhæft kvitteringer'
-              : 'Record purchases and attach receipts'}
+              ? 'Registrer køb, vedhæft kvitteringer og modtag e-fakturaer'
+              : 'Record purchases, attach receipts and receive e-invoices'}
             action={(
               <Button
                 onClick={handleAddClick}
@@ -252,8 +254,10 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
         <div className="mt-4">
           {activeTab === 'transactions' ? (
             <TransactionsPage user={user} hideHeader defaultTypeFilter="PURCHASE" />
-          ) : (
+          ) : activeTab === 'recurring' ? (
             <RecurringEntriesPage user={user} hideHeader />
+          ) : (
+            <EInvoiceInbox user={user} />
           )}
         </div>
       </div>

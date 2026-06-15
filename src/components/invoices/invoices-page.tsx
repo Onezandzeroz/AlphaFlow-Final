@@ -116,7 +116,6 @@ import { PageHeader } from '@/components/shared/page-header';
 import { StatsCard } from '@/components/shared/stats-card';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
 import { SendInvoiceDialog } from '@/components/invoices/send-invoice-dialog';
-import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
 import { SendEInvoiceDialog } from '@/components/invoices/send-einvoice-dialog';
 import { EInvoiceSendStatus } from '@/components/invoices/einvoice-send-status';
 
@@ -200,7 +199,7 @@ interface Account {
   group: string;
 }
 
-type PageView = 'list' | 'create' | 'received';
+type PageView = 'list' | 'create';
 
 export function InvoicesPage({ user, initialView, onInitialViewConsumed }: InvoicesPageProps) {
   const { t, tc, td, language } = useTranslation();
@@ -2365,38 +2364,11 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const renderInvoiceList = () => (
     <div className="p-3 lg:p-6 space-y-4 lg:space-y-6">
       <PageHeader
-        title={currentView === 'received' ? (isDanish ? 'E-faktura Indbakke' : 'E-Invoice Inbox') : t('invoicesTitle')}
-        description={currentView === 'received' ? (isDanish ? 'Modtag og bogfør e-fakturaer (OIOUBL / Peppol BIS)' : 'Receive and book e-invoices (OIOUBL / Peppol BIS)') : t('manageInvoices')}
+        title={t('invoicesTitle')}
+        description={t('manageInvoices')}
         action={
           <div className="flex items-center gap-2">
-            {/* Tab toggle: Udgående / Indgående */}
-            <div className="hidden sm:flex items-center bg-white/10 lg:bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-0.5">
-              <button
-                type="button"
-                onClick={() => { setCurrentView('list'); }}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  currentView !== 'received'
-                    ? 'bg-[#0d9488] text-white shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}
-              >
-                {isDanish ? 'Udgående' : 'Outgoing'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setCurrentView('received'); }}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                  currentView === 'received'
-                    ? 'bg-[#0d9488] text-white shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}
-              >
-                <Inbox className="h-3.5 w-3.5" />
-                {isDanish ? 'Indgående' : 'Inbox'}
-              </button>
-            </div>
-            {currentView === 'list' && (
-              <Button
+            <Button
                 onClick={() => {
                   guardWriteAccess(isDanish ? 'Opret faktura' : 'Create invoice', () => {
                     if (!companyInfo) {
@@ -2411,7 +2383,6 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 <Plus className="h-4 w-4" />
                 {t('createInvoice')}
               </Button>
-            )}
           </div>
         }
       />
@@ -3102,7 +3073,6 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     <>
       {currentView === 'list' && renderInvoiceList()}
       {currentView === 'create' && renderCreateInvoice()}
-      {currentView === 'received' && <EInvoiceInbox user={user} />}
       {renderCompanySetupDialog()}
       {renderInvoicePreview()}
 
