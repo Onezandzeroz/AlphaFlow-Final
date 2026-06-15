@@ -38,7 +38,7 @@ export const POST = withGuard(
             where: { id: ctx.activeCompanyId },
             select: {
               id: true, name: true, cvrNumber: true, address: true, phone: true,
-              email: true, companyType: true,
+              email: true, companyType: true, bankIban: true, bankAccount: true,
             },
           })
         : null;
