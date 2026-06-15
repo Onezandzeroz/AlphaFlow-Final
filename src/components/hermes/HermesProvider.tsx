@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/lib/auth-store';
 import { HermesOverlay } from './HermesOverlay';
+import { HermesEnabledProvider } from './hermes-context';
 
-export function HermesProvider() {
+export function HermesProvider({ children }: { children?: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const [hermesEnabled, setHermesEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,14 +52,19 @@ export function HermesProvider() {
     return () => clearInterval(interval);
   }, [user?.activeCompanyId]);
 
-  if (isLoading || !hermesEnabled || !user?.activeCompanyId) return null;
-
+  // Always wrap children in the context provider so PageHeader/AppLayout
+  // can react to the Hermes enabled state even before the fetch completes.
   return (
-    <HermesOverlay
-      tenantId={user.activeCompanyId}
-      userId={user.id}
-      userName={user.businessName || user.email || 'Bruger'}
-      servicePort={3004}
-    />
+    <HermesEnabledProvider enabled={!isLoading && hermesEnabled && !!user?.activeCompanyId}>
+      {children}
+      {!isLoading && hermesEnabled && user?.activeCompanyId && (
+        <HermesOverlay
+          tenantId={user.activeCompanyId}
+          userId={user.id}
+          userName={user.businessName || user.email || 'Bruger'}
+          servicePort={3004}
+        />
+      )}
+    </HermesEnabledProvider>
   );
 }

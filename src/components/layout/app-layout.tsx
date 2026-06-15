@@ -13,6 +13,7 @@ import { MobileFab } from '@/components/mobile-fab';
 import { MobileBottomNav } from '@/components/mobile-bottom-nav';
 import { KeyboardShortcutsModal } from '@/components/keyboard-shortcuts-modal';
 import { UpgradeAccessModal } from '@/components/upgrade-access-modal';
+import { useHermesEnabled } from '@/components/hermes/hermes-context';
 import { SubscriptionPlansPrompt } from '@/components/dashboard/subscription-plans-prompt';
 import { NotificationCenter } from '@/components/notification-center';
 import { Button } from '@/components/ui/button';
@@ -129,6 +130,7 @@ export function AppLayout({
   children,
 }: AppLayoutProps) {
   const { darkMode, toggleDarkMode } = useDarkMode();
+  const hermesEnabled = useHermesEnabled();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -528,7 +530,7 @@ export function AppLayout({
           </div>
 
           {/* Right: Menu button (left of owl when Hermes enabled) */}
-          <div className="flex items-center justify-end w-1/3 pr-14">
+          <div className={cn("flex items-center justify-end w-1/3", hermesEnabled ? "pr-14" : "pr-2")}>
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="sm" className="lg:hidden shrink-0">

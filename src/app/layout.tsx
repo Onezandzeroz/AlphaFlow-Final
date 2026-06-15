@@ -81,9 +81,10 @@ export default function RootLayout({
         >
           <OfflineNotice />
           <PwaProvider>
-            {children}
+            <HermesProvider>
+              {children}
+            </HermesProvider>
           </PwaProvider>
-          <HermesProvider />
           <Toaster />
         </ThemeProvider>
       </body>

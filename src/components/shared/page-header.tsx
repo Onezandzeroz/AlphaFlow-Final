@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useLanguageStore } from '@/lib/language-store';
+import { useHermesEnabled } from '@/components/hermes/hermes-context';
 import {
   ChevronRight,
   Home,
@@ -32,6 +33,7 @@ export function PageHeader({
   breadcrumbs,
 }: PageHeaderProps) {
   const { language } = useLanguageStore();
+  const hermesEnabled = useHermesEnabled();
 
   return (
     <div className="animate-fade-in">
@@ -55,7 +57,12 @@ export function PageHeader({
       </div>
 
       {/* Desktop: teal gradient banner */}
-      <div className="hidden lg:block relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0d9488] via-[#14b8a6] to-[#5eead4] dark:from-[#0f766e] dark:via-[#0d6058] dark:to-[#0d9488] p-5 sm:p-7 lg:p-8 lg:pr-52">
+      <div className={cn(
+        "hidden lg:block relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#0d9488] via-[#14b8a6] to-[#5eead4] dark:from-[#0f766e] dark:via-[#0d6058] dark:to-[#0d9488] p-5 sm:p-7 lg:p-8",
+        // Reserve right padding for the Hermes owl when it's active;
+        // when inactive, the action buttons extend to the normal edge
+        hermesEnabled ? "lg:pr-52" : "lg:pr-8"
+      )}>
         {/* Decorative dot pattern */}
         <div
           className="absolute inset-0 opacity-[0.25]"
