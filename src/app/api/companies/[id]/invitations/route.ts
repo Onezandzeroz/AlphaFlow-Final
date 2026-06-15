@@ -97,6 +97,7 @@ export const POST = withGuard(guard.POST!, async (request, ctx, context) => {
       const userCompanyName = `${normalizedEmail.split('@')[0]} (privat)`;
       const existingCompany = await db.company.findFirst({
         where: { name: userCompanyName },
+        select: { id: true, name: true },
       });
       if (existingCompany) {
         return NextResponse.json(

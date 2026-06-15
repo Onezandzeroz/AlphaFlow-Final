@@ -11,8 +11,21 @@ const guard = routeConfig['/api/company'];
 // GET /api/company - Get active company info
 export const GET = withGuard(guard.GET!, async (request, ctx) => {
   try {
+    // Use explicit `select` to avoid failures when Prisma schema has columns
+    // that haven't been synced to the database yet (e.g. after adding new features).
     const company = await db.company.findUnique({
       where: { id: ctx.activeCompanyId! },
+      select: {
+        id: true, logo: true, name: true, address: true, phone: true,
+        email: true, cvrNumber: true, invoicePrefix: true,
+        bankName: true, bankAccount: true, bankRegistration: true,
+        bankIban: true, bankStreet: true, bankCity: true, bankCountry: true,
+        companyType: true, invoiceTerms: true, invoiceNotesTemplate: true,
+        nextInvoiceSequence: true, currentYear: true, isDemo: true, updatedAt: true,
+        // E-invoice / eDelivery fields for onboarding status detection
+        einvoiceEnabled: true, einvoiceRegistrationNo: true, einvoiceEndpointId: true,
+        einvoiceDeliveryMode: true, storecoveConnected: true,
+      },
     });
 
     // Auto-fix stale currentYear: if the DB value doesn't match the actual year,
@@ -22,9 +35,8 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
     if (company && company.currentYear !== new Date().getFullYear()) {
       await db.company.update({
         where: { id: company.id },
-        data: {
-          currentYear: new Date().getFullYear(),
-        },
+        data: { currentYear: new Date().getFullYear() },
+        select: { currentYear: true },
       });
       company.currentYear = new Date().getFullYear();
     }
@@ -85,6 +97,7 @@ export const POST = withGuard(guard.POST!, async (request, ctx) => {
     // Enforce unique company name — no two tenants may share a name
     const existingWithName = await db.company.findFirst({
       where: { name: companyName },
+      select: { id: true, name: true },
     });
     if (existingWithName) {
       return NextResponse.json(
@@ -180,6 +193,9 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
 
     const existing = await db.company.findUnique({
       where: { id: ctx.activeCompanyId! },
+      select: {
+        id: true, name: true, address: true, cvrNumber: true, phone: true,
+      },
     });
     if (!existing) {
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
@@ -189,6 +205,7 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
     if (companyName && companyName !== existing.name) {
       const nameTaken = await db.company.findFirst({
         where: { name: companyName },
+        select: { id: true, name: true },
       });
       if (nameTaken) {
         return NextResponse.json(

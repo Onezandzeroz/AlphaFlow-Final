@@ -34,7 +34,13 @@ export const POST = withGuard(
 
       // Fetch company info for supplier details
       const companyInfo = ctx.activeCompanyId
-        ? await db.company.findUnique({ where: { id: ctx.activeCompanyId } })
+        ? await db.company.findUnique({
+            where: { id: ctx.activeCompanyId },
+            select: {
+              id: true, name: true, cvrNumber: true, address: true, phone: true,
+              email: true, companyType: true,
+            },
+          })
         : null;
 
       // Parse line items

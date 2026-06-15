@@ -33,7 +33,15 @@ export const GET = withGuard(
 
       // Fetch company info for the current user (supplier details)
       const companyInfo = ctx.activeCompanyId
-        ? await db.company.findUnique({ where: { id: ctx.activeCompanyId } })
+        ? await db.company.findUnique({
+            where: { id: ctx.activeCompanyId },
+            select: {
+              id: true, name: true, cvrNumber: true, address: true, phone: true,
+              email: true, companyType: true, bankName: true, bankAccount: true,
+              bankRegistration: true, bankIban: true, bankStreet: true, bankCity: true,
+              bankCountry: true,
+            },
+          })
         : null;
 
       // Parse line items from JSON

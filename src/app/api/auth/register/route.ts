@@ -68,6 +68,7 @@ export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
 
     const existingCompany = await db.company.findFirst({
       where: { name: companyName },
+      select: { id: true, name: true },
     });
     if (existingCompany) {
       return NextResponse.json(

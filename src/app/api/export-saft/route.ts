@@ -53,7 +53,10 @@ export const GET = withGuard(
 
       // ── Company info ──
       const companyData = ctx.activeCompanyId
-        ? await db.company.findUnique({ where: { id: ctx.activeCompanyId } })
+        ? await db.company.findUnique({
+            where: { id: ctx.activeCompanyId },
+            select: { name: true, cvrNumber: true, address: true, email: true, phone: true },
+          })
         : null;
 
       const companyName = companyData?.name || ctx.businessName || ctx.email.split('@')[0];

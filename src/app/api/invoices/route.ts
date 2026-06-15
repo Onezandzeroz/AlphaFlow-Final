@@ -64,7 +64,14 @@ export const POST = withGuard(
       const total = subtotal + vatTotal;
 
         const companyInfo = ctx.activeCompanyId
-        ? await db.company.findUnique({ where: { id: ctx.activeCompanyId } })
+        ? await db.company.findUnique({
+            where: { id: ctx.activeCompanyId },
+            select: {
+              id: true, name: true, cvrNumber: true, address: true, phone: true,
+              email: true, invoicePrefix: true, nextInvoiceSequence: true, currentYear: true,
+              bankName: true, bankAccount: true, bankRegistration: true,
+            },
+          })
         : null;
       if (!companyInfo) {
         return NextResponse.json({ error: 'Company info not set up. Please set up company information first.' }, { status: 400 });

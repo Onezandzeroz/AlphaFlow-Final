@@ -25,7 +25,10 @@ export const POST = withGuard(routeConfig['/api/company/switch'].POST!, async (r
     }
 
     // Verify company exists and is active
-    const company = await db.company.findUnique({ where: { id: companyId } });
+    const company = await db.company.findUnique({
+      where: { id: companyId },
+      select: { id: true, name: true, isActive: true, isDemo: true, cvrNumber: true },
+    });
     if (!company || !company.isActive) {
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
