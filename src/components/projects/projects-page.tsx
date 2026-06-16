@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { toast } from 'sonner';
@@ -540,7 +540,7 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
                         ? 'ring-2 ring-offset-2 ring-offset-white dark:ring-offset-gray-950 scale-110'
                         : 'hover:scale-105'
                     )}
-                    style={{ backgroundColor: color, ringColor: color }}
+                    style={{ backgroundColor: color, '--tw-ring-color': color } as CSSProperties}
                   />
                 ))}
               </div>
