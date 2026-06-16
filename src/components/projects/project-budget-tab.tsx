@@ -278,7 +278,7 @@ export function ProjectBudgetTab({ projectId, companyId, user }: ProjectBudgetTa
 
       // Add edited entries
       for (const [accountId, months] of accountMap.entries()) {
-        const entry: Record<string, string | number> = { accountId };
+        const entry: { accountId: string; [month: string]: string | number } = { accountId };
         for (const month of MONTHS) {
           entry[month] = months[month] ?? 0;
         }
@@ -288,7 +288,7 @@ export function ProjectBudgetTab({ projectId, companyId, user }: ProjectBudgetTa
       // Add unedited existing entries so they're included in upsert
       for (const existing of entries) {
         if (!accountMap.has(existing.accountId)) {
-          const entry: Record<string, string | number> = { accountId: existing.accountId };
+          const entry: { accountId: string; [month: string]: string | number } = { accountId: existing.accountId };
           for (const month of MONTHS) {
             entry[month] = Number(existing.budget[month] || 0);
           }
