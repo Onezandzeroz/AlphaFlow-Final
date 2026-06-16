@@ -131,7 +131,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const { t, tc, language } = useTranslation();
   const isDa = language === 'da';
   const { handleMutationError } = useAccessErrorHandler();
-  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
+  const activeCompanyId = useAuthStore((s) => s.user?.activeCompanyId);
 
   // ─── State ───
   const [isLoading, setIsLoading] = useState(false);
