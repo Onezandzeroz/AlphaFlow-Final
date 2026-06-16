@@ -2142,7 +2142,6 @@ export const translations = {
   revenue: { da: 'Indtægter', en: 'Revenue' },
   expenses: { da: 'Udgifter', en: 'Expenses' },
   result: { da: 'Resultat', en: 'Result' },
-  allStatuses: { da: 'Alle statusser', en: 'All statuses' },
   searchProjects: { da: 'Søg projekter...', en: 'Search projects...' },
   backToProjects: { da: 'Tilbage til projekter', en: 'Back to projects' },
   projectCancelled: { da: 'Annulleret', en: 'Cancelled' },
