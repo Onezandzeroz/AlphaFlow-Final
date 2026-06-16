@@ -42,10 +42,11 @@ import { SwipeViewContainer } from '@/components/swipe-view-container';
 import { ReceiptScanner } from '@/components/scanner/ReceiptScanner';
 import { TermsOfServicePage } from '@/components/legal/terms-of-service';
 import { AnnualReportPage } from '@/components/annual-report/annual-report-page';
+import { ProjectsPage } from '@/components/projects/projects-page';
 
-type View = 'dashboard' | 'transactions' | 'vat-report' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
+type View = 'dashboard' | 'transactions' | 'vat-report' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
 
-const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'vat-report', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'year-end', 'aging', 'cash-flow', 'recurring', 'budget', 'settings', 'settings-company', 'settings-edelivery', 'annual-report'];
+const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'vat-report', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'year-end', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report'];
 
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
 function getInitialView(): View {
@@ -605,6 +606,8 @@ export default function Home() {
         return <CompanySettingsPage user={user} onNavigate={(navView) => navigateToView(navView as View)} />;
       case 'settings-edelivery':
         return <EInvoiceSettingsPage user={user} onNavigate={(navView) => { if (isCurrent) setOnboardingStepJustDone(3); navigateToView(navView as View); }} />;
+      case 'projects':
+        return <ProjectsPage user={user} />;
       case 'annual-report':
         return <AnnualReportPage user={user} />;
       default:

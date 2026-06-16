@@ -46,6 +46,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
+import { ProjectSelector } from '@/components/projects/project-selector';
 import {
   FileText,
   Plus,
@@ -213,6 +214,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
   const [formDescription, setFormDescription] = useState('');
   const [formReference, setFormReference] = useState('');
   const [formLines, setFormLines] = useState<JournalLineInput[]>([createEmptyLine()]);
+  const [formProjectId, setFormProjectId] = useState<string | null>(null);
 
   // Account options
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
@@ -332,6 +334,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
   const closeDialog = useCallback(() => {
     setDialogOpen(false);
     setEditingEntry(null);
+    setFormProjectId(null);
   }, []);
 
   // ─── Line Management ────────────────────────────────────────────────────
@@ -427,6 +430,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
           debit: parseFloat(l.debit) || 0,
           credit: parseFloat(l.credit) || 0,
           description: l.description || undefined,
+          projectId: formProjectId || undefined,
         }));
 
       if (payloadLines.length < 2) return;
@@ -486,7 +490,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
     } finally {
       setDialogLoading(false);
     }
-  }, [editingEntry, formDate, formDescription, formReference, formLines, closeDialog, fetchEntries, handleMutationError, isDanish]);
+  }, [editingEntry, formDate, formDescription, formReference, formLines, formProjectId, closeDialog, fetchEntries, handleMutationError, isDanish]);
 
   // ─── Cancel Entry ──────────────────────────────────────────────────────
 
@@ -1079,6 +1083,19 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                     className="bg-gray-50 dark:bg-white/5"
                   />
                 </div>
+              </div>
+
+              {/* Project selector - applies to all lines */}
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {isDanish ? 'Projekt' : 'Project'}
+                  <span className="text-gray-400 dark:text-gray-500 ml-1">({isDanish ? 'valgfrit, gælder alle linjer' : 'optional, applies to all lines'})</span>
+                </Label>
+                <ProjectSelector
+                  value={formProjectId || undefined}
+                  onChange={setFormProjectId}
+                  companyId={user.activeCompanyId || ''}
+                />
               </div>
 
               <Separator className="dark:bg-gray-800" />

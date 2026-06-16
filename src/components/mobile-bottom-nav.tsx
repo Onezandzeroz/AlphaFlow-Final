@@ -8,7 +8,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 
-type View = 'dashboard' | 'transactions' | 'invoices' | 'reports' | 'settings' | 'vat-report' | 'exports' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'settings-company' | 'settings-edelivery';
+type View = 'dashboard' | 'transactions' | 'invoices' | 'reports' | 'settings' | 'vat-report' | 'exports' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings-company' | 'settings-edelivery';
 
 interface MobileBottomNavProps {
   currentView: string;
@@ -36,7 +36,7 @@ const navItems: NavItem[] = [
     labelDa: 'Indkøb & Kvittering',
     labelEn: 'Purchases & Receipts',
     icon: List,
-    matchViews: ['transactions', 'bank-recon', 'recurring'],
+    matchViews: ['transactions', 'bank-recon', 'recurring', 'projects'],
   },
   {
     key: 'invoices',

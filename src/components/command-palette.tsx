@@ -36,6 +36,7 @@ import {
   FolderOpen,
   BookCheck,
   FileBarChart,
+  Briefcase,
   ShieldCheck,
   Settings,
   Search,
@@ -66,6 +67,7 @@ type View =
   | 'cash-flow'
   | 'recurring'
   | 'budget'
+  | 'projects'
   | 'settings'
   | 'settings-edelivery';
 
@@ -103,6 +105,7 @@ const NAV_SECTIONS: NavSectionDef[] = [
       { id: 'transactions', nameDa: 'Indkøb & Kvittering', nameEn: 'Purchases & Receipts', icon: Receipt },
       { id: 'invoices', nameDa: 'Salg & Faktura', nameEn: 'Sales & Invoice', icon: FileText },
       { id: 'contacts', nameDa: 'Kontakter', nameEn: 'Contacts', icon: Users },
+      { id: 'projects', nameDa: 'Projekter', nameEn: 'Projects', icon: Briefcase },
     ],
   },
   {

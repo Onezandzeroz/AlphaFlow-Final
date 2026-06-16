@@ -51,12 +51,14 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   { id: 'saft-export',          labelDa: 'SAF-T Eksport',            labelEn: 'SAF-T Export',           icon: 'Shield',        defaultVisible: false, defaultSize: 'half',    section: 'details' },
   { id: 'ai-categorization',    labelDa: 'AI-Kategorisering',        labelEn: 'AI Categorization',      icon: 'Sparkles',      defaultVisible: false, defaultSize: 'half',    section: 'details' },
   { id: 'financial-health-detail',labelDa: 'Økonomisk Sundhed Detail',labelEn: 'Health Detail',        icon: 'Droplets',      defaultVisible: false, defaultSize: 'third',   section: 'details' },
+  { id: 'project-summary', labelDa: 'Aktive projekter', labelEn: 'Active Projects', icon: 'Briefcase', defaultVisible: false, defaultSize: 'half', section: 'details' },
+  { id: 'project-profit',  labelDa: 'Projektresultat',   labelEn: 'Project Result',    icon: 'Briefcase', defaultVisible: false, defaultSize: 'half', section: 'charts' },
 ];
 
 // ─── Defaults version ──────────────────────────────────────────
 // Bump this when code-level defaults change (visibility, order, column layout).
 // The Zustand store compares this against localStorage to detect stale cache.
-export const WIDGET_DEFAULTS_VERSION = 4;
+export const WIDGET_DEFAULTS_VERSION = 5;
 
 export function getDefaultVisibilityMap(): Record<string, boolean> {
   const map: Record<string, boolean> = {};

@@ -40,6 +40,8 @@ import { toast } from 'sonner';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useScannerStore } from '@/lib/scanner-store';
 import { useOcr, type OCRResult } from '@/lib/ocr';
+import { useAuthStore } from '@/lib/auth-store';
+import { ProjectSelector } from '@/components/projects/project-selector';
 
 const CURRENCIES = ['DKK', 'EUR', 'USD', 'GBP', 'SEK', 'NOK'] as const;
 
@@ -129,6 +131,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const { t, tc, language } = useTranslation();
   const isDa = language === 'da';
   const { handleMutationError } = useAccessErrorHandler();
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
 
   // ─── State ───
   const [isLoading, setIsLoading] = useState(false);
@@ -159,6 +162,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const [receiptNaturalWidth, setReceiptNaturalWidth] = useState<number | null>(null);
   const [originalWasPdf, setOriginalWasPdf] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
+  const [projectId, setProjectId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const preloadedConsumedRef = useRef(false);
   const lastConsumedScanIdRef = useRef<number>(0);
@@ -698,6 +702,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           vatPercent: txVatPercent,
           receiptImage: receiptImagePath,
           accountId: txAccountId,
+          projectId: projectId || undefined,
         }),
       });
 
@@ -763,6 +768,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       setDescription('');
       setVatPercent('25');
       setSelectedAccountId('');
+      setProjectId(null);
       setPurchaseLines([{ ...EMPTY_LINE_ITEM }]);
       resetOCR();
       clearReceipt();
@@ -1367,6 +1373,21 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         {renderVatCurrency()}
         {renderExchangeRate()}
         {renderAccountSelect()}
+        {/* Project selector */}
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-[#0d9488] dark:text-[#2dd4bf]" />
+            <Label className="dark:text-gray-300 text-sm font-medium">
+              {isDa ? 'Projekt' : 'Project'}
+            </Label>
+            <span className="text-[10px] text-gray-400 ml-1">({isDa ? 'valgfrit' : 'optional'})</span>
+          </div>
+          <ProjectSelector
+            value={projectId || undefined}
+            onChange={setProjectId}
+            companyId={activeCompanyId || ''}
+          />
+        </div>
         {renderReceiptUpload()}
         {renderDescription()}
         {renderSubmit()}
@@ -1530,6 +1551,24 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
 
             {/* ── 4. Fra konto ── */}
             {renderAccountSelect(!receiptCardHasData)}
+
+            <div className="border-t border-gray-100 dark:border-white/5" />
+
+            {/* ── 5. Projekt ── */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-[#0d9488] dark:text-[#2dd4bf]" />
+                <Label className="dark:text-gray-300 text-sm font-medium">
+                  {isDa ? 'Projekt' : 'Project'}
+                </Label>
+                <span className="text-[10px] text-gray-400 ml-1">({isDa ? 'valgfrit' : 'optional'})</span>
+              </div>
+              <ProjectSelector
+                value={projectId || undefined}
+                onChange={setProjectId}
+                companyId={activeCompanyId || ''}
+              />
+            </div>
           </CardContent>
         </Card>
 

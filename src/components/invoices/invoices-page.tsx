@@ -118,6 +118,7 @@ import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown
 import { SendInvoiceDialog } from '@/components/invoices/send-invoice-dialog';
 import { SendEInvoiceDialog } from '@/components/invoices/send-einvoice-dialog';
 import { EInvoiceSendStatus } from '@/components/invoices/einvoice-send-status';
+import { ProjectSelector } from '@/components/projects/project-selector';
 
 // Types
 interface CompanyInfo {
@@ -232,6 +233,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   // Contact state (for invoice creation)
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [selectedContactId, setSelectedContactId] = useState<string>('');
+  const [invoiceProjectId, setInvoiceProjectId] = useState<string | null>(null);
   const [contactTypeFilter, setContactTypeFilter] = useState<'CUSTOMER' | 'SUPPLIER' | 'ALL'>('CUSTOMER');
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
 
@@ -541,6 +543,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           dueDate: invoiceForm.dueDate,
           lineItems: invoiceForm.lineItems.filter(item => item.description.trim()),
           notes: invoiceForm.notes || null,
+          projectId: invoiceProjectId || undefined,
           // Only update status when editing a draft back to draft
           ...(isEditing ? { status: 'DRAFT' } : {}),
         }),
@@ -579,6 +582,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       });
 
       setSelectedContactId('');
+      setInvoiceProjectId(null);
       fetchInvoices();
       fetchCompanyInfo(); // Refresh to get updated nextInvoiceSequence
       setCurrentView('list');
@@ -587,7 +591,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     } finally {
       setIsSubmitting(false);
     }
-  }, [companyInfo, invoiceForm, editingInvoiceId, t, language, fetchInvoices, fetchCompanyInfo, handleMutationError]);
+  }, [companyInfo, invoiceForm, editingInvoiceId, invoiceProjectId, t, language, fetchInvoices, fetchCompanyInfo, handleMutationError]);
 
   // Delete invoice
   const handleDeleteInvoice = useCallback(async (id: string) => {
@@ -709,6 +713,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       lineItems: items.length > 0 ? items : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
       notes: invoice.notes || '',
     });
+    setInvoiceProjectId(null);
     setCurrentView('create');
   }, []);
 
@@ -1826,6 +1831,19 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 </PopoverContent>
               </Popover>
             </div>
+          </div>
+
+          {/* Project selector */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {language === 'da' ? 'Projekt' : 'Project'}
+              <span className="text-[10px] text-gray-400 ml-1">({language === 'da' ? 'valgfrit' : 'optional'})</span>
+            </Label>
+            <ProjectSelector
+              value={invoiceProjectId || undefined}
+              onChange={setInvoiceProjectId}
+              companyId={user.activeCompanyId || ''}
+            />
           </div>
 
           {selectedContactId && (
