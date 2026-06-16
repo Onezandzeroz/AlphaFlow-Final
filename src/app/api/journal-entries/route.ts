@@ -162,13 +162,14 @@ export const POST = withGuard(
             userId: ctx.id,
             companyId: ctx.activeCompanyId!,
             lines: {
-              create: lines.map((l: { accountId: string; debit: number; credit: number; description?: string; vatCode?: string }) => ({
+              create: lines.map((l: { accountId: string; debit: number; credit: number; description?: string; vatCode?: string; projectId?: string }) => ({
                 companyId: ctx.activeCompanyId!,
                 accountId: l.accountId,
                 debit: l.debit,
                 credit: l.credit,
                 description: l.description || null,
                 vatCode: (l.vatCode as VATCode | undefined) ?? null,
+                projectId: l.projectId ?? null,
               })),
             },
           },

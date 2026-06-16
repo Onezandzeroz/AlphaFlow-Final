@@ -41,6 +41,7 @@ export const POST = withGuard(
         lineItems,
         notes,
         status,
+        projectId,
       } = body;
 
       if (!customerName || !issueDate || !dueDate || !lineItems || !Array.isArray(lineItems) || lineItems.length === 0) {
@@ -102,6 +103,7 @@ export const POST = withGuard(
             total,
             status: 'DRAFT', // Always create as DRAFT; use PUT to change status
             notes: notes || null,
+            projectId: projectId || null,
             userId: ctx.id,
             companyId: ctx.activeCompanyId!,
           },

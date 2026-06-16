@@ -70,7 +70,7 @@ export const POST = withGuard({
 }, async (request, ctx) => {
   try {
     const body = await request.json();
-    const { type, date, amount, description, vatPercent, receiptImage, accountId } = body;
+    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId } = body;
 
     if (!date || !amount || !description) {
       return NextResponse.json(
@@ -147,24 +147,24 @@ export const POST = withGuard({
         ]);
 
         if (bankAccount) {
-          const jeLines: Array<{ accountId: string; debit: number; credit: number; description: string; vatCode: VATCode | null; companyId: string }> = [];
+          const jeLines: Array<{ accountId: string; debit: number; credit: number; description: string; vatCode: VATCode | null; companyId: string; projectId: string | null }> = [];
 
           // Debit expense account (net amount)
           // NOTE: Expense lines must NOT have a vatCode — only the dedicated INPUT_VAT
           // account lines (5410/5420) carry vatCode. The vat-register filters by
           // account.group, so tagging expense lines would inflate input VAT totals.
           if (expenseAccount) {
-            jeLines.push({ accountId: expenseAccount.id, debit: netAmount, credit: 0, description, vatCode: null, companyId: ctx.activeCompanyId! });
+            jeLines.push({ accountId: expenseAccount.id, debit: netAmount, credit: 0, description, vatCode: null, companyId: ctx.activeCompanyId!, projectId: projectId || null });
           }
 
           // Debit input VAT account (VAT amount)
           if (inputVatAccount && vatAmount > 0) {
             const vatCode: VATCode = vatPct === 25 ? 'K25' : vatPct === 12 ? 'K12' : 'K0';
-            jeLines.push({ accountId: inputVatAccount.id, debit: Math.round(vatAmount * 100) / 100, credit: 0, description: `${description} – Indgående moms ${vatPct}%`, vatCode, companyId: ctx.activeCompanyId! });
+            jeLines.push({ accountId: inputVatAccount.id, debit: Math.round(vatAmount * 100) / 100, credit: 0, description: `${description} – Indgående moms ${vatPct}%`, vatCode, companyId: ctx.activeCompanyId!, projectId: null });
           }
 
           // Credit bank account (gross amount)
-          jeLines.push({ accountId: bankAccount.id, debit: 0, credit: Math.round(grossAmount * 100) / 100, description: `${description} – Betaling`, vatCode: null, companyId: ctx.activeCompanyId! });
+          jeLines.push({ accountId: bankAccount.id, debit: 0, credit: Math.round(grossAmount * 100) / 100, description: `${description} – Betaling`, vatCode: null, companyId: ctx.activeCompanyId!, projectId: null });
 
           // Only create if balanced (2 or more lines and debit === credit)
           const totalDebit = jeLines.reduce((s, l) => s + l.debit, 0);
@@ -181,7 +181,7 @@ export const POST = withGuard({
                     status: 'POSTED',
                     userId: ctx.id,
                     companyId: ctx.activeCompanyId!,
-                    lines: { create: jeLines.map(l => ({ companyId: l.companyId, account: { connect: { id: l.accountId } }, debit: l.debit, credit: l.credit, description: l.description, vatCode: l.vatCode })) },
+                    lines: { create: jeLines.map(l => ({ companyId: l.companyId, account: { connect: { id: l.accountId } }, debit: l.debit, credit: l.credit, description: l.description, vatCode: l.vatCode, projectId: l.projectId })) },
                   },
                 });
                 // Assign voucher number for POSTED journal entry

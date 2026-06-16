@@ -46,6 +46,7 @@ export const GET = withGuard(
       const type = searchParams.get('type');
       const fromStr = searchParams.get('from');
       const toStr = searchParams.get('to');
+      const projectIdFilter = searchParams.get('projectId');
 
       if (!type || (!['income-statement', 'balance-sheet'].includes(type))) {
         return NextResponse.json(
@@ -72,7 +73,7 @@ export const GET = withGuard(
       }
 
       if (type === 'income-statement') {
-        return generateIncomeStatement(ctx, fromStr, toStr, toDate);
+        return generateIncomeStatement(ctx, fromStr, toStr, toDate, projectIdFilter);
       } else {
         return generateBalanceSheet(ctx, toStr, toDate);
       }
@@ -92,7 +93,8 @@ async function generateIncomeStatement(
   ctx: AuthContext,
   fromStr: string | null,
   toStr: string,
-  toDate: Date
+  toDate: Date,
+  projectIdFilter: string | null
 ) {
   if (!fromStr) {
     return NextResponse.json(
@@ -109,6 +111,12 @@ async function generateIncomeStatement(
     );
   }
 
+  // Build line filter for projectId if specified
+  const lineWhere: Record<string, unknown> = {};
+  if (projectIdFilter) {
+    lineWhere.projectId = projectIdFilter;
+  }
+
   // Fetch POSTED, non-cancelled journal entries in the period
   const entries = await db.journalEntry.findMany({
     where: {
@@ -122,6 +130,7 @@ async function generateIncomeStatement(
     },
     include: {
       lines: {
+        where: lineWhere,
         include: {
           account: true,
         },
