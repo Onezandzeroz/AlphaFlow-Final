@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { toast } from 'sonner';
@@ -47,6 +47,9 @@ import {
 } from '@/components/ui/table';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft } from '@/lib/draft-store';
 import { ProjectBudgetTab } from './project-budget-tab';
 import {
   ArrowLeft,
@@ -180,6 +183,35 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
   // Contacts for form
   const [contacts, setContacts] = useState<ContactOption[]>([]);
 
+  // ── Draft persistence (edit project form) ──
+  const editDraftKey = `project:edit:${projectId}`;
+  const { clearDraft: clearEditDraft } = useDraftSync(
+    editDraftKey,
+    { ...formData },
+    {
+      label: isDa ? 'Rediger projekt' : 'Edit project',
+      disabled: !isEditOpen,
+    }
+  );
+
+  // ── Dirty tracking + safety-net guard ──
+  const loadedEditStateRef = useRef<ProjectFormData | null>(null);
+  const isEditDirty = isEditOpen && loadedEditStateRef.current !== null && (
+    formData.name !== loadedEditStateRef.current.name ||
+    formData.code !== loadedEditStateRef.current.code ||
+    formData.description !== loadedEditStateRef.current.description ||
+    formData.color !== loadedEditStateRef.current.color ||
+    formData.status !== loadedEditStateRef.current.status ||
+    formData.startDate !== loadedEditStateRef.current.startDate ||
+    formData.endDate !== loadedEditStateRef.current.endDate ||
+    formData.budgetTotal !== loadedEditStateRef.current.budgetTotal ||
+    formData.customerId !== loadedEditStateRef.current.customerId
+  );
+  const editGuard = useWarnOnUnsaved(isEditDirty, {
+    onConfirmDiscard: () => { clearEditDraft(); setIsEditOpen(false); },
+    window: false,
+  });
+
   // ── Fetch project detail ──
   const fetchProject = useCallback(async () => {
     setIsLoading(true);
@@ -238,7 +270,7 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
   const openEdit = () => {
     guardWriteAccess(isDa ? 'Rediger projekt' : 'Edit project', () => {
       if (!project) return;
-      setFormData({
+      const serverForm: ProjectFormData = {
         name: project.name,
         code: project.code || '',
         description: project.description || '',
@@ -248,7 +280,26 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
         endDate: project.endDate ? project.endDate.split('T')[0] : '',
         budgetTotal: project.budgetTotal ? String(project.budgetTotal) : '',
         customerId: project.customerId || '',
-      });
+      };
+      // Merge any existing draft over server data (user edits win).
+      const draft = readDraft(`project:edit:${projectId}`);
+      let initial = serverForm;
+      if (draft?.data) {
+        const d = draft.data as Partial<ProjectFormData>;
+        initial = {
+          name: typeof d.name === 'string' ? d.name : serverForm.name,
+          code: typeof d.code === 'string' ? d.code : serverForm.code,
+          description: typeof d.description === 'string' ? d.description : serverForm.description,
+          color: typeof d.color === 'string' ? d.color : serverForm.color,
+          status: typeof d.status === 'string' ? d.status : serverForm.status,
+          startDate: typeof d.startDate === 'string' ? d.startDate : serverForm.startDate,
+          endDate: typeof d.endDate === 'string' ? d.endDate : serverForm.endDate,
+          budgetTotal: typeof d.budgetTotal === 'string' ? d.budgetTotal : serverForm.budgetTotal,
+          customerId: typeof d.customerId === 'string' ? d.customerId : serverForm.customerId,
+        };
+      }
+      setFormData(initial);
+      loadedEditStateRef.current = initial;
       fetchContacts();
       setIsEditOpen(true);
     });
@@ -289,6 +340,8 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
       }
 
       setIsEditOpen(false);
+      clearEditDraft();
+      loadedEditStateRef.current = null;
       toast.success(isDa ? 'Projekt opdateret' : 'Project updated');
       fetchProject();
     } catch (err) {
@@ -752,7 +805,7 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
 
       {/* ── Edit Dialog ── */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto" {...editGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle>{t('projectEdit')}</DialogTitle>
             <DialogDescription>

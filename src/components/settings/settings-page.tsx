@@ -20,6 +20,8 @@ import { OversightSettings } from '@/components/settings/oversight-settings';
 import { AccessSettings } from '@/components/settings/access-settings';
 import { HermesSettings } from '@/components/settings/hermes-settings';
 import { EInvoiceSettings } from '@/components/settings/einvoice-settings';
+import { DraftRecoveryBanner } from '@/components/settings/draft-recovery-banner';
+import { useDraftStore } from '@/lib/draft-store';
 import { toast } from 'sonner';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import {
@@ -38,6 +40,7 @@ import {
   KeyRound,
   Bot,
   FileSpreadsheet,
+  FileEdit,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -72,7 +75,7 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
     if (typeof window === 'undefined') return 'company';
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    return tab && ['company', 'account', 'defaults', 'access', 'hermes', 'oversight'].includes(tab) ? tab : 'company';
+    return tab && ['company', 'account', 'defaults', 'access', 'hermes', 'oversight', 'drafts'].includes(tab) ? tab : 'company';
   });
 
   const [prefs, setPrefs] = useState<UserPreferences>({
@@ -86,6 +89,9 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
 
   const [originalPrefs, setOriginalPrefs] = useState<UserPreferences | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Live count of saved drafts — drives the badge on the Drafts tab.
+  const draftCount = useDraftStore((s) => Object.keys(s.drafts).length);
 
   // ── Fetch preferences ──
   const fetchPreferences = useCallback(async () => {
@@ -122,7 +128,7 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get('tab');
-      if (tab && ['company', 'account', 'defaults', 'access', 'hermes', 'oversight'].includes(tab)) {
+      if (tab && ['company', 'account', 'defaults', 'access', 'hermes', 'oversight', 'drafts'].includes(tab)) {
         setActiveTab(tab);
       }
     };
@@ -288,6 +294,18 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
           >
             <KeyRound className="h-4 w-4" />
             <span className="hidden sm:inline">{language === 'da' ? 'Adgang' : 'Access'}</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="drafts"
+            className="gap-2 rounded-lg data-[state=active]:bg-teal-50 data-[state=active]:text-[#0d9488] data-[state=active]:shadow-sm data-[state=active]:shadow-[#0d9488]/20 data-[state=active]:border data-[state=active]:border-[#0d9488]/20 transition-all relative"
+          >
+            <FileEdit className="h-4 w-4" />
+            <span className="hidden sm:inline">{language === 'da' ? 'Udkast' : 'Drafts'}</span>
+            {draftCount > 0 && (
+              <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[10px] font-semibold flex items-center justify-center">
+                {draftCount}
+              </span>
+            )}
           </TabsTrigger>
           <TabsTrigger
             value="hermes"
@@ -548,6 +566,11 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
         {/* ═══ ACCESS TAB ═══ */}
         <TabsContent value="access" className="border-l-4 border-[#0d9488] dark:border-[#2dd4bf] pl-4">
           <AccessSettings userId={user.id} />
+        </TabsContent>
+
+        {/* ═══ DRAFTS TAB (unsaved form input recovery) ═══ */}
+        <TabsContent value="drafts" className="border-l-4 border-amber-400 dark:border-amber-600 pl-4">
+          <DraftRecoveryBanner />
         </TabsContent>
 
         {/* ═══ HERMES AI TAB ═══ */}

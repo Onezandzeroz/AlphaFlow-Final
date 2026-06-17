@@ -46,6 +46,9 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { format, formatDistanceToNow } from 'date-fns';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft } from '@/lib/draft-store';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -158,6 +161,100 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
     bankCountry: '',
     invoiceTerms: DEFAULT_INVOICE_TERMS,
     invoiceNotesTemplate: '',
+  });
+
+  // ── Draft persistence (input retention) ──
+  // Persist all editable text fields (logo is excluded — it's a multi-MB base64
+  // data URL that would blow the localStorage quota; the user can re-upload it).
+  // `disabled` while the initial fetch is in-flight so we never persist the empty
+  // initial form before the server data arrives. Restore is performed in a
+  // dedicated useEffect below — the hook's onRestore only fires once on mount
+  // (i.e. the page-load moment), which is BEFORE the server data has loaded, so
+  // it would be overwritten by fetchCompanyInfo. The useEffect approach merges
+  // the draft over the freshly-loaded server data (user edits win).
+  const { clearDraft: clearCompanyDraft } = useDraftSync(
+    'company-settings',
+    {
+      companyName: form.companyName,
+      address: form.address,
+      phone: form.phone,
+      email: form.email,
+      cvrNumber: form.cvrNumber,
+      companyType: form.companyType,
+      invoicePrefix: form.invoicePrefix,
+      bankName: form.bankName,
+      bankAccount: form.bankAccount,
+      bankRegistration: form.bankRegistration,
+      bankIban: form.bankIban,
+      bankStreet: form.bankStreet,
+      bankCity: form.bankCity,
+      bankCountry: form.bankCountry,
+      invoiceTerms: form.invoiceTerms,
+      invoiceNotesTemplate: form.invoiceNotesTemplate,
+    },
+    {
+      label: 'Company settings',
+      disabled: isLoading,
+    }
+  );
+
+  // Apply the saved draft ONCE after the initial server fetch completes so user
+  // edits win over the server-loaded defaults. (On subsequent data refreshes —
+  // e.g. after a successful save — the draft has already been cleared, so this
+  // is a no-op.)
+  const companyDraftAppliedRef = useRef(false);
+  useEffect(() => {
+    if (isLoading || companyDraftAppliedRef.current) return;
+    companyDraftAppliedRef.current = true;
+    const draft = readDraft('company-settings');
+    const d = draft?.data as
+      | {
+          companyName?: unknown;
+          address?: unknown;
+          phone?: unknown;
+          email?: unknown;
+          cvrNumber?: unknown;
+          companyType?: unknown;
+          invoicePrefix?: unknown;
+          bankName?: unknown;
+          bankAccount?: unknown;
+          bankRegistration?: unknown;
+          bankIban?: unknown;
+          bankStreet?: unknown;
+          bankCity?: unknown;
+          bankCountry?: unknown;
+          invoiceTerms?: unknown;
+          invoiceNotesTemplate?: unknown;
+        }
+      | undefined;
+    if (!d) return;
+    setForm((prev) => ({
+      ...prev,
+      companyName: typeof d.companyName === 'string' ? d.companyName : prev.companyName,
+      address: typeof d.address === 'string' ? d.address : prev.address,
+      phone: typeof d.phone === 'string' ? d.phone : prev.phone,
+      email: typeof d.email === 'string' ? d.email : prev.email,
+      cvrNumber: typeof d.cvrNumber === 'string' ? d.cvrNumber : prev.cvrNumber,
+      companyType: typeof d.companyType === 'string' ? d.companyType : prev.companyType,
+      invoicePrefix: typeof d.invoicePrefix === 'string' ? d.invoicePrefix : prev.invoicePrefix,
+      bankName: typeof d.bankName === 'string' ? d.bankName : prev.bankName,
+      bankAccount: typeof d.bankAccount === 'string' ? d.bankAccount : prev.bankAccount,
+      bankRegistration: typeof d.bankRegistration === 'string' ? d.bankRegistration : prev.bankRegistration,
+      bankIban: typeof d.bankIban === 'string' ? d.bankIban : prev.bankIban,
+      bankStreet: typeof d.bankStreet === 'string' ? d.bankStreet : prev.bankStreet,
+      bankCity: typeof d.bankCity === 'string' ? d.bankCity : prev.bankCity,
+      bankCountry: typeof d.bankCountry === 'string' ? d.bankCountry : prev.bankCountry,
+      invoiceTerms: typeof d.invoiceTerms === 'string' ? d.invoiceTerms : prev.invoiceTerms,
+      invoiceNotesTemplate: typeof d.invoiceNotesTemplate === 'string' ? d.invoiceNotesTemplate : prev.invoiceNotesTemplate,
+    }));
+  }, [isLoading]);
+
+  // ── Safety net: warn on unsaved changes (page form — beforeunload protects tab/nav close) ──
+  useWarnOnUnsaved(hasChanges, {
+    onConfirmDiscard: () => {
+      clearCompanyDraft();
+    },
+    window: true,
   });
 
   // ── Validation ──
@@ -381,6 +478,8 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
           setHasChanges(false);
           setErrors({});
         }
+        // Clear the persisted draft now that the save succeeded.
+        clearCompanyDraft();
         toast.success(language === 'da' ? 'Indstillinger gemt!' : 'Settings Saved!', {
           description: language === 'da' ? 'Virksomhedsoplysningerne er opdateret.' : 'Company information has been updated.',
         });
@@ -405,7 +504,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
     } finally {
       setIsSaving(false);
     }
-  }, [form, companyInfo, language, validationErrors, handleMutationError]);
+  }, [form, companyInfo, language, validationErrors, handleMutationError, clearCompanyDraft]);
 
   // ── Loading skeleton ──
   if (isLoading) {

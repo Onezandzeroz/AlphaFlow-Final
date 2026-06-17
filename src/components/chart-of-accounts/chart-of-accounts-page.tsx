@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { toast } from 'sonner';
@@ -52,6 +52,9 @@ import {
 import { PageHeader } from '@/components/shared/page-header';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft } from '@/lib/draft-store';
 import {
   BookOpen,
   Search,
@@ -335,6 +338,53 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
   // Tab state
   const [activeTab, setActiveTab] = useState<'accounts' | 'mapping' | 'vat' | 'guide'>('accounts');
 
+  // ── Draft persistence (add + edit account forms) ──
+  const { clearDraft: clearAddDraft } = useDraftSync(
+    'account:new',
+    { ...formData },
+    {
+      label: isDanish ? 'Ny konto' : 'New account',
+      disabled: !showAddDialog,
+    }
+  );
+  const editDraftKey = editAccount ? `account:edit:${editAccount.id}` : 'account:edit:none';
+  const { clearDraft: clearEditDraft } = useDraftSync(
+    editDraftKey,
+    { ...formData },
+    {
+      label: isDanish ? 'Rediger konto' : 'Edit account',
+      disabled: !editAccount,
+    }
+  );
+
+  // ── Dirty tracking + safety-net guard ──
+  const loadedEditStateRef = useRef<AccountFormData | null>(null);
+  const isAddDirty = showAddDialog && (
+    formData.number.trim() !== '' ||
+    formData.name.trim() !== '' ||
+    formData.nameEn.trim() !== '' ||
+    formData.type !== '' ||
+    formData.group !== '' ||
+    formData.description.trim() !== '' ||
+    formData.postingGuide.trim() !== ''
+  );
+  const isEditDirty = !!editAccount && loadedEditStateRef.current !== null && (
+    formData.name !== loadedEditStateRef.current.name ||
+    formData.nameEn !== loadedEditStateRef.current.nameEn ||
+    formData.type !== loadedEditStateRef.current.type ||
+    formData.group !== loadedEditStateRef.current.group ||
+    formData.description !== loadedEditStateRef.current.description ||
+    formData.postingGuide !== loadedEditStateRef.current.postingGuide
+  );
+  const addGuard = useWarnOnUnsaved(isAddDirty, {
+    onConfirmDiscard: () => { clearAddDraft(); setShowAddDialog(false); },
+    window: false,
+  });
+  const editGuard = useWarnOnUnsaved(isEditDirty, {
+    onConfirmDiscard: () => { clearEditDraft(); setEditAccount(null); },
+    window: false,
+  });
+
   // ─── Data Fetching ────────────────────────────────────────────────────
 
   const fetchAccounts = useCallback(async () => {
@@ -451,14 +501,28 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
 
   const openAddDialog = () => {
     guardWriteAccess(isDanish ? 'Opret konto' : 'Create account', () => {
-      setFormData(EMPTY_FORM);
+      const draft = readDraft('account:new');
+      if (draft?.data) {
+        const d = draft.data as Partial<AccountFormData>;
+        setFormData({
+          number: typeof d.number === 'string' ? d.number : '',
+          name: typeof d.name === 'string' ? d.name : '',
+          nameEn: typeof d.nameEn === 'string' ? d.nameEn : '',
+          type: typeof d.type === 'string' ? d.type : '',
+          group: typeof d.group === 'string' ? d.group : '',
+          description: typeof d.description === 'string' ? d.description : '',
+          postingGuide: typeof d.postingGuide === 'string' ? d.postingGuide : '',
+        });
+      } else {
+        setFormData(EMPTY_FORM);
+      }
       setFormErrors({});
       setShowAddDialog(true);
     });
   };
 
   const openEditDialog = (account: Account) => {
-    setFormData({
+    const serverForm: AccountFormData = {
       number: account.number,
       name: account.name,
       nameEn: account.nameEn || '',
@@ -466,8 +530,25 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
       group: account.group,
       description: account.description || '',
       postingGuide: account.postingGuide || '',
-    });
+    };
+    // Merge any existing draft over server data (user edits win).
+    const draft = readDraft(`account:edit:${account.id}`);
+    let initial = serverForm;
+    if (draft?.data) {
+      const d = draft.data as Partial<AccountFormData>;
+      initial = {
+        number: serverForm.number, // number is read-only in edit mode
+        name: typeof d.name === 'string' ? d.name : serverForm.name,
+        nameEn: typeof d.nameEn === 'string' ? d.nameEn : serverForm.nameEn,
+        type: typeof d.type === 'string' ? d.type : serverForm.type,
+        group: typeof d.group === 'string' ? d.group : serverForm.group,
+        description: typeof d.description === 'string' ? d.description : serverForm.description,
+        postingGuide: typeof d.postingGuide === 'string' ? d.postingGuide : serverForm.postingGuide,
+      };
+    }
+    setFormData(initial);
     setFormErrors({});
+    loadedEditStateRef.current = initial;
     setEditAccount(account);
   };
 
@@ -532,6 +613,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
       }
 
       setShowAddDialog(false);
+      clearAddDraft();
       await fetchAccounts();
     } catch (err) {
       console.error('Create account error:', err);
@@ -568,6 +650,8 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
       }
 
       setEditAccount(null);
+      clearEditDraft();
+      loadedEditStateRef.current = null;
       await fetchAccounts();
     } catch (err) {
       console.error('Update account error:', err);
@@ -1299,6 +1383,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
         isDanish={isDanish}
         editAccount={editAccount}
         availableGroups={availableGroups}
+        dialogProps={editAccount ? editGuard.dialogProps : addGuard.dialogProps}
         onClose={() => {
           setShowAddDialog(false);
           setEditAccount(null);
@@ -1386,6 +1471,11 @@ interface AccountFormDialogProps {
   isDanish: boolean;
   editAccount: Account | null;
   availableGroups: string[];
+  dialogProps?: {
+    onPointerDownOutside?: (e: Event) => void;
+    onEscapeKeyDown?: (e: KeyboardEvent) => void;
+    onInteractOutside?: (e: Event) => void;
+  };
   onClose: () => void;
   onChangeFormData: React.Dispatch<React.SetStateAction<AccountFormData>>;
   onSave: () => void;
@@ -1400,13 +1490,14 @@ function AccountFormDialog({
   isDanish,
   editAccount,
   availableGroups,
+  dialogProps,
   onClose,
   onChangeFormData,
   onSave,
 }: AccountFormDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-lg max-h-[90vh] overflow-y-auto" {...dialogProps}>
         <DialogHeader>
           <DialogTitle className="dark:text-white flex items-center gap-2 text-xl">
             <div className="h-10 w-10 rounded-xl bg-[#0d9488]/10 flex items-center justify-center shrink-0">

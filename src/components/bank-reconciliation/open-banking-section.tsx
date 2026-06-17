@@ -1,10 +1,13 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { toast } from 'sonner';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft } from '@/lib/draft-store';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -273,6 +276,94 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
   const [isRunningAiMatch, setIsRunningAiMatch] = useState(false);
   const [aiMatchResult, setAiMatchResult] = useState<AiMatchSummary | null>(null);
 
+  // ── Draft persistence (connect + edit bank-connection forms) ──
+  const { clearDraft: clearConnectDraft } = useDraftSync(
+    'bank-connection:new',
+    {
+      connectBankName,
+      connectProvider,
+      connectRegNumber,
+      connectAccountNumber,
+      connectIban,
+      connectAccountName,
+      connectSyncFrequency,
+    },
+    {
+      label: language === 'da' ? 'Ny bankforbindelse' : 'New bank connection',
+      disabled: !connectDialogOpen,
+    }
+  );
+  const editDraftKey = connectionToEdit ? `bank-connection:edit:${connectionToEdit.id}` : 'bank-connection:edit:none';
+  const { clearDraft: clearEditDraft } = useDraftSync(
+    editDraftKey,
+    { editFrequency, editAccountName },
+    {
+      label: language === 'da' ? 'Rediger bankforbindelse' : 'Edit bank connection',
+      disabled: !editDialogOpen,
+    }
+  );
+
+  // ── Dirty tracking + safety-net guard ──
+  const isConnectDirty = connectDialogOpen && (
+    connectBankName.trim() !== '' ||
+    connectProvider !== '' ||
+    connectRegNumber.trim() !== '' ||
+    connectAccountNumber.trim() !== '' ||
+    connectIban.trim() !== '' ||
+    connectAccountName.trim() !== '' ||
+    connectSyncFrequency !== 'daily'
+  );
+  const loadedEditBankRef = useRef<{ freq: string; name: string } | null>(null);
+  const isEditBankDirty = editDialogOpen && loadedEditBankRef.current !== null && (
+    editFrequency !== loadedEditBankRef.current.freq ||
+    editAccountName !== loadedEditBankRef.current.name
+  );
+  const connectGuard = useWarnOnUnsaved(isConnectDirty, {
+    onConfirmDiscard: () => { clearConnectDraft(); setConnectDialogOpen(false); },
+    window: false,
+  });
+  const editBankGuard = useWarnOnUnsaved(isEditBankDirty, {
+    onConfirmDiscard: () => { clearEditDraft(); setEditDialogOpen(false); setConnectionToEdit(null); },
+    window: false,
+  });
+
+  // ── Open connect dialog (with draft restore) ──
+  const openConnectDialog = useCallback(() => {
+    const draft = readDraft('bank-connection:new');
+    if (draft?.data) {
+      const d = draft.data;
+      setConnectBankName(typeof d.connectBankName === 'string' ? d.connectBankName : '');
+      setConnectProvider(typeof d.connectProvider === 'string' ? d.connectProvider : '');
+      setConnectRegNumber(typeof d.connectRegNumber === 'string' ? d.connectRegNumber : '');
+      setConnectAccountNumber(typeof d.connectAccountNumber === 'string' ? d.connectAccountNumber : '');
+      setConnectIban(typeof d.connectIban === 'string' ? d.connectIban : '');
+      setConnectAccountName(typeof d.connectAccountName === 'string' ? d.connectAccountName : '');
+      setConnectSyncFrequency(typeof d.connectSyncFrequency === 'string' ? d.connectSyncFrequency : 'daily');
+    } else {
+      resetConnectForm();
+    }
+    setConnectDialogOpen(true);
+  }, []);
+
+  // ── Open edit dialog (with draft restore, merging over server data) ──
+  const openEditDialog = useCallback((connection: BankConnection) => {
+    const serverFreq = connection.syncFrequency || 'daily';
+    const serverName = connection.accountName || '';
+    const draft = readDraft(`bank-connection:edit:${connection.id}`);
+    let initialFreq = serverFreq;
+    let initialName = serverName;
+    if (draft?.data) {
+      const d = draft.data;
+      if (typeof d.editFrequency === 'string') initialFreq = d.editFrequency;
+      if (typeof d.editAccountName === 'string') initialName = d.editAccountName;
+    }
+    setConnectionToEdit(connection);
+    setEditFrequency(initialFreq);
+    setEditAccountName(initialName);
+    loadedEditBankRef.current = { freq: initialFreq, name: initialName };
+    setEditDialogOpen(true);
+  }, []);
+
   // ── Fetch connections ──
 
   const fetchConnections = useCallback(async () => {
@@ -380,6 +471,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
       if (result.consentRedirect) {
         // Close the connect dialog, open consent authorization dialog
         setConnectDialogOpen(false);
+        clearConnectDraft();
         setConsentInfo({
           connectionId: result.connection.id,
           consentId: result.connection.consentId,
@@ -398,6 +490,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
             : `${connectBankName || connectProvider} is now connected`,
         });
         setConnectDialogOpen(false);
+        clearConnectDraft();
         resetConnectForm();
         await fetchConnections();
         onSyncComplete?.();
@@ -599,6 +692,8 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
       });
 
       setEditDialogOpen(false);
+      clearEditDraft();
+      loadedEditBankRef.current = null;
       setConnectionToEdit(null);
       await fetchConnections();
     } catch (err) {
@@ -1009,7 +1104,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                       : 'Connect your bank account for automatic transaction import and smart reconciliation.'}
                   </p>
                   <Button
-                    onClick={() => setConnectDialogOpen(true)}
+                    onClick={openConnectDialog}
                     className="gap-2 bg-[#0d9488] hover:bg-[#0f766e] text-white font-medium"
                   >
                     <Plus className="h-4 w-4" />
@@ -1157,12 +1252,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48">
                               <DropdownMenuItem
-                                onClick={() => {
-                                  setConnectionToEdit(connection);
-                                  setEditFrequency(connection.syncFrequency);
-                                  setEditAccountName(connection.accountName || '');
-                                  setEditDialogOpen(true);
-                                }}
+                                onClick={() => openEditDialog(connection)}
                               >
                                 <Clock className="h-4 w-4 mr-2" />
                                 {language === 'da' ? 'Skift synk-frekvens' : 'Change sync frequency'}
@@ -1205,7 +1295,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Button
-                        onClick={() => setConnectDialogOpen(true)}
+                        onClick={openConnectDialog}
                         variant="outline"
                         size="sm"
                         className="gap-1.5 border-[#0d9488]/30 text-[#0d9488] hover:bg-[#0d9488]/10 hover:text-[#0f766e]"
@@ -1265,7 +1355,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
 
       {/* ── Connect Dialog ── */}
       <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" {...connectGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-full bg-[#0d9488]/10 flex items-center justify-center">
@@ -1527,7 +1617,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
 
       {/* ── Edit Settings Dialog ── */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm" {...editBankGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="h-4 w-4 text-[#0d9488]" />

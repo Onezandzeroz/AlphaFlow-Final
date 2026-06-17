@@ -70,6 +70,9 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft } from '@/lib/draft-store';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -304,10 +307,51 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
   const openNewDialog = useCallback(() => {
     guardWriteAccess(isDanish ? 'Opret postering' : 'Create journal entry', () => {
       setEditingEntry(null);
-      setFormDate(new Date().toISOString().split('T')[0]);
-      setFormDescription('');
-      setFormReference('');
-      setFormLines([createEmptyLine(), createEmptyLine()]);
+      // Restore the saved draft for "new journal entry" if one exists, otherwise
+      // fall back to a fresh empty form (date = today, two empty lines).
+      const draft = readDraft('journal-entry:new');
+      const d = draft?.data as
+        | {
+            formDate?: unknown;
+            formDescription?: unknown;
+            formReference?: unknown;
+            formProjectId?: unknown;
+            formLines?: unknown;
+          }
+        | undefined;
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (d) {
+        setFormDate(typeof d.formDate === 'string' && d.formDate ? d.formDate : todayStr);
+        setFormDescription(typeof d.formDescription === 'string' ? d.formDescription : '');
+        setFormReference(typeof d.formReference === 'string' ? d.formReference : '');
+        setFormProjectId(
+          d.formProjectId === null || typeof d.formProjectId === 'string'
+            ? (d.formProjectId as string | null)
+            : null
+        );
+        if (Array.isArray(d.formLines) && d.formLines.length > 0) {
+          // Regenerate stable _key per line (the persisted draft stripped them).
+          setFormLines(
+            d.formLines.map(
+              (l: Record<string, unknown>): JournalLineInput => ({
+                _key: generateLineKey(),
+                accountId: typeof l.accountId === 'string' ? l.accountId : '',
+                debit: typeof l.debit === 'string' ? l.debit : '',
+                credit: typeof l.credit === 'string' ? l.credit : '',
+                description: typeof l.description === 'string' ? l.description : '',
+              })
+            )
+          );
+        } else {
+          setFormLines([createEmptyLine(), createEmptyLine()]);
+        }
+      } else {
+        setFormDate(todayStr);
+        setFormDescription('');
+        setFormReference('');
+        setFormLines([createEmptyLine(), createEmptyLine()]);
+        setFormProjectId(null);
+      }
       setDialogOpen(true);
     });
   }, [guardWriteAccess, isDanish]);
@@ -338,6 +382,44 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
     setEditingEntry(null);
     setFormProjectId(null);
   }, []);
+
+  // ─── Draft persistence (input retention) ───
+  // Only persist when creating a new entry — edit mode is intentionally excluded
+  // so we never overwrite the server-loaded entry with a stale draft. Restore is
+  // performed in openNewDialog via readDraft so that opening the dialog multiple
+  // times reliably reapplies the draft (the hook's onRestore fires only once on
+  // component mount — i.e. the page-load moment — not the dialog-open moment).
+  const { clearDraft: clearJournalDraft } = useDraftSync(
+    'journal-entry:new',
+    {
+      formDate,
+      formDescription,
+      formReference,
+      formProjectId,
+      // Strip the unstable _key before persisting — we regenerate keys on restore.
+      formLines: formLines.map(({ _key: _k, ...rest }) => rest),
+    },
+    {
+      label: 'New journal entry',
+      disabled: !!editingEntry,
+    }
+  );
+
+  // ─── Safety net: warn on unsaved changes ───
+  // isDirty = the create/edit dialog is open AND any field has user input.
+  const isJournalDirty =
+    dialogOpen &&
+    (formDescription.trim() !== '' ||
+      formReference.trim() !== '' ||
+      !!formProjectId ||
+      formLines.some((l) => l.accountId || l.debit || l.credit || l.description));
+  const journalGuard = useWarnOnUnsaved(isJournalDirty, {
+    onConfirmDiscard: () => {
+      if (!editingEntry) clearJournalDraft();
+      closeDialog();
+    },
+    window: false,
+  });
 
   // ─── Line Management ────────────────────────────────────────────────────
 
@@ -484,6 +566,8 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
         }
       }
 
+      // Clear the persisted draft only on a successful create (edit mode never persisted).
+      if (!editingEntry) clearJournalDraft();
       closeDialog();
       await fetchEntries();
     } catch (err) {
@@ -492,7 +576,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
     } finally {
       setDialogLoading(false);
     }
-  }, [editingEntry, formDate, formDescription, formReference, formLines, formProjectId, closeDialog, fetchEntries, handleMutationError, isDanish]);
+  }, [editingEntry, formDate, formDescription, formReference, formLines, formProjectId, closeDialog, fetchEntries, handleMutationError, isDanish, clearJournalDraft]);
 
   // ─── Cancel Entry ──────────────────────────────────────────────────────
 
@@ -1025,7 +1109,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
 
       {/* ─── New/Edit Journal Entry Dialog ───────────────────────────────── */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
-        <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" {...journalGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="dark:text-white flex items-center gap-2 text-xl">
               <div className="h-9 w-9 rounded-xl bg-[#0d9488]/10 flex items-center justify-center shrink-0">

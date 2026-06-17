@@ -42,6 +42,8 @@ import { useScannerStore } from '@/lib/scanner-store';
 import { useOcr, type OCRResult } from '@/lib/ocr';
 import { useAuthStore } from '@/lib/auth-store';
 import { ProjectSelector } from '@/components/projects/project-selector';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 
 const CURRENCIES = ['DKK', 'EUR', 'USD', 'GBP', 'SEK', 'NOK'] as const;
 
@@ -204,6 +206,86 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const [purchaseLines, setPurchaseLines] = useState<PurchaseLineItem[]>([
     { ...EMPTY_LINE_ITEM },
   ]);
+
+  // ─── Draft persistence (input retention) ───
+  // Persists user input to localStorage so accidental close / nav doesn't lose data.
+  // Excludes: receiptFile (File), receiptPreview (blob URL), receiptNaturalWidth,
+  // originalWasPdf, isLoading, error, accountError, rateLoading, rateDate, OCR state.
+  const { clearDraft } = useDraftSync(
+    'transaction:new',
+    {
+      date,
+      purchaseLinesDate,
+      amount,
+      currency,
+      exchangeRate,
+      includesVAT,
+      description,
+      vatPercent,
+      isRecurring,
+      recurringFrequency,
+      recurringStartDate,
+      recurringEndDate,
+      selectedAccountId,
+      projectId,
+      purchaseLineItems: purchaseLines,
+    },
+    {
+      label: 'New transaction',
+      onRestore: (draft) => {
+        if (typeof draft.date === 'string' && draft.date) setDate(draft.date);
+        if (typeof draft.purchaseLinesDate === 'string' && draft.purchaseLinesDate) setPurchaseLinesDate(draft.purchaseLinesDate);
+        if (typeof draft.amount === 'string') setAmount(draft.amount);
+        if (typeof draft.currency === 'string' && draft.currency) setCurrency(draft.currency);
+        if (typeof draft.exchangeRate === 'string') setExchangeRate(draft.exchangeRate);
+        if (typeof draft.includesVAT === 'boolean') setIncludesVAT(draft.includesVAT);
+        if (typeof draft.description === 'string') setDescription(draft.description);
+        if (typeof draft.vatPercent === 'string') setVatPercent(draft.vatPercent);
+        if (typeof draft.isRecurring === 'boolean') setIsRecurring(draft.isRecurring);
+        if (typeof draft.recurringFrequency === 'string' && draft.recurringFrequency) setRecurringFrequency(draft.recurringFrequency);
+        if (typeof draft.recurringStartDate === 'string') setRecurringStartDate(draft.recurringStartDate);
+        if (typeof draft.recurringEndDate === 'string') setRecurringEndDate(draft.recurringEndDate);
+        if (typeof draft.selectedAccountId === 'string') setSelectedAccountId(draft.selectedAccountId);
+        if (draft.projectId === null || typeof draft.projectId === 'string') setProjectId(draft.projectId as string | null);
+        if (Array.isArray(draft.purchaseLineItems) && draft.purchaseLineItems.length > 0) {
+          setPurchaseLines(
+            draft.purchaseLineItems
+              .filter((l): l is PurchaseLineItem =>
+                l != null && typeof l === 'object' && typeof (l as PurchaseLineItem).description === 'string'
+              )
+              .map((l) => ({
+                description: l.description ?? '',
+                quantity: typeof l.quantity === 'number' ? l.quantity : 1,
+                unitPrice: typeof l.unitPrice === 'number' ? l.unitPrice : 0,
+                vatPercent: typeof l.vatPercent === 'number' ? l.vatPercent : 25,
+                accountId: typeof l.accountId === 'string' ? l.accountId : '',
+              }))
+          );
+        }
+      },
+    }
+  );
+
+  // ─── Safety net: warn on unsaved changes ───
+  // This form lives in BOTH a Dialog (mobile) and a page (desktop). The Dialog is
+  // wrapped by a parent, so we can't spread dialogProps here — instead we rely on
+  // the beforeunload listener (window: true) to protect against tab/nav loss for
+  // the page version, and on the draft restore for the dialog version.
+  const isTransactionDirty =
+    amount !== '' ||
+    description.trim() !== '' ||
+    selectedAccountId !== '' ||
+    projectId !== null ||
+    isRecurring ||
+    currency !== 'DKK' ||
+    exchangeRate !== '' ||
+    purchaseLines.some((l) => l.description.trim() !== '' || l.unitPrice > 0 || l.accountId !== '');
+  useWarnOnUnsaved(isTransactionDirty, {
+    onConfirmDiscard: () => {
+      clearDraft();
+    },
+    window: true,
+  });
 
   // ─── Data ───
   const [expenseAccounts, setExpenseAccounts] = useState<ExpenseAccount[]>([]);
@@ -783,13 +865,15 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           : 'Your purchase has been recorded in the double-entry ledger',
       });
 
+      // Clear the persisted draft now that the save succeeded.
+      clearDraft();
       onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : (isDa ? 'Der opstod en fejl' : 'An error occurred'));
     } finally {
       setIsLoading(false);
     }
-  }, [date, amount, currency, exchangeRate, includesVAT, netAmount, parsedAmount, description, vatPercent, receiptFile, selectedAccountId, clearReceipt, onSuccess, isDa, handleMutationError, receiptCardHasData, purchaseLinesHasData, purchaseLines, purchaseLinesDate, lineTotals, isRecurring, recurringFrequency, recurringStartDate, recurringEndDate]);
+  }, [date, amount, currency, exchangeRate, includesVAT, netAmount, parsedAmount, description, vatPercent, receiptFile, selectedAccountId, clearReceipt, onSuccess, isDa, handleMutationError, receiptCardHasData, purchaseLinesHasData, purchaseLines, purchaseLinesDate, lineTotals, isRecurring, recurringFrequency, recurringStartDate, recurringEndDate, clearDraft]);
 
   // ─── RENDER ───
 

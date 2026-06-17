@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, type CSSProperties } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { toast } from 'sonner';
@@ -30,6 +30,9 @@ import { PageHeader } from '@/components/shared/page-header';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft } from '@/lib/draft-store';
 import { ProjectCard } from './project-card';
 import { ProjectDetail } from './project-detail';
 import {
@@ -129,6 +132,33 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
   // Contacts for create form
   const [contacts, setContacts] = useState<ContactOption[]>([]);
 
+  // ── Draft persistence (create project form) ──
+  const { clearDraft: clearCreateDraft } = useDraftSync(
+    'project:new',
+    { ...formData },
+    {
+      label: isDa ? 'Nyt projekt' : 'New project',
+      disabled: !isCreateOpen,
+    }
+  );
+
+  // ── Dirty tracking + safety-net guard ──
+  const isCreateDirty = isCreateOpen && (
+    formData.name.trim() !== EMPTY_FORM.name ||
+    formData.code.trim() !== EMPTY_FORM.code ||
+    formData.description.trim() !== EMPTY_FORM.description ||
+    formData.color !== EMPTY_FORM.color ||
+    formData.status !== EMPTY_FORM.status ||
+    formData.startDate !== EMPTY_FORM.startDate ||
+    formData.endDate !== EMPTY_FORM.endDate ||
+    formData.budgetTotal !== EMPTY_FORM.budgetTotal ||
+    formData.customerId !== EMPTY_FORM.customerId
+  );
+  const createGuard = useWarnOnUnsaved(isCreateDirty, {
+    onConfirmDiscard: () => { clearCreateDraft(); setIsCreateOpen(false); },
+    window: false,
+  });
+
   // ── Fetch projects ──
   const fetchProjects = useCallback(async () => {
     setIsLoading(true);
@@ -187,7 +217,23 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
   // ── Open create dialog ──
   const openCreate = () => {
     guardWriteAccess(isDa ? 'Opret projekt' : 'Create project', () => {
-      setFormData(EMPTY_FORM);
+      const draft = readDraft('project:new');
+      if (draft?.data) {
+        const d = draft.data as Partial<ProjectFormData>;
+        setFormData({
+          name: typeof d.name === 'string' ? d.name : '',
+          code: typeof d.code === 'string' ? d.code : '',
+          description: typeof d.description === 'string' ? d.description : '',
+          color: typeof d.color === 'string' ? d.color : '#0d9488',
+          status: typeof d.status === 'string' ? d.status : 'ACTIVE',
+          startDate: typeof d.startDate === 'string' ? d.startDate : '',
+          endDate: typeof d.endDate === 'string' ? d.endDate : '',
+          budgetTotal: typeof d.budgetTotal === 'string' ? d.budgetTotal : '',
+          customerId: typeof d.customerId === 'string' ? d.customerId : '',
+        });
+      } else {
+        setFormData(EMPTY_FORM);
+      }
       fetchContacts();
       setIsCreateOpen(true);
     });
@@ -228,6 +274,7 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
       }
 
       setIsCreateOpen(false);
+      clearCreateDraft();
       toast.success(isDa ? 'Projekt oprettet' : 'Project created');
       fetchProjects();
     } catch (err) {
@@ -487,7 +534,7 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
 
       {/* ── Create Project Dialog ── */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto" {...createGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle>{t('newProject')}</DialogTitle>
             <DialogDescription>

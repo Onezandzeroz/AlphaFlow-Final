@@ -113,6 +113,9 @@ import { toast } from "sonner";
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft } from '@/lib/draft-store';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatsCard } from '@/components/shared/stats-card';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
@@ -279,6 +282,107 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const invoicePreviewRef = useRef<HTMLDivElement>(null);
   const [previewScale, setPreviewScale] = useState(1);
   const [previewContentH, setPreviewContentH] = useState(0);
+
+  // ── Draft persistence (create / edit-draft invoice) ──
+  // The create invoice view is a page form (not a dialog). Drafts are
+  // restored manually in openCreateView / handleEditDraft.
+  const isCreateView = currentView === 'create';
+  const isEditingDraft = isCreateView && !!editingInvoiceId;
+  const { clearDraft: clearCreateDraft } = useDraftSync(
+    'invoice:new',
+    {
+      customerName: invoiceForm.customerName,
+      customerAddress: invoiceForm.customerAddress,
+      customerEmail: invoiceForm.customerEmail,
+      customerPhone: invoiceForm.customerPhone,
+      customerCvr: invoiceForm.customerCvr,
+      issueDate: invoiceForm.issueDate,
+      dueDate: invoiceForm.dueDate,
+      lineItems: invoiceForm.lineItems,
+      notes: invoiceForm.notes,
+    },
+    {
+      label: language === 'da' ? 'Ny faktura' : 'New invoice',
+      disabled: !isCreateView || isEditingDraft,
+    }
+  );
+  const editDraftKey = editingInvoiceId ? `invoice:edit-draft:${editingInvoiceId}` : 'invoice:edit-draft:none';
+  const { clearDraft: clearEditDraftDraft } = useDraftSync(
+    editDraftKey,
+    {
+      customerName: invoiceForm.customerName,
+      customerAddress: invoiceForm.customerAddress,
+      customerEmail: invoiceForm.customerEmail,
+      customerPhone: invoiceForm.customerPhone,
+      customerCvr: invoiceForm.customerCvr,
+      issueDate: invoiceForm.issueDate,
+      dueDate: invoiceForm.dueDate,
+      lineItems: invoiceForm.lineItems,
+      notes: invoiceForm.notes,
+    },
+    {
+      label: language === 'da' ? 'Rediger faktura-kladde' : 'Edit invoice draft',
+      disabled: !isEditingDraft,
+    }
+  );
+
+  // ── Dirty tracking + page-level safety-net (beforeunload) ──
+  const loadedEditInvoiceRef = useRef<typeof invoiceForm | null>(null);
+  const isInvoiceDirty = isCreateView && (
+    isEditingDraft
+      ? (loadedEditInvoiceRef.current !== null && (
+          invoiceForm.customerName !== loadedEditInvoiceRef.current.customerName ||
+          invoiceForm.customerAddress !== loadedEditInvoiceRef.current.customerAddress ||
+          invoiceForm.customerEmail !== loadedEditInvoiceRef.current.customerEmail ||
+          invoiceForm.customerPhone !== loadedEditInvoiceRef.current.customerPhone ||
+          invoiceForm.customerCvr !== loadedEditInvoiceRef.current.customerCvr ||
+          invoiceForm.issueDate !== loadedEditInvoiceRef.current.issueDate ||
+          invoiceForm.dueDate !== loadedEditInvoiceRef.current.dueDate ||
+          invoiceForm.notes !== loadedEditInvoiceRef.current.notes ||
+          invoiceForm.lineItems.length !== loadedEditInvoiceRef.current.lineItems.length ||
+          JSON.stringify(invoiceForm.lineItems) !== JSON.stringify(loadedEditInvoiceRef.current.lineItems)
+        ))
+      : (
+          invoiceForm.customerName.trim() !== '' ||
+          invoiceForm.customerAddress.trim() !== '' ||
+          invoiceForm.customerEmail.trim() !== '' ||
+          invoiceForm.customerPhone.trim() !== '' ||
+          invoiceForm.customerCvr.trim() !== '' ||
+          invoiceForm.notes.trim() !== '' ||
+          invoiceForm.lineItems.some((i) => i.description.trim() !== '')
+        )
+  );
+  useWarnOnUnsaved(isInvoiceDirty, {
+    onConfirmDiscard: () => {
+      if (isEditingDraft) { clearEditDraftDraft(); } else { clearCreateDraft(); }
+      setCurrentView('list');
+    },
+    window: true,
+  });
+
+  // ── Open create view (with draft restore) ──
+  const openCreateView = useCallback(() => {
+    const draft = readDraft('invoice:new');
+    if (draft?.data) {
+      const d = draft.data;
+      setInvoiceForm({
+        customerName: typeof d.customerName === 'string' ? d.customerName : '',
+        customerAddress: typeof d.customerAddress === 'string' ? d.customerAddress : '',
+        customerEmail: typeof d.customerEmail === 'string' ? d.customerEmail : '',
+        customerPhone: typeof d.customerPhone === 'string' ? d.customerPhone : '',
+        customerCvr: typeof d.customerCvr === 'string' ? d.customerCvr : '',
+        issueDate: typeof d.issueDate === 'string' ? d.issueDate : (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
+        dueDate: typeof d.dueDate === 'string' ? d.dueDate : (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
+        lineItems: Array.isArray(d.lineItems) && d.lineItems.length > 0
+          ? (d.lineItems as LineItem[])
+          : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+        notes: typeof d.notes === 'string' ? d.notes : '',
+      });
+    }
+    setEditingInvoiceId(null);
+    loadedEditInvoiceRef.current = null;
+    setCurrentView('create');
+  }, []);
 
   // Fetch data
   const fetchCompanyInfo = useCallback(async () => {
@@ -569,6 +673,10 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
         description: savedInvoice.invoiceNumber,
       });
 
+      // Clear persisted draft for this invoice (success path).
+      if (isEditing) { clearEditDraftDraft(); } else { clearCreateDraft(); }
+      loadedEditInvoiceRef.current = null;
+
       // Reset form and editing state
       setEditingInvoiceId(null);
 
@@ -595,7 +703,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     } finally {
       setIsSubmitting(false);
     }
-  }, [companyInfo, invoiceForm, editingInvoiceId, invoiceProjectId, t, language, fetchInvoices, fetchCompanyInfo, handleMutationError]);
+  }, [companyInfo, invoiceForm, editingInvoiceId, invoiceProjectId, t, language, fetchInvoices, fetchCompanyInfo, handleMutationError, clearCreateDraft, clearEditDraftDraft]);
 
   // Delete invoice
   const handleDeleteInvoice = useCallback(async (id: string) => {
@@ -706,7 +814,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     setEditingInvoiceId(invoice.id);
     setPreviewInvoice(null);
     const items = invoice.lineItems as LineItem[];
-    setInvoiceForm({
+    const serverForm = {
       customerName: invoice.customerName,
       customerAddress: invoice.customerAddress || '',
       customerEmail: invoice.customerEmail || '',
@@ -716,7 +824,28 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       dueDate: invoice.dueDate,
       lineItems: items.length > 0 ? items : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
       notes: invoice.notes || '',
-    });
+    };
+    // Merge any existing draft over server data (user edits win).
+    const draft = readDraft(`invoice:edit-draft:${invoice.id}`);
+    let initial = serverForm;
+    if (draft?.data) {
+      const d = draft.data;
+      initial = {
+        customerName: typeof d.customerName === 'string' ? d.customerName : serverForm.customerName,
+        customerAddress: typeof d.customerAddress === 'string' ? d.customerAddress : serverForm.customerAddress,
+        customerEmail: typeof d.customerEmail === 'string' ? d.customerEmail : serverForm.customerEmail,
+        customerPhone: typeof d.customerPhone === 'string' ? d.customerPhone : serverForm.customerPhone,
+        customerCvr: typeof d.customerCvr === 'string' ? d.customerCvr : serverForm.customerCvr,
+        issueDate: typeof d.issueDate === 'string' ? d.issueDate : serverForm.issueDate,
+        dueDate: typeof d.dueDate === 'string' ? d.dueDate : serverForm.dueDate,
+        lineItems: Array.isArray(d.lineItems) && d.lineItems.length > 0
+          ? (d.lineItems as LineItem[])
+          : serverForm.lineItems,
+        notes: typeof d.notes === 'string' ? d.notes : serverForm.notes,
+      };
+    }
+    setInvoiceForm(initial);
+    loadedEditInvoiceRef.current = initial;
     setInvoiceProjectId(null);
     setCurrentView('create');
   }, []);
@@ -2396,7 +2525,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     if (!companyInfo) {
                       setShowCompanySetup(true);
                     } else {
-                      setCurrentView('create');
+                      openCreateView();
                     }
                   });
                 }}
@@ -2611,7 +2740,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                         if (!companyInfo) {
                           setShowCompanySetup(true);
                         } else {
-                          setCurrentView('create');
+                          openCreateView();
                         }
                       });
                     }}
@@ -2875,7 +3004,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                       if (!companyInfo) {
                         setShowCompanySetup(true);
                       } else {
-                        setCurrentView('create');
+                        openCreateView();
                       }
                     });
                   }}

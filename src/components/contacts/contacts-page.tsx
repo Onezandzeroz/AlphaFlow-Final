@@ -51,6 +51,9 @@ import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft, removeDraft } from '@/lib/draft-store';
 import {
   Users,
   Plus,
@@ -232,6 +235,50 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // ─── Draft persistence (input retention) ───
+  // Dual-key: 'contact:new' for create, `contact:edit:${id}` for edit. The key
+  // changes when the user switches modes, so each mode has its own independent
+  // draft. Restore is performed in openCreateDialog / openEditDialog via
+  // readDraft so the draft is reliably reapplied every time the dialog opens
+  // (the hook's onRestore fires only once on component mount — i.e. the page
+  // load — not on each dialog-open).
+  const contactDraftKey = editingContact
+    ? `contact:edit:${editingContact.id}`
+    : 'contact:new';
+  const { clearDraft: clearContactDraft } = useDraftSync(
+    contactDraftKey,
+    { ...formData },
+    {
+      label: editingContact ? 'Edit contact' : 'New contact',
+    }
+  );
+
+  // ─── Safety net: warn on unsaved changes ───
+  const isContactDirty =
+    isFormOpen &&
+    (formData.name !== '' ||
+      formData.cvrNumber !== '' ||
+      formData.email !== '' ||
+      formData.phone !== '' ||
+      formData.address !== '' ||
+      formData.city !== '' ||
+      formData.postalCode !== '' ||
+      formData.notes !== '' ||
+      formData.country !== 'Danmark' ||
+      formData.type !== 'CUSTOMER');
+  const contactGuard = useWarnOnUnsaved(isContactDirty, {
+    onConfirmDiscard: () => {
+      // Clear whichever draft corresponds to the current mode.
+      if (editingContact) {
+        removeDraft(`contact:edit:${editingContact.id}`);
+      } else {
+        removeDraft('contact:new');
+      }
+      setIsFormOpen(false);
+    },
+    window: false,
+  });
+
   // ─── Data Fetching ──────────────────────────────────────────────────────
 
   const fetchContacts = useCallback(async () => {
@@ -303,8 +350,44 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
     guardWriteAccess(
       isDanish ? 'Opret kontakt' : 'Create contact',
       () => {
+        // When switching from edit back to create, discard the edit-mode draft
+        // (per spec: clear draft when switching from edit back to add).
+        if (editingContact) {
+          removeDraft(`contact:edit:${editingContact.id}`);
+        }
         setEditingContact(null);
-        setFormData(EMPTY_FORM);
+        // Restore any saved create-mode draft, otherwise start fresh.
+        const draft = readDraft('contact:new');
+        const d = draft?.data as
+          | {
+              name?: unknown;
+              cvrNumber?: unknown;
+              email?: unknown;
+              phone?: unknown;
+              address?: unknown;
+              city?: unknown;
+              postalCode?: unknown;
+              country?: unknown;
+              type?: unknown;
+              notes?: unknown;
+            }
+          | undefined;
+        if (d) {
+          setFormData({
+            name: typeof d.name === 'string' ? d.name : '',
+            cvrNumber: typeof d.cvrNumber === 'string' ? d.cvrNumber : '',
+            email: typeof d.email === 'string' ? d.email : '',
+            phone: typeof d.phone === 'string' ? d.phone : '',
+            address: typeof d.address === 'string' ? d.address : '',
+            city: typeof d.city === 'string' ? d.city : '',
+            postalCode: typeof d.postalCode === 'string' ? d.postalCode : '',
+            country: typeof d.country === 'string' ? d.country : 'Danmark',
+            type: typeof d.type === 'string' ? d.type : 'CUSTOMER',
+            notes: typeof d.notes === 'string' ? d.notes : '',
+          });
+        } else {
+          setFormData(EMPTY_FORM);
+        }
         setFormError(null);
         setIsFormOpen(true);
       },
@@ -316,18 +399,50 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
       isDanish ? 'Rediger kontakt' : 'Edit contact',
       () => {
         setEditingContact(contact);
-        setFormData({
-          name: contact.name,
-          cvrNumber: contact.cvrNumber || '',
-          email: contact.email || '',
-          phone: contact.phone || '',
-          address: contact.address || '',
-          city: contact.city || '',
-          postalCode: contact.postalCode || '',
-          country: contact.country || 'Danmark',
-          type: contact.type,
-          notes: contact.notes || '',
-        });
+        // If a saved edit-mode draft exists for this contact, prefer it over
+        // the server data (user edits win). Otherwise load from server.
+        const draft = readDraft(`contact:edit:${contact.id}`);
+        const d = draft?.data as
+          | {
+              name?: unknown;
+              cvrNumber?: unknown;
+              email?: unknown;
+              phone?: unknown;
+              address?: unknown;
+              city?: unknown;
+              postalCode?: unknown;
+              country?: unknown;
+              type?: unknown;
+              notes?: unknown;
+            }
+          | undefined;
+        if (d) {
+          setFormData({
+            name: typeof d.name === 'string' ? d.name : contact.name,
+            cvrNumber: typeof d.cvrNumber === 'string' ? d.cvrNumber : (contact.cvrNumber || ''),
+            email: typeof d.email === 'string' ? d.email : (contact.email || ''),
+            phone: typeof d.phone === 'string' ? d.phone : (contact.phone || ''),
+            address: typeof d.address === 'string' ? d.address : (contact.address || ''),
+            city: typeof d.city === 'string' ? d.city : (contact.city || ''),
+            postalCode: typeof d.postalCode === 'string' ? d.postalCode : (contact.postalCode || ''),
+            country: typeof d.country === 'string' ? d.country : (contact.country || 'Danmark'),
+            type: typeof d.type === 'string' ? d.type : contact.type,
+            notes: typeof d.notes === 'string' ? d.notes : (contact.notes || ''),
+          });
+        } else {
+          setFormData({
+            name: contact.name,
+            cvrNumber: contact.cvrNumber || '',
+            email: contact.email || '',
+            phone: contact.phone || '',
+            address: contact.address || '',
+            city: contact.city || '',
+            postalCode: contact.postalCode || '',
+            country: contact.country || 'Danmark',
+            type: contact.type,
+            notes: contact.notes || '',
+          });
+        }
         setFormError(null);
         setIsFormOpen(true);
       },
@@ -377,6 +492,9 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
         throw new Error(data?.error || (isDanish ? 'Kunne ikke gemme kontakt' : 'Failed to save contact'));
       }
 
+      // Clear the persisted draft now that the save succeeded. The hook's
+      // clearDraft uses the current key (which matches the current mode).
+      clearContactDraft();
       setIsFormOpen(false);
       fetchContacts();
     } catch (err) {
@@ -386,7 +504,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
     } finally {
       setIsSaving(false);
     }
-  }, [formData, editingContact, isDanish, fetchContacts, handleMutationError]);
+  }, [formData, editingContact, isDanish, fetchContacts, handleMutationError, clearContactDraft]);
 
   // ─── Delete Handler ─────────────────────────────────────────────────────
 
@@ -966,6 +1084,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
             const nameInput = document.getElementById('contact-name') as HTMLInputElement | null;
             nameInput?.focus();
           }}
+          {...contactGuard.dialogProps}
         >
           <DialogHeader>
             <DialogTitle className="dark:text-white flex items-center gap-2 text-xl">

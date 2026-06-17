@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,9 @@ import {
 import { PageHeader } from '@/components/shared/page-header';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useDraftSync } from '@/hooks/use-draft-sync';
+import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { readDraft } from '@/lib/draft-store';
 import {
   Target,
   Plus,
@@ -250,6 +253,48 @@ export function BudgetPage({ user }: { user: User }) {
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(false);
 
+  // ── Draft persistence (create + edit budget forms) ──
+  // The hook writes on every state change; we restore manually in
+  // handleOpenCreate / handleOpenEdit so we can merge draft with server data.
+  const { clearDraft: clearCreateDraft } = useDraftSync(
+    'budget:new',
+    { formYear, formName, formNotes, formEntries },
+    {
+      label: isDa ? 'Nyt budget' : 'New budget',
+      disabled: !createDialogOpen,
+    }
+  );
+  const editDraftKey = detail ? `budget:edit:${detail.budget.id}` : 'budget:edit:none';
+  const { clearDraft: clearEditDraft } = useDraftSync(
+    editDraftKey,
+    { formName, formNotes, formEntries },
+    {
+      label: isDa ? 'Rediger budget' : 'Edit budget',
+      disabled: !editDialogOpen,
+    }
+  );
+
+  // ── Dirty tracking for safety-net guard ──
+  const loadedEditStateRef = useRef<{ name: string; notes: string; entriesStr: string } | null>(null);
+  const isCreateDirty = createDialogOpen && (
+    formName.trim() !== '' ||
+    formNotes.trim() !== '' ||
+    formEntries.some((e) => e.accountId !== '')
+  );
+  const isEditDirty = editDialogOpen && loadedEditStateRef.current !== null && (
+    formName !== loadedEditStateRef.current.name ||
+    formNotes !== loadedEditStateRef.current.notes ||
+    JSON.stringify(formEntries) !== loadedEditStateRef.current.entriesStr
+  );
+  const createGuard = useWarnOnUnsaved(isCreateDirty, {
+    onConfirmDiscard: () => { clearCreateDraft(); setCreateDialogOpen(false); },
+    window: false,
+  });
+  const editGuard = useWarnOnUnsaved(isEditDirty, {
+    onConfirmDiscard: () => { clearEditDraft(); setEditDialogOpen(false); },
+    window: false,
+  });
+
   // ── Fetch budgets list ──
   const fetchBudgets = useCallback(async () => {
     setIsLoadingBudgets(true);
@@ -389,6 +434,7 @@ export function BudgetPage({ user }: { user: User }) {
         throw new Error(errData?.error || 'Failed to create budget');
       }
       setCreateDialogOpen(false);
+      clearCreateDraft();
       resetForm();
       await fetchBudgets();
       setSelectedYear(formYear);
@@ -442,6 +488,8 @@ export function BudgetPage({ user }: { user: User }) {
         throw new Error(errData?.error || 'Failed to update budget');
       }
       setEditDialogOpen(false);
+      clearEditDraft();
+      loadedEditStateRef.current = null;
       resetForm();
       await fetchBudgets();
       await fetchDetail(selectedYear);
@@ -471,8 +519,6 @@ export function BudgetPage({ user }: { user: User }) {
   const handleOpenEdit = async () => {
     if (!detail) return;
     setFormYear(detail.budget.year);
-    setFormName(detail.budget.name);
-    setFormNotes(detail.budget.notes || '');
     const existing: BudgetFormEntry[] = detail.entries.map((e) => ({
       id: e.id,
       accountId: e.accountId,
@@ -489,14 +535,49 @@ export function BudgetPage({ user }: { user: User }) {
       november: e.budget.november || 0,
       december: e.budget.december || 0,
     }));
-    setFormEntries(existing.length > 0 ? existing : [createEmptyFormEntry()]);
+
+    // Merge any existing draft over server data (user edits win).
+    let initialName = detail.budget.name;
+    let initialNotes = detail.budget.notes || '';
+    let initialEntries: BudgetFormEntry[] = existing.length > 0 ? existing : [createEmptyFormEntry()];
+    const draft = readDraft(`budget:edit:${detail.budget.id}`);
+    if (draft?.data) {
+      const d = draft.data;
+      if (typeof d.formName === 'string') initialName = d.formName;
+      if (typeof d.formNotes === 'string') initialNotes = d.formNotes;
+      if (Array.isArray(d.formEntries) && d.formEntries.length > 0) {
+        initialEntries = d.formEntries as BudgetFormEntry[];
+      }
+    }
+
+    setFormName(initialName);
+    setFormNotes(initialNotes);
+    setFormEntries(initialEntries);
+    loadedEditStateRef.current = {
+      name: initialName,
+      notes: initialNotes,
+      entriesStr: JSON.stringify(initialEntries),
+    };
     await fetchAccounts();
     setEditDialogOpen(true);
   };
 
   // ── Open create dialog ──
   const handleOpenCreate = async () => {
-    resetForm();
+    const draft = readDraft('budget:new');
+    if (draft?.data) {
+      const d = draft.data;
+      setFormYear(typeof d.formYear === 'number' ? d.formYear : new Date().getFullYear());
+      setFormName(typeof d.formName === 'string' ? d.formName : '');
+      setFormNotes(typeof d.formNotes === 'string' ? d.formNotes : '');
+      setFormEntries(
+        Array.isArray(d.formEntries) && d.formEntries.length > 0
+          ? (d.formEntries as BudgetFormEntry[])
+          : [createEmptyFormEntry()]
+      );
+    } else {
+      resetForm();
+    }
     await fetchAccounts();
     setCreateDialogOpen(true);
   };
@@ -1054,7 +1135,7 @@ export function BudgetPage({ user }: { user: User }) {
 
       {/* ─── Create Budget Dialog ─── */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" {...createGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="h-5 w-5 text-[#0d9488]" />
@@ -1194,7 +1275,7 @@ export function BudgetPage({ user }: { user: User }) {
 
       {/* ─── Edit Budget Dialog ─── */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" {...editGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Target className="h-5 w-5 text-[#0d9488]" />
