@@ -32,7 +32,7 @@
  * on every page nav would be annoying.
  */
 
-import { useEffect, useCallback, useMemo } from 'react';
+import { useEffect, useCallback, useMemo, useRef } from 'react';
 
 export interface UseWarnOnUnsavedOptions {
   /**
@@ -122,8 +122,6 @@ export function useWarnOnUnsaved(
 }
 
 // ─── Tiny stable-callback ref helper ─────────────────────────────────
-
-import { useRef, useEffect } from 'react';
 
 function useCallbackRef<T extends (...args: never[]) => unknown>(callback: T | undefined): {
   current: T | undefined;
