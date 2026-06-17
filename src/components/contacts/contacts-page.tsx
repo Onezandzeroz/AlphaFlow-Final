@@ -1076,7 +1076,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
       </Card>
 
       {/* Add/Edit Contact Dialog */}
-      <Dialog open={isFormOpen} onOpenChange={(open) => { if (!open) setIsFormOpen(false); }}>
+      <Dialog open={isFormOpen} onOpenChange={(open) => { if (!open) { clearContactDraft(); setIsFormOpen(false); } }}>
         <DialogContent
           className="bg-white dark:bg-[#1a1f1e] max-w-lg max-h-[90vh] overflow-y-auto"
           onOpenAutoFocus={(e) => {
@@ -1306,7 +1306,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setIsFormOpen(false)}
+                onClick={() => { clearContactDraft(); setIsFormOpen(false); }}
                 className="dark:bg-white/5 dark:text-gray-300"
               >
                 {isDanish ? 'Annuller' : 'Cancel'}

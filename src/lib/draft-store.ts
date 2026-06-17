@@ -158,3 +158,45 @@ export function removeDraft(key: string): void {
 export function draftExists(key: string): boolean {
   return Boolean(useDraftStore.getState().drafts[key]);
 }
+
+// ─── External-clear handshake (parent → hook) ────────────────────────
+//
+// When a PARENT component (e.g. a Dialog wrapper) needs to clear a form's
+// draft on close, it can't call the hook's internal clearDraft() because
+// the hook lives inside the form component. Calling removeDraft() alone
+// is not enough — the hook's unmount-flush would re-create the draft.
+//
+// clearDraftBeforeUnmount() marks the key so that the hook's unmount
+// cleanup knows to SKIP the flush. The flag is auto-cleared after 500ms
+// (safety net in case the form doesn't actually unmount) and is also
+// consumed on the next unmount.
+
+const pendingExternalClear = new Set<string>();
+
+/**
+ * Clear a draft AND signal the owning hook to suppress its unmount-flush.
+ * Call this from a parent component right before the form unmounts
+ * (e.g. in a Dialog onOpenChange handler when closing).
+ */
+export function clearDraftBeforeUnmount(key: string): void {
+  pendingExternalClear.add(key);
+  useDraftStore.getState().clearDraft(key);
+  // Safety net: if the form doesn't actually unmount within 500ms
+  // (e.g. close was vetoed), clear the flag so future unmounts flush normally.
+  setTimeout(() => {
+    pendingExternalClear.delete(key);
+  }, 500);
+}
+
+/**
+ * Check (and consume) the external-clear flag. Called by the hook's unmount
+ * cleanup. Returns true if the draft was externally cleared and the flush
+ * should be skipped.
+ */
+export function consumeExternalClear(key: string): boolean {
+  if (pendingExternalClear.has(key)) {
+    pendingExternalClear.delete(key);
+    return true;
+  }
+  return false;
+}

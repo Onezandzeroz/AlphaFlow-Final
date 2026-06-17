@@ -1134,7 +1134,7 @@ export function BudgetPage({ user }: { user: User }) {
       )}
 
       {/* ─── Create Budget Dialog ─── */}
-      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+      <Dialog open={createDialogOpen} onOpenChange={(open) => { if (!open) clearCreateDraft(); setCreateDialogOpen(open); }}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" {...createGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1258,7 +1258,7 @@ export function BudgetPage({ user }: { user: User }) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+            <Button variant="outline" onClick={() => { clearCreateDraft(); setCreateDialogOpen(false); }}>
               {isDa ? 'Annuller' : 'Cancel'}
             </Button>
             <Button
@@ -1274,7 +1274,7 @@ export function BudgetPage({ user }: { user: User }) {
       </Dialog>
 
       {/* ─── Edit Budget Dialog ─── */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) clearEditDraft(); setEditDialogOpen(open); }}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" {...editGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1377,7 +1377,7 @@ export function BudgetPage({ user }: { user: User }) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="outline" onClick={() => { clearEditDraft(); setEditDialogOpen(false); }}>
               {isDa ? 'Annuller' : 'Cancel'}
             </Button>
             <Button

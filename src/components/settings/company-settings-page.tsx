@@ -1205,7 +1205,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={fetchCompanyInfo}
+                  onClick={() => { clearCompanyDraft(); fetchCompanyInfo(); }}
                   className="gap-2"
                 >
                   {t('cancel')}

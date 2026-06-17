@@ -1108,7 +1108,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
       </Card>
 
       {/* ─── New/Edit Journal Entry Dialog ───────────────────────────────── */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { if (!editingEntry) clearJournalDraft(); closeDialog(); } }}>
         <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" {...journalGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="dark:text-white flex items-center gap-2 text-xl">
@@ -1422,7 +1422,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
           <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
             <Button
               variant="outline"
-              onClick={closeDialog}
+              onClick={() => { if (!editingEntry) clearJournalDraft(); closeDialog(); }}
               disabled={dialogLoading}
               className="dark:bg-white/5 dark:text-gray-300"
             >

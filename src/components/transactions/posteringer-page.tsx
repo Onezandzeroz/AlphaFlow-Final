@@ -9,6 +9,7 @@ import { RecurringEntriesPage } from '@/components/recurring-entries/recurring-e
 import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
 import { PageHeader } from '@/components/shared/page-header';
 import { AddTransactionForm } from '@/components/transaction/add-transaction-form';
+import { clearDraftBeforeUnmount } from '@/lib/draft-store';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -105,6 +106,11 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
     if (!open && isScannerActiveRef.current) return;
     setIsMobileDialogOpen(open);
     if (!open) {
+      // Clear the transaction draft when the dialog is closed (cancel/X/
+      // backdrop/escape) so the form starts empty next time. Uses
+      // clearDraftBeforeUnmount so the form's useDraftSync unmount-flush
+      // doesn't re-create the draft that was just removed.
+      clearDraftBeforeUnmount('transaction:new');
       setPreloadedFile(null);
     }
   }, []);

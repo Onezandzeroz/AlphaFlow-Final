@@ -29,7 +29,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useDraftStore } from '@/lib/draft-store';
+import { useDraftStore, consumeExternalClear } from '@/lib/draft-store';
 
 const DEFAULT_DEBOUNCE_MS = 300;
 
@@ -92,9 +92,13 @@ export function useDraftForm<T extends Record<string, unknown>>(
   // Debounced write — we schedule a timeout on each change and clear the
   // previous one, so we only hit the store once after typing pauses.
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Once clearDraft() is called (e.g. user clicked Cancel), we must NOT
+  // re-create the draft via a debounced write or the unmount flush.
+  const clearedRef = useRef(false);
+
   const writeDraft = useCallback(
     (v: T) => {
-      if (disabled) return;
+      if (disabled || clearedRef.current) return;
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         useDraftStore.getState().setDraft(key, v as Record<string, unknown>, label);
@@ -104,13 +108,17 @@ export function useDraftForm<T extends Record<string, unknown>>(
   );
 
   // Flush any pending write on unmount (so closing the form still persists
-  // the last keystroke).
+  // the last keystroke) — UNLESS clearDraft() was called (user cancelled)
+  // OR the parent called clearDraftBeforeUnmount (external clear), in which
+  // case we must not re-create the draft that was just removed.
   useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
-        // Fire synchronously on unmount so the data isn't lost
-        useDraftStore.getState().setDraft(key, values as Record<string, unknown>, label);
+        if (!clearedRef.current && !consumeExternalClear(key)) {
+          // Fire synchronously on unmount so the data isn't lost
+          useDraftStore.getState().setDraft(key, values as Record<string, unknown>, label);
+        }
       }
     };
     // Intentionally only re-subscribes on key change — we read `values`
@@ -148,6 +156,7 @@ export function useDraftForm<T extends Record<string, unknown>>(
   );
 
   const clearDraft = useCallback(() => {
+    clearedRef.current = true;
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -156,6 +165,7 @@ export function useDraftForm<T extends Record<string, unknown>>(
   }, [key]);
 
   const reset = useCallback(() => {
+    clearedRef.current = true;
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;

@@ -1354,7 +1354,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
       </Card>
 
       {/* ── Connect Dialog ── */}
-      <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
+      <Dialog open={connectDialogOpen} onOpenChange={(open) => { if (!open) clearConnectDraft(); setConnectDialogOpen(open); }}>
         <DialogContent className="sm:max-w-md" {...connectGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1590,6 +1590,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
             <Button
               variant="outline"
               onClick={() => {
+                clearConnectDraft();
                 setConnectDialogOpen(false);
                 resetConnectForm();
               }}
@@ -1616,7 +1617,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
       </Dialog>
 
       {/* ── Edit Settings Dialog ── */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) clearEditDraft(); setEditDialogOpen(open); }}>
         <DialogContent className="sm:max-w-sm" {...editBankGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1664,7 +1665,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={isEditing}>
+            <Button variant="outline" onClick={() => { clearEditDraft(); setEditDialogOpen(false); }} disabled={isEditing}>
               {language === 'da' ? 'Annuller' : 'Cancel'}
             </Button>
             <Button

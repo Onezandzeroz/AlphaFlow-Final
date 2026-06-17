@@ -533,7 +533,7 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
       )}
 
       {/* ── Create Project Dialog ── */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+      <Dialog open={isCreateOpen} onOpenChange={(open) => { if (!open) clearCreateDraft(); setIsCreateOpen(open); }}>
         <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto" {...createGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle>{t('newProject')}</DialogTitle>
@@ -667,7 +667,7 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateOpen(false)} disabled={isSaving}>
+            <Button variant="outline" onClick={() => { clearCreateDraft(); setIsCreateOpen(false); }} disabled={isSaving}>
               {isDa ? 'Annuller' : 'Cancel'}
             </Button>
             <Button onClick={handleCreate} disabled={isSaving} className="bg-[#0d9488] hover:bg-[#0f766e] text-white gap-1.5">

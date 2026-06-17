@@ -43,7 +43,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useDraftStore } from '@/lib/draft-store';
+import { useDraftStore, consumeExternalClear } from '@/lib/draft-store';
 
 const DEFAULT_DEBOUNCE_MS = 300;
 
@@ -108,9 +108,14 @@ export function useDraftSync<T extends Record<string, unknown>>(
   const stateRef = useRef(currentState);
   stateRef.current = currentState;
 
+  // Once clearDraft() is called (e.g. user clicked Cancel), we must NOT
+  // re-create the draft via a debounced write or the unmount flush. This
+  // flag is set by clearDraft and checked by every write path.
+  const clearedRef = useRef(false);
+
   const writeDraft = useCallback(
     (v: T) => {
-      if (disabled) return;
+      if (disabled || clearedRef.current) return;
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         useDraftStore.getState().setDraft(key, v as Record<string, unknown>, label);
@@ -123,12 +128,15 @@ export function useDraftSync<T extends Record<string, unknown>>(
     writeDraft(currentState);
   }, [currentState, writeDraft]);
 
-  // Flush on unmount so the last keystroke isn't lost.
+  // Flush on unmount so the last keystroke isn't lost — UNLESS clearDraft()
+  // was called (e.g. user cancelled) OR the parent called
+  // clearDraftBeforeUnmount (external clear), in which case we must not
+  // re-create the draft that was just removed.
   useEffect(() => {
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
-        if (!disabled) {
+        if (!disabled && !clearedRef.current && !consumeExternalClear(key)) {
           useDraftStore
             .getState()
             .setDraft(key, stateRef.current as Record<string, unknown>, label);
@@ -139,6 +147,7 @@ export function useDraftSync<T extends Record<string, unknown>>(
   }, [key]);
 
   const clearDraft = useCallback(() => {
+    clearedRef.current = true;
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;

@@ -1842,7 +1842,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               <FileText className="h-3 w-3" />
               {nextInvoiceNumber}
             </Badge>
-            <Button variant="outline" onClick={() => setCurrentView('list')} className="bg-gray-200 hover:bg-gray-300 text-gray-700 border border-gray-300 lg:bg-white/10 lg:hover:bg-white/20 lg:text-white lg:border-white/20 gap-2">
+            <Button variant="outline" onClick={() => { if (isEditingDraft) { clearEditDraftDraft(); } else { clearCreateDraft(); } setCurrentView('list'); }} className="bg-gray-200 hover:bg-gray-300 text-gray-700 border border-gray-300 lg:bg-white/10 lg:hover:bg-white/20 lg:text-white lg:border-white/20 gap-2">
               {t('cancel')}
             </Button>
           </div>
@@ -2484,7 +2484,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentView('list')}
+                  onClick={() => { if (isEditingDraft) { clearEditDraftDraft(); } else { clearCreateDraft(); } setCurrentView('list'); }}
                   className="gap-2"
                 >
                   {t('cancel')}

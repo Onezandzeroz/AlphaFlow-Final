@@ -1385,6 +1385,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
         availableGroups={availableGroups}
         dialogProps={editAccount ? editGuard.dialogProps : addGuard.dialogProps}
         onClose={() => {
+          if (editAccount) { clearEditDraft(); } else { clearAddDraft(); }
           setShowAddDialog(false);
           setEditAccount(null);
         }}

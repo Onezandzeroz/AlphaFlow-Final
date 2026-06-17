@@ -804,7 +804,7 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
       </Tabs>
 
       {/* ── Edit Dialog ── */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+      <Dialog open={isEditOpen} onOpenChange={(open) => { if (!open) clearEditDraft(); setIsEditOpen(open); }}>
         <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto" {...editGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle>{t('projectEdit')}</DialogTitle>
@@ -938,7 +938,7 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditOpen(false)} disabled={isSaving}>
+            <Button variant="outline" onClick={() => { clearEditDraft(); setIsEditOpen(false); }} disabled={isSaving}>
               {isDa ? 'Annuller' : 'Cancel'}
             </Button>
             <Button onClick={handleSave} disabled={isSaving} className="bg-[#0d9488] hover:bg-[#0f766e] text-white gap-1.5">
