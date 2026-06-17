@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { toast } from 'sonner';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -302,9 +303,12 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
     if (showLoading) setIsLoading(false);
   }, [fetchConnections, fetchAvailableBanks]);
 
+  // Auto-refresh bank connections when the server signals a data-changed event.
+  const bankConnectionsVersion = useDataVersion('bank-connections');
+
   useEffect(() => {
     loadAll();
-  }, [loadAll]);
+  }, [loadAll, bankConnectionsVersion]);
 
   // ── Computed ──
 

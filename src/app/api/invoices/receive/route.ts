@@ -6,6 +6,7 @@ import { parseEInvoiceXml, mapDocumentTypeToDbValue, mapFormatToDbValue } from '
 import { generateApplicationResponse, generateMessageLevelResponse } from '@/lib/einvoice-response';
 import { logger } from '@/lib/logger';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // POST /api/invoices/receive — Receive and store an e-invoice
 export const POST = withGuard(
@@ -176,6 +177,8 @@ export const POST = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'received-invoices', companyId, action: 'create' }).catch(() => {});
 
       return NextResponse.json(
         {

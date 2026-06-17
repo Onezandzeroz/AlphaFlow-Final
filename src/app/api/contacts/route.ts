@@ -5,6 +5,7 @@ import { ContactType } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // GET - List contacts for the authenticated user
 export const GET = withGuard(
@@ -94,6 +95,8 @@ export const POST = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'contacts', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
 
       return NextResponse.json({ contact }, { status: 201 });
     } catch (error) {

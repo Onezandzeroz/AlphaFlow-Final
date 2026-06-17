@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
+import { useDataVersion } from '@/hooks/use-data-version';
 import {
   Settings,
   Building2,
@@ -214,9 +215,12 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
     }
   }, []);
 
+  // Auto-refresh company info when the server signals a data-changed event.
+  const companySettingsVersion = useDataVersion('company-settings');
+
   useEffect(() => {
     fetchCompanyInfo();
-  }, [fetchCompanyInfo]);
+  }, [fetchCompanyInfo, companySettingsVersion]);
 
   // ── Track changes ──
   useEffect(() => {

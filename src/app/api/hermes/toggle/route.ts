@@ -4,6 +4,7 @@ import { withGuard } from '@/lib/route-guard';
 import { routeConfig } from '@/lib/route-config';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 /**
  * POST /api/hermes/toggle
@@ -71,6 +72,15 @@ export const POST = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (re
       enabled,
       performedBy: ctx.id,
     });
+
+    // Notify all connected clients in this company that the Hermes config
+    // changed, so the HermesProvider re-fetches immediately instead of
+    // waiting for the (now removed) 60s polling.
+    notifyDataChange({
+      scope: 'hermes-config',
+      companyId,
+      action: 'toggle',
+    }).catch(() => { /* non-critical */ });
 
     return NextResponse.json({ success: true, enabled: hermesAgent.enabled });
   } catch (error) {

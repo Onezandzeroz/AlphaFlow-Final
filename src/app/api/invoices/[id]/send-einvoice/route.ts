@@ -5,6 +5,7 @@ import { EInvoiceSendChannel } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoiceSendChannel.PEPPOL_BIS, EInvoiceSendChannel.STORECOVE];
 
@@ -51,6 +52,8 @@ export const POST = withGuard(
         userId: ctx.id,
         companyId: ctx.activeCompanyId,
       });
+
+      notifyDataChange({ scope: 'invoices', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
 
       return NextResponse.json({ sending }, { status: 201 });
     } catch (error) {

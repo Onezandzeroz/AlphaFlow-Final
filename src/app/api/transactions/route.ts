@@ -8,6 +8,7 @@ import { tenantFilter, Permission } from '@/lib/rbac';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { enrichTransactionsWithVAT } from '@/lib/vat-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // GET - Fetch all non-cancelled transactions for the logged-in user
 export const GET = withGuard({
@@ -209,6 +210,14 @@ export const POST = withGuard({
     // Trigger initial backup on first tenant data input
     ensureInitialBackup(ctx.activeCompanyId!, ctx.id);
 
+    notifyDataChanges([
+      { scope: 'transactions', companyId: ctx.activeCompanyId!, action: 'create' },
+      { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'reports', companyId: ctx.activeCompanyId!, action: 'update' },
+    ]).catch(() => {});
+
     return NextResponse.json({ transaction });
   } catch (error) {
     logger.error('Create transaction error:', error);
@@ -344,6 +353,14 @@ export const DELETE = withGuard({
       requestMetadata(request),
       ctx.activeCompanyId
     );
+
+    notifyDataChanges([
+      { scope: 'transactions', companyId: ctx.activeCompanyId!, action: 'delete' },
+      { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'reports', companyId: ctx.activeCompanyId!, action: 'update' },
+    ]).catch(() => {});
 
     return NextResponse.json({ success: true, message: 'Transaction cancelled (soft-delete)' });
   } catch (error) {

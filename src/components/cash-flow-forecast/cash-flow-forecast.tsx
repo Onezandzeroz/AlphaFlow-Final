@@ -31,6 +31,7 @@ import {
   Legend,
   Cell,
 } from 'recharts';
+import { useDataVersion } from '@/hooks/use-data-version';
 
 interface CashFlowForecastData {
   historical: Array<{
@@ -82,6 +83,7 @@ interface CashFlowForecastProps {
 }
 
 export function CashFlowForecast({ dateRange: _dateRange }: CashFlowForecastProps) {
+  const cashFlowVersion = useDataVersion('cash-flow');
   const [data, setData] = useState<CashFlowForecastData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { tc, language } = useTranslation();
@@ -103,7 +105,7 @@ export function CashFlowForecast({ dateRange: _dateRange }: CashFlowForecastProp
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, cashFlowVersion]);
 
   if (isLoading) {
     return (

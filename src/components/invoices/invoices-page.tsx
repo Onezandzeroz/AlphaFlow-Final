@@ -112,6 +112,7 @@ import { da, enGB } from 'date-fns/locale';
 import { toast } from "sonner";
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatsCard } from '@/components/shared/stats-card';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
@@ -344,12 +345,15 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     } catch { /* silent */ }
   }, []);
 
+  // Auto-refresh invoices when the server signals a data-changed event.
+  const invoicesVersion = useDataVersion('invoices');
+
   useEffect(() => {
     fetchCompanyInfo();
     fetchInvoices();
     fetchAccounts();
     fetchEInvoiceConfig();
-  }, [fetchCompanyInfo, fetchInvoices, fetchAccounts, fetchEInvoiceConfig]);
+  }, [fetchCompanyInfo, fetchInvoices, fetchAccounts, fetchEInvoiceConfig, invoicesVersion]);
 
   // Sync initialView prop changes to internal currentView state.
   // This handles the case where the component is already mounted (e.g. rendered

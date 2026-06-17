@@ -29,6 +29,7 @@ import {
 import { PageHeader } from '@/components/shared/page-header';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { ProjectCard } from './project-card';
 import { ProjectDetail } from './project-detail';
 import {
@@ -147,9 +148,12 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
     }
   }, [statusFilter, isDa]);
 
+  // Auto-refresh projects when the server signals a data-changed event.
+  const projectsVersion = useDataVersion('projects');
+
   useEffect(() => {
     fetchProjects();
-  }, [fetchProjects]);
+  }, [fetchProjects, projectsVersion]);
 
   // ── Fetch contacts when create dialog opens ──
   const fetchContacts = useCallback(async () => {

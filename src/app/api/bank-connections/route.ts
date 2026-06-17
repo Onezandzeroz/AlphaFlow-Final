@@ -6,6 +6,7 @@ import { getProvider, getAvailableBanks } from '@/lib/bank-providers';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { encryptOrNull, decryptOrNull } from '@/lib/crypto';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // GET - List bank connections or available banks
 export const GET = withGuard(
@@ -165,6 +166,8 @@ export const POST = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'bank-connections', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
 
       // If demo provider and active, do an initial sync
       if (bankProvider.isDemo && connection.status === 'ACTIVE') {

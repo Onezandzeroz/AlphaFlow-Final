@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { performSync } from '@/app/api/bank-connections/route';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // POST - Trigger manual sync for a bank connection
 export const POST = withGuard(
@@ -56,6 +57,15 @@ export const POST = withGuard(
       );
 
       const result = await performSync(id, ctx.id);
+
+      notifyDataChanges([
+        { scope: 'bank-connections', companyId: ctx.activeCompanyId!, action: 'sync' },
+        { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'transactions', companyId: ctx.activeCompanyId!, action: 'sync' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
 
       return NextResponse.json({ sync: result });
     } catch (error) {

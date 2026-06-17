@@ -5,6 +5,7 @@ import { AccountType, ProjectStatus } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -162,6 +163,8 @@ export const POST = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'projects', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
 
       return NextResponse.json({ project }, { status: 201 });
     } catch (error) {

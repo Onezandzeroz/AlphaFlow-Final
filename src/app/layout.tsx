@@ -6,6 +6,7 @@ import { PwaProvider } from "@/components/pwa/pwa-register";
 import { OfflineNotice } from "@/components/pwa/offline-notice";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import { HermesProvider } from "@/components/hermes";
+import { DataSyncProvider } from "@/components/providers/data-sync-provider";
 
 const geistSans = localFont({
   src: [
@@ -81,9 +82,11 @@ export default function RootLayout({
         >
           <OfflineNotice />
           <PwaProvider>
-            <HermesProvider>
-              {children}
-            </HermesProvider>
+            <DataSyncProvider>
+              <HermesProvider>
+                {children}
+              </HermesProvider>
+            </DataSyncProvider>
           </PwaProvider>
           <Toaster />
         </ThemeProvider>

@@ -45,6 +45,7 @@ import {
   Info,
   FileText,
 } from 'lucide-react';
+import { useDataVersion } from '@/hooks/use-data-version';
 
 // ─── API Response Types ────────────────────────────────────────────
 
@@ -125,6 +126,7 @@ function valueColor(value: number): string {
 // ─── Component ─────────────────────────────────────────────────────
 
 export function ReportsPage({ user }: ReportsPageProps) {
+  const reportsVersion = useDataVersion('reports');
   const [activeTab, setActiveTab] = useState<string>('income-statement');
   const [incomeData, setIncomeData] = useState<IncomeStatementData | null>(null);
   const [balanceData, setBalanceData] = useState<BalanceSheetData | null>(null);
@@ -194,11 +196,11 @@ export function ReportsPage({ user }: ReportsPageProps) {
 
   useEffect(() => {
     fetchIncomeStatement();
-  }, [fetchIncomeStatement]);
+  }, [fetchIncomeStatement, reportsVersion]);
 
   useEffect(() => {
     fetchBalanceSheet();
-  }, [fetchBalanceSheet]);
+  }, [fetchBalanceSheet, reportsVersion]);
 
   // ─── Export CSV — Income Statement ─────────────────────────────
   const handleExportIncomeCSV = useCallback(() => {

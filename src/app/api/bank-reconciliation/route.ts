@@ -4,6 +4,7 @@ import { auditCreate, auditUpdate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { tenantFilter, companyScope, Permission, type AuthContext } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -482,6 +483,13 @@ export const POST = withGuard(
         ctx.activeCompanyId
       );
 
+      notifyDataChanges([
+        { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
+
       return NextResponse.json(
         {
           bankStatement: updatedStatement,
@@ -611,6 +619,13 @@ export const PUT = withGuard(
           });
         }
 
+        notifyDataChanges([
+          { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+        ]).catch(() => {});
+
         return NextResponse.json({ bankStatementLine: updatedLine });
       } else {
         // Unmatch
@@ -659,6 +674,13 @@ export const PUT = withGuard(
           { ...requestMetadata(request), bankLineId, action },
           ctx.activeCompanyId
         );
+
+        notifyDataChanges([
+          { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+        ]).catch(() => {});
 
         return NextResponse.json({ bankStatementLine: updatedLine });
       }

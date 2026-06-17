@@ -6,6 +6,7 @@ import path from 'path';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // Allowed file types for document attachments
 const ALLOWED_TYPES = [
@@ -164,6 +165,8 @@ export const POST = withGuard(
         ctx.activeCompanyId
       );
 
+      notifyDataChange({ scope: 'documents', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
+
       return NextResponse.json({ document }, { status: 201 });
     } catch (error) {
       logger.error('Upload document error:', error);
@@ -235,6 +238,8 @@ export const DELETE = withGuard(
       } catch {
         // Ignore file deletion errors
       }
+
+      notifyDataChange({ scope: 'documents', companyId: ctx.activeCompanyId!, action: 'delete' }).catch(() => {});
 
       return NextResponse.json({
         success: true,

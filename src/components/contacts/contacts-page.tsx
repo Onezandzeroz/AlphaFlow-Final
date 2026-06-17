@@ -50,6 +50,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
+import { useDataVersion } from '@/hooks/use-data-version';
 import {
   Users,
   Plus,
@@ -255,9 +256,12 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
     }
   }, [typeFilter, searchQuery, isDanish]);
 
+  // Auto-refresh contacts when the server signals a data-changed event.
+  const contactsVersion = useDataVersion('contacts');
+
   useEffect(() => {
     fetchContacts();
-  }, [fetchContacts]);
+  }, [fetchContacts, contactsVersion]);
 
   // Auto-open create dialog when navigated from mobile FAB
   useEffect(() => {

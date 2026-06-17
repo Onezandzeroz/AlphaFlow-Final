@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { generateVoucherNumber } from '@/lib/voucher-number';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // GET - Get a single journal entry with lines
 export const GET = withGuard(
@@ -195,6 +196,14 @@ export const PUT = withGuard(
         ctx.activeCompanyId
       );
 
+      notifyDataChanges([
+        { scope: 'journal-entries', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'reports', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
+
       return NextResponse.json({ journalEntry: entry });
     } catch (error) {
       logger.error('Update journal entry error:', error);
@@ -262,6 +271,14 @@ export const DELETE = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChanges([
+        { scope: 'journal-entries', companyId: ctx.activeCompanyId!, action: 'delete' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'reports', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
 
       return NextResponse.json({ journalEntry: entry });
     } catch (error) {

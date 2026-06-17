@@ -13,6 +13,7 @@ import { logger } from '@/lib/logger';
 import { JournalEntryStatus } from '@prisma/client';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // ─── GET /api/invoices/received/[id] ────────────────────────────
 
@@ -98,6 +99,8 @@ export const PUT = withGuard(
           companyId
         );
 
+        notifyDataChange({ scope: 'received-invoices', companyId, action: 'update' }).catch(() => {});
+
         return NextResponse.json({ receivedInvoice: updated });
       }
 
@@ -126,6 +129,8 @@ export const PUT = withGuard(
           { action: 'reject' },
           companyId
         );
+
+        notifyDataChange({ scope: 'received-invoices', companyId, action: 'update' }).catch(() => {});
 
         return NextResponse.json({ receivedInvoice: updated });
       }
@@ -286,6 +291,8 @@ export const PUT = withGuard(
           companyId
         );
 
+        notifyDataChange({ scope: 'received-invoices', companyId, action: 'update' }).catch(() => {});
+
         return NextResponse.json({
           receivedInvoice: updated,
           journalEntry,
@@ -333,6 +340,8 @@ export const DELETE = withGuard(
           companyId
         );
 
+        notifyDataChange({ scope: 'received-invoices', companyId, action: 'delete' }).catch(() => {});
+
         return NextResponse.json({ message: 'Received invoice deleted' });
       } else {
         // Soft delete: set status to REJECTED with reason "Slettet"
@@ -352,6 +361,8 @@ export const DELETE = withGuard(
           { action: 'soft_delete', previousStatus: existing.status },
           companyId
         );
+
+        notifyDataChange({ scope: 'received-invoices', companyId, action: 'delete' }).catch(() => {});
 
         return NextResponse.json({ receivedInvoice: updated });
       }

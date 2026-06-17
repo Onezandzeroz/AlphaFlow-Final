@@ -7,6 +7,7 @@ import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // GET - List journal entries for the authenticated user
 export const GET = withGuard(
@@ -199,6 +200,14 @@ export const POST = withGuard(
 
       // Trigger initial backup on first tenant data input
       ensureInitialBackup(ctx.activeCompanyId!, ctx.id);
+
+      notifyDataChanges([
+        { scope: 'journal-entries', companyId: ctx.activeCompanyId!, action: 'create' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'reports', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
 
       return NextResponse.json({ journalEntry: entry }, { status: 201 });
     } catch (error) {

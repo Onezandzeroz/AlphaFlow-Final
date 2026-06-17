@@ -51,6 +51,7 @@ import {
 } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/shared/page-header';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
+import { useDataVersion } from '@/hooks/use-data-version';
 import {
   BookOpen,
   Search,
@@ -354,9 +355,12 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
     }
   }, [isDanish]);
 
+  // Auto-refresh accounts when the server signals a data-changed event.
+  const accountsVersion = useDataVersion('accounts');
+
   useEffect(() => {
     fetchAccounts();
-  }, [fetchAccounts]);
+  }, [fetchAccounts, accountsVersion]);
 
   // ─── Seed Standard Accounts ───────────────────────────────────────────
 

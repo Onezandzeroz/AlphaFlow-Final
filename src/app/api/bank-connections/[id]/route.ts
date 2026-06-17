@@ -4,6 +4,7 @@ import { auditCreate, auditUpdate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // GET - Get single bank connection
 export const GET = withGuard(
@@ -83,6 +84,8 @@ export const DELETE = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'bank-connections', companyId: ctx.activeCompanyId!, action: 'delete' }).catch(() => {});
 
       return NextResponse.json({ success: true });
     } catch (error) {

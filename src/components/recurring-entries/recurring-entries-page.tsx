@@ -50,6 +50,7 @@ import { PageHeader } from '@/components/shared/page-header';
 
 import { toLocalDate, daysBetween, addFrequency, parseLocalDate, todayLocal } from '@/lib/date-utils';
 import { RecurringFrequency } from '@prisma/client';
+import { useDataVersion } from '@/hooks/use-data-version';
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -257,6 +258,7 @@ function countPastPayments(entry: RecurringEntry): number {
 // ─── Component ────────────────────────────────────────────────────
 
 export function RecurringEntriesPage({ user, hideHeader }: { user: User; hideHeader?: boolean }) {
+  const recurringVersion = useDataVersion('recurring-entries');
   const { language, td } = useTranslation();
   const [entries, setEntries] = useState<RecurringEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -288,7 +290,7 @@ export function RecurringEntriesPage({ user, hideHeader }: { user: User; hideHea
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData, recurringVersion]);
 
   // ─── Toggle pause ─────────────────────────────────────────────
 

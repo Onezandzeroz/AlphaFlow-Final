@@ -68,6 +68,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { OpenBankingSection } from '@/components/bank-reconciliation/open-banking-section';
 
 // ──────────────── Types ────────────────
@@ -200,9 +201,12 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
     }
   }, [fetchData]);
 
+  // Auto-refresh bank reconciliation data when the server signals a data-changed event.
+  const bankReconciliationVersion = useDataVersion('bank-reconciliation');
+
   useEffect(() => {
     fetchAndSetLoading();
-  }, [fetchAndSetLoading]);
+  }, [fetchAndSetLoading, bankReconciliationVersion]);
 
   // ──────────────── Computed stats ────────────────
 

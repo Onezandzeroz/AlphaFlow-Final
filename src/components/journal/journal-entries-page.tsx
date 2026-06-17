@@ -69,6 +69,7 @@ import {
   Info,
   RotateCcw,
 } from 'lucide-react';
+import { useDataVersion } from '@/hooks/use-data-version';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -180,6 +181,7 @@ interface JournalEntriesPageProps {
 }
 
 export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
+  const journalEntriesVersion = useDataVersion('journal-entries');
   const { language } = useTranslation();
   const isDanish = language === 'da';
   const { handleMutationError } = useAccessErrorHandler();
@@ -260,7 +262,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
 
   useEffect(() => {
     fetchEntries();
-  }, [fetchEntries]);
+  }, [fetchEntries, journalEntriesVersion]);
 
   useEffect(() => {
     fetchAccounts();

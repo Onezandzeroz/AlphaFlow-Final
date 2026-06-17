@@ -4,6 +4,7 @@ import { auditUpdate, auditCancel, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // GET - Get a single account
 export const GET = withGuard({
@@ -86,6 +87,11 @@ export const PUT = withGuard({
       ctx.activeCompanyId
     );
 
+    notifyDataChanges([
+      { scope: 'accounts', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+    ]).catch(() => {});
+
     return NextResponse.json({ account });
   } catch (error) {
     logger.error('Update account error:', error);
@@ -136,6 +142,11 @@ export const DELETE = withGuard({
       requestMetadata(request),
       ctx.activeCompanyId
     );
+
+    notifyDataChanges([
+      { scope: 'accounts', companyId: ctx.activeCompanyId!, action: 'delete' },
+      { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+    ]).catch(() => {});
 
     return NextResponse.json({ account });
   } catch (error) {

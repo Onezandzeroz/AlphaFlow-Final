@@ -5,6 +5,7 @@ import { AccountType } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission, type AuthContext } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -247,6 +248,8 @@ export const POST = withGuard(
         ctx.activeCompanyId
       );
 
+      notifyDataChange({ scope: 'budgets', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
+
       return NextResponse.json({ budget }, { status: 201 });
     } catch (error) {
       logger.error('Budget POST error:', error);
@@ -401,6 +404,8 @@ export const PUT = withGuard(
         ctx.activeCompanyId
       );
 
+      notifyDataChange({ scope: 'budgets', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
+
       return NextResponse.json({ budget: updated });
     } catch (error) {
       logger.error('Budget PUT error:', error);
@@ -475,6 +480,10 @@ async function cancelBudget(
     requestMetadata(request),
     companyId
   );
+
+  if (companyId) {
+    notifyDataChange({ scope: 'budgets', companyId, action: 'delete' }).catch(() => {});
+  }
 
   return NextResponse.json({ budget: cancelled });
 }

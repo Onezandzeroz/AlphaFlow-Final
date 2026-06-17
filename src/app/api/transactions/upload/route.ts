@@ -3,6 +3,7 @@ import { withGuard } from '@/lib/route-guard';
 import { Permission } from '@/lib/rbac';
 import { saveReceiptFile, validateReceiptFile } from '@/lib/file-service';
 import { logger } from '@/lib/logger';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 /**
  * POST /api/transactions/upload
@@ -58,6 +59,14 @@ export const POST = withGuard({
       `[RECEIPT-UPLOAD] Saved receipt for company ${ctx.activeCompanyId}: ` +
       `${result.dbPath} (${(result.fileSize / 1024).toFixed(1)} KB, original: ${result.originalName})`
     );
+
+    notifyDataChanges([
+      { scope: 'transactions', companyId: ctx.activeCompanyId!, action: 'create' },
+      { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+      { scope: 'reports', companyId: ctx.activeCompanyId!, action: 'update' },
+    ]).catch(() => {});
 
     return NextResponse.json({ path: result.dbPath });
   } catch (error) {

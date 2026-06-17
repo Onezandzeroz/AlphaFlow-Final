@@ -5,6 +5,7 @@ import { routeConfig } from '@/lib/route-config';
 import { auditCreate, auditUpdate, auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { notifyOwner } from '@/lib/notify-owner';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 const guard = routeConfig['/api/company'];
 
@@ -282,6 +283,8 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       isDemo: company.isDemo,
       updatedAt: company.updatedAt,
     };
+
+    notifyDataChange({ scope: 'company-settings', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
 
     return NextResponse.json({ companyInfo });
   } catch (error) {

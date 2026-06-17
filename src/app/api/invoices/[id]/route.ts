@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // GET /api/invoices/[id] - Get a specific invoice
 export const GET = withGuard(
@@ -500,6 +501,11 @@ export const PUT = withGuard(
           `Faktura ${existing.invoiceNumber} ændret fra SENDT til ${newStatus}`,
         );
       }
+
+      notifyDataChanges([
+        { scope: 'invoices', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
 
       return NextResponse.json({ invoice });
     } catch (error) {

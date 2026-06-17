@@ -5,6 +5,7 @@ import { AccountType, ProjectStatus } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard, READ, MUTATE } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -193,6 +194,8 @@ export const PUT = withGuard(
         ctx.activeCompanyId
       );
 
+      notifyDataChange({ scope: 'projects', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
+
       return NextResponse.json({ project });
     } catch (error) {
       logger.error('Project PUT error:', error);
@@ -240,6 +243,8 @@ export const DELETE = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'projects', companyId: ctx.activeCompanyId!, action: 'delete' }).catch(() => {});
 
       return NextResponse.json({ project });
     } catch (error) {

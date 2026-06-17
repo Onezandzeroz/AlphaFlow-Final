@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { format, formatDistanceToNow } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
 
@@ -168,9 +169,12 @@ export function FiscalPeriodsPage({ user }: FiscalPeriodsPageProps) {
     }
   }, [selectedYear]);
 
+  // Auto-refresh fiscal periods when the server signals a data-changed event.
+  const fiscalPeriodsVersion = useDataVersion('fiscal-periods');
+
   useEffect(() => {
     fetchPeriods();
-  }, [fetchPeriods]);
+  }, [fetchPeriods, fiscalPeriodsVersion]);
 
   // Create year
   const handleCreateYear = useCallback(async () => {

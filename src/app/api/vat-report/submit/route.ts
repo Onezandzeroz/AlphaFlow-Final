@@ -8,6 +8,7 @@ import {
 import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 const VALID_PERIODS: VATReportingPeriod[] = ['Q1', 'Q2', 'Q3', 'Q4', 'YEARLY'];
 
@@ -52,6 +53,11 @@ export const POST = withGuard(
       // Step 2: Submit to Skattestyrelsen
       logger.info(`[VAT-Submit API] Submitting VAT report ${submission.id} to Skattestyrelsen`);
       const result = await submitVATToSkat(submission.id, ctx.id);
+
+      notifyDataChanges([
+        { scope: 'vat-report', companyId, action: 'submit' },
+        { scope: 'dashboard', companyId, action: 'update' },
+      ]).catch(() => {});
 
       return NextResponse.json(
         {

@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // POST /api/invoices/[id]/send — Generate PDF, send email, mark as SENT
 export const POST = withGuard(
@@ -246,6 +247,8 @@ export const POST = withGuard(
       } else {
         logger.warn(`[INVOICE-SEND] Invoice ${invoice.invoiceNumber} re-sent to ${recipientEmail} (was already ${invoice.status}), logId=${emailResult.logId}`);
       }
+
+      notifyDataChange({ scope: 'invoices', companyId, action: 'update' }).catch(() => {});
 
       return NextResponse.json({
         success: true,

@@ -6,6 +6,7 @@ import { tenantFilter, Permission } from '@/lib/rbac';
 import { addFrequency, parseLocalDate, todayLocal } from '@/lib/date-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // ─── POST - Execute a single recurring entry (create journal entry & advance) ─
 
@@ -164,6 +165,15 @@ export const POST = withGuard(
       logger.info(
         `[RECURRING-EXECUTE] Manually executed "${entry.name}" for company ${entry.companyId} → journal ${journalEntry.id}, next: ${dateStr}`,
       );
+
+      notifyDataChanges([
+        { scope: 'recurring-entries', companyId: ctx.activeCompanyId!, action: 'sync' },
+        { scope: 'transactions', companyId: ctx.activeCompanyId!, action: 'sync' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+        { scope: 'reports', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
 
       return NextResponse.json({
         recurringEntry: updatedEntry,

@@ -7,6 +7,7 @@ import { tenantFilter, Permission } from '@/lib/rbac';
 import { addFrequency, parseLocalDate, todayLocal, formatDateLocal } from '@/lib/date-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // ─── GET - List recurring entries for the authenticated user ──────────────
 
@@ -307,6 +308,8 @@ export const POST = withGuard(
           ctx.activeCompanyId
         );
 
+        notifyDataChange({ scope: 'recurring-entries', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
+
         return NextResponse.json({ recurringEntry: updatedEntry || entry, backfilledCount: postedCount }, { status: 201 });
       }
 
@@ -318,6 +321,8 @@ export const POST = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'recurring-entries', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
 
       return NextResponse.json({ recurringEntry: entry }, { status: 201 });
     } catch (error) {

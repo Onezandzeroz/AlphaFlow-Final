@@ -4,6 +4,7 @@ import { withGuard } from '@/lib/route-guard';
 import { routeConfig } from '@/lib/route-config';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 /**
  * POST /api/hermes/data-access
@@ -77,6 +78,14 @@ export const POST = withGuard(routeConfig['/api/hermes/data-access'].POST!, asyn
       dataAccessEnabled: enabled,
       performedBy: ctx.id,
     });
+
+    // Notify all connected clients in this company that the Hermes config
+    // changed (data access affects what Hermes can show).
+    notifyDataChange({
+      scope: 'hermes-config',
+      companyId: ctx.activeCompanyId!,
+      action: 'toggle',
+    }).catch(() => { /* non-critical */ });
 
     return NextResponse.json({ success: true, dataAccessEnabled: updatedAgent.dataAccessEnabled });
   } catch (error) {

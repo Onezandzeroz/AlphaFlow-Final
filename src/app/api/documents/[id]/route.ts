@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { logger } from '@/lib/logger';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // GET - Get document metadata and serve the file
 export const GET = withGuard(
@@ -125,6 +126,8 @@ export const DELETE = withGuard(
       await db.document.delete({
         where: { id },
       });
+
+      notifyDataChange({ scope: 'documents', companyId: ctx.activeCompanyId!, action: 'delete' }).catch(() => {});
 
       return NextResponse.json({
         success: true,

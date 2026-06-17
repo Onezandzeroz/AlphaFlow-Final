@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/select';
 import { PageHeader } from '@/components/shared/page-header';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
+import { useDataVersion } from '@/hooks/use-data-version';
 import {
   Target,
   Plus,
@@ -313,13 +314,16 @@ export function BudgetPage({ user }: { user: User }) {
     }
   }, []);
 
+  // Auto-refresh budgets when the server signals a data-changed event.
+  const budgetsVersion = useDataVersion('budgets');
+
   useEffect(() => {
     fetchBudgets();
-  }, [fetchBudgets]);
+  }, [fetchBudgets, budgetsVersion]);
 
   useEffect(() => {
     fetchDetail(selectedYear);
-  }, [selectedYear, fetchDetail]);
+  }, [selectedYear, fetchDetail, budgetsVersion]);
 
   // ── Grouped entries ──
   const groupedEntries = useMemo(() => {

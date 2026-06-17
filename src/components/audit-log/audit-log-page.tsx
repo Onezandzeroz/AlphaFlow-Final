@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/dialog';
 import { PageHeader } from '@/components/shared/page-header';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
+import { useDataVersion } from '@/hooks/use-data-version';
 import {
   Collapsible,
   CollapsibleContent,
@@ -358,9 +359,14 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
     }
   }, [actionFilter, entityTypeFilter, isDanish]);
 
+  // Auto-refresh audit logs when the server signals a significant financial
+  // change (bumps the 'dashboard' scope as a proxy — there is no dedicated
+  // audit-logs bump, but dashboard is invalidated on all significant changes).
+  const dashboardVersion = useDataVersion('dashboard');
+
   useEffect(() => {
     fetchLogs(1);
-  }, [fetchLogs]);
+  }, [fetchLogs, dashboardVersion]);
 
   // Reset to page 1 when filters change
   useEffect(() => {

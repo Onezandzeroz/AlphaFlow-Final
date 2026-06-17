@@ -31,6 +31,7 @@ import {
   ArrowUpDown,
   CalendarDays,
 } from 'lucide-react';
+import { useDataVersion } from '@/hooks/use-data-version';
 
 interface LedgerAccount {
   accountId: string;
@@ -118,6 +119,7 @@ function getAccountTypeIconColor(type: string): string {
 }
 
 export function LedgerPage({ user }: LedgerPageProps) {
+  const ledgerVersion = useDataVersion('ledger');
   const [data, setData] = useState<LedgerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +148,7 @@ export function LedgerPage({ user }: LedgerPageProps) {
 
   useEffect(() => {
     fetchLedger();
-  }, [fetchLedger]);
+  }, [fetchLedger, ledgerVersion]);
 
   // Group accounts by type
   const groupedAccounts = useMemo(() => {

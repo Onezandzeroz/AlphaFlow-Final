@@ -76,6 +76,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useDataVersion } from '@/hooks/use-data-version';
 
 interface Transaction {
   id: string;
@@ -135,6 +136,7 @@ type SortField = 'date' | 'amount' | 'vatPercent';
 type SortDirection = 'asc' | 'desc';
 
 export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: TransactionsPageProps) {
+  const transactionsVersion = useDataVersion('transactions');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -233,7 +235,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
 
   useEffect(() => {
     fetchTransactions();
-  }, [fetchTransactions]);
+  }, [fetchTransactions, transactionsVersion]);
 
   const handleAddTransaction = useCallback(() => {
     setIsDialogOpen(false);

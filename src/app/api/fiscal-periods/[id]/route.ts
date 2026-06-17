@@ -4,6 +4,7 @@ import { auditUpdate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // PUT - Lock/unlock a fiscal period
 export const PUT = withGuard(
@@ -80,6 +81,8 @@ export const PUT = withGuard(
           ctx.activeCompanyId
         );
 
+        notifyDataChange({ scope: 'fiscal-periods', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
+
         return NextResponse.json({ fiscalPeriod: updated });
       }
 
@@ -109,6 +112,8 @@ export const PUT = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'fiscal-periods', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
 
       return NextResponse.json({ fiscalPeriod: updated });
     } catch (error) {

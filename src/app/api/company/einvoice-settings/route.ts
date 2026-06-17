@@ -5,6 +5,7 @@ import { getCompanyEInvoiceSettings, updateCompanyEInvoiceSettings } from '@/lib
 import type { CompanyEInvoiceConfig } from '@/lib/einvoice-sender';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 const guard = routeConfig['/api/company/einvoice-settings'];
 
@@ -129,6 +130,8 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       userId: ctx.id,
       changedFields: Object.keys(updateData),
     });
+
+    notifyDataChange({ scope: 'company-settings', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
 
     return NextResponse.json({ settings });
   } catch (error) {

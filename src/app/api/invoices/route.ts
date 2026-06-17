@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // GET /api/invoices - List all non-cancelled invoices
 export const GET = withGuard(
@@ -130,6 +131,11 @@ export const POST = withGuard(
       // Trigger initial backup on first tenant data input
       ensureInitialBackup(ctx.activeCompanyId!, ctx.id);
 
+      notifyDataChanges([
+        { scope: 'invoices', companyId: ctx.activeCompanyId!, action: 'create' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
+
       return NextResponse.json({ invoice }, { status: 201 });
     } catch (error) {
       logger.error('Failed to create invoice:', error);
@@ -178,6 +184,11 @@ export const DELETE = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChanges([
+        { scope: 'invoices', companyId: ctx.activeCompanyId!, action: 'delete' },
+        { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
 
       return NextResponse.json({ success: true, message: 'Invoice cancelled (soft-delete)' });
     } catch (error) {

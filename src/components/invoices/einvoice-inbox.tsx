@@ -5,6 +5,7 @@ import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { formatCurrency } from '@/lib/currency-utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -156,7 +157,10 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
     }
   }, [statusFilter, search]);
 
-  useEffect(() => { fetchInvoices(); }, [fetchInvoices]);
+  // Auto-refresh received invoices when the server signals a data-changed event.
+  const receivedInvoicesVersion = useDataVersion('received-invoices');
+
+  useEffect(() => { fetchInvoices(); }, [fetchInvoices, receivedInvoicesVersion]);
 
   // ── File upload ────────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ import { auditUpdate, auditCancel, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 // GET - Get a single contact
 export const GET = withGuard(
@@ -76,6 +77,8 @@ export const PUT = withGuard(
         ctx.activeCompanyId
       );
 
+      notifyDataChange({ scope: 'contacts', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
+
       return NextResponse.json({ contact });
     } catch (error) {
       logger.error('Update contact error:', error);
@@ -115,6 +118,8 @@ export const DELETE = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'contacts', companyId: ctx.activeCompanyId!, action: 'delete' }).catch(() => {});
 
       return NextResponse.json({ contact });
     } catch (error) {

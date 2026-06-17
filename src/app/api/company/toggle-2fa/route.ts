@@ -5,6 +5,7 @@ import { routeConfig } from '@/lib/route-config';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
+import { notifyDataChange } from '@/lib/notify-data-change';
 
 /**
  * POST /api/company/toggle-2fa
@@ -127,6 +128,8 @@ export const POST = withGuard(routeConfig['/api/company/toggle-2fa'].POST!, asyn
         previousValue: company.twoFactorRequired,
       },
     });
+
+    notifyDataChange({ scope: 'company-settings', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
 
     return NextResponse.json({
       twoFactorRequired: enabled,

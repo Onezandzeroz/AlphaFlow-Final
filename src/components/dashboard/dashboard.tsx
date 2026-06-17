@@ -87,6 +87,7 @@ import { SubscriptionPlansWidget } from '@/components/dashboard/subscription-pla
 import { WidgetLayoutEditor } from '@/components/dashboard/widget-layout-editor';
 import { MasonryLayout } from '@/components/dashboard/masonry-layout';
 import { useAccessCacheStore } from '@/hooks/use-write-access-guard';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { hasAccess } from '@/lib/tokenpay';
 import { format, subMonths, startOfYear, startOfMonth, addMonths } from 'date-fns';
 import {
@@ -199,6 +200,7 @@ const chartTooltipStyle = {
 // ─── Component ────────────────────────────────────────────────────
 
 export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardingStepDoneConsumed }: DashboardProps) {
+  const dashboardVersion = useDataVersion('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -502,7 +504,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
 
   useEffect(() => {
     fetchAllData();
-  }, [fetchAllData]);
+  }, [fetchAllData, dashboardVersion]);
 
 
 
