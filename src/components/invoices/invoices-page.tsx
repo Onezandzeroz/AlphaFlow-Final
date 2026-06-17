@@ -378,6 +378,21 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
         notes: typeof d.notes === 'string' ? d.notes : '',
       });
+    } else {
+      // No draft (was cleared on cancel or never created) — reset to defaults
+      // so the form starts empty. Without this, the old invoiceForm state
+      // (which lives in the parent and never auto-resets) would be shown.
+      setInvoiceForm({
+        customerName: '',
+        customerAddress: '',
+        customerEmail: '',
+        customerPhone: '',
+        customerCvr: '',
+        issueDate: (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
+        dueDate: (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
+        lineItems: [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+        notes: '',
+      });
     }
     setEditingInvoiceId(null);
     loadedEditInvoiceRef.current = null;

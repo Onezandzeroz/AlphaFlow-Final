@@ -96,6 +96,16 @@ export function useDraftForm<T extends Record<string, unknown>>(
   // re-create the draft via a debounced write or the unmount flush.
   const clearedRef = useRef(false);
 
+  // When the form is re-activated (disabled goes true→false), reset the
+  // cleared flag so the hook can save drafts again.
+  const prevDisabledRef = useRef(disabled);
+  useEffect(() => {
+    if (prevDisabledRef.current && !disabled) {
+      clearedRef.current = false;
+    }
+    prevDisabledRef.current = disabled;
+  }, [disabled]);
+
   const writeDraft = useCallback(
     (v: T) => {
       if (disabled || clearedRef.current) return;

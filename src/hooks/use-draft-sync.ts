@@ -113,6 +113,18 @@ export function useDraftSync<T extends Record<string, unknown>>(
   // flag is set by clearDraft and checked by every write path.
   const clearedRef = useRef(false);
 
+  // When the form is re-activated (disabled goes true→false, e.g. the user
+  // re-opens the form after cancelling), reset the cleared flag so the hook
+  // can save drafts again. Without this, page-form hooks (which never
+  // unmount) would stop saving after the first cancel.
+  const prevDisabledRef = useRef(disabled);
+  useEffect(() => {
+    if (prevDisabledRef.current && !disabled) {
+      clearedRef.current = false;
+    }
+    prevDisabledRef.current = disabled;
+  }, [disabled]);
+
   const writeDraft = useCallback(
     (v: T) => {
       if (disabled || clearedRef.current) return;
