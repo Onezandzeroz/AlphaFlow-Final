@@ -44,6 +44,7 @@ import { useAuthStore } from '@/lib/auth-store';
 import { ProjectSelector } from '@/components/projects/project-selector';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 
 const CURRENCIES = ['DKK', 'EUR', 'USD', 'GBP', 'SEK', 'NOK'] as const;
 
@@ -1446,10 +1447,54 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     </Button>
   );
 
+  // ─── Reset form to defaults (used by ClearFormButton) ───
+  const resetFormToDefaults = useCallback(() => {
+    // Revoke any pending object URL to avoid memory leaks
+    if (receiptPreviewUrlRef.current) {
+      URL.revokeObjectURL(receiptPreviewUrlRef.current);
+      receiptPreviewUrlRef.current = null;
+    }
+    setDate(defaultToday());
+    setPurchaseLinesDate(defaultToday());
+    setAmount('');
+    setCurrency('DKK');
+    setExchangeRate('');
+    setIncludesVAT(true);
+    setDescription('');
+    setVatPercent('25');
+    setIsRecurring(false);
+    setRecurringFrequency('MONTHLY');
+    setRecurringStartDate('');
+    setRecurringEndDate('');
+    setReceiptFile(null);
+    setReceiptPreview(null);
+    setReceiptNaturalWidth(null);
+    setOriginalWasPdf(false);
+    setSelectedAccountId('');
+    setProjectId(null);
+    setPurchaseLines([{ ...EMPTY_LINE_ITEM }]);
+    dateManuallySetRef.current = false;
+    purchaseLinesDateManuallySetRef.current = false;
+    exchangeRateManualRef.current = false;
+    setRateDate(null);
+    resetOCR();
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setError('');
+    clearDraft();
+  }, [clearDraft, resetOCR]);
+
   // ─── Compact layout (for mobile dialog) ───
   if (layout === 'compact') {
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex justify-end -mb-2">
+          <ClearFormButton
+            size="xs"
+            label={isDa ? 'Ryd formular' : 'Clear form'}
+            isDirty={isTransactionDirty}
+            onClear={resetFormToDefaults}
+          />
+        </div>
         {renderError()}
         {renderInfoBanner()}
         {renderDateAmount()}
@@ -1482,6 +1527,14 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   // ─── Card layout (for desktop full-page) ───
   return (
     <form onSubmit={handleSubmit} className="space-y-4 lg:space-y-6">
+      <div className="flex justify-end">
+        <ClearFormButton
+          size="sm"
+          label={isDa ? 'Ryd formular' : 'Clear form'}
+          isDirty={isTransactionDirty}
+          onClear={resetFormToDefaults}
+        />
+      </div>
       {renderError()}
 
       {/* ── Two-column: Purchase Details + Receipt & Invoice ── */}

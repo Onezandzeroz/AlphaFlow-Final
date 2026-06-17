@@ -33,6 +33,7 @@ import { useDataVersion } from '@/hooks/use-data-version';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 import { ProjectCard } from './project-card';
 import { ProjectDetail } from './project-detail';
 import {
@@ -536,7 +537,18 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
       <Dialog open={isCreateOpen} onOpenChange={(open) => { if (!open) clearCreateDraft(); setIsCreateOpen(open); }}>
         <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto" {...createGuard.dialogProps}>
           <DialogHeader>
-            <DialogTitle>{t('newProject')}</DialogTitle>
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <span>{t('newProject')}</span>
+              <ClearFormButton
+                size="xs"
+                label={isDa ? 'Ryd formular' : 'Clear form'}
+                isDirty={isCreateDirty}
+                onClear={() => {
+                  setFormData(EMPTY_FORM);
+                  clearCreateDraft();
+                }}
+              />
+            </DialogTitle>
             <DialogDescription>
               {isDa ? 'Opret et nyt projekt til at spore økonomi og fremskridt' : 'Create a new project to track finances and progress'}
             </DialogDescription>

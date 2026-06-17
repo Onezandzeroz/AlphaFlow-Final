@@ -50,6 +50,7 @@ import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 import { ProjectBudgetTab } from './project-budget-tab';
 import {
   ArrowLeft,
@@ -807,7 +808,21 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
       <Dialog open={isEditOpen} onOpenChange={(open) => { if (!open) clearEditDraft(); setIsEditOpen(open); }}>
         <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto" {...editGuard.dialogProps}>
           <DialogHeader>
-            <DialogTitle>{t('projectEdit')}</DialogTitle>
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <span>{t('projectEdit')}</span>
+              <ClearFormButton
+                size="xs"
+                label={isDa ? 'Ryd formular' : 'Clear form'}
+                isDirty={isEditDirty}
+                onClear={() => {
+                  // Revert to the values that were loaded when the edit dialog opened.
+                  if (loadedEditStateRef.current) {
+                    setFormData(loadedEditStateRef.current);
+                  }
+                  clearEditDraft();
+                }}
+              />
+            </DialogTitle>
             <DialogDescription>
               {isDa ? 'Opdater projektoplysninger' : 'Update project information'}
             </DialogDescription>

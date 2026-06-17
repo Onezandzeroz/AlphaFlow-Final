@@ -49,6 +49,7 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -551,6 +552,64 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
 
   return (
     <div className="space-y-4 lg:space-y-6">
+
+      {/* ── Discreet clear-form action (top-right) ── */}
+      <div className="flex justify-end -mb-2">
+        <ClearFormButton
+          size="sm"
+          label={language === 'da' ? 'Ryd formular' : 'Clear form'}
+          isDirty={hasChanges}
+          onClear={() => {
+            // Revert to the server-loaded values (or empty defaults if not
+            // loaded yet) and drop the persisted draft.
+            if (companyInfo) {
+              setForm({
+                logo: companyInfo.logo || '',
+                companyName: companyInfo.companyName || '',
+                address: companyInfo.address || '',
+                phone: companyInfo.phone || '',
+                email: companyInfo.email || '',
+                cvrNumber: companyInfo.cvrNumber || '',
+                companyType: companyInfo.companyType || '',
+                invoicePrefix: companyInfo.invoicePrefix || '',
+                bankName: companyInfo.bankName || '',
+                bankAccount: companyInfo.bankAccount || '',
+                bankRegistration: companyInfo.bankRegistration || '',
+                bankIban: companyInfo.bankIban || '',
+                bankStreet: companyInfo.bankStreet || '',
+                bankCity: companyInfo.bankCity || '',
+                bankCountry: companyInfo.bankCountry || '',
+                invoiceTerms: companyInfo.invoiceTerms || DEFAULT_INVOICE_TERMS,
+                invoiceNotesTemplate: companyInfo.invoiceNotesTemplate || '',
+              });
+            } else {
+              setForm({
+                logo: '',
+                companyName: '',
+                address: '',
+                phone: '',
+                email: '',
+                cvrNumber: '',
+                companyType: '',
+                invoicePrefix: '',
+                bankName: '',
+                bankAccount: '',
+                bankRegistration: '',
+                bankIban: '',
+                bankStreet: '',
+                bankCity: '',
+                bankCountry: '',
+                invoiceTerms: DEFAULT_INVOICE_TERMS,
+                invoiceNotesTemplate: '',
+              });
+            }
+            setHasChanges(false);
+            setErrors({});
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            clearCompanyDraft();
+          }}
+        />
+      </div>
 
       {/* ── Status Indicators ── */}
       <Card className="stat-card">

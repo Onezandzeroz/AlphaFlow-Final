@@ -123,6 +123,7 @@ import { SendInvoiceDialog } from '@/components/invoices/send-invoice-dialog';
 import { SendEInvoiceDialog } from '@/components/invoices/send-einvoice-dialog';
 import { EInvoiceSendStatus } from '@/components/invoices/einvoice-send-status';
 import { ProjectSelector } from '@/components/projects/project-selector';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 
 // Types
 interface CompanyInfo {
@@ -1857,6 +1858,30 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               <FileText className="h-3 w-3" />
               {nextInvoiceNumber}
             </Badge>
+            <ClearFormButton
+              size="sm"
+              label={language === 'da' ? 'Ryd formular' : 'Clear form'}
+              isDirty={isInvoiceDirty}
+              onClear={() => {
+                // Reset invoice form to empty defaults
+                setInvoiceForm({
+                  customerName: '',
+                  customerAddress: '',
+                  customerEmail: '',
+                  customerPhone: '',
+                  customerCvr: '',
+                  issueDate: (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
+                  dueDate: (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
+                  lineItems: [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+                  notes: '',
+                });
+                setSelectedContactId('');
+                setInvoiceProjectId(null);
+                setEditingInvoiceId(null);
+                loadedEditInvoiceRef.current = null;
+                if (isEditingDraft) { clearEditDraftDraft(); } else { clearCreateDraft(); }
+              }}
+            />
             <Button variant="outline" onClick={() => { if (isEditingDraft) { clearEditDraftDraft(); } else { clearCreateDraft(); } setCurrentView('list'); }} className="bg-gray-200 hover:bg-gray-300 text-gray-700 border border-gray-300 lg:bg-white/10 lg:hover:bg-white/20 lg:text-white lg:border-white/20 gap-2">
               {t('cancel')}
             </Button>

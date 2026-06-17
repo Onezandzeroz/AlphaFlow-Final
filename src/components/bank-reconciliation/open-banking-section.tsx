@@ -8,6 +8,7 @@ import { useDataVersion } from '@/hooks/use-data-version';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1357,11 +1358,22 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
       <Dialog open={connectDialogOpen} onOpenChange={(open) => { if (!open) clearConnectDraft(); setConnectDialogOpen(open); }}>
         <DialogContent className="sm:max-w-md" {...connectGuard.dialogProps}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full bg-[#0d9488]/10 flex items-center justify-center">
-                <Landmark className="h-4 w-4 text-[#0d9488]" />
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-[#0d9488]/10 flex items-center justify-center">
+                  <Landmark className="h-4 w-4 text-[#0d9488]" />
+                </div>
+                {language === 'da' ? 'Tilknyt bankkonto' : 'Connect bank account'}
               </div>
-              {language === 'da' ? 'Tilknyt bankkonto' : 'Connect bank account'}
+              <ClearFormButton
+                size="xs"
+                label={language === 'da' ? 'Ryd formular' : 'Clear form'}
+                isDirty={isConnectDirty}
+                onClear={() => {
+                  resetConnectForm();
+                  clearConnectDraft();
+                }}
+              />
             </DialogTitle>
             <DialogDescription>
               {language === 'da'
@@ -1620,9 +1632,24 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
       <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) clearEditDraft(); setEditDialogOpen(open); }}>
         <DialogContent className="sm:max-w-sm" {...editBankGuard.dialogProps}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Settings className="h-4 w-4 text-[#0d9488]" />
-              {language === 'da' ? 'Indstillinger' : 'Settings'}
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-[#0d9488]" />
+                {language === 'da' ? 'Indstillinger' : 'Settings'}
+              </div>
+              <ClearFormButton
+                size="xs"
+                label={language === 'da' ? 'Ryd formular' : 'Clear form'}
+                isDirty={isEditBankDirty}
+                onClear={() => {
+                  // Revert to the values that were loaded when the edit dialog opened.
+                  if (loadedEditBankRef.current) {
+                    setEditFrequency(loadedEditBankRef.current.freq);
+                    setEditAccountName(loadedEditBankRef.current.name);
+                  }
+                  clearEditDraft();
+                }}
+              />
             </DialogTitle>
             <DialogDescription>
               {connectionToEdit?.bankName} — {connectionToEdit ? maskAccountNumber(connectionToEdit.accountNumber) : ''}

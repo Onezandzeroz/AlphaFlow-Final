@@ -55,6 +55,7 @@ import { useDataVersion } from '@/hooks/use-data-version';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 import {
   BookOpen,
   Search,
@@ -1384,6 +1385,20 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
         editAccount={editAccount}
         availableGroups={availableGroups}
         dialogProps={editAccount ? editGuard.dialogProps : addGuard.dialogProps}
+        isDirty={editAccount ? isEditDirty : isAddDirty}
+        onClear={() => {
+          if (editAccount) {
+            // Revert to the values that were loaded when the edit dialog opened.
+            if (loadedEditStateRef.current) {
+              setFormData(loadedEditStateRef.current);
+            }
+            clearEditDraft();
+          } else {
+            setFormData(EMPTY_FORM);
+            setFormErrors({});
+            clearAddDraft();
+          }
+        }}
         onClose={() => {
           if (editAccount) { clearEditDraft(); } else { clearAddDraft(); }
           setShowAddDialog(false);
@@ -1480,6 +1495,10 @@ interface AccountFormDialogProps {
   onClose: () => void;
   onChangeFormData: React.Dispatch<React.SetStateAction<AccountFormData>>;
   onSave: () => void;
+  /** Whether the form currently has user input (drives the confirm dialog). */
+  isDirty?: boolean;
+  /** Clear-form callback: reset fields to defaults/loaded values + clear draft. */
+  onClear?: () => void;
 }
 
 function AccountFormDialog({
@@ -1495,22 +1514,34 @@ function AccountFormDialog({
   onClose,
   onChangeFormData,
   onSave,
+  isDirty,
+  onClear,
 }: AccountFormDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-lg max-h-[90vh] overflow-y-auto" {...dialogProps}>
         <DialogHeader>
-          <DialogTitle className="dark:text-white flex items-center gap-2 text-xl">
-            <div className="h-10 w-10 rounded-xl bg-[#0d9488]/10 flex items-center justify-center shrink-0">
-              {mode === 'add' ? (
-                <Plus className="h-5 w-5 text-[#0d9488] dark:text-[#2dd4bf]" />
-              ) : (
-                <Pencil className="h-5 w-5 text-[#0d9488] dark:text-[#2dd4bf]" />
-              )}
+          <DialogTitle className="dark:text-white flex items-center justify-between gap-2 text-xl">
+            <div className="flex items-center gap-2">
+              <div className="h-10 w-10 rounded-xl bg-[#0d9488]/10 flex items-center justify-center shrink-0">
+                {mode === 'add' ? (
+                  <Plus className="h-5 w-5 text-[#0d9488] dark:text-[#2dd4bf]" />
+                ) : (
+                  <Pencil className="h-5 w-5 text-[#0d9488] dark:text-[#2dd4bf]" />
+                )}
+              </div>
+              {mode === 'add'
+                ? (isDanish ? 'Opret ny konto' : 'Create New Account')
+                : (isDanish ? 'Rediger konto' : 'Edit Account')}
             </div>
-            {mode === 'add'
-              ? (isDanish ? 'Opret ny konto' : 'Create New Account')
-              : (isDanish ? 'Rediger konto' : 'Edit Account')}
+            {onClear && (
+              <ClearFormButton
+                size="xs"
+                label={isDanish ? 'Ryd formular' : 'Clear form'}
+                isDirty={isDirty}
+                onClear={onClear}
+              />
+            )}
           </DialogTitle>
           <DialogDescription className="dark:text-gray-400">
             {mode === 'add'

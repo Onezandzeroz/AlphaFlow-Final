@@ -73,6 +73,7 @@ import { useDataVersion } from '@/hooks/use-data-version';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1111,13 +1112,31 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { if (!editingEntry) clearJournalDraft(); closeDialog(); } }}>
         <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" {...journalGuard.dialogProps}>
           <DialogHeader>
-            <DialogTitle className="dark:text-white flex items-center gap-2 text-xl">
-              <div className="h-9 w-9 rounded-xl bg-[#0d9488]/10 flex items-center justify-center shrink-0">
-                <FileText className="h-5 w-5 text-[#0d9488] dark:text-[#2dd4bf]" />
+            <DialogTitle className="dark:text-white flex items-center justify-between gap-2 text-xl">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 rounded-xl bg-[#0d9488]/10 flex items-center justify-center shrink-0">
+                  <FileText className="h-5 w-5 text-[#0d9488] dark:text-[#2dd4bf]" />
+                </div>
+                {editingEntry
+                  ? (isDanish ? 'Rediger journalpost' : 'Edit Journal Entry')
+                  : (isDanish ? 'Ny journalpost' : 'New Journal Entry')}
               </div>
-              {editingEntry
-                ? (isDanish ? 'Rediger journalpost' : 'Edit Journal Entry')
-                : (isDanish ? 'Ny journalpost' : 'New Journal Entry')}
+              {!editingEntry && (
+                <ClearFormButton
+                  size="xs"
+                  label={isDanish ? 'Ryd formular' : 'Clear form'}
+                  isDirty={isJournalDirty}
+                  onClear={() => {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    setFormDate(todayStr);
+                    setFormDescription('');
+                    setFormReference('');
+                    setFormProjectId(null);
+                    setFormLines([createEmptyLine(), createEmptyLine()]);
+                    clearJournalDraft();
+                  }}
+                />
+              )}
             </DialogTitle>
             <DialogDescription className="dark:text-gray-400">
               {isDanish

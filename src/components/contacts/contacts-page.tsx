@@ -54,6 +54,7 @@ import { useDataVersion } from '@/hooks/use-data-version';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft, removeDraft } from '@/lib/draft-store';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 import {
   Users,
   Plus,
@@ -1087,18 +1088,46 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
           {...contactGuard.dialogProps}
         >
           <DialogHeader>
-            <DialogTitle className="dark:text-white flex items-center gap-2 text-xl">
-              {editingContact ? (
-                <>
-                  <Pencil className="h-5 w-5 text-[#0d9488]" />
-                  {isDanish ? 'Rediger kontakt' : 'Edit Contact'}
-                </>
-              ) : (
-                <>
-                  <Plus className="h-5 w-5 text-[#0d9488]" />
-                  {isDanish ? 'Ny kontakt' : 'New Contact'}
-                </>
-              )}
+            <DialogTitle className="dark:text-white flex items-center justify-between gap-2 text-xl">
+              <div className="flex items-center gap-2">
+                {editingContact ? (
+                  <>
+                    <Pencil className="h-5 w-5 text-[#0d9488]" />
+                    {isDanish ? 'Rediger kontakt' : 'Edit Contact'}
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-5 w-5 text-[#0d9488]" />
+                    {isDanish ? 'Ny kontakt' : 'New Contact'}
+                  </>
+                )}
+              </div>
+              <ClearFormButton
+                size="xs"
+                label={isDanish ? 'Ryd formular' : 'Clear form'}
+                isDirty={isContactDirty}
+                onClear={() => {
+                  // Create → reset to empty defaults; Edit → reset to the
+                  // original loaded (server) values so "clear" means "revert".
+                  if (editingContact) {
+                    setFormData({
+                      name: editingContact.name,
+                      cvrNumber: editingContact.cvrNumber || '',
+                      email: editingContact.email || '',
+                      phone: editingContact.phone || '',
+                      address: editingContact.address || '',
+                      city: editingContact.city || '',
+                      postalCode: editingContact.postalCode || '',
+                      country: editingContact.country || 'Danmark',
+                      type: editingContact.type,
+                      notes: editingContact.notes || '',
+                    });
+                  } else {
+                    setFormData(EMPTY_FORM);
+                  }
+                  clearContactDraft();
+                }}
+              />
             </DialogTitle>
             <DialogDescription className="dark:text-gray-400">
               {editingContact

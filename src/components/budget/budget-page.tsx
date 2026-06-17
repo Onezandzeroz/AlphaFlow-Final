@@ -40,6 +40,7 @@ import { useDataVersion } from '@/hooks/use-data-version';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
+import { ClearFormButton } from '@/components/ui/clear-form-button';
 import {
   Target,
   Plus,
@@ -1137,9 +1138,20 @@ export function BudgetPage({ user }: { user: User }) {
       <Dialog open={createDialogOpen} onOpenChange={(open) => { if (!open) clearCreateDraft(); setCreateDialogOpen(open); }}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" {...createGuard.dialogProps}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5 text-[#0d9488]" />
-              {isDa ? 'Opret nyt budget' : 'Create New Budget'}
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-[#0d9488]" />
+                {isDa ? 'Opret nyt budget' : 'Create New Budget'}
+              </div>
+              <ClearFormButton
+                size="xs"
+                label={isDa ? 'Ryd formular' : 'Clear form'}
+                isDirty={isCreateDirty}
+                onClear={() => {
+                  resetForm();
+                  clearCreateDraft();
+                }}
+              />
             </DialogTitle>
             <DialogDescription>
               {isDa
@@ -1277,9 +1289,28 @@ export function BudgetPage({ user }: { user: User }) {
       <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) clearEditDraft(); setEditDialogOpen(open); }}>
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto" {...editGuard.dialogProps}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-[#0d9488]" />
-              {isDa ? 'Rediger budget' : 'Edit Budget'} — {formYear}
+            <DialogTitle className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-[#0d9488]" />
+                {isDa ? 'Rediger budget' : 'Edit Budget'} — {formYear}
+              </div>
+              <ClearFormButton
+                size="xs"
+                label={isDa ? 'Ryd formular' : 'Clear form'}
+                isDirty={isEditDirty}
+                onClear={() => {
+                  // Revert to the values that were loaded when the dialog opened
+                  // (server data + draft merged) so "clear" means "revert".
+                  if (loadedEditStateRef.current) {
+                    setFormName(loadedEditStateRef.current.name);
+                    setFormNotes(loadedEditStateRef.current.notes);
+                    try {
+                      setFormEntries(JSON.parse(loadedEditStateRef.current.entriesStr));
+                    } catch { /* ignore parse failure — leave entries as-is */ }
+                  }
+                  clearEditDraft();
+                }}
+              />
             </DialogTitle>
             <DialogDescription>
               {isDa
