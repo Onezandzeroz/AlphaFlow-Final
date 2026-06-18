@@ -27,9 +27,22 @@ export const GET = withGuard(
               account: true,
             },
           },
+          // Include full invoice details for the Invoices tab
           invoices: {
-            select: { id: true },
+            select: {
+              id: true,
+              invoiceNumber: true,
+              issueDate: true,
+              dueDate: true,
+              status: true,
+              totalAmount: true,
+              currency: true,
+              customerName: true,
+            },
+            orderBy: { issueDate: 'desc' },
           },
+          // Include journal lines WITH their parent journal entry so the
+          // Transactions tab can show date, description, voucher number, etc.
           journalLines: {
             where: {
               journalEntry: {
@@ -38,7 +51,20 @@ export const GET = withGuard(
               },
             },
             include: {
-              account: { select: { type: true } },
+              account: { select: { id: true, number: true, name: true, type: true } },
+              journalEntry: {
+                select: {
+                  id: true,
+                  date: true,
+                  description: true,
+                  reference: true,
+                  voucherNumber: true,
+                  status: true,
+                },
+              },
+            },
+            orderBy: {
+              journalEntry: { date: 'desc' },
             },
           },
         },
@@ -66,14 +92,41 @@ export const GET = withGuard(
       const budgetTotal = project.budgetTotal ? Number(project.budgetTotal) : 0;
       const budgetUsage = budgetTotal > 0 ? r((totalExpenses / budgetTotal) * 100) : 0;
 
-      // Remove journalLines from response — only needed for computation
-      const { journalLines, ...projectData } = project;
+      // Build a transactions list for the Transactions tab — one row per
+      // journal line (so multi-line entries appear as multiple rows).
+      // The journalEntry is denormalized onto each row for easy display.
+      const transactions = project.journalLines.map((line) => ({
+        id: line.id,
+        date: line.journalEntry.date,
+        description: line.journalEntry.description,
+        reference: line.journalEntry.reference,
+        voucherNumber: line.journalEntry.voucherNumber,
+        accountNumber: line.account.number,
+        accountName: line.account.name,
+        accountType: line.account.type,
+        lineDescription: line.description,
+        debit: Number(line.debit || 0),
+        credit: Number(line.credit || 0),
+      }));
+
+      // Map invoice Decimal fields to numbers for JSON serialization
+      const invoices = project.invoices.map((inv) => ({
+        ...inv,
+        totalAmount: inv.totalAmount ? Number(inv.totalAmount) : 0,
+        issueDate: inv.issueDate?.toISOString() || null,
+        dueDate: inv.dueDate?.toISOString() || null,
+      }));
+
+      // Remove raw relations from the response — we've extracted what we need
+      const { journalLines: _jl, invoices: _inv, ...projectData } = project;
 
       return NextResponse.json({
         project: {
           ...projectData,
           budgetTotal,
-          invoiceCount: project.invoices.length,
+          invoiceCount: invoices.length,
+          invoices,
+          transactions,
         },
         kpis: {
           totalRevenue,
