@@ -116,99 +116,156 @@ export const POST = withGuard({
       }
     }
 
-    
-    const transaction = await db.transaction.create({
-      data: {
-        type: txType,
-        date: new Date(date),
-        amount: parsedAmount,
-        description,
-        vatPercent: vatPercent ?? 25.0,
-        receiptImage,
-        accountId: accountId || null,
-        userId: ctx.id,
-        companyId: ctx.activeCompanyId!,
-      },
-    });
-
-    // Create journal entry for PURCHASE transactions (double-entry bookkeeping)
+    // ─── Pre-flight check for PURCHASE journal-entry prerequisites ──────
+    // A purchase MUST produce a balanced journal entry. If any required
+    // system account is missing (Bank 1100, Input VAT 5410/5420), we fail
+    // LOUDLY before creating anything — so the user gets a clear error
+    // instead of a silently half-created transaction with no journal entry.
     if (txType === 'PURCHASE') {
-      const netAmount = parsedAmount; // stored amount is always net
       const vatPct = vatPercent ?? 25;
-      const vatAmount = (netAmount * vatPct) / 100;
-      const grossAmount = netAmount + vatAmount;
+      const [bankAccount, inputVatAccount, expenseAccount] = await Promise.all([
+        db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '1100', isActive: true } }),
+        db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: vatPct === 12 ? '5420' : '5410', isActive: true } }),
+        accountId ? db.account.findFirst({ where: { id: accountId, companyId: ctx.activeCompanyId! } }) : Promise.resolve(null),
+      ]);
 
-      // Only create JE if there's an actual amount
-      if (netAmount > 0 && grossAmount > 0) {
-        // Look up required accounts
-        const [bankAccount, inputVatAccount, expenseAccount] = await Promise.all([
-          db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '1100', isActive: true } }),
-          db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: vatPct === 12 ? '5420' : '5410', isActive: true } }),
-          accountId ? db.account.findFirst({ where: { id: accountId } }) : Promise.resolve(null),
-        ]);
+      const missing: string[] = [];
+      if (!bankAccount) missing.push('1100 Bankkonto');
+      if (!inputVatAccount) missing.push(`${vatPct === 12 ? '5420' : '5410'} Indgående moms`);
+      if (!expenseAccount) missing.push('valgt omkostningskonto');
 
-        if (!bankAccount) {
-          logger.warn(`[PURCHASE] No active account 1100 (Bankkonto) found for company ${ctx.activeCompanyId}. Journal entry NOT created for transaction ${transaction.id}. Seed the standard chart of accounts.`);
-        }
-        if (!inputVatAccount) {
-          logger.warn(`[PURCHASE] No active account ${vatPct === 12 ? '5420' : '5410'} (Indgående moms) found for company ${ctx.activeCompanyId}. VAT line will be skipped.`);
-        }
-        if (!expenseAccount) {
-          logger.warn(`[PURCHASE] No expense account (accountId=${accountId ?? 'none'}) for transaction ${transaction.id}. Expense line will be skipped — the journal entry may be unbalanced and not created.`);
-        }
+      if (missing.length > 0) {
+        const isDa = true; // default to Danish for the error message
+        const msg = isDa
+          ? `Kan ikke bogføre indkøb — følgende konti mangler i kontoplanen: ${missing.join(', ')}. Gå til Kontoplan og klik "Standardkonti" for at oprette den danske standardkontoplan.`
+          : `Cannot record purchase — the following accounts are missing from the chart of accounts: ${missing.join(', ')}. Go to Chart of Accounts and click "Seed" to create the standard Danish chart.`;
+        logger.error(`[PURCHASE] Prerequisite check failed for company ${ctx.activeCompanyId}: missing ${missing.join(', ')}`);
+        return NextResponse.json({ error: msg }, { status: 400 });
+      }
+    }
 
-        if (bankAccount) {
+    // ─── Create transaction + journal entry ATOMICALLY ───────────────────
+    // Both must succeed or neither does — no half-created state.
+    let transaction;
+    try {
+      transaction = await db.$transaction(async (tx) => {
+        // 1. Create the transaction record
+        const newTx = await tx.transaction.create({
+          data: {
+            type: txType,
+            date: new Date(date),
+            amount: parsedAmount,
+            description,
+            vatPercent: vatPercent ?? 25.0,
+            receiptImage,
+            accountId: accountId || null,
+            userId: ctx.id,
+            companyId: ctx.activeCompanyId!,
+          },
+        });
+
+        // 2. For PURCHASE, create the paired journal entry
+        if (txType === 'PURCHASE') {
+          const netAmount = parsedAmount;
+          const vatPct = vatPercent ?? 25;
+          const vatAmount = (netAmount * vatPct) / 100;
+          const grossAmount = netAmount + vatAmount;
+
+          if (netAmount <= 0 || grossAmount <= 0) {
+            throw new Error(`Invalid amount: net=${netAmount}, gross=${grossAmount}`);
+          }
+
+          // Re-fetch accounts inside the transaction (consistent read)
+          const [bankAccount, inputVatAccount, expenseAccount] = await Promise.all([
+            tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '1100', isActive: true } }),
+            tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: vatPct === 12 ? '5420' : '5410', isActive: true } }),
+            accountId ? tx.account.findFirst({ where: { id: accountId, companyId: ctx.activeCompanyId! } }) : Promise.resolve(null),
+          ]);
+
+          if (!bankAccount || !expenseAccount) {
+            throw new Error('Required account disappeared during transaction');
+          }
+
           const jeLines: Array<{ accountId: string; debit: number; credit: number; description: string; vatCode: VATCode | null; companyId: string; projectId: string | null }> = [];
 
-          // Debit expense account (net amount)
-          // NOTE: Expense lines must NOT have a vatCode — only the dedicated INPUT_VAT
-          // account lines (5410/5420) carry vatCode. The vat-register filters by
-          // account.group, so tagging expense lines would inflate input VAT totals.
-          if (expenseAccount) {
-            jeLines.push({ accountId: expenseAccount.id, debit: netAmount, credit: 0, description, vatCode: null, companyId: ctx.activeCompanyId!, projectId: projectId || null });
-          }
+          // Debit expense account (net amount) — carries projectId
+          jeLines.push({
+            accountId: expenseAccount.id,
+            debit: netAmount,
+            credit: 0,
+            description,
+            vatCode: null,
+            companyId: ctx.activeCompanyId!,
+            projectId: projectId || null,
+          });
 
-          // Debit input VAT account (VAT amount)
+          // Debit input VAT account (VAT amount) — no projectId (VAT is company-level)
           if (inputVatAccount && vatAmount > 0) {
             const vatCode: VATCode = vatPct === 25 ? 'K25' : vatPct === 12 ? 'K12' : 'K0';
-            jeLines.push({ accountId: inputVatAccount.id, debit: Math.round(vatAmount * 100) / 100, credit: 0, description: `${description} – Indgående moms ${vatPct}%`, vatCode, companyId: ctx.activeCompanyId!, projectId: null });
+            jeLines.push({
+              accountId: inputVatAccount.id,
+              debit: Math.round(vatAmount * 100) / 100,
+              credit: 0,
+              description: `${description} – Indgående moms ${vatPct}%`,
+              vatCode,
+              companyId: ctx.activeCompanyId!,
+              projectId: null,
+            });
           }
 
-          // Credit bank account (gross amount)
-          jeLines.push({ accountId: bankAccount.id, debit: 0, credit: Math.round(grossAmount * 100) / 100, description: `${description} – Betaling`, vatCode: null, companyId: ctx.activeCompanyId!, projectId: null });
+          // Credit bank account (gross amount) — no projectId
+          jeLines.push({
+            accountId: bankAccount.id,
+            debit: 0,
+            credit: Math.round(grossAmount * 100) / 100,
+            description: `${description} – Betaling`,
+            vatCode: null,
+            companyId: ctx.activeCompanyId!,
+            projectId: null,
+          });
 
-          // Only create if balanced (2 or more lines and debit === credit)
+          // Validate balance BEFORE creating
           const totalDebit = jeLines.reduce((s, l) => s + l.debit, 0);
           const totalCredit = jeLines.reduce((s, l) => s + l.credit, 0);
-
-          if (jeLines.length >= 2 && Math.abs(totalDebit - totalCredit) < 0.01) {
-            try {
-              await db.$transaction(async (tx) => {
-                const je = await tx.journalEntry.create({
-                  data: {
-                    date: new Date(date),
-                    description: `Køb – ${description}`,
-                    reference: `TX-${transaction.id.slice(0, 8)}`,
-                    status: 'POSTED',
-                    userId: ctx.id,
-                    companyId: ctx.activeCompanyId!,
-                    lines: { create: jeLines.map(l => ({ companyId: l.companyId, account: { connect: { id: l.accountId } }, debit: l.debit, credit: l.credit, description: l.description, vatCode: l.vatCode, projectId: l.projectId })) },
-                  },
-                });
-                // Assign voucher number for POSTED journal entry
-                await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
-              });
-              logger.info(`[PURCHASE] Created journal entry for transaction ${transaction.id}: DR=${totalDebit}, CR=${totalCredit}, projectId=${projectId || 'none'}`);
-            } catch (jeError) {
-              logger.error(`[PURCHASE] Failed to create journal entry for transaction ${transaction.id}:`, jeError);
-            }
-          } else {
-            logger.warn(`[PURCHASE] Journal entry NOT created for transaction ${transaction.id}: unbalanced (DR=${totalDebit}, CR=${totalCredit}, lines=${jeLines.length}). This usually means the expense account or VAT account is missing.`);
+          if (jeLines.length < 2 || Math.abs(totalDebit - totalCredit) >= 0.01) {
+            throw new Error(`Unbalanced journal entry: DR=${totalDebit}, CR=${totalCredit}, lines=${jeLines.length}`);
           }
+
+          const je = await tx.journalEntry.create({
+            data: {
+              date: new Date(date),
+              description: `Køb – ${description}`,
+              reference: `TX-${newTx.id.slice(0, 8)}`,
+              status: 'POSTED',
+              userId: ctx.id,
+              companyId: ctx.activeCompanyId!,
+              lines: {
+                create: jeLines.map(l => ({
+                  companyId: l.companyId,
+                  account: { connect: { id: l.accountId } },
+                  debit: l.debit,
+                  credit: l.credit,
+                  description: l.description,
+                  vatCode: l.vatCode,
+                  projectId: l.projectId,
+                })),
+              },
+            },
+          });
+
+          await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
+          logger.info(`[PURCHASE] Created journal entry ${je.id} for transaction ${newTx.id}: DR=${totalDebit}, CR=${totalCredit}, projectId=${projectId || 'none'}`);
         }
-      } else {
-        logger.warn(`[PURCHASE] Journal entry NOT created for transaction ${transaction.id}: netAmount=${netAmount}, grossAmount=${grossAmount} (must be > 0).`);
-      }
+
+        return newTx;
+      });
+    } catch (txError) {
+      logger.error('[PURCHASE] Atomic transaction+journal creation failed:', txError);
+      const errMsg = txError instanceof Error ? txError.message : 'Unknown error';
+      return NextResponse.json(
+        { error: `Kunne ikke bogføre indkøb: ${errMsg}. / Failed to record purchase: ${errMsg}.` },
+        { status: 500 }
+      );
     }
 
     // Audit log
