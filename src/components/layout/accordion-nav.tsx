@@ -219,6 +219,18 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
   // Keep server in sync with debounced saves
   useSyncToServer();
 
+  // ── Project Mode gating (FASE 4) ──
+  // When the SuperDev has not enabled project mode for this tenant, strip the
+  // Projects nav item so users cannot even see the section.
+  // Declared before activeSectionId because that memo depends on it.
+  const visibleSections = useMemo(() => {
+    if (user?.projectModeEnabled) return NAV_SECTIONS;
+    return NAV_SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.id !== 'projects'),
+    })).filter((section) => section.items.length > 0);
+  }, [user?.projectModeEnabled]);
+
   // Find which section contains the currently active view
   const activeSectionId = useMemo(() => {
     for (const section of visibleSections) {
@@ -228,17 +240,6 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
     }
     return null;
   }, [currentView, visibleSections]);
-
-  // ── Project Mode gating (FASE 4) ──
-  // When the SuperDev has not enabled project mode for this tenant, strip the
-  // Projects nav item so users cannot even see the section.
-  const visibleSections = useMemo(() => {
-    if (user?.projectModeEnabled) return NAV_SECTIONS;
-    return NAV_SECTIONS.map((section) => ({
-      ...section,
-      items: section.items.filter((item) => item.id !== 'projects'),
-    })).filter((section) => section.items.length > 0);
-  }, [user?.projectModeEnabled]);
 
   const isDa = language === 'da';
 
