@@ -233,6 +233,10 @@ export const POST = withGuard(
                       credit: l.credit,
                       description: l.description,
                       vatCode: (l.vatCode as any) ?? null,
+                      // Propagate the invoice's project onto every journal
+                      // line so the project detail's Transactions tab +
+                      // Realiseret/Resultat KPIs reflect the invoice.
+                      projectId: invoice.projectId ?? null,
                     })),
                   },
                 },

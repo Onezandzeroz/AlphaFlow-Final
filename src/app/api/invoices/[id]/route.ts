@@ -177,6 +177,9 @@ async function createAccrualJournalEntry(
             credit: l.credit,
             description: l.description,
             vatCode: (l.vatCode as VATCode | undefined) ?? null,
+            // Propagate the invoice's project onto every journal line so
+            // the project detail's Transactions tab + KPIs reflect it.
+            projectId: existing.projectId ?? null,
           })),
         },
       },
@@ -266,6 +269,8 @@ async function createCashReceiptJournalEntry(
             credit: l.credit,
             description: l.description,
             vatCode: null,
+            // Propagate the invoice's project onto every journal line.
+            projectId: existing.projectId ?? null,
           })),
         },
       },
