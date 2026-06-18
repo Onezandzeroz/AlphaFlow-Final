@@ -197,6 +197,19 @@ const chartTooltipStyle = {
 };
 
 
+// ─── Label helpers ────────────────────────────────────────────────
+
+// Translates a JournalEntryStatus enum value (DRAFT / POSTED / CANCELLED)
+// to a localized label so we never render the raw English enum to the user.
+function getJournalStatusLabel(status: string, language: 'da' | 'en'): string {
+  const labels: Record<string, { da: string; en: string }> = {
+    DRAFT: { da: 'Kladde', en: 'Draft' },
+    POSTED: { da: 'Bogført', en: 'Posted' },
+    CANCELLED: { da: 'Annulleret', en: 'Cancelled' },
+  };
+  return labels[status]?.[language] || status;
+}
+
 // ─── Component ────────────────────────────────────────────────────
 
 export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardingStepDoneConsumed }: DashboardProps) {
@@ -2860,7 +2873,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                                   : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
                               }`}
                             >
-                              {entry.status}
+                              {getJournalStatusLabel(entry.status, language)}
                             </Badge>
                           </div>
                         </div>
@@ -2930,7 +2943,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                                     : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
                                 }`}
                               >
-                                {entry.status}
+                                {getJournalStatusLabel(entry.status, language)}
                               </Badge>
                             </div>
                           </div>

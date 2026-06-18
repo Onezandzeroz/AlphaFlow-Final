@@ -420,6 +420,33 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
     return labels[status]?.[language] || status;
   }
 
+  // Translates a raw AccountGroup enum value (e.g. SALES_REVENUE) or
+  // AccountType (e.g. REVENUE) to a human-readable label. The project
+  // report backend returns account.group as the raw enum string.
+  function getAccountGroupLabel(group: string): string {
+    const labels: Record<string, { da: string; en: string }> = {
+      // AccountType
+      ASSET: { da: 'Aktiver', en: 'Assets' },
+      LIABILITY: { da: 'Passiver', en: 'Liabilities' },
+      EQUITY: { da: 'Egenkapital', en: 'Equity' },
+      REVENUE: { da: 'Indtægter', en: 'Revenue' },
+      EXPENSE: { da: 'Omkostninger', en: 'Expenses' },
+      // AccountGroup — revenue
+      SALES_REVENUE: { da: 'Salgsindtægter', en: 'Sales Revenue' },
+      OTHER_REVENUE: { da: 'Andre indtægter', en: 'Other Revenue' },
+      OUTPUT_VAT: { da: 'Udgående moms', en: 'Output VAT' },
+      FINANCIAL_INCOME: { da: 'Finansielle indtægter', en: 'Financial Income' },
+      // AccountGroup — expenses
+      COST_OF_GOODS: { da: 'Vareforbrug', en: 'Cost of Goods' },
+      PERSONNEL: { da: 'Personaleomkostninger', en: 'Personnel' },
+      OTHER_OPERATING: { da: 'Andre driftsomkostninger', en: 'Other Operating' },
+      FINANCIAL_EXPENSE: { da: 'Finansielle omkostninger', en: 'Financial Expense' },
+      INPUT_VAT: { da: 'Indgående moms', en: 'Input VAT' },
+      TAX: { da: 'Skat', en: 'Tax' },
+    };
+    return labels[group]?.[language] || group;
+  }
+
   // ─── Loading state ──
   if (isLoading) {
     return (
@@ -735,7 +762,7 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
                             : 'bg-red-50/50 dark:bg-red-950/10'
                         )}>
                           <TableCell className="text-xs font-semibold">
-                            {group.name}
+                            {getAccountGroupLabel(group.name)}
                           </TableCell>
                           <TableCell className={cn(
                             'text-right text-xs font-semibold',
