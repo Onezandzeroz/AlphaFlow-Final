@@ -127,9 +127,22 @@ function getAccountTypeHeaderBg(type: string): string {
   }
 }
 
+/**
+ * Determines whether a variance is "favorable" for the given account type.
+ *
+ * Variance is computed as (actual − budget) in the backend, using each
+ * account type's natural balance direction. So the SIGN of the variance
+ * already reflects whether it's favorable:
+ *   - positive variance → favorable for REVENUE/ASSET/EQUITY (more than budget)
+ *   - negative variance → favorable for EXPENSE/LIABILITY (less than budget)
+ */
 function isFavorableVariance(variance: number, accountType: string): boolean {
-  if (accountType === 'REVENUE') return variance >= 0;
-  return variance <= 0;
+  if (variance === 0) return true;
+  if (accountType === 'REVENUE' || accountType === 'ASSET' || accountType === 'EQUITY') {
+    return variance > 0;
+  }
+  // EXPENSE, LIABILITY
+  return variance < 0;
 }
 
 function createEmptyFormEntry(): FormEntry {

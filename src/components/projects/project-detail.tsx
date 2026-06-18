@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -262,10 +263,16 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
     }
   }, []);
 
+  // Re-fetch the project when the server signals a 'projects' data-changed
+  // event (e.g. when the budget was saved in the budget tab — the project's
+  // budgetTotal/budgetUsage are recomputed by /api/projects and we need to
+  // refresh the detail view's header + stats).
+  const projectsVersion = useDataVersion('projects');
+
   useEffect(() => {
     fetchProject();
     fetchReport();
-  }, [fetchProject, fetchReport]);
+  }, [fetchProject, fetchReport, projectsVersion]);
 
   // ── Open edit dialog ──
   const openEdit = () => {

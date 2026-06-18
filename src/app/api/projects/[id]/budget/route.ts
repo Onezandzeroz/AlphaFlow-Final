@@ -4,6 +4,7 @@ import { AccountType } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission, type AuthContext } from '@/lib/rbac';
 import { withGuard, READ, MUTATE } from '@/lib/route-guard';
+import { notifyDataChanges } from '@/lib/notify-data-change';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -206,6 +207,14 @@ export const PUT = withGuard(
           accountGroup: upserted.account.group,
         });
       }
+
+      // Notify clients that BOTH the project budget and the project list
+      // changed. The project list (/api/projects) computes budgetUsage
+      // from projectBudgetEntry, so the project card's budget progress
+      // bar + percentage must refresh after a budget save.
+      notifyDataChanges([
+        { scope: 'projects', companyId: ctx.activeCompanyId!, action: 'update', entity: id },
+      ]).catch(() => {});
 
       return NextResponse.json({ entries: upsertedEntries });
     } catch (error) {
