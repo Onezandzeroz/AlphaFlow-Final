@@ -88,7 +88,7 @@ import {
 import { StandardMappingPanel } from '@/components/chart-of-accounts/standard-mapping-panel';
 import { VATMappingPanel } from '@/components/chart-of-accounts/vat-mapping-panel';
 import { PostingGuideAssistant } from '@/components/chart-of-accounts/posting-guide-assistant';
-import { isProjectAccount } from '@/lib/project-chart-template';
+import { isProjectAccount } from '@/lib/project-chart-constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 

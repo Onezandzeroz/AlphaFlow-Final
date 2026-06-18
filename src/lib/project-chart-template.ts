@@ -24,6 +24,9 @@
 
 import { db } from '@/lib/db';
 import { AccountType, AccountGroup } from '@prisma/client';
+import { isProjectAccount } from '@/lib/project-chart-constants';
+
+export { isProjectAccount };
 
 export interface ProjectSeedAccount {
   number: string;
@@ -174,21 +177,10 @@ export const PROJECT_CHART_TEMPLATE: ProjectSeedAccount[] = [
   },
 ];
 
-/**
- * Project account numbers (for quick lookup / filtering in the UI).
- * Used by the chart-of-accounts page to show a "project accounts" badge
- * and by the project-budget UI to pre-suggest these accounts.
- */
-export const PROJECT_ACCOUNT_NUMBERS = new Set(
-  PROJECT_CHART_TEMPLATE.map((a) => a.number)
-);
-
-/**
- * Check whether an account number belongs to the project template.
- */
-export function isProjectAccount(number: string): boolean {
-  return PROJECT_ACCOUNT_NUMBERS.has(number);
-}
+// NOTE: isProjectAccount() and PROJECT_ACCOUNT_NUMBERS live in
+// project-chart-constants.ts (client-safe, no Prisma imports) and are
+// re-exported above. This keeps the server-only seed function isolated
+// from client components that only need the account-number lookup.
 
 /**
  * Seeds the project-oriented supplementary accounts for a company.
