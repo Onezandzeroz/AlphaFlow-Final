@@ -214,7 +214,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
       <div className="space-y-0">
         <div className="p-3 lg:p-6 pb-0">
           <PageHeader
-            title={isDa ? 'Indkøb & Kvittering' : 'Purchases & Receipts'}
+            title={isDa ? 'Køb & Kvittering' : 'Purchases & Receipts'}
             description={isDa
               ? 'Registrer køb, vedhæft kvitteringer og modtag e-fakturaer'
               : 'Record purchases, attach receipts and receive e-invoices'}

@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
   },
   {
     key: 'transactions',
-    labelDa: 'Indkøb & Kvittering',
+    labelDa: 'Køb & Kvittering',
     labelEn: 'Purchases & Receipts',
     icon: List,
     matchViews: ['transactions', 'bank-recon', 'recurring', 'projects'],

@@ -99,7 +99,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     items: [
       { id: 'dashboard', nameDa: 'Kontrolpanel', nameEn: 'Dashboard', icon: LayoutDashboard },
       { id: 'invoices', nameDa: 'Salg & Faktura', nameEn: 'Sales & Invoice', icon: FileText },
-      { id: 'transactions', nameDa: 'Indkøb & Kvittering', nameEn: 'Purchases & Receipts', icon: Receipt },
+      { id: 'transactions', nameDa: 'Køb & Kvittering', nameEn: 'Purchases & Receipts', icon: Receipt },
       { id: 'contacts', nameDa: 'Kontakter', nameEn: 'Contacts', icon: Users },
       { id: 'projects', nameDa: 'Projekter', nameEn: 'Projects', icon: Briefcase },
     ],
