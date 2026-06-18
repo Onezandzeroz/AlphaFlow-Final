@@ -131,10 +131,23 @@ function getAccountTypeHeaderBg(type: string): string {
  * Determines whether a variance is "favorable" for the given account type.
  *
  * Variance is computed as (actual − budget) in the backend, using each
- * account type's natural balance direction. So the SIGN of the variance
- * already reflects whether it's favorable:
- *   - positive variance → favorable for REVENUE/ASSET/EQUITY (more than budget)
- *   - negative variance → favorable for EXPENSE/LIABILITY (less than budget)
+ * account type's natural balance direction:
+ *   - REVENUE:  actual = credit − debit  →  positive = earned money
+ *   - EXPENSE:  actual = debit − credit  →  positive = spent money
+ *   - ASSET:    actual = debit − credit  →  positive = asset value
+ *   - LIABILITY: actual = credit − debit →  positive = debt owed
+ *   - EQUITY:   actual = credit − debit  →  positive = equity held
+ *
+ * Favorability (is "actual being higher than budget" good or bad?):
+ *   - REVENUE / ASSET / EQUITY: actual > budget is GOOD (you earned more /
+ *     have more assets / have more equity than planned) → positive variance favorable
+ *   - EXPENSE / LIABILITY: actual < budget is GOOD (you spent less / owe less
+ *     than planned) → negative variance favorable
+ *
+ * IMPORTANT: when `actual` is 0 (no real postings yet, only a budget line),
+ * the variance equals −budget, which is NOT meaningful to color as good/bad.
+ * Callers should treat the no-actual case as neutral (gray) — see
+ * `varianceClass` which checks `actual === 0` first.
  */
 function isFavorableVariance(variance: number, accountType: string): boolean {
   if (variance === 0) return true;
@@ -262,8 +275,14 @@ export function ProjectBudgetTab({ projectId, companyId, user }: ProjectBudgetTa
   );
 
   // ── Variance color helper ──
-  const varianceClass = (variance: number, accountType: string): string => {
+  // Returns neutral (gray) when there is no actual to compare against
+  // (e.g. a freshly created budget line with no postings yet). Otherwise
+  // green for favorable, red for unfavorable, based on account type.
+  const varianceClass = (variance: number, accountType: string, actual: number = 0): string => {
     if (variance === 0) return 'text-gray-500 dark:text-gray-400';
+    // No actual postings yet → the variance is just −budget, which is not
+    // meaningful to judge as good/bad. Show it neutral.
+    if (actual === 0) return 'text-gray-500 dark:text-gray-400';
     return isFavorableVariance(variance, accountType)
       ? 'text-emerald-600 dark:text-emerald-400'
       : 'text-red-600 dark:text-red-400';
@@ -648,9 +667,12 @@ export function ProjectBudgetTab({ projectId, companyId, user }: ProjectBudgetTa
               <p className="text-xs text-gray-500 dark:text-gray-400">{isDa ? 'Afvigelse' : 'Variance'}</p>
               <p className={cn(
                 'text-sm font-semibold mt-0.5',
-                summary.totalVariance >= 0
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-red-600 dark:text-red-400'
+                // Neutral when there's no actual to compare against yet
+                summary.totalActual === 0 || summary.totalVariance === 0
+                  ? 'text-gray-500 dark:text-gray-400'
+                  : summary.totalVariance >= 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-red-600 dark:text-red-400'
               )}>
                 {tc(summary.totalVariance)}
               </p>
@@ -675,7 +697,7 @@ export function ProjectBudgetTab({ projectId, companyId, user }: ProjectBudgetTa
                 <span className="text-gray-500 dark:text-gray-400">
                   {isDa ? 'Realiseret' : 'Actual'}: {tc(group.totalActual)}
                 </span>
-                <span className={varianceClass(group.totalVariance, group.type)}>
+                <span className={varianceClass(group.totalVariance, group.type, group.totalActual)}>
                   {isDa ? 'Afvigelse' : 'Var.'}: {tc(group.totalVariance)}
                 </span>
               </div>
