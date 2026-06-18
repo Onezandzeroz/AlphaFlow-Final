@@ -135,6 +135,18 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const isDa = language === 'da';
   const { handleMutationError } = useAccessErrorHandler();
   const activeCompanyId = useAuthStore((s) => s.user?.activeCompanyId);
+  // ── Project Mode (FASE 4) ──
+  // When in project mode, the active project id is forced into the form's
+  // projectId state on every render. This is defence-in-depth alongside the
+  // locked ProjectSelector — even if a draft or preload tried to set a
+  // different project, project mode wins.
+  const activeProjectId = useAuthStore((s) => s.user?.activeProjectId);
+  const isProjectMode = useAuthStore((s) => !!s.user?.isProjectMode);
+  useEffect(() => {
+    if (isProjectMode && activeProjectId && projectId !== activeProjectId) {
+      setProjectId(activeProjectId);
+    }
+  }, [isProjectMode, activeProjectId, projectId]);
 
   // ─── State ───
   const [isLoading, setIsLoading] = useState(false);
@@ -247,7 +259,10 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         if (typeof draft.recurringStartDate === 'string') setRecurringStartDate(draft.recurringStartDate);
         if (typeof draft.recurringEndDate === 'string') setRecurringEndDate(draft.recurringEndDate);
         if (typeof draft.selectedAccountId === 'string') setSelectedAccountId(draft.selectedAccountId);
-        if (draft.projectId === null || typeof draft.projectId === 'string') setProjectId(draft.projectId as string | null);
+        if (draft.projectId === null || typeof draft.projectId === 'string') {
+          // In project mode, ignore any draft project — always use the active project
+          setProjectId(isProjectMode ? activeProjectId : (draft.projectId as string | null));
+        }
         if (Array.isArray(draft.purchaseLineItems) && draft.purchaseLineItems.length > 0) {
           setPurchaseLines(
             draft.purchaseLineItems

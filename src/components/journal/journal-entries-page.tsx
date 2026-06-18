@@ -222,6 +222,16 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
   const [formLines, setFormLines] = useState<JournalLineInput[]>([createEmptyLine()]);
   const [formProjectId, setFormProjectId] = useState<string | null>(null);
 
+  // ── Project Mode (FASE 4) ──
+  // Defence-in-depth: force the journal entry's project to the active project
+  // when in project mode, so a draft or stale state cannot attach the entry
+  // to the tenant instead of the active project.
+  useEffect(() => {
+    if (user.isProjectMode && user.activeProjectId && formProjectId !== user.activeProjectId) {
+      setFormProjectId(user.activeProjectId);
+    }
+  }, [user.isProjectMode, user.activeProjectId, formProjectId]);
+
   // Account options
   const [accounts, setAccounts] = useState<AccountOption[]>([]);
   const [accountsLoading, setAccountsLoading] = useState(false);

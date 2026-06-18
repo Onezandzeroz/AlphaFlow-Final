@@ -4,7 +4,7 @@ import { withGuard } from '@/lib/route-guard';
 import { auditCreate, auditUpdate, auditCancel, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { TransactionType, Prisma, VATCode } from '@prisma/client';
-import { tenantFilter, Permission } from '@/lib/rbac';
+import { tenantFilter, Permission, projectScope } from '@/lib/rbac';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { enrichTransactionsWithVAT } from '@/lib/vat-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
@@ -17,9 +17,25 @@ export const GET = withGuard({
   permissions: [Permission.DATA_READ],
 }, async (request, ctx) => {
   try {
+    // ── Project Mode (FASE 4) ──
+    // When in project mode, scope the list to the active project's
+    // transactions only — tenant-level transactions stay hidden so the user
+    // only sees what belongs to the project they are working in.
+    // Outside project mode, all tenant transactions are shown (including
+    // any that carry a projectId, so users can still see project-tagged
+    // entries from the tenant view).
+    const where = {
+      ...tenantFilter(ctx),
+      cancelled: false,
+      ...(ctx.isProjectMode && ctx.activeProjectId ? { projectId: ctx.activeProjectId } : {}),
+    };
+
     const transactions = await db.transaction.findMany({
-      where: { ...tenantFilter(ctx), cancelled: false },
+      where,
       orderBy: { date: 'desc' },
+      include: {
+        project: { select: { id: true, name: true, color: true, code: true } },
+      },
     });
 
     // Enrich with journal-entry-derived VAT data (single source of truth)
@@ -72,6 +88,30 @@ export const POST = withGuard({
   try {
     const body = await request.json();
     const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId } = body;
+
+    // ── Project Mode (FASE 4) ──
+    // Defence-in-depth: when the session is in project mode, force projectId
+    // to the active project regardless of what the client sent. This pairs
+    // with the form-level useEffect + locked ProjectSelector so a saved
+    // draft or tampered request cannot escape the project context.
+    const effectiveProjectId = ctx.isProjectMode
+      ? ctx.activeProjectId
+      : (projectId || null);
+
+    // Validate projectId (when not in project mode) — must belong to the
+    // active company and be ACTIVE.
+    if (!ctx.isProjectMode && effectiveProjectId) {
+      const project = await db.project.findFirst({
+        where: { id: effectiveProjectId, companyId: ctx.activeCompanyId! },
+        select: { id: true },
+      });
+      if (!project) {
+        return NextResponse.json(
+          { error: 'Ugyldigt projekt. / Invalid project.' },
+          { status: 400 }
+        );
+      }
+    }
 
     if (!date || !amount || !description) {
       return NextResponse.json(
@@ -159,6 +199,7 @@ export const POST = withGuard({
             vatPercent: vatPercent ?? 25.0,
             receiptImage,
             accountId: accountId || null,
+            projectId: effectiveProjectId,
             userId: ctx.id,
             companyId: ctx.activeCompanyId!,
           },
@@ -196,7 +237,7 @@ export const POST = withGuard({
             description,
             vatCode: null,
             companyId: ctx.activeCompanyId!,
-            projectId: projectId || null,
+            projectId: effectiveProjectId || null,
           });
 
           // Debit input VAT account (VAT amount) — no projectId (VAT is company-level)
@@ -256,7 +297,7 @@ export const POST = withGuard({
           });
 
           await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
-          logger.info(`[PURCHASE] Created journal entry ${je.id} for transaction ${newTx.id}: DR=${totalDebit}, CR=${totalCredit}, projectId=${projectId || 'none'}`);
+          logger.info(`[PURCHASE] Created journal entry ${je.id} for transaction ${newTx.id}: DR=${totalDebit}, CR=${totalCredit}, projectId=${effectiveProjectId || 'none'}`);
         }
 
         return newTx;
@@ -275,7 +316,7 @@ export const POST = withGuard({
       ctx.id,
       'Transaction',
       transaction.id,
-      { type: txType, date, amount: parsedAmount, description, vatPercent, receiptImage, accountId },
+      { type: txType, date, amount: parsedAmount, description, vatPercent, receiptImage, accountId, projectId: effectiveProjectId },
       requestMetadata(request),
       ctx.activeCompanyId
     );

@@ -154,6 +154,7 @@ enum EInvoiceType {
 enum EInvoiceSendChannel {
   NEMHANDEL_OIOUBL  // OIOUBL via NemHandel network
   PEPPOL_BIS        // Peppol BIS Billing 3.0 via Access Point
+  STORECOVE         // Peppol BIS Billing 3.0 via Storecove Access Point
 }
 
 enum EInvoiceSendStatus {
@@ -182,6 +183,15 @@ enum InvitationStatus {
   ACCEPTED
   EXPIRED
   REVOKED
+}
+
+// ─── PROJECT ACCOUNTING ENUMS ────────────────────────────────────
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
 }
 
 // ─── COMPANY (TENANT ENTITY) ──────────────────────────────────────
@@ -235,6 +245,14 @@ model Company {
   einvoiceRegistrationNo   String?             // NemHandelsregisteret registration number
   einvoiceRegisteredAt     DateTime?           // When registered in NemHandelsregisteret
   einvoiceAutoSendOnFinalize Boolean           @default(false) // Auto-send when invoice is finalized
+  einvoiceDeliveryMode      String?             // 'manual' or 'automatic' — null = not yet chosen
+
+  // Storecove Access Point integration (Peppol delivery)
+  storecoveConnected       Boolean             @default(false) // Whether Storecove API is configured
+  storecoveApiKeyId        String?             // Storecove API key ID (last 4 chars stored for identification)
+  storecoveLegalEntityId   Int?                // Storecove legal entity ID for this company
+  storecoveConnectedAt     DateTime?           // When Storecove was connected
+  storecoveLastTestedAt    DateTime?           // Last successful connection test
 
   // Meta
   isDemo               Boolean  @default(false)  // Demo company flag — only the shared demo company should be true
@@ -264,6 +282,7 @@ model Company {
   receivedInvoices      ReceivedInvoice[]
   eInvoiceSendings      EInvoiceSending[]
   vatSubmissions         VATSubmission[]
+  projects               Project[]
 
   @@unique([name])
   @@index([isActive])
@@ -369,6 +388,7 @@ model User {
   performedAuditLogs AuditLog[]       @relation("PerformedByUser")
   notificationReads NotificationRead[]
   vatSubmissions    VATSubmission[]
+  projects          Project[]
 }
 
 // ─── SESSION (with activeCompanyId) ───────────────────────────────
@@ -458,12 +478,15 @@ model Invoice {
   contact         Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
   transactions    Transaction[]
   eInvoiceSendings EInvoiceSending[]
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   companyId       String
   company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, invoiceNumber])
   @@index([companyId, status, issueDate])
   @@index([userId])
+  @@index([projectId])
 }
 
 // ─── AUDIT LOG ────────────────────────────────────────────────────
@@ -559,6 +582,7 @@ model Account {
   user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   journalLines  JournalEntryLine[]
   budgetEntries  BudgetEntry[]
+  projectBudgetEntries ProjectBudgetEntry[]
   transactions   Transaction[]
   standardMappings StandardAccountMapping[]
   companyId     String
@@ -631,10 +655,13 @@ model JournalEntryLine {
   journalEntry   JournalEntry  @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
   account        Account       @relation(fields: [accountId], references: [id])
   bankMatches    BankStatementLine[]
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([journalEntryId])
   @@index([companyId, accountId])
   @@index([accountId])
+  @@index([projectId])
 }
 
 // ─── CONTACTS ─────────────────────────────────────────────────────
@@ -657,6 +684,7 @@ model Contact {
   userId      String?
   user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   invoices    Invoice[]
+  projects    Project[]
   companyId   String
   company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -1147,6 +1175,10 @@ model EInvoiceSending {
   messageId       String?             // Message ID from NemHandel/Peppol network
   responseXml     String?             // Response XML from the network/receiver
 
+  // Storecove-specific tracking
+  storecoveSubmissionId String?      // Storecove submission ID (for status polling)
+  storecoveStorecoveId String?       // Storecove internal ID (numeric, stored as string)
+
   // Audit
   sentBy          String              // userId who initiated the send
   createdAt       DateTime            @default(now())
@@ -1160,4 +1192,66 @@ model EInvoiceSending {
   @@index([companyId, createdAt])
   @@index([sentBy])
   @@index([nextRetryAt])
+}
+
+// ─── PROJECT ACCOUNTING ──────────────────────────────────────────
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String                                    // "Hjemmeside redesign"
+  code        String?                                   // Kort kode: "PRJ-001"
+  description String?                                   // Valgfri beskrivelse
+  color       String?                                   // Visuel farve-tag: "#0d9488"
+  status      ProjectStatus @default(ACTIVE)
+  startDate   DateTime?                                 // Projektets startdato
+  endDate     DateTime?                                 // Forventet/ reel slutdato
+  budgetTotal Decimal?      @db.Decimal(18, 2)          // Valgfri samlet projektbudget
+  customerId  String?                                   // Valgfri kunde-kobling
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customer    Contact?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  // Relations
+  journalLines JournalEntryLine[]
+  invoices     Invoice[]
+  budgetEntries ProjectBudgetEntry[]
+
+  // Meta
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  userId      String?
+  user        User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([companyId, customerId])
+}
+
+model ProjectBudgetEntry {
+  id        String   @id @default(cuid())
+  projectId String
+  companyId String                                    // Denormalized for query performance
+  accountId String
+  january   Decimal  @db.Decimal(18, 2) @default(0)
+  february  Decimal  @db.Decimal(18, 2) @default(0)
+  march     Decimal  @db.Decimal(18, 2) @default(0)
+  april     Decimal  @db.Decimal(18, 2) @default(0)
+  may       Decimal  @db.Decimal(18, 2) @default(0)
+  june      Decimal  @db.Decimal(18, 2) @default(0)
+  july      Decimal  @db.Decimal(18, 2) @default(0)
+  august    Decimal  @db.Decimal(18, 2) @default(0)
+  september Decimal  @db.Decimal(18, 2) @default(0)
+  october   Decimal  @db.Decimal(18, 2) @default(0)
+  november  Decimal  @db.Decimal(18, 2) @default(0)
+  december  Decimal  @db.Decimal(18, 2) @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  account   Account  @relation(fields: [accountId], references: [id])
+
+  @@unique([projectId, accountId])
+  @@index([projectId])
+  @@index([companyId])
+  @@index([accountId])
 }

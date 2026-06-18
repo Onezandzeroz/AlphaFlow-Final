@@ -43,6 +43,8 @@ import {
   AlertTriangle,
   Eye,
   EyeOff,
+  Briefcase,
+  ShieldCheck,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -50,6 +52,7 @@ import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
 import { ClearFormButton } from '@/components/ui/clear-form-button';
+import { Switch } from '@/components/ui/switch';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -76,6 +79,7 @@ interface CompanyInfo {
   currentYear: number;
   createdAt: string;
   updatedAt: string;
+  projectModeEnabled?: boolean;
 }
 
 interface CompanySettingsPageProps {
@@ -128,6 +132,44 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isTogglingProjectMode, setIsTogglingProjectMode] = useState(false);
+
+  // ── SuperDev: toggle project mode for this tenant (FASE 4) ──
+  // PATCH /api/company with projectModeEnabled. Only SuperDev sees the card.
+  const handleToggleProjectMode = useCallback(async (enabled: boolean) => {
+    setIsTogglingProjectMode(true);
+    try {
+      const res = await fetch('/api/company', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectModeEnabled: enabled }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || 'Failed to update project mode');
+      }
+      // Reflect the change locally
+      setCompanyInfo((prev) => prev ? { ...prev, projectModeEnabled: enabled } : prev);
+      toast.success(
+        enabled
+          ? (language === 'da' ? 'Projekt-tilstand aktiveret' : 'Project mode enabled')
+          : (language === 'da' ? 'Projekt-tilstand deaktiveret' : 'Project mode disabled'),
+        {
+          description: enabled
+            ? (language === 'da'
+              ? 'Projekter er nu synlige for denne virksomhed. Brugere kan klikke på et aktivt projekt for at arbejde i projekt-regnskab.'
+              : 'Projects are now visible for this tenant. Users can click an active project to work in project accounting.')
+            : (language === 'da'
+              ? 'Projekt-sektionen er nu skjult. Eksisterende projekt-data bevares, men kan ikke tilgås før tilstand aktiveres igen.'
+              : 'The Projects section is now hidden. Existing project data is retained but inaccessible until re-enabled.'),
+        }
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update project mode');
+    } finally {
+      setIsTogglingProjectMode(false);
+    }
+  }, [language]);
 
   // ── Company info completeness check ──
   // Checks actual field content, not just object existence.
@@ -1288,6 +1330,60 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── SuperDev: Project Mode gate (FASE 4) ──
+          Only AppOwner (isSuperDev) can toggle whether this tenant can see
+          and use the Projects section + project accounts. When off, the
+          Projects nav item, ProjectSelector dropdowns, project APIs and the
+          project-mode banner are all hidden for this tenant. */}
+      {user.isSuperDev && companyInfo && (
+        <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5 mt-2">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#0d9488] to-[#14b8a6] flex items-center justify-center shrink-0">
+                <ShieldCheck className="h-4 w-4 text-white" />
+              </div>
+              {language === 'da' ? 'Projekt-tilstand (AppOwner)' : 'Project Mode (AppOwner)'}
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
+              {language === 'da'
+                ? 'Styr om denne virksomhed kan se og bruge Projekter, projektkonti og projekt-regnskab. Når deaktiveret, skjules hele projekt-sektionen for brugerne i denne virksomhed.'
+                : 'Control whether this tenant can see and use Projects, project accounts and project accounting. When disabled, the entire Projects section is hidden for users in this tenant.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between gap-4 p-4 rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/[0.06]">
+              <div className="flex items-start gap-3 min-w-0">
+                <Briefcase className="h-5 w-5 text-[#0d9488] shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {language === 'da' ? 'Projekt-tilstand' : 'Project mode'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {companyInfo.projectModeEnabled
+                      ? (language === 'da'
+                        ? 'Aktiveret — Projekter er synlige for denne virksomhed.'
+                        : 'Enabled — Projects are visible for this tenant.')
+                      : (language === 'da'
+                        ? 'Deaktiveret — Projekter er skjult for denne virksomhed.'
+                        : 'Disabled — Projects are hidden for this tenant.')}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={!!companyInfo.projectModeEnabled}
+                disabled={isTogglingProjectMode}
+                onCheckedChange={(checked) => handleToggleProjectMode(checked)}
+              />
+            </div>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3 leading-relaxed">
+              {language === 'da'
+                ? 'Bemærk: Eksisterende projekt-data (projekter, budgetter, projekt-knyttede fakturaer og journalposter) bevares når tilstand deaktiveres — de bliver blot utilgængelige indtil tilstand aktiveres igen. Denne indstilling påvirker kun synlighed og adgang, ikke data.'
+                : 'Note: Existing project data (projects, budgets, project-linked invoices and journal entries) is retained when mode is disabled — it just becomes inaccessible until mode is re-enabled. This setting affects visibility and access only, not data.'}
+            </p>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

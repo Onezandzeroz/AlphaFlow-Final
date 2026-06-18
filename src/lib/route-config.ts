@@ -406,6 +406,7 @@ export const routeConfig: RouteConfigMap = {
     GET: { auth: true, requireCompany: true, permissions: [Permission.COMPANY_VIEW_SETTINGS] },
     POST: { auth: true, blockOversight: true, requireTokenPay: true }, // Create new company
     PUT: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.COMPANY_EDIT_SETTINGS] },
+    PATCH: { auth: true, requireCompany: true, blockOversight: true, requireSuperDev: true }, // SuperDev per-tenant flags (projectModeEnabled)
     DELETE: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.COMPANY_DELETE] },
   },
   '/api/company/switch': {
@@ -547,5 +548,14 @@ export const routeConfig: RouteConfigMap = {
 
   '/api/trial/start': {
     POST: { auth: true, blockOversight: true, blockDemo: true },
+  },
+
+  // ── Project Mode (FASE 4) ──
+  // Enter/exit project context. The SuperDev gate (projectModeEnabled) is
+  // enforced inside the handler because it is a per-tenant DB flag, not a
+  // guard-chain concern.
+  '/api/project-mode': {
+    GET: { auth: true },
+    POST: { auth: true, requireCompany: true, blockOversight: true },
   },
 };

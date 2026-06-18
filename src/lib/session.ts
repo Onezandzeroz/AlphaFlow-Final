@@ -35,6 +35,16 @@ export interface AuthContext {
   oversightCompanyName: string | null;
   /** True when oversightCompanyId is set — all mutations must be blocked */
   isOversightMode: boolean;
+  // ── Project Mode (FASE 4) ──
+  /** SuperDev-controlled per-tenant flag: when false, Projects UI + APIs are hidden */
+  projectModeEnabled: boolean;
+  /** When set, the user is working inside this project's context */
+  activeProjectId: string | null;
+  activeProjectName: string | null;
+  activeProjectColor: string | null;
+  activeProjectStatus: string | null;
+  /** True when activeProjectId is set */
+  isProjectMode: boolean;
 }
 
 // ─── TOKEN GENERATION ────────────────────────────────────────────────
@@ -123,7 +133,7 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
 
   if (!token) return null;
 
-  // Find valid session with user + activeCompany + oversightCompany
+  // Find valid session with user + activeCompany + oversightCompany + activeProject
   const session = await db.session.findUnique({
     where: { token },
     include: {
@@ -144,12 +154,22 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
           name: true,
           isDemo: true,
           cvrNumber: true,
+          projectModeEnabled: true,
         },
       },
       oversightCompany: {
         select: {
           id: true,
           name: true,
+        },
+      },
+      activeProject: {
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          status: true,
+          companyId: true,
         },
       },
     },
@@ -201,6 +221,24 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
   // SuperDev (AppOwner / AlphaAi) is ALWAYS treated as verified
   const effectiveEmailVerified = session.user.isSuperDev ? true : (session.user.emailVerified ?? false);
 
+  // ── Project Mode safety: clear stale activeProjectId if it belongs to a
+  // different company than the active one (e.g. after company switch), or if
+  // project mode is disabled for this tenant. We auto-clean the session row
+  // so the next request sees a consistent state without a manual exit.
+  let effectiveActiveProject = session.activeProject;
+  if (
+    session.activeProject &&
+    (!session.activeCompany?.projectModeEnabled ||
+      session.activeProject.companyId !== session.activeCompanyId)
+  ) {
+    effectiveActiveProject = null;
+    // Fire-and-forget cleanup — don't block the response on it
+    db.session.update({
+      where: { id: session.id },
+      data: { activeProjectId: null },
+    }).catch(() => { /* ignore */ });
+  }
+
   return {
     id: session.user.id,
     email: session.user.email,
@@ -215,6 +253,13 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
     oversightCompanyId: session.oversightCompanyId,
     oversightCompanyName: session.oversightCompany?.name ?? null,
     isOversightMode: session.oversightCompanyId !== null,
+    // ── Project Mode ──
+    projectModeEnabled: session.activeCompany?.projectModeEnabled ?? false,
+    activeProjectId: effectiveActiveProject?.id ?? null,
+    activeProjectName: effectiveActiveProject?.name ?? null,
+    activeProjectColor: effectiveActiveProject?.color ?? null,
+    activeProjectStatus: effectiveActiveProject?.status ?? null,
+    isProjectMode: effectiveActiveProject != null,
   };
 }
 

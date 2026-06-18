@@ -74,6 +74,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Briefcase,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useDataVersion } from '@/hooks/use-data-version';
@@ -87,6 +88,8 @@ interface Transaction {
   vatPercent: number;
   receiptImage: string | null;
   invoiceId?: string | null;
+  projectId?: string | null;
+  project?: { id: string; name: string; color: string | null; code: string | null } | null;
   // Journal-entry-derived VAT (authoritative) — from double-entry journal.
   // null when no journal entry exists.
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
@@ -729,12 +732,27 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                           <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
                             {transaction.description}
                           </p>
-                          {transaction.id.startsWith('inv-') && (
-                            <Badge className="mt-1 text-[10px] px-1.5 py-0 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#0d9488]/20 dark:text-[#2dd4bf] border-0 gap-1">
-                              <FileText className="h-2.5 w-2.5" />
-                              {language === 'da' ? 'Faktura' : 'Invoice'}
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            {transaction.id.startsWith('inv-') && (
+                              <Badge className="text-[10px] px-1.5 py-0 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#0d9488]/20 dark:text-[#2dd4bf] border-0 gap-1">
+                                <FileText className="h-2.5 w-2.5" />
+                                {language === 'da' ? 'Faktura' : 'Invoice'}
+                              </Badge>
+                            )}
+                            {transaction.project && (
+                              <Badge
+                                className="text-[10px] px-1.5 py-0 border-0 gap-1"
+                                style={{
+                                  backgroundColor: `${transaction.project.color || '#0d9488'}1a`,
+                                  color: transaction.project.color || '#0d9488',
+                                }}
+                                title={transaction.project.name}
+                              >
+                                <Briefcase className="h-2.5 w-2.5" />
+                                {transaction.project.code || transaction.project.name}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <span className={`text-base font-bold whitespace-nowrap ${typeInfo.amountClass}`}>
                           {tc(transaction.amount)}
@@ -940,7 +958,22 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         {td(new Date(transaction.date))}
                       </TableCell>
                       <TableCell className="max-w-[150px] lg:max-w-[250px] truncate">
-                        {transaction.description}
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate">{transaction.description}</span>
+                          {transaction.project && (
+                            <Badge
+                              className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1"
+                              style={{
+                                backgroundColor: `${transaction.project.color || '#0d9488'}1a`,
+                                color: transaction.project.color || '#0d9488',
+                              }}
+                              title={transaction.project.name}
+                            >
+                              <Briefcase className="h-2.5 w-2.5" />
+                              {transaction.project.code || transaction.project.name}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap font-medium">
                         {tc(transaction.amount)}

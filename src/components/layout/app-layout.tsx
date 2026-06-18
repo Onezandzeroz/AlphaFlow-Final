@@ -57,6 +57,7 @@ import {
   EyeOff,
   ChevronsLeft,
   ShieldCheck,
+  Briefcase,
 } from 'lucide-react';
 
 export type View = 'dashboard' | 'transactions' | 'vat-report' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
@@ -784,6 +785,44 @@ export function AppLayout({
               </button>
             </div>
           )
+        )}
+
+        {/* ── Project Mode Banner (FASE 4) ──
+            Shown when the user has entered a project context. Uses the
+            project's own color so it is instantly recognisable — mirroring
+            the demo-mode banner pattern but with a dynamic background.
+            The "Tilbage til tenant-regnskabet" link calls exitProject(). */}
+        {user.isProjectMode && user.activeProjectId && (
+          <div
+            className="flex bg-[color:var(--project-banner-bg,#0d9488)] text-white px-4 py-2 items-center justify-between gap-3 text-sm"
+            style={
+              {
+                '--project-banner-bg': user.activeProjectColor || '#0d9488',
+              } as React.CSSProperties
+            }
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Briefcase className="h-4 w-4 shrink-0" />
+              <span className="font-medium truncate">
+                {language === 'da' ? 'Projekt-regnskab' : 'Project Accounting'}:{' '}
+                {user.activeProjectName || ''}
+              </span>
+              <span className="hidden sm:inline opacity-80">
+                — {language === 'da'
+                  ? 'alle nye posteringer knyttes automatisk til dette projekt'
+                  : 'all new entries are auto-attached to this project'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                useAuthStore.getState().exitProject();
+              }}
+              className="text-xs font-medium underline underline-offset-2 hover:opacity-80 whitespace-nowrap"
+            >
+              {language === 'da' ? 'Tilbage til tenant-regnskabet' : 'Back to tenant accounting'}
+            </button>
+          </div>
         )}
         <EmailVerificationBanner />
         <div

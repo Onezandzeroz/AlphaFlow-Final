@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useEffect, useCallback, useMemo, useState } from 'react';
 import { useCommandState } from 'cmdk';
 import { useLanguageStore } from '@/lib/language-store';
+import { useAuthStore } from '@/lib/auth-store';
 import {
   CommandDialog,
   CommandInput,
@@ -247,6 +248,18 @@ export function CommandPalette({ open, onOpenChange, onNavigate }: CommandPalett
   const { language } = useLanguageStore();
   const isDa = language === 'da';
 
+  // ── Project Mode gating (FASE 4) ──
+  // Hide the Projects command when the SuperDev has not enabled project mode
+  // for the active tenant.
+  const { user } = useAuthStore();
+  const visibleSections = useMemo(() => {
+    if (user?.projectModeEnabled) return NAV_SECTIONS;
+    return NAV_SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.id !== 'projects'),
+    })).filter((section) => section.items.length > 0);
+  }, [user?.projectModeEnabled]);
+
   const handleSelect = useCallback(
     (viewId: string) => {
       onNavigate(viewId);
@@ -288,7 +301,7 @@ export function CommandPalette({ open, onOpenChange, onNavigate }: CommandPalett
           </div>
         </CommandEmpty>
 
-        {NAV_SECTIONS.map((section, sectionIndex) => {
+        {visibleSections.map((section, sectionIndex) => {
           const SectionIcon = section.icon;
           const sectionName = isDa ? section.nameDa : section.nameEn;
 

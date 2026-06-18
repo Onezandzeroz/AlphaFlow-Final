@@ -242,6 +242,16 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const [contactTypeFilter, setContactTypeFilter] = useState<'CUSTOMER' | 'SUPPLIER' | 'ALL'>('CUSTOMER');
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
 
+  // ── Project Mode (FASE 4) ──
+  // Defence-in-depth: force the invoice's project to the active project when
+  // in project mode, so a saved draft or stale state can never attach an
+  // invoice to the wrong project (or to the tenant instead of the project).
+  useEffect(() => {
+    if (user.isProjectMode && user.activeProjectId && invoiceProjectId !== user.activeProjectId) {
+      setInvoiceProjectId(user.activeProjectId);
+    }
+  }, [user.isProjectMode, user.activeProjectId, invoiceProjectId]);
+
   // Accounts state (for line item account selection)
   const [accounts, setAccounts] = useState<Account[]>([]);
 

@@ -29,6 +29,16 @@ export interface AuthContext {
   oversightCompanyName: string | null;
   /** True when oversightCompanyId is set — all mutations must be blocked */
   isOversightMode: boolean;
+  // ── Project Mode (FASE 4) ──
+  /** SuperDev-controlled per-tenant flag: when false, Projects UI + APIs are hidden */
+  projectModeEnabled: boolean;
+  /** When set, the user is working inside this project's context */
+  activeProjectId: string | null;
+  activeProjectName: string | null;
+  activeProjectColor: string | null;
+  activeProjectStatus: string | null;
+  /** True when activeProjectId is set */
+  isProjectMode: boolean;
 }
 
 // ─── ROLE HIERARCHY ──────────────────────────────────────────────────
@@ -349,6 +359,57 @@ export function blockOversightMutation(
   }
 
   return null;
+}
+
+// ─── PROJECT MODE GUARDS (FASE 4) ───────────────────────────────────
+
+/**
+ * Block access to project-related APIs when project mode is disabled for the
+ * active tenant. SuperDev (AppOwner) is always allowed to read project data
+ * so they can configure / inspect tenants, but writes follow normal rules.
+ *
+ * Usage in every project API route (GET/POST/PUT/DELETE):
+ * ```ts
+ * const projectBlocked = requireProjectModeEnabled(ctx);
+ * if (projectBlocked) return projectBlocked;
+ * ```
+ *
+ * @returns null if access is allowed, or a 403 NextResponse if blocked.
+ */
+export function requireProjectModeEnabled(
+  ctx: AuthContext | null
+): NextResponse | null {
+  if (!ctx) return null; // Let requirePermission handle unauthenticated
+
+  // Oversight mode always sees project data (read-only) — guard below blocks writes
+  if (ctx.isOversightMode) return null;
+
+  if (!ctx.projectModeEnabled) {
+    return NextResponse.json(
+      {
+        error: 'Projekt-tilstand er ikke aktiveret for denne virksomhed',
+        code: 'PROJECT_MODE_DISABLED',
+      },
+      { status: 403 }
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Resolve the project scope for queries when the user is in project mode.
+ * Returns `{ projectId: <id> }` when in project mode, or `{}` (no project
+ * filter) when in normal tenant mode. Oversight mode returns `{}` too —
+ * oversight sees all projects for the overseen tenant.
+ */
+export function projectScope(
+  ctx: AuthContext
+): { projectId: string } | Record<string, never> {
+  if (ctx.isProjectMode && ctx.activeProjectId) {
+    return { projectId: ctx.activeProjectId };
+  }
+  return {};
 }
 
 // ─── DEMO COMPANY MUTATION BLOCK ────────────────────────────────────

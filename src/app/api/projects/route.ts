@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { AccountType, ProjectStatus } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { tenantFilter, Permission } from '@/lib/rbac';
+import { tenantFilter, Permission, requireProjectModeEnabled } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { notifyDataChange } from '@/lib/notify-data-change';
 import { seedProjectAccounts } from '@/lib/project-chart-template';
@@ -17,6 +17,10 @@ export const GET = withGuard(
   { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
   async (request, ctx) => {
     try {
+      // ── Project mode gate (FASE 4) ──
+      const projectBlocked = requireProjectModeEnabled(ctx);
+      if (projectBlocked) return projectBlocked;
+
       const { searchParams } = new URL(request.url);
       const statusFilter = searchParams.get('status');
 
@@ -116,6 +120,10 @@ export const POST = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_CREATE] },
   async (request, ctx) => {
     try {
+      // ── Project mode gate (FASE 4) ──
+      const projectBlocked = requireProjectModeEnabled(ctx);
+      if (projectBlocked) return projectBlocked;
+
       const body = await request.json();
       const { name, code, description, color, status, startDate, endDate, budgetTotal, customerId } = body;
 

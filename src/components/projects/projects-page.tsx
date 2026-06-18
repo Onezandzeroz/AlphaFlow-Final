@@ -36,6 +36,7 @@ import { readDraft } from '@/lib/draft-store';
 import { ClearFormButton } from '@/components/ui/clear-form-button';
 import { ProjectCard } from './project-card';
 import { ProjectDetail } from './project-detail';
+import { useAuthStore } from '@/lib/auth-store';
 import {
   Briefcase,
   Plus,
@@ -118,7 +119,8 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Selected project for detail view
+  // Selected project for detail view (non-ACTIVE projects only — ACTIVE
+  // projects enter project mode instead, see handleCardClick below)
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Filter state
@@ -159,6 +161,34 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
     onConfirmDiscard: () => { clearCreateDraft(); setIsCreateOpen(false); },
     window: false,
   });
+
+  // ── Card click handler (FASE 4) ──
+  // ACTIVE projects enter project mode (sets activeProjectId on the session
+  // → colored banner appears, forms auto-attach new entries to the project).
+  // Non-ACTIVE projects (ON_HOLD / COMPLETED / CANCELLED) open the read-only
+  // detail view instead, since you cannot "work in" a non-active project.
+  const enterProject = useAuthStore((s) => s.enterProject);
+  const handleCardClick = useCallback(
+    async (project: Project) => {
+      if (project.status === 'ACTIVE') {
+        try {
+          await enterProject(project.id);
+          // enterProject triggers a reload — no further UI work needed here
+        } catch (err) {
+          toast.error(
+            err instanceof Error
+              ? err.message
+              : isDa
+            ? 'Kunne ikke aktivere projekt-tilstand'
+            : 'Could not enter project mode'
+          );
+        }
+      } else {
+        setSelectedProjectId(project.id);
+      }
+    },
+    [enterProject, isDa]
+  );
 
   // ── Fetch projects ──
   // IMPORTANT: we always fetch ALL projects (no status param) and filter
@@ -533,7 +563,7 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
             <ProjectCard
               key={project.id}
               project={project}
-              onClick={() => setSelectedProjectId(project.id)}
+              onClick={() => handleCardClick(project)}
             />
           ))}
         </div>

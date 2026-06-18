@@ -221,13 +221,24 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
 
   // Find which section contains the currently active view
   const activeSectionId = useMemo(() => {
-    for (const section of NAV_SECTIONS) {
+    for (const section of visibleSections) {
       if (section.items.some((item) => item.id === currentView)) {
         return section.id;
       }
     }
     return null;
-  }, [currentView]);
+  }, [currentView, visibleSections]);
+
+  // ── Project Mode gating (FASE 4) ──
+  // When the SuperDev has not enabled project mode for this tenant, strip the
+  // Projects nav item so users cannot even see the section.
+  const visibleSections = useMemo(() => {
+    if (user?.projectModeEnabled) return NAV_SECTIONS;
+    return NAV_SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.id !== 'projects'),
+    })).filter((section) => section.items.length > 0);
+  }, [user?.projectModeEnabled]);
 
   const isDa = language === 'da';
 
@@ -255,7 +266,7 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
           }}
           className="space-y-1"
         >
-          {NAV_SECTIONS.map((section, sectionIndex) => {
+          {visibleSections.map((section, sectionIndex) => {
             const SectionIcon = section.icon;
             const isActive = activeSectionId === section.id;
             const isExpanded = expandedSections.includes(section.id);

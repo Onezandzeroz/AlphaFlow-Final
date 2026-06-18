@@ -66,6 +66,13 @@ export const GET = withGuard({ auth: 'optional' }, async (request, ctx) => {
         oversightCompanyId: ctx.oversightCompanyId,
         oversightCompanyName: ctx.oversightCompanyName,
         isOversightMode: ctx.isOversightMode,
+        // ── Project Mode (FASE 4) ──
+        projectModeEnabled: ctx.projectModeEnabled,
+        activeProjectId: ctx.activeProjectId,
+        activeProjectName: ctx.activeProjectName,
+        activeProjectColor: ctx.activeProjectColor,
+        activeProjectStatus: ctx.activeProjectStatus,
+        isProjectMode: ctx.isProjectMode,
         companies: mappedCompanies,
       },
     });

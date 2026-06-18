@@ -26,6 +26,8 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
         // E-invoice / eDelivery fields for onboarding status detection
         einvoiceEnabled: true, einvoiceRegistrationNo: true, einvoiceEndpointId: true,
         einvoiceDeliveryMode: true, storecoveConnected: true,
+        // Project Mode gate (FASE 4) — SuperDev per-tenant visibility control
+        projectModeEnabled: true,
       },
     });
 
@@ -72,6 +74,7 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       einvoiceEndpointId: company.einvoiceEndpointId,
       einvoiceDeliveryMode: company.einvoiceDeliveryMode,
       storecoveConnected: company.storecoveConnected,
+      projectModeEnabled: company.projectModeEnabled,
     } : null;
 
     return NextResponse.json({ companyInfo });
@@ -293,7 +296,66 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
   }
 });
 
-// ─── Email Builder ──────────────────────────────────────────────────
+// PATCH /api/company - SuperDev-only toggles for per-tenant feature flags
+// Currently supports: projectModeEnabled (FASE 4)
+// Body: { projectModeEnabled?: boolean }
+export const PATCH = withGuard(
+  { auth: true, requireCompany: true, blockOversight: true, requireSuperDev: true },
+  async (request, ctx) => {
+    try {
+      const body = await request.json();
+      const { projectModeEnabled } = body as { projectModeEnabled?: boolean };
+
+      if (typeof projectModeEnabled !== 'boolean') {
+        return NextResponse.json(
+          { error: 'Invalid body. Expected { projectModeEnabled: boolean }.' },
+          { status: 400 }
+        );
+      }
+
+      const existing = await db.company.findUnique({
+        where: { id: ctx.activeCompanyId! },
+        select: { id: true, name: true, projectModeEnabled: true },
+      });
+      if (!existing) {
+        return NextResponse.json({ error: 'Company not found' }, { status: 404 });
+      }
+
+      // Only update + audit if the value actually changes
+      if (existing.projectModeEnabled !== projectModeEnabled) {
+        await db.company.update({
+          where: { id: ctx.activeCompanyId! },
+          data: { projectModeEnabled },
+          select: { id: true, projectModeEnabled: true },
+        });
+
+        await auditLog({
+          action: 'UPDATE',
+          entityType: 'Company',
+          entityId: existing.id,
+          userId: ctx.id,
+          companyId: existing.id,
+          changes: { projectModeEnabled: { old: existing.projectModeEnabled, new: projectModeEnabled } },
+          metadata: requestMetadata(request),
+        });
+
+        logger.info(
+          `[Company PATCH] SuperDev ${ctx.id} set projectModeEnabled=${projectModeEnabled} for company ${existing.id}`
+        );
+
+        notifyDataChange({ scope: 'company-settings', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
+      }
+
+      return NextResponse.json({
+        projectModeEnabled,
+        companyId: existing.id,
+      });
+    } catch (error) {
+      logger.error('Failed to patch company flags:', error);
+      return NextResponse.json({ error: 'Failed to update company flags' }, { status: 500 });
+    }
+  }
+);
 
 /**
  * Build a nicely formatted HTML email body for the app owner
