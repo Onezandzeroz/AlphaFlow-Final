@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react';
-import { User } from '@/lib/auth-store';
+import { User, useAuthStore } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { toast } from 'sonner';
@@ -66,6 +66,7 @@ import {
   FileText,
   Receipt,
   DollarSign,
+  Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -208,6 +209,31 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
   // Delete state
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // ── Project Mode activation (FASE 4) ──
+  // "Aktivér projekt-tilstand" button state — enters project mode so all new
+  // transactions/invoices/journal entries auto-attach to this project.
+  const enterProject = useAuthStore((s) => s.enterProject);
+  const [isEntering, setIsEntering] = useState(false);
+
+  const handleEnterProjectMode = useCallback(async () => {
+    if (!project) return;
+    setIsEntering(true);
+    try {
+      await enterProject(project.id);
+      // enterProject triggers a reload on success — no further UI work needed
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : isDa
+            ? 'Kunne ikke aktivere projekt-tilstand'
+            : 'Could not enter project mode'
+      );
+    } finally {
+      setIsEntering(false);
+    }
+  }, [project, enterProject, isDa]);
 
   // Contacts for form
   const [contacts, setContacts] = useState<ContactOption[]>([]);
@@ -549,6 +575,27 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* ── Enter Project Mode (FASE 4) ──
+                Only for ACTIVE projects — enters project mode so all new
+                transactions/invoices/journal entries auto-attach to this
+                project. Uses the project's own color for visual connection
+                to the banner that will appear after activation. */}
+            {project.status === 'ACTIVE' && (
+              <Button
+                size="sm"
+                onClick={handleEnterProjectMode}
+                disabled={isEntering}
+                className="gap-1.5 text-white border-0 font-medium"
+                style={{ backgroundColor: project.color || '#0d9488' }}
+              >
+                {isEntering ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Zap className="h-3.5 w-3.5" />
+                )}
+                {isDa ? 'Arbejd i projektet' : 'Work in project'}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={openEdit} className="gap-1.5">
               <Pencil className="h-3.5 w-3.5" />
               {t('projectEdit')}
