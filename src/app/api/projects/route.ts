@@ -40,9 +40,22 @@ export const GET = withGuard(
               account: { select: { type: true } },
             },
           },
+          // Include the detailed budget entries (per account × month) so we
+          // can compute the TRUE budget total from the budget tab. The
+          // Project.budgetTotal field is a manual fallback used only when
+          // no budget lines have been entered yet.
+          budgetEntries: {
+            select: {
+              january: true, february: true, march: true, april: true,
+              may: true, june: true, july: true, august: true,
+              september: true, october: true, november: true, december: true,
+            },
+          },
         },
         orderBy: { createdAt: 'desc' },
       });
+
+      const MONTH_KEYS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'] as const;
 
       const result = projects.map((project) => {
         let totalRevenue = 0;
@@ -59,11 +72,25 @@ export const GET = withGuard(
         totalRevenue = r(totalRevenue);
         totalExpenses = r(totalExpenses);
         const projectResult = r(totalRevenue - totalExpenses);
-        const budgetTotal = project.budgetTotal ? Number(project.budgetTotal) : 0;
+
+        // Compute the TRUE budget total from the detailed budget entries
+        // (sum of all months × all accounts). This is what the budget tab
+        // shows, so the project card will now match. Falls back to the
+        // manual Project.budgetTotal field when no budget lines exist yet.
+        const budgetEntriesTotal = project.budgetEntries.reduce((sum, entry) => {
+          const entrySum = MONTH_KEYS.reduce((s, m) => s + Number(entry[m] || 0), 0);
+          return sum + entrySum;
+        }, 0);
+        const manualBudgetTotal = project.budgetTotal ? Number(project.budgetTotal) : 0;
+        // Prefer the sum of budget entries when there are any; otherwise use
+        // the manual field (set at project create/edit). This way the card
+        // always reflects what's in the budget tab once the user starts
+        // adding lines.
+        const budgetTotal = budgetEntriesTotal > 0 ? r(budgetEntriesTotal) : r(manualBudgetTotal);
         const budgetUsage = budgetTotal > 0 ? r((totalExpenses / budgetTotal) * 100) : 0;
 
-        // Remove journalLines from the response — only needed for computation
-        const { journalLines, ...projectData } = project;
+        // Remove relations from the response — only needed for computation
+        const { journalLines, budgetEntries, ...projectData } = project;
 
         return {
           ...projectData,
