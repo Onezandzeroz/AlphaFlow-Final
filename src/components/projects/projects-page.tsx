@@ -161,13 +161,14 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
   });
 
   // ── Fetch projects ──
+  // IMPORTANT: we always fetch ALL projects (no status param) and filter
+  // client-side. This lets the empty-state UI distinguish "no projects at
+  // all" from "no projects in this filter" — which the previous server-
+  // side filter made impossible (the API returned [] for both cases).
   const fetchProjects = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (statusFilter !== 'ALL') params.set('status', statusFilter);
-
-      const response = await fetch(`/api/projects?${params.toString()}`);
+      const response = await fetch('/api/projects');
       if (!response.ok) throw new Error(isDa ? 'Kunne ikke hente projekter' : 'Failed to fetch projects');
       const data = await response.json();
       setProjects(data.projects || []);
@@ -177,7 +178,7 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter, isDa]);
+  }, [isDa]);
 
   // Auto-refresh projects when the server signals a data-changed event.
   const projectsVersion = useDataVersion('projects');
@@ -203,17 +204,28 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
     }
   }, []);
 
-  // ── Filtered projects by search ──
+  // ── Filtered projects by status + search ──
+  // Filtering is done client-side (we fetch ALL projects) so that the
+  // empty-state UI can tell "no projects at all" from "no projects in
+  // this filter".
   const filteredProjects = useMemo(() => {
-    if (!searchQuery.trim()) return projects;
-    const q = searchQuery.toLowerCase().trim();
-    return projects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.code && p.code.toLowerCase().includes(q)) ||
-        (p.customer && p.customer.name.toLowerCase().includes(q))
-    );
-  }, [projects, searchQuery]);
+    let result = projects;
+    // Status filter (client-side)
+    if (statusFilter !== 'ALL') {
+      result = result.filter((p) => p.status === statusFilter);
+    }
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.code && p.code.toLowerCase().includes(q)) ||
+          (p.customer && p.customer.name.toLowerCase().includes(q))
+      );
+    }
+    return result;
+  }, [projects, statusFilter, searchQuery]);
 
   // ── Open create dialog ──
   const openCreate = () => {
