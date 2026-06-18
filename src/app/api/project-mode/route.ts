@@ -68,11 +68,13 @@ export const POST = withGuard(
           );
         }
 
-        // Verify the project exists, belongs to the active company, and is ACTIVE
+        // Verify the project exists, belongs to the active company, and is ACTIVE.
+        // `ctx.activeCompanyId` is guaranteed non-null by the route guard's
+        // `requireCompany: true` config — the `!` asserts that to TypeScript.
         const project = await db.project.findFirst({
           where: {
             id: projectId,
-            companyId: ctx.activeCompanyId,
+            companyId: ctx.activeCompanyId!,
             status: 'ACTIVE',
           },
           select: {
