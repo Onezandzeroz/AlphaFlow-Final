@@ -856,6 +856,71 @@ export async function getInvoiceSendHistory(
 }
 
 /**
+ * ── Channel alias <-> Prisma enum normalisation ──
+ *
+ * The settings UI (and several invoice dialogs) use short aliases for the
+ * default sending channel — 'OIOUBL' and 'PEPPOL' — because those match the
+ * document-format vocabulary users already know. The database column
+ * `einvoiceDefaultChannel`, however, is typed as the Prisma enum
+ * `EInvoiceSendChannel` whose members are NEMHANDEL_OIOUBL | PEPPOL_BIS |
+ * STORECOVE.
+ *
+ * Sending the alias directly to Prisma raises a validation error (the root
+ * cause of the "Der opstod en fejl. Prøv igen." toast on the e-delivery
+ * onboarding step). These helpers translate at the lib boundary so callers
+ * may freely use either the alias or the canonical enum name.
+ */
+const CHANNEL_ALIAS_TO_ENUM: Record<string, EInvoiceSendChannel> = {
+  OIOUBL: 'NEMHANDEL_OIOUBL',
+  NEMHANDEL: 'NEMHANDEL_OIOUBL',
+  NEMHANDEL_OIOUBL: 'NEMHANDEL_OIOUBL',
+  PEPPOL: 'PEPPOL_BIS',
+  PEPPOL_BIS: 'PEPPOL_BIS',
+  STORECOVE: 'STORECOVE',
+};
+
+const ENUM_TO_CHANNEL_ALIAS: Record<EInvoiceSendChannel, string> = {
+  NEMHANDEL_OIOUBL: 'OIOUBL',
+  PEPPOL_BIS: 'PEPPOL',
+  STORECOVE: 'STORECOVE',
+};
+
+/**
+ * Normalise an incoming channel value (alias OR canonical enum name) to a
+ * valid `EInvoiceSendChannel` enum member. Null/empty -> null. Unknown
+ * values pass through untouched so Prisma raises a clear validation error
+ * (surfaced to the user thanks to api-error-handler).
+ */
+function normalizeChannelToEnum(
+  channel: string | null | undefined,
+): EInvoiceSendChannel | null {
+  if (!channel) return null;
+  const trimmed = channel.trim();
+  if (!trimmed) return null;
+  // Already a canonical enum value?
+  if (trimmed in ENUM_TO_CHANNEL_ALIAS) {
+    return trimmed as EInvoiceSendChannel;
+  }
+  // Try alias mapping (case-insensitive)
+  const mapped = CHANNEL_ALIAS_TO_ENUM[trimmed.toUpperCase()];
+  if (mapped) return mapped;
+  // Unknown — return as-is so Prisma rejects it with a descriptive error
+  return trimmed as EInvoiceSendChannel;
+}
+
+/**
+ * Reverse-map a stored enum value back to the UI alias so the settings
+ * Select (and the send-einvoice dialog) can match it against 'OIOUBL' /
+ * 'PEPPOL' / 'STORECOVE'.
+ */
+function enumToChannelAlias(
+  channel: EInvoiceSendChannel | null,
+): string | null {
+  if (!channel) return null;
+  return ENUM_TO_CHANNEL_ALIAS[channel] ?? channel;
+}
+
+/**
  * Get the e-invoice configuration for a company.
  *
  * Returns all e-invoicing settings including channel preferences,
@@ -893,7 +958,7 @@ export async function getCompanyEInvoiceSettings(
 
   return {
     enabled: company.einvoiceEnabled,
-    defaultChannel: company.einvoiceDefaultChannel ?? null,
+    defaultChannel: enumToChannelAlias(company.einvoiceDefaultChannel),
     endpointId: company.einvoiceEndpointId ?? null,
     gln: company.einvoiceGLN ?? null,
     peppolAs4Id: company.einvoicePeppolAs4Id ?? null,
@@ -930,7 +995,9 @@ export async function updateCompanyEInvoiceSettings(
     updateData.einvoiceEnabled = settings.enabled;
   }
   if (settings.defaultChannel !== undefined) {
-    updateData.einvoiceDefaultChannel = settings.defaultChannel as EInvoiceSendChannel | null;
+    // Normalise UI aliases ('OIOUBL'/'PEPPOL') to canonical Prisma enum
+    // members (NEMHANDEL_OIOUBL / PEPPOL_BIS / STORECOVE).
+    updateData.einvoiceDefaultChannel = normalizeChannelToEnum(settings.defaultChannel);
   }
   if (settings.endpointId !== undefined) {
     updateData.einvoiceEndpointId = settings.endpointId;
@@ -980,7 +1047,7 @@ export async function updateCompanyEInvoiceSettings(
 
   const newSettings: CompanyEInvoiceConfig = {
     enabled: company.einvoiceEnabled,
-    defaultChannel: company.einvoiceDefaultChannel ?? null,
+    defaultChannel: enumToChannelAlias(company.einvoiceDefaultChannel),
     endpointId: company.einvoiceEndpointId ?? null,
     gln: company.einvoiceGLN ?? null,
     peppolAs4Id: company.einvoicePeppolAs4Id ?? null,

@@ -43,6 +43,7 @@ const ERROR_CODE_MAP: Record<string, { titleKey?: string; messageKey: string }> 
 
 /** HTTP status → fallback translation key */
 const STATUS_FALLBACK: Partial<Record<number, string>> = {
+  400: 'anErrorOccurred',
   401: 'authenticationRequired',
   403: 'insufficientPermissions',
   404: 'anErrorOccurred',
@@ -86,20 +87,36 @@ export function parseApiError(
   // Fallback to HTTP status-based translation
   const fallbackKey = STATUS_FALLBACK[status];
   if (fallbackKey) {
+    // For error-class statuses (400/404/429/500) prefer the server's own
+    // descriptive `error` message when present — it is almost always more
+    // actionable than the generic "an error occurred" translation (e.g. a
+    // Prisma validation message or route-specific validation text). Auth
+    // statuses (401/403) keep their friendly translated text.
+    const preferServerMessage = fallbackKey === 'anErrorOccurred';
+    const serverMessage = body.error as string | undefined;
     return {
       status,
       code,
       message: rawMessage,
-      translatedMessage: t(fallbackKey as Parameters<typeof t>[0], language),
+      translatedMessage:
+        preferServerMessage && serverMessage && serverMessage.trim()
+          ? serverMessage
+          : t(fallbackKey as Parameters<typeof t>[0], language),
     };
   }
 
-  // Generic fallback
+  // Generic fallback — prefer the server's own error message when available
+  // (e.g. Prisma validation messages, route-specific validation text) so the
+  // user sees what actually went wrong instead of a misleading generic toast.
+  const serverMessage = body.error as string | undefined;
   return {
     status,
     code,
     message: rawMessage,
-    translatedMessage: t('anErrorOccurred', language),
+    translatedMessage:
+      serverMessage && serverMessage.trim()
+        ? serverMessage
+        : t('anErrorOccurred', language),
   };
 }
 
