@@ -179,8 +179,9 @@ async function createAccrualJournalEntry(
             vatCode: (l.vatCode as VATCode | undefined) ?? null,
             // Propagate the invoice's project onto every journal line so
             // the project detail's Transactions tab + KPIs reflect it.
-            // Prisma v6 requires { connect } for nested creates.
-            ...(existing.projectId ? { project: { connect: { id: existing.projectId } } } : {}),
+            // Scalar syntax (matching accountId above) — Prisma v6 requires
+            // consistent syntax within a nested create.
+            projectId: existing.projectId ?? null,
           })),
         },
       },
@@ -271,8 +272,8 @@ async function createCashReceiptJournalEntry(
             description: l.description,
             vatCode: null,
             // Propagate the invoice's project onto every journal line.
-            // Prisma v6 requires { connect } for nested creates.
-            ...(existing.projectId ? { project: { connect: { id: existing.projectId } } } : {}),
+            // Scalar syntax (matching accountId above).
+            projectId: existing.projectId ?? null,
           })),
         },
       },

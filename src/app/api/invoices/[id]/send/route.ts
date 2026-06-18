@@ -236,8 +236,8 @@ export const POST = withGuard(
                       // Propagate the invoice's project onto every journal
                       // line so the project detail's Transactions tab +
                       // Realiseret/Resultat KPIs reflect the invoice.
-                      // Prisma v6 requires { connect } for nested creates.
-                      ...(invoice.projectId ? { project: { connect: { id: invoice.projectId } } } : {}),
+                      // Scalar syntax (matching accountId above).
+                      projectId: invoice.projectId ?? null,
                     })),
                   },
                 },
