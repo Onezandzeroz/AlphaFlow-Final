@@ -136,17 +136,13 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const { handleMutationError } = useAccessErrorHandler();
   const activeCompanyId = useAuthStore((s) => s.user?.activeCompanyId);
   // ── Project Mode (FASE 4) ──
-  // When in project mode, the active project id is forced into the form's
-  // projectId state on every render. This is defence-in-depth alongside the
+  // activeProjectId + isProjectMode are read here so the project-mode
+  // useEffect (declared after `projectId` state below) can force the form's
+  // projectId to match the active project. Defence-in-depth alongside the
   // locked ProjectSelector — even if a draft or preload tried to set a
   // different project, project mode wins.
   const activeProjectId = useAuthStore((s) => s.user?.activeProjectId);
   const isProjectMode = useAuthStore((s) => !!s.user?.isProjectMode);
-  useEffect(() => {
-    if (isProjectMode && activeProjectId && projectId !== activeProjectId) {
-      setProjectId(activeProjectId);
-    }
-  }, [isProjectMode, activeProjectId, projectId]);
 
   // ─── State ───
   const [isLoading, setIsLoading] = useState(false);
@@ -178,6 +174,14 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const [originalWasPdf, setOriginalWasPdf] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
   const [projectId, setProjectId] = useState<string | null>(null);
+  // ── Project Mode (FASE 4) ──
+  // Force the form's projectId to the active project when in project mode.
+  // Declared here (after `projectId` state) because the effect references it.
+  useEffect(() => {
+    if (isProjectMode && activeProjectId && projectId !== activeProjectId) {
+      setProjectId(activeProjectId);
+    }
+  }, [isProjectMode, activeProjectId, projectId]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const preloadedConsumedRef = useRef(false);
   const lastConsumedScanIdRef = useRef<number>(0);
