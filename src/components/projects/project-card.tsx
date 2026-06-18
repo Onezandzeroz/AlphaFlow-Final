@@ -37,10 +37,10 @@ interface ProjectCardProps {
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 const STATUS_STYLES: Record<string, string> = {
-  ACTIVE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
-  ON_HOLD: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
-  COMPLETED: 'bg-slate-100 text-slate-700 dark:bg-slate-800/40 dark:text-slate-400',
-  CANCELLED: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
+  ACTIVE: '!bg-emerald-100 !text-emerald-700 dark:!bg-emerald-950/40 dark:!text-emerald-400',
+  ON_HOLD: '!bg-amber-100 !text-amber-700 dark:!bg-amber-950/40 dark:!text-amber-400',
+  COMPLETED: '!bg-slate-100 !text-slate-700 dark:!bg-slate-800/40 dark:!text-slate-400',
+  CANCELLED: '!bg-red-100 !text-red-700 dark:!bg-red-950/40 dark:!text-red-400',
 };
 
 function getStatusLabel(status: string, language: 'da' | 'en'): string {
@@ -83,7 +83,10 @@ export function ProjectCard({ project, onClick }: ProjectCardProps) {
         'hover:shadow-md hover:-translate-y-0.5',
         'border border-gray-200/60 dark:border-white/[0.06]',
         'bg-white dark:bg-[#1a1d1c]/80',
-        'rounded-2xl overflow-hidden'
+        'rounded-2xl overflow-hidden',
+        // Grayed-out (dimmed) for cancelled projects so they're visually
+        // de-emphasised relative to active/completed ones.
+        project.status === 'CANCELLED' && 'opacity-50 grayscale',
       )}
       onClick={onClick}
     >

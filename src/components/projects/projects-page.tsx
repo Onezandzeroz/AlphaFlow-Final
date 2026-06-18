@@ -122,7 +122,7 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Filter state
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('ACTIVE');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Create dialog state
