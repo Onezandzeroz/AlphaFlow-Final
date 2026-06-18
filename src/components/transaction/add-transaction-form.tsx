@@ -790,6 +790,29 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       });
 
       if (!response.ok) {
+        // Try to extract the backend's specific error message first — the
+        // generic handleMutationError would replace it with "An error
+        // occurred" which hides the actionable detail (e.g. "missing
+        // account 1100 — seed the chart of accounts").
+        let backendError: string | null = null;
+        try {
+          const errBody = await response.clone().json();
+          if (typeof errBody?.error === 'string' && errBody.error.trim()) {
+            backendError = errBody.error;
+          }
+        } catch {
+          // body wasn't JSON — fall through to generic handler
+        }
+
+        if (backendError) {
+          // Show the specific backend message directly
+          setError(backendError);
+          toast.error(backendError, { duration: 7000 });
+          setIsLoading(false);
+          return;
+        }
+
+        // No specific message — fall back to the generic access/error handler
         const isAccess = await handleMutationError(
           response,
           isDa ? 'Opret indkøb' : 'Create purchase'
