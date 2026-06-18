@@ -87,6 +87,33 @@ interface ProjectDetail {
   updatedAt: string;
   customer?: { id: string; name: string } | null;
   invoiceCount: number;
+  invoices?: ProjectInvoice[];
+  transactions?: ProjectTransaction[];
+}
+
+interface ProjectInvoice {
+  id: string;
+  invoiceNumber: string | null;
+  issueDate: string | null;
+  dueDate: string | null;
+  status: string;
+  totalAmount: number;
+  currency: string | null;
+  customerName: string | null;
+}
+
+interface ProjectTransaction {
+  id: string;
+  date: string;
+  description: string;
+  reference: string | null;
+  voucherNumber: string | null;
+  accountNumber: string;
+  accountName: string;
+  accountType: string;
+  lineDescription: string | null;
+  debit: number;
+  credit: number;
 }
 
 interface KPIs {
@@ -759,14 +786,62 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
                 {t('projectTransactions')}
               </h3>
-              <div className="text-center py-8 text-gray-400 dark:text-gray-500">
-                <FileText className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">
-                  {isDa
-                    ? 'Transaktioner knyttet til dette projekt vises her'
-                    : 'Transactions linked to this project will appear here'}
-                </p>
-              </div>
+              {(project.transactions?.length ?? 0) > 0 ? (
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-xs">{isDa ? 'Dato' : 'Date'}</TableHead>
+                        <TableHead className="text-xs">{isDa ? 'Bilag' : 'Voucher'}</TableHead>
+                        <TableHead className="text-xs">{isDa ? 'Beskrivelse' : 'Description'}</TableHead>
+                        <TableHead className="text-xs">{isDa ? 'Konto' : 'Account'}</TableHead>
+                        <TableHead className="text-xs text-right">{isDa ? 'Debet' : 'Debit'}</TableHead>
+                        <TableHead className="text-xs text-right">{isDa ? 'Kredit' : 'Credit'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {project.transactions!.map((tx) => {
+                        const dateStr = tx.date ? new Date(tx.date).toLocaleDateString(isDa ? 'da-DK' : 'en-GB') : '—';
+                        return (
+                          <TableRow key={tx.id} className="text-xs">
+                            <TableCell className="whitespace-nowrap text-gray-600 dark:text-gray-300">{dateStr}</TableCell>
+                            <TableCell className="whitespace-nowrap font-mono text-gray-500 dark:text-gray-400">{tx.voucherNumber || '—'}</TableCell>
+                            <TableCell className="max-w-[240px]">
+                              <div className="truncate text-gray-900 dark:text-white" title={tx.description}>
+                                {tx.description || '—'}
+                              </div>
+                              {tx.lineDescription && (
+                                <div className="truncate text-[10px] text-gray-400" title={tx.lineDescription}>
+                                  {tx.lineDescription}
+                                </div>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <span className="font-mono text-gray-500 dark:text-gray-400">{tx.accountNumber}</span>{' '}
+                              <span className="text-gray-600 dark:text-gray-300">{tx.accountName}</span>
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap font-mono text-gray-900 dark:text-white">
+                              {tx.debit !== 0 ? tc(tx.debit) : '—'}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap font-mono text-gray-900 dark:text-white">
+                              {tx.credit !== 0 ? tc(tx.credit) : '—'}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-400 dark:text-gray-500">
+                  <FileText className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">
+                    {isDa
+                      ? 'Ingen transaktioner knyttet til dette projekt endnu. Bogfør en postering med dette projekt valgt for at se den her.'
+                      : 'No transactions linked to this project yet. Post a journal entry with this project selected to see it here.'}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -787,22 +862,61 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
               <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
                 {t('projectInvoices')}
               </h3>
-              {project.invoiceCount > 0 ? (
-                <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                  <Receipt className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">
-                    {isDa
-                      ? `${project.invoiceCount} faktura(er) knyttet til dette projekt`
-                      : `${project.invoiceCount} invoice(s) linked to this project`}
-                  </p>
+              {(project.invoices?.length ?? 0) > 0 ? (
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="text-xs">{isDa ? 'Faktura nr.' : 'Invoice no.'}</TableHead>
+                        <TableHead className="text-xs">{isDa ? 'Kunde' : 'Customer'}</TableHead>
+                        <TableHead className="text-xs">{isDa ? 'Udstedt' : 'Issued'}</TableHead>
+                        <TableHead className="text-xs">{isDa ? 'Forfald' : 'Due'}</TableHead>
+                        <TableHead className="text-xs">{isDa ? 'Status' : 'Status'}</TableHead>
+                        <TableHead className="text-xs text-right">{isDa ? 'Beløb' : 'Amount'}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {project.invoices!.map((inv) => {
+                        const issueStr = inv.issueDate ? new Date(inv.issueDate).toLocaleDateString(isDa ? 'da-DK' : 'en-GB') : '—';
+                        const dueStr = inv.dueDate ? new Date(inv.dueDate).toLocaleDateString(isDa ? 'da-DK' : 'en-GB') : '—';
+                        const statusLabel = isDa
+                          ? ({ DRAFT: 'Kladde', SENT: 'Sendt', PAID: 'Betalt', OVERDUE: 'Forsinket', CANCELLED: 'Annulleret' } as Record<string, string>)[inv.status] || inv.status
+                          : inv.status;
+                        const statusColor =
+                          inv.status === 'PAID' ? 'badge-green'
+                          : inv.status === 'OVERDUE' ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+                          : inv.status === 'SENT' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400'
+                          : inv.status === 'CANCELLED' ? 'bg-gray-100 text-gray-500 dark:bg-gray-800/40 dark:text-gray-400'
+                          : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400';
+                        return (
+                          <TableRow key={inv.id} className="text-xs">
+                            <TableCell className="whitespace-nowrap font-mono text-gray-900 dark:text-white">
+                              {inv.invoiceNumber || '—'}
+                            </TableCell>
+                            <TableCell className="max-w-[200px] truncate text-gray-600 dark:text-gray-300" title={inv.customerName || ''}>
+                              {inv.customerName || '—'}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">{issueStr}</TableCell>
+                            <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">{dueStr}</TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <Badge className={`text-[10px] border-0 ${statusColor}`}>{statusLabel}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap font-mono text-gray-900 dark:text-white">
+                              {tc(inv.totalAmount)} <span className="text-gray-400">{inv.currency || 'DKK'}</span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-400 dark:text-gray-500">
                   <Receipt className="h-10 w-10 mx-auto mb-2 opacity-40" />
                   <p className="text-sm">
                     {isDa
-                      ? 'Ingen fakturaer knyttet til dette projekt endnu'
-                      : 'No invoices linked to this project yet'}
+                      ? 'Ingen fakturaer knyttet til dette projekt endnu. Opret en faktura med dette projekt valgt for at se den her.'
+                      : 'No invoices linked to this project yet. Create an invoice with this project selected to see it here.'}
                   </p>
                 </div>
               )}
