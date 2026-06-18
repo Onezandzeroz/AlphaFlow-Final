@@ -223,13 +223,17 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
 
   // ── Project Mode safety: clear stale activeProjectId if it belongs to a
   // different company than the active one (e.g. after company switch), or if
-  // project mode is disabled for this tenant. We auto-clean the session row
-  // so the next request sees a consistent state without a manual exit.
+  // project mode is disabled for this tenant AND the user is not a SuperDev.
+  // SuperDev bypasses the projectModeEnabled check so they can enter/exit
+  // project mode in any tenant (to test + inspect) — including their own
+  // AlphaAi tenant where projectModeEnabled defaults to false.
+  // We auto-clean the session row so the next request sees a consistent
+  // state without a manual exit.
   let effectiveActiveProject = session.activeProject;
   if (
     session.activeProject &&
-    (!session.activeCompany?.projectModeEnabled ||
-      session.activeProject.companyId !== session.activeCompanyId)
+    (session.activeProject.companyId !== session.activeCompanyId ||
+      (!session.activeCompany?.projectModeEnabled && !session.user.isSuperDev))
   ) {
     effectiveActiveProject = null;
     // Fire-and-forget cleanup — don't block the response on it
