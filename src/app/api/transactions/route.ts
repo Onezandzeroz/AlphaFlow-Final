@@ -147,6 +147,16 @@ export const POST = withGuard({
           accountId ? db.account.findFirst({ where: { id: accountId } }) : Promise.resolve(null),
         ]);
 
+        if (!bankAccount) {
+          logger.warn(`[PURCHASE] No active account 1100 (Bankkonto) found for company ${ctx.activeCompanyId}. Journal entry NOT created for transaction ${transaction.id}. Seed the standard chart of accounts.`);
+        }
+        if (!inputVatAccount) {
+          logger.warn(`[PURCHASE] No active account ${vatPct === 12 ? '5420' : '5410'} (Indgående moms) found for company ${ctx.activeCompanyId}. VAT line will be skipped.`);
+        }
+        if (!expenseAccount) {
+          logger.warn(`[PURCHASE] No expense account (accountId=${accountId ?? 'none'}) for transaction ${transaction.id}. Expense line will be skipped — the journal entry may be unbalanced and not created.`);
+        }
+
         if (bankAccount) {
           const jeLines: Array<{ accountId: string; debit: number; credit: number; description: string; vatCode: VATCode | null; companyId: string; projectId: string | null }> = [];
 
@@ -188,12 +198,16 @@ export const POST = withGuard({
                 // Assign voucher number for POSTED journal entry
                 await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
               });
-              logger.info(`[PURCHASE] Created journal entry for transaction ${transaction.id}: DR=${totalDebit}, CR=${totalCredit}`);
+              logger.info(`[PURCHASE] Created journal entry for transaction ${transaction.id}: DR=${totalDebit}, CR=${totalCredit}, projectId=${projectId || 'none'}`);
             } catch (jeError) {
               logger.error(`[PURCHASE] Failed to create journal entry for transaction ${transaction.id}:`, jeError);
             }
+          } else {
+            logger.warn(`[PURCHASE] Journal entry NOT created for transaction ${transaction.id}: unbalanced (DR=${totalDebit}, CR=${totalCredit}, lines=${jeLines.length}). This usually means the expense account or VAT account is missing.`);
           }
         }
+      } else {
+        logger.warn(`[PURCHASE] Journal entry NOT created for transaction ${transaction.id}: netAmount=${netAmount}, grossAmount=${grossAmount} (must be > 0).`);
       }
     }
 
