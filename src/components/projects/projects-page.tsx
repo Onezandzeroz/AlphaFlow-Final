@@ -526,26 +526,53 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
           ))}
         </div>
       ) : (
-        /* Empty state */
+        /* Empty state — context-aware:
+           - 0 projects total → "No projects yet, create your first"
+           - 0 in this filter but >0 total → "No projects with status X,
+             switch filter to see them" (don't imply the workspace is empty) */
         <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5 rounded-2xl">
           <CardContent className="py-16 text-center">
             <div className="empty-state-container inline-flex flex-col items-center">
               <div className="empty-state-illustration inline-flex items-center justify-center h-20 w-20 rounded-2xl mb-4">
                 <Briefcase className="h-10 w-10 text-[#0d9488] dark:text-[#2dd4bf]" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                {t('noProjectsYet')}
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-4">
-                {t('createFirstProject')}
-              </p>
-              <Button
-                onClick={openCreate}
-                className="gap-2 bg-[#0d9488] hover:bg-[#0f766e] text-white"
-              >
-                <Plus className="h-4 w-4" />
-                {t('newProject')}
-              </Button>
+              {projects.length === 0 ? (
+                <>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    {t('noProjectsYet')}
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-4">
+                    {t('createFirstProject')}
+                  </p>
+                  <Button
+                    onClick={openCreate}
+                    className="gap-2 bg-[#0d9488] hover:bg-[#0f766e] text-white"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {t('newProject')}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                    {isDa
+                      ? 'Ingen projekter i denne kategori'
+                      : 'No projects in this category'}
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mx-auto mb-4">
+                    {isDa
+                      ? `Du har ${projects.length} ${projects.length === 1 ? 'projekt' : 'projekter'} i alt, men ingen med status "${statusOptions.find((o) => o.value === statusFilter)?.label ?? statusFilter}". Skift filter for at se dem.`
+                      : `You have ${projects.length} ${projects.length === 1 ? 'project' : 'projects'} in total, but none with status "${statusOptions.find((o) => o.value === statusFilter)?.label ?? statusFilter}". Change the filter to see them.`}
+                  </p>
+                  <Button
+                    onClick={() => setStatusFilter('ALL')}
+                    variant="outline"
+                    className="gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 dark:bg-white/10 dark:hover:bg-white/20 dark:text-white dark:border-white/20"
+                  >
+                    {isDa ? 'Vis alle projekter' : 'Show all projects'}
+                  </Button>
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
