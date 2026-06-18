@@ -247,7 +247,9 @@ export const POST = withGuard({
                   credit: l.credit,
                   description: l.description,
                   vatCode: l.vatCode,
-                  projectId: l.projectId,
+                  // Prisma v6 requires relation connections via { connect },
+                  // not the raw foreign-key field name, inside nested creates.
+                  ...(l.projectId ? { project: { connect: { id: l.projectId } } } : {}),
                 })),
               },
             },

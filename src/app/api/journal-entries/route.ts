@@ -170,7 +170,8 @@ export const POST = withGuard(
                 credit: l.credit,
                 description: l.description || null,
                 vatCode: (l.vatCode as VATCode | undefined) ?? null,
-                projectId: l.projectId ?? null,
+                // Prisma v6 requires { connect } for nested creates.
+                ...(l.projectId ? { project: { connect: { id: l.projectId } } } : {}),
               })),
             },
           },
