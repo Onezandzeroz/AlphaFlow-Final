@@ -35,7 +35,7 @@ export const GET = withGuard(
               issueDate: true,
               dueDate: true,
               status: true,
-              totalAmount: true,
+              total: true,
               currency: true,
               customerName: true,
             },
@@ -109,13 +109,18 @@ export const GET = withGuard(
         credit: Number(line.credit || 0),
       }));
 
-      // Map invoice Decimal fields to numbers for JSON serialization
-      const invoices = project.invoices.map((inv) => ({
-        ...inv,
-        totalAmount: inv.totalAmount ? Number(inv.totalAmount) : 0,
-        issueDate: inv.issueDate?.toISOString() || null,
-        dueDate: inv.dueDate?.toISOString() || null,
-      }));
+      // Map invoice Decimal fields to numbers for JSON serialization.
+      // Rename `total` → `totalAmount` in the response so the frontend
+      // interface uses a consistent name regardless of the Prisma field.
+      const invoices = project.invoices.map((inv) => {
+        const { total, ...rest } = inv;
+        return {
+          ...rest,
+          totalAmount: total ? Number(total) : 0,
+          issueDate: inv.issueDate?.toISOString() || null,
+          dueDate: inv.dueDate?.toISOString() || null,
+        };
+      });
 
       // Remove raw relations from the response — we've extracted what we need
       const { journalLines: _jl, invoices: _inv, ...projectData } = project;
