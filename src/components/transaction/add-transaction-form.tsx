@@ -264,8 +264,10 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         if (typeof draft.recurringEndDate === 'string') setRecurringEndDate(draft.recurringEndDate);
         if (typeof draft.selectedAccountId === 'string') setSelectedAccountId(draft.selectedAccountId);
         if (draft.projectId === null || typeof draft.projectId === 'string') {
-          // In project mode, ignore any draft project — always use the active project
-          setProjectId(isProjectMode ? activeProjectId : (draft.projectId as string | null));
+          // In project mode, ignore any draft project — always use the active project.
+          // `activeProjectId` is `string | null | undefined` from the store; coerce
+          // undefined → null so it matches setProjectId's `string | null` signature.
+          setProjectId(isProjectMode ? (activeProjectId ?? null) : (draft.projectId as string | null));
         }
         if (Array.isArray(draft.purchaseLineItems) && draft.purchaseLineItems.length > 0) {
           setPurchaseLines(
