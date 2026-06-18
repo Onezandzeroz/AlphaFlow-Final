@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { notifyDataChange } from '@/lib/notify-data-change';
+import { seedProjectAccounts } from '@/lib/project-chart-template';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
@@ -166,7 +167,39 @@ export const POST = withGuard(
 
       notifyDataChange({ scope: 'projects', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
 
-      return NextResponse.json({ project }, { status: 201 });
+      // ─── Just-in-time project account seeding ───────────────────────
+      // When a project is created, ensure the company has the supplementary
+      // project-oriented accounts in its chart of accounts. The seed is
+      // idempotent (skips existing account numbers), so this is cheap on
+      // the 2nd/3rd/... project — just one findMany to confirm they exist.
+      // Best-effort: a failure here must NOT fail the project creation.
+      let projectAccountsCreated = 0;
+      try {
+        const seedResult = await seedProjectAccounts(ctx.id, ctx.activeCompanyId!);
+        projectAccountsCreated = seedResult.created;
+        if (projectAccountsCreated > 0) {
+          // Notify clients that the accounts list also changed (badges,
+          // selectors, etc. should refresh).
+          notifyDataChange({
+            scope: 'accounts',
+            companyId: ctx.activeCompanyId!,
+            action: 'create',
+          }).catch(() => {});
+          logger.info(
+            `[PROJECT CREATE] Auto-seeded ${projectAccountsCreated} project accounts for company ${ctx.activeCompanyId}`,
+            { performedBy: ctx.id, projectId: project.id }
+          );
+        }
+      } catch (seedError) {
+        // Non-critical — the project was created successfully; the user
+        // can still add project accounts manually via the chart of accounts.
+        logger.warn('[PROJECT CREATE] Failed to auto-seed project accounts:', seedError);
+      }
+
+      return NextResponse.json(
+        { project, projectAccountsCreated },
+        { status: 201 }
+      );
     } catch (error) {
       logger.error('Project POST error:', error);
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

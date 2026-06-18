@@ -83,10 +83,12 @@ import {
   ArrowRightLeft,
   Percent,
   Lightbulb,
+  FolderPlus,
 } from 'lucide-react';
 import { StandardMappingPanel } from '@/components/chart-of-accounts/standard-mapping-panel';
 import { VATMappingPanel } from '@/components/chart-of-accounts/vat-mapping-panel';
 import { PostingGuideAssistant } from '@/components/chart-of-accounts/posting-guide-assistant';
+import { isProjectAccount } from '@/lib/project-chart-template';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -317,6 +319,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isSeedingProject, setIsSeedingProject] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
@@ -434,6 +437,53 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
       console.error('Seed error:', err);
     } finally {
       setIsSeeding(false);
+    }
+  }, [fetchAccounts, isDanish, handleMutationError]);
+
+  // ─── Seed Project Accounts (supplementary) ────────────────────────────
+
+  const handleSeedProject = useCallback(async () => {
+    setIsSeedingProject(true);
+    try {
+      const response = await fetch('/api/accounts/seed-project', { method: 'POST' });
+      if (!response.ok) {
+        const isAccess = await handleMutationError(
+          response,
+          isDanish ? 'Tilføj projektkonti' : 'Add project accounts'
+        );
+        if (isAccess) { setIsSeedingProject(false); return; }
+        throw new Error(
+          isDanish ? 'Kunne ikke tilføje projektkonti' : 'Failed to add project accounts'
+        );
+      }
+      const data = await response.json();
+      await fetchAccounts();
+      if (data.created > 0) {
+        toast.success(
+          isDanish ? `${data.created} projektkonti tilføjet!` : `${data.created} project accounts added!`,
+          {
+            description: isDanish
+              ? 'Projekt-orienterede konti er nu klar i din kontoplan.'
+              : 'Project-oriented accounts are now available in your chart of accounts.',
+          }
+        );
+      } else {
+        toast.info(
+          isDanish ? 'Projektkonti allerede til stede' : 'Project accounts already present',
+          {
+            description: isDanish
+              ? 'Alle projektkonti findes allerede i din kontoplan.'
+              : 'All project accounts already exist in your chart of accounts.',
+          }
+        );
+      }
+    } catch (err) {
+      console.error('Seed project error:', err);
+      toast.error(
+        isDanish ? 'Kunne ikke tilføje projektkonti' : 'Failed to add project accounts'
+      );
+    } finally {
+      setIsSeedingProject(false);
     }
   }, [fetchAccounts, isDanish, handleMutationError]);
 
@@ -828,6 +878,17 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
                   <span className="hidden sm:inline">{isDanish ? 'Standardkonti' : 'Seed'}</span>
                 </Button>
                 <Button
+                  onClick={handleSeedProject}
+                  disabled={isSeedingProject || isSeeding}
+                  variant="outline"
+                  size="sm"
+                  title={isDanish ? 'Tilføj projekt-orienterede konti (indtægter, WIP, omkostninger)' : 'Add project-oriented accounts (revenue, WIP, expenses)'}
+                  className="gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/20 dark:hover:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/40"
+                >
+                  {isSeedingProject ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
+                  <span className="hidden sm:inline">{isDanish ? 'Projektkonti' : 'Project'}</span>
+                </Button>
+                <Button
                   onClick={openAddDialog}
                   size="sm"
                   className="bg-[#0d9488] hover:bg-[#0f766e] text-white border border-[#0d9488] gap-1.5 lg:bg-white/20 lg:hover:bg-white/30 lg:border-white/30 lg:backdrop-blur-sm"
@@ -1160,6 +1221,12 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
                                       <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
                                         {account.name}
                                       </span>
+                                      {isProjectAccount(account.number) && (
+                                        <Badge className="text-[9px] px-1.5 py-0 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/50 shrink-0 gap-1">
+                                          <FolderPlus className="h-2.5 w-2.5" />
+                                          {isDanish ? 'Projekt' : 'Project'}
+                                        </Badge>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
                                       {account.isActive ? (
@@ -1244,7 +1311,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
                                 </div>
 
                                 {/* ── Desktop table layout ── */}
-                                {/* Number + System lock */}
+                                {/* Number + System lock + Project badge */}
                                 <div className="hidden md:col-span-1 md:flex md:items-center md:gap-1.5">
                                   <span className="font-mono text-sm font-semibold text-gray-900 dark:text-white">
                                     {account.number}
@@ -1260,6 +1327,12 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
                                         </TooltipContent>
                                       </Tooltip>
                                     </TooltipProvider>
+                                  )}
+                                  {isProjectAccount(account.number) && (
+                                    <Badge className="text-[9px] px-1.5 py-0 bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/50 shrink-0 gap-0.5">
+                                      <FolderPlus className="h-2.5 w-2.5" />
+                                      {isDanish ? 'Projekt' : 'Proj'}
+                                    </Badge>
                                   )}
                                 </div>
 

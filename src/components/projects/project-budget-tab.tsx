@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from '@/lib/use-translation';
+import { isProjectAccount } from '@/lib/project-chart-template';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -65,6 +66,7 @@ interface AccountOption {
   name: string;
   type: string;
   group: string;
+  isProject?: boolean;
 }
 
 interface FormEntry {
@@ -188,15 +190,21 @@ export function ProjectBudgetTab({ projectId, companyId, user }: ProjectBudgetTa
       const res = await fetch('/api/accounts');
       if (!res.ok) throw new Error('Failed to fetch accounts');
       const data = await res.json();
-      setAccounts(
-        (data.accounts || []).map((a: { id: string; number: string; name: string; type: string; group: string }) => ({
-          id: a.id,
-          number: a.number,
-          name: a.name,
-          type: a.type,
-          group: a.group,
-        }))
-      );
+      // Sort project-relevant accounts first so they appear at the top
+      // of the account selector when building a project budget.
+      const mapped = (data.accounts || []).map((a: { id: string; number: string; name: string; type: string; group: string }) => ({
+        id: a.id,
+        number: a.number,
+        name: a.name,
+        type: a.type,
+        group: a.group,
+        isProject: isProjectAccount(a.number),
+      }));
+      mapped.sort((a: { isProject: boolean; number: string }, b: { isProject: boolean; number: string }) => {
+        if (a.isProject !== b.isProject) return a.isProject ? -1 : 1;
+        return a.number.localeCompare(b.number, undefined, { numeric: true });
+      });
+      setAccounts(mapped);
     } catch (err) {
       console.error('Failed to fetch accounts:', err);
     }
@@ -456,6 +464,9 @@ export function ProjectBudgetTab({ projectId, companyId, user }: ProjectBudgetTa
                       {availableAccounts.map((a) => (
                         <SelectItem key={a.id} value={a.id}>
                           <span className="flex items-center gap-2">
+                            {a.isProject && (
+                              <span className="text-amber-500 text-xs font-bold" title={isDa ? 'Projektkonto' : 'Project account'}>★</span>
+                            )}
                             <span className="text-xs text-gray-400">{a.number}</span>
                             <span>{a.name}</span>
                           </span>
@@ -573,6 +584,9 @@ export function ProjectBudgetTab({ projectId, companyId, user }: ProjectBudgetTa
                     {availableAccounts.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         <span className="flex items-center gap-2">
+                          {a.isProject && (
+                            <span className="text-amber-500 text-xs font-bold" title={isDa ? 'Projektkonto' : 'Project account'}>★</span>
+                          )}
                           <span className="text-xs text-gray-400">{a.number}</span>
                           <span>{a.name}</span>
                         </span>

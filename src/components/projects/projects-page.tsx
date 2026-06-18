@@ -274,9 +274,27 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
         throw new Error(data?.error || (isDa ? 'Kunne ikke oprette projekt' : 'Failed to create project'));
       }
 
+      const created = await response.json().catch(() => ({}));
+
       setIsCreateOpen(false);
       clearCreateDraft();
       toast.success(isDa ? 'Projekt oprettet' : 'Project created');
+
+      // If this was the company's first project, the backend auto-seeded
+      // the project-oriented accounts — tell the user so they know where
+      // to find them when budgeting.
+      if (created?.projectAccountsCreated > 0) {
+        toast.info(
+          isDa
+            ? `${created.projectAccountsCreated} projektkonti tilføjet`
+            : `${created.projectAccountsCreated} project accounts added`,
+          {
+            description: isDa
+              ? 'Din kontoplan er nu udvidet med projekt-orienterede konti (indtægter, WIP, omkostninger). Brug dem når du budgetterer på projektet.'
+              : 'Your chart of accounts now includes project-oriented accounts (revenue, WIP, expenses). Use them when budgeting on the project.',
+          }
+        );
+      }
       fetchProjects();
     } catch (err) {
       console.error('Create project error:', err);
