@@ -47,7 +47,10 @@ export const POST = withGuard(
       }
 
       // ── SuperDev gate: project mode must be enabled for this tenant ──
-      if (!ctx.projectModeEnabled) {
+      // SuperDev (AppOwner) bypasses this so they can enter/exit project mode
+      // in any tenant to test + inspect — including their own AlphaAi tenant
+      // where projectModeEnabled defaults to false.
+      if (!ctx.projectModeEnabled && !ctx.isSuperDev) {
         return NextResponse.json(
           {
             error: 'Projekt-tilstand er ikke aktiveret for denne virksomhed',

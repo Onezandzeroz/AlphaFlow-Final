@@ -36,7 +36,6 @@ import { readDraft } from '@/lib/draft-store';
 import { ClearFormButton } from '@/components/ui/clear-form-button';
 import { ProjectCard } from './project-card';
 import { ProjectDetail } from './project-detail';
-import { useAuthStore } from '@/lib/auth-store';
 import {
   Briefcase,
   Plus,
@@ -162,32 +161,18 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
     window: false,
   });
 
-  // ── Card click handler (FASE 4) ──
-  // ACTIVE projects enter project mode (sets activeProjectId on the session
-  // → colored banner appears, forms auto-attach new entries to the project).
-  // Non-ACTIVE projects (ON_HOLD / COMPLETED / CANCELLED) open the read-only
-  // detail view instead, since you cannot "work in" a non-active project.
-  const enterProject = useAuthStore((s) => s.enterProject);
+  // ── Card click handler ──
+  // Clicking a project card opens the detail view for ALL projects (ACTIVE
+  // and non-ACTIVE). Inside the detail view there is a prominent
+  // "Aktivér projekt-tilstand" button that enters project mode for ACTIVE
+  // projects — this keeps detail access and mode activation as separate,
+  // intentional actions (matches the demo-mode pattern where you don't
+  // enter demo mode by accident).
   const handleCardClick = useCallback(
-    async (project: Project) => {
-      if (project.status === 'ACTIVE') {
-        try {
-          await enterProject(project.id);
-          // enterProject triggers a reload — no further UI work needed here
-        } catch (err) {
-          toast.error(
-            err instanceof Error
-              ? err.message
-              : isDa
-            ? 'Kunne ikke aktivere projekt-tilstand'
-            : 'Could not enter project mode'
-          );
-        }
-      } else {
-        setSelectedProjectId(project.id);
-      }
+    (project: Project) => {
+      setSelectedProjectId(project.id);
     },
-    [enterProject, isDa]
+    []
   );
 
   // ── Fetch projects ──
