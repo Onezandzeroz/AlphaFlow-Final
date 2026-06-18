@@ -220,16 +220,20 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
   useSyncToServer();
 
   // ── Project Mode gating (FASE 4) ──
-  // When the SuperDev has not enabled project mode for this tenant, strip the
-  // Projects nav item so users cannot even see the section.
+  // The Projects nav item is visible when EITHER:
+  //   - the SuperDev has enabled projectModeEnabled for this tenant, OR
+  //   - the current user is a SuperDev (AppOwner), who always sees Projects
+  //     so they can configure/inspect it in any tenant — including their own
+  //     AlphaAi tenant where projectModeEnabled defaults to false.
   // Declared before activeSectionId because that memo depends on it.
   const visibleSections = useMemo(() => {
-    if (user?.projectModeEnabled) return NAV_SECTIONS;
+    const projectsVisible = !!user?.projectModeEnabled || !!user?.isSuperDev;
+    if (projectsVisible) return NAV_SECTIONS;
     return NAV_SECTIONS.map((section) => ({
       ...section,
       items: section.items.filter((item) => item.id !== 'projects'),
     })).filter((section) => section.items.length > 0);
-  }, [user?.projectModeEnabled]);
+  }, [user?.projectModeEnabled, user?.isSuperDev]);
 
   // Find which section contains the currently active view
   const activeSectionId = useMemo(() => {

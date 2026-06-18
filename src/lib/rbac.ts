@@ -384,6 +384,11 @@ export function requireProjectModeEnabled(
   // Oversight mode always sees project data (read-only) — guard below blocks writes
   if (ctx.isOversightMode) return null;
 
+  // SuperDev (AppOwner) always has access to project data so they can
+  // configure + inspect Projects in ANY tenant — including their own
+  // AlphaAi tenant where projectModeEnabled may be off by default.
+  if (ctx.isSuperDev) return null;
+
   if (!ctx.projectModeEnabled) {
     return NextResponse.json(
       {

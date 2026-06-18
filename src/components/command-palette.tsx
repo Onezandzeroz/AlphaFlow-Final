@@ -249,16 +249,18 @@ export function CommandPalette({ open, onOpenChange, onNavigate }: CommandPalett
   const isDa = language === 'da';
 
   // ── Project Mode gating (FASE 4) ──
-  // Hide the Projects command when the SuperDev has not enabled project mode
-  // for the active tenant.
+  // The Projects command is visible when EITHER projectModeEnabled is on for
+  // this tenant OR the current user is a SuperDev (AppOwner), who always
+  // sees Projects so they can configure/inspect it in any tenant.
   const { user } = useAuthStore();
   const visibleSections = useMemo(() => {
-    if (user?.projectModeEnabled) return NAV_SECTIONS;
+    const projectsVisible = !!user?.projectModeEnabled || !!user?.isSuperDev;
+    if (projectsVisible) return NAV_SECTIONS;
     return NAV_SECTIONS.map((section) => ({
       ...section,
       items: section.items.filter((item) => item.id !== 'projects'),
     })).filter((section) => section.items.length > 0);
-  }, [user?.projectModeEnabled]);
+  }, [user?.projectModeEnabled, user?.isSuperDev]);
 
   const handleSelect = useCallback(
     (viewId: string) => {
