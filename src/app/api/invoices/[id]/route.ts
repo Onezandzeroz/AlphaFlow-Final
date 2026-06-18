@@ -45,7 +45,7 @@ function effectiveCompanyId(ctx: { activeCompanyId: string | null; isOversightMo
 //
 async function createAccrualJournalEntry(
   ctx: { id: string; activeCompanyId: string | null; isOversightMode: boolean; demoModeEnabled: boolean; isDemoCompany: boolean },
-  existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; lineItems: any },
+  existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; lineItems: any; projectId?: string | null },
 ): Promise<{ success: boolean; reason?: string; journalEntryId?: string; debit?: number; credit?: number }> {
   const lineItems = existing.lineItems as Array<{
     description: string;
@@ -211,7 +211,7 @@ async function createAccrualJournalEntry(
 //
 async function createCashReceiptJournalEntry(
   ctx: { id: string; activeCompanyId: string | null; isOversightMode: boolean; demoModeEnabled: boolean; isDemoCompany: boolean },
-  existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; total: number | { toNumber(): number } },
+  existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; total: number | { toNumber(): number }; projectId?: string | null },
   paymentDate?: Date,
 ): Promise<boolean> {
   // Look up Bank account (1100) and Receivables account (1200)
