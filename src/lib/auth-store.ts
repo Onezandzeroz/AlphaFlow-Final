@@ -27,6 +27,9 @@ export interface User {
   activeProjectName?: string | null;
   activeProjectColor?: string | null;
   activeProjectStatus?: string | null;
+  /** Project's start/end dates (ISO strings) — used to auto-default date filters */
+  activeProjectStartDate?: string | null;
+  activeProjectEndDate?: string | null;
   /** True when activeProjectId is set */
   isProjectMode?: boolean;
 }
@@ -200,6 +203,8 @@ export const useAuthStore = create<AuthState>()(
                   activeProjectName: data.activeProjectName ?? null,
                   activeProjectColor: data.activeProjectColor ?? null,
                   activeProjectStatus: data.activeProjectStatus ?? null,
+                  activeProjectStartDate: data.activeProjectStartDate ?? null,
+                  activeProjectEndDate: data.activeProjectEndDate ?? null,
                   isProjectMode: true,
                 },
               });
@@ -241,6 +246,8 @@ export const useAuthStore = create<AuthState>()(
                   activeProjectName: null,
                   activeProjectColor: null,
                   activeProjectStatus: null,
+                  activeProjectStartDate: null,
+                  activeProjectEndDate: null,
                   isProjectMode: false,
                 },
               });

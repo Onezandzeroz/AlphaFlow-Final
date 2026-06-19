@@ -37,6 +37,7 @@ import {
 import { PageHeader } from '@/components/shared/page-header';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useProjectDateDefaults } from '@/hooks/use-project-date-defaults';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
@@ -238,7 +239,9 @@ export function BudgetPage({ user }: { user: User }) {
 
   // ── State ──
   const [budgets, setBudgets] = useState<BudgetListItem[]>([]);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  // ── Project Mode: default year to project start year ──
+  const { projectYear } = useProjectDateDefaults();
+  const [selectedYear, setSelectedYear] = useState<number>(projectYear || new Date().getFullYear());
   const [detail, setDetail] = useState<BudgetDetail | null>(null);
   const [isLoadingBudgets, setIsLoadingBudgets] = useState(true);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);

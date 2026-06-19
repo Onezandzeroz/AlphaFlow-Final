@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
+import { useProjectDateDefaults } from '@/hooks/use-project-date-defaults';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -72,8 +73,10 @@ export function CashFlowPage({ user }: CashFlowPageProps) {
 
   const today = new Date();
   const currentYear = today.getFullYear();
-  const defaultFrom = `${currentYear}-01-01`;
-  const defaultTo = `${currentYear}-12-31`;
+  // ── Project Mode: default date range to project start/end ──
+  const { projectFromDate, projectToDate } = useProjectDateDefaults();
+  const defaultFrom = projectFromDate || `${currentYear}-01-01`;
+  const defaultTo = projectToDate || `${currentYear}-12-31`;
 
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
@@ -329,8 +332,13 @@ export function CashFlowPage({ user }: CashFlowPageProps) {
       <PageHeader
         title={isDanish ? 'Likviditetsopgørelse' : 'Cash Flow Statement'}
         description={isDanish
-          ? 'Oversigt over virksomhedens likviditetsstrømme i den valgte periode'
-          : 'Overview of the company\'s cash flows for the selected period'}
+          ? (user.isProjectMode
+            ? `Oversigt over projektets likviditetsstrømme i den valgte periode${user.activeProjectName ? ' — ' + user.activeProjectName : ''}`
+            : 'Oversigt over virksomhedens likviditetsstrømme i den valgte periode')
+          : (user.isProjectMode
+            ? `Overview of the project's cash flows for the selected period${user.activeProjectName ? ' — ' + user.activeProjectName : ''}`
+            : 'Overview of the company\'s cash flows for the selected period')
+        }
       />
 
       {/* Date Range Picker */}
@@ -877,8 +885,12 @@ export function CashFlowPage({ user }: CashFlowPageProps) {
                   </p>
                   <p>
                     {isDanish
-                      ? 'Denne opgørelse viser virksomhedens likviditetsstrømme opdelt i drifts-, investerings- og finansieringsaktiviteter i den valgte periode.'
-                      : 'This statement shows the company\'s cash flows divided into operating, investing, and financing activities for the selected period.'}
+                      ? (user.isProjectMode
+                        ? 'Denne opgørelse viser projektets likviditetsstrømme opdelt i drifts-, investerings- og finansieringsaktiviteter i den valgte periode.'
+                        : 'Denne opgørelse viser virksomhedens likviditetsstrømme opdelt i drifts-, investerings- og finansieringsaktiviteter i den valgte periode.')
+                      : (user.isProjectMode
+                        ? 'This statement shows the project\'s cash flows divided into operating, investing, and financing activities for the selected period.'
+                        : 'This statement shows the company\'s cash flows divided into operating, investing, and financing activities for the selected period.')}
                   </p>
                   <p>
                     {isDanish

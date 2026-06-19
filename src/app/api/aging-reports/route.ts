@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { AccountGroup } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { companyScope, Permission } from '@/lib/rbac';
+import { companyScope, Permission, projectScope } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import type { AuthContext } from '@/lib/session';
 
@@ -276,6 +276,8 @@ async function generateReceivablesAging(
         group: AccountGroup.RECEIVABLES,
         companyId: scope.companyId,
       },
+      // ── Project Mode (FASE 4): only count lines tagged to the active project ──
+      ...projectScope(ctx),
       journalEntry: {
         status: 'POSTED',
         cancelled: false,
@@ -380,6 +382,8 @@ async function generatePayablesAging(
         group: AccountGroup.PAYABLES,
         companyId: scope.companyId,
       },
+      // ── Project Mode (FASE 4): only count lines tagged to the active project ──
+      ...projectScope(ctx),
       journalEntry: {
         status: 'POSTED',
         cancelled: false,

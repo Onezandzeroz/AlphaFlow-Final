@@ -86,6 +86,8 @@ export const POST = withGuard(
             color: true,
             status: true,
             companyId: true,
+            startDate: true,
+            endDate: true,
           },
         });
 
@@ -126,6 +128,8 @@ export const POST = withGuard(
           activeProjectName: project.name,
           activeProjectColor: project.color,
           activeProjectStatus: project.status,
+          activeProjectStartDate: project.startDate ? project.startDate.toISOString() : null,
+          activeProjectEndDate: project.endDate ? project.endDate.toISOString() : null,
         });
       }
 

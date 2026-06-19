@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { AccountType, AccountGroup } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { tenantFilter, Permission } from '@/lib/rbac';
+import { tenantFilter, Permission, projectScope } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 
 // Helper to round to 2 decimals
@@ -63,6 +63,10 @@ export const GET = withGuard(
       }
 
       // ─── Fetch all posted entries up to toDate ─────────────────────
+      // ── Project Mode (FASE 4): in project mode, only count journal lines
+      // tagged to the active project. We filter at the lines level so the
+      // journalEntry still loads, but only its project-tagged lines are
+      // included in the cash flow calculation. ──
       const entries = await db.journalEntry.findMany({
         where: {
           ...tenantFilter(ctx),
@@ -72,6 +76,7 @@ export const GET = withGuard(
         },
         include: {
           lines: {
+            where: projectScope(ctx),
             include: { account: true },
           },
         },

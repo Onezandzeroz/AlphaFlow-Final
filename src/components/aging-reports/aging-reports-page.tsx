@@ -49,6 +49,7 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
+import { useProjectDateDefaults } from '@/hooks/use-project-date-defaults';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -104,7 +105,9 @@ export function AgingReportsPage({ user }: { user: User }) {
 
   // ── State ──
   const [activeTab, setActiveTab] = useState<string>('receivables');
-  const [asOfDate, setAsOfDate] = useState(todayStr);
+  // ── Project Mode: default as-of date to project end date (or today) ──
+  const { projectToDate } = useProjectDateDefaults();
+  const [asOfDate, setAsOfDate] = useState(projectToDate || todayStr());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<AgingReport | null>(null);
@@ -359,8 +362,12 @@ export function AgingReportsPage({ user }: { user: User }) {
       <PageHeader
         title={isDanish ? 'Aldersopdeling' : 'Aging Reports'}
         description={isDanish
-          ? 'Debitor- og kreditorrapport med aldersfordeling'
-          : 'Accounts receivable and payable aging analysis'}
+          ? (user.isProjectMode
+            ? `Debitor- og kreditorrapport med aldersfordeling for projektet${user.activeProjectName ? ' — ' + user.activeProjectName : ''}`
+            : 'Debitor- og kreditorrapport med aldersfordeling')
+          : (user.isProjectMode
+            ? `Accounts receivable and payable aging analysis for the project${user.activeProjectName ? ' — ' + user.activeProjectName : ''}`
+            : 'Accounts receivable and payable aging analysis')}
         action={
           <Button
             onClick={() => fetchReport(activeTab, asOfDate)}

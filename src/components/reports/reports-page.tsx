@@ -46,6 +46,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useProjectDateDefaults } from '@/hooks/use-project-date-defaults';
 
 // ─── API Response Types ────────────────────────────────────────────
 
@@ -137,11 +138,14 @@ export function ReportsPage({ user }: ReportsPageProps) {
   const { tc, language } = useTranslation();
 
   const currentYear = new Date().getFullYear();
-  const [fromDate, setFromDate] = useState(`${currentYear}-01-01`);
-  const [toDate, setToDate] = useState(() => {
+  // ── Project Mode: default date range to project start/end ──
+  const { projectFromDate, projectToDate } = useProjectDateDefaults();
+  const todayStr = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  });
+  };
+  const [fromDate, setFromDate] = useState(projectFromDate || `${currentYear}-01-01`);
+  const [toDate, setToDate] = useState(projectToDate || todayStr());
 
   // ─── Fetch Income Statement ────────────────────────────────────
   const fetchIncomeStatement = useCallback(async () => {

@@ -43,6 +43,9 @@ export interface AuthContext {
   activeProjectName: string | null;
   activeProjectColor: string | null;
   activeProjectStatus: string | null;
+  /** Project's start/end dates (ISO strings) — used to auto-default date filters */
+  activeProjectStartDate: string | null;
+  activeProjectEndDate: string | null;
   /** True when activeProjectId is set */
   isProjectMode: boolean;
 }
@@ -170,6 +173,8 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
           color: true,
           status: true,
           companyId: true,
+          startDate: true,
+          endDate: true,
         },
       },
     },
@@ -263,6 +268,12 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
     activeProjectName: effectiveActiveProject?.name ?? null,
     activeProjectColor: effectiveActiveProject?.color ?? null,
     activeProjectStatus: effectiveActiveProject?.status ?? null,
+    activeProjectStartDate: effectiveActiveProject?.startDate
+      ? effectiveActiveProject.startDate.toISOString()
+      : null,
+    activeProjectEndDate: effectiveActiveProject?.endDate
+      ? effectiveActiveProject.endDate.toISOString()
+      : null,
     isProjectMode: effectiveActiveProject != null,
   };
 }

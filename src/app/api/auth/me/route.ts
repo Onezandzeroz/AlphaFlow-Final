@@ -72,6 +72,8 @@ export const GET = withGuard({ auth: 'optional' }, async (request, ctx) => {
         activeProjectName: ctx.activeProjectName,
         activeProjectColor: ctx.activeProjectColor,
         activeProjectStatus: ctx.activeProjectStatus,
+        activeProjectStartDate: ctx.activeProjectStartDate,
+        activeProjectEndDate: ctx.activeProjectEndDate,
         isProjectMode: ctx.isProjectMode,
         companies: mappedCompanies,
       },

@@ -37,6 +37,9 @@ export interface AuthContext {
   activeProjectName: string | null;
   activeProjectColor: string | null;
   activeProjectStatus: string | null;
+  /** Project's start/end dates (ISO strings) — used to auto-default date filters */
+  activeProjectStartDate: string | null;
+  activeProjectEndDate: string | null;
   /** True when activeProjectId is set */
   isProjectMode: boolean;
 }

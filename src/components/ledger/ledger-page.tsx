@@ -32,6 +32,7 @@ import {
   CalendarDays,
 } from 'lucide-react';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { useProjectDateDefaults } from '@/hooks/use-project-date-defaults';
 
 interface LedgerAccount {
   accountId: string;
@@ -126,8 +127,10 @@ export function LedgerPage({ user }: LedgerPageProps) {
   const { t, tc, language } = useTranslation();
 
   const currentYear = new Date().getFullYear();
-  const [fromDate, setFromDate] = useState(`${currentYear}-01-01`);
-  const [toDate, setToDate] = useState(`${currentYear}-12-31`);
+  // ── Project Mode: default date range to project start/end ──
+  const { projectFromDate, projectToDate } = useProjectDateDefaults();
+  const [fromDate, setFromDate] = useState(projectFromDate || `${currentYear}-01-01`);
+  const [toDate, setToDate] = useState(projectToDate || `${currentYear}-12-31`);
 
   const fetchLedger = useCallback(async () => {
     setIsLoading(true);
