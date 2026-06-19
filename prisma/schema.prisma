@@ -843,10 +843,18 @@ model Budget {
   entries     BudgetEntry[]
   companyId   String
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // ── Project Mode (FASE 4) ──
+  // When set, this budget belongs to a specific project. When null, it is a
+  // tenant-level budget. Each project can have its own budget per year.
+  projectId   String?
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
-  @@unique([companyId, year])
+  // One budget per (company, project, year): tenant budgets have projectId=null,
+  // project budgets have projectId=<id>. Both can coexist for the same year.
+  @@unique([companyId, projectId, year])
   @@index([companyId])
   @@index([userId])
+  @@index([projectId])
 }
 
 model BudgetEntry {
@@ -1232,6 +1240,7 @@ model Project {
   invoices     Invoice[]
   budgetEntries ProjectBudgetEntry[]
   transactions Transaction[]   // FASE 4: transactions attached to this project
+  budgets      Budget[]        // FASE 4: project-scoped budgets
   // Sessions that currently have this project active (project mode)
   activeSessions Session[] @relation("ActiveProjectSession")
 

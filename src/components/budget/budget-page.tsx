@@ -53,6 +53,7 @@ import {
   PiggyBank,
   Calendar,
   Info,
+  Briefcase,
 } from 'lucide-react';
 import {
   BarChart,
@@ -74,6 +75,8 @@ interface BudgetListItem {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  projectId?: string | null;
+  project?: { id: string; name: string; color: string | null; code: string | null } | null;
 }
 
 interface BudgetEntry {
@@ -689,6 +692,19 @@ export function BudgetPage({ user }: { user: User }) {
                 <TabsTrigger key={b.year} value={String(b.year)} className="gap-1.5">
                   <Calendar className="h-3.5 w-3.5" />
                   {b.year}
+                  {b.project && (
+                    <Badge
+                      className="text-[9px] px-1 py-0 ml-1 border-0 gap-0.5"
+                      style={{
+                        backgroundColor: `${b.project.color || '#0d9488'}1a`,
+                        color: b.project.color || '#0d9488',
+                      }}
+                      title={b.project.name}
+                    >
+                      <Briefcase className="h-2.5 w-2.5" />
+                      {b.project.code || b.project.name}
+                    </Badge>
+                  )}
                   {!b.isActive && (
                     <Badge variant="outline" className="text-[9px] px-1 py-0 ml-1 text-gray-400">
                       {isDa ? 'Inaktiv' : 'Inactive'}

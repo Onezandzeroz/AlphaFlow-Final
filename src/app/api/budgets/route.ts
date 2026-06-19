@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { auditCreate, auditUpdate, auditCancel, requestMetadata } from '@/lib/audit';
 import { AccountType } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { tenantFilter, Permission, type AuthContext } from '@/lib/rbac';
+import { tenantFilter, Permission, projectScope, type AuthContext } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { notifyDataChange } from '@/lib/notify-data-change';
 
@@ -29,8 +29,16 @@ export const GET = withGuard(
 
       // If no year, return list of all budgets
       if (!yearParam) {
-              const budgets = await db.budget.findMany({
-          where: { ...tenantFilter(ctx) },
+        // ── Project Mode (FASE 4) ──
+        // In project mode, scope to the active project's budgets only.
+        // Outside project mode, show tenant-level budgets (projectId=null)
+        // AND project-tagged budgets (so users can see them from tenant view).
+        const where = {
+          ...tenantFilter(ctx),
+          ...projectScope(ctx),
+        };
+        const budgets = await db.budget.findMany({
+          where,
           orderBy: { year: 'desc', },
           select: {
             id: true,
@@ -39,6 +47,8 @@ export const GET = withGuard(
             isActive: true,
             createdAt: true,
             updatedAt: true,
+            projectId: true,
+            project: { select: { id: true, name: true, color: true, code: true } },
           },
         });
         return NextResponse.json({ budgets });
@@ -54,8 +64,13 @@ export const GET = withGuard(
       }
 
       // Find budget for this year
+      // ── Project Mode (FASE 4): scope to active project when in project mode ──
       const budget = await db.budget.findFirst({
-        where: { ...tenantFilter(ctx), year },
+        where: {
+          ...tenantFilter(ctx),
+          ...projectScope(ctx),
+          year,
+        },
         include: {
           entries: {
             include: {
@@ -161,14 +176,27 @@ export const POST = withGuard(
         );
       }
 
-      // Check for duplicate year
-          const existingBudget = await db.budget.findFirst({
-        where: { ...tenantFilter(ctx), year },
+      // ── Project Mode (FASE 4) ──
+      // When in project mode, force projectId to the active project so new
+      // budgets are created in the project context. Outside project mode,
+      // projectId is null (tenant-level budget).
+      const effectiveProjectId = ctx.isProjectMode ? ctx.activeProjectId : null;
+
+      // Check for duplicate (company + project + year)
+      const existingBudget = await db.budget.findFirst({
+        where: {
+          ...tenantFilter(ctx),
+          projectId: effectiveProjectId,
+          year,
+        },
       });
 
       if (existingBudget) {
+        const scopeLabel = effectiveProjectId
+          ? (ctx.isProjectMode ? ' for this project' : '')
+          : '';
         return NextResponse.json(
-          { error: `A budget already exists for year ${year}. Use PUT to update it.` },
+          { error: `A budget already exists for year ${year}${scopeLabel}. Use PUT to update it.` },
           { status: 409 }
         );
       }
@@ -215,6 +243,7 @@ export const POST = withGuard(
           notes: notes || null,
           userId: ctx.id,
           companyId: ctx.activeCompanyId!,
+          projectId: effectiveProjectId,
           entries: entries && Array.isArray(entries)
             ? {
                 create: entries.map((e: Record<string, unknown>) => ({
@@ -275,8 +304,10 @@ export const PUT = withGuard(
       }
 
       // Find existing budget
-          const existing = await db.budget.findFirst({
-        where: { id, ...tenantFilter(ctx) },
+      // ── Project Mode (FASE 4): scope to active project so users in project
+      // mode can only update the project's budget, not tenant-level budgets. ──
+      const existing = await db.budget.findFirst({
+        where: { id, ...tenantFilter(ctx), ...projectScope(ctx) },
       });
 
       if (!existing) {
@@ -433,10 +464,10 @@ export const DELETE = withGuard(
             { status: 400 }
           );
         }
-        return await cancelBudget(bodyId, ctx.id, ctx.activeCompanyId, request);
+        return await cancelBudget(bodyId, ctx, request);
       }
 
-      return await cancelBudget(id, ctx.id, ctx.activeCompanyId, request);
+      return await cancelBudget(id, ctx, request);
     } catch (error) {
       logger.error('Budget DELETE error:', error);
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -448,13 +479,14 @@ export const DELETE = withGuard(
 
 async function cancelBudget(
   id: string,
-  userId: string,
-  companyId: string | null,
+  ctx: AuthContext,
   request: Request
 ) {
+    // ── Project Mode (FASE 4): scope to active project so users in project
+    // mode can only cancel the project's budget, not tenant-level budgets. ──
     const existing = await db.budget.findFirst({
-    where: { id, userId },
-  });
+      where: { id, ...tenantFilter(ctx), ...projectScope(ctx) },
+    });
 
   if (!existing) {
     return NextResponse.json({ error: 'Budget not found' }, { status: 404 });
@@ -473,16 +505,16 @@ async function cancelBudget(
   });
 
   await auditCancel(
-    userId,
+    ctx.id,
     'Budget',
     id,
     'Budget cancelled via API',
     requestMetadata(request),
-    companyId
+    ctx.activeCompanyId
   );
 
-  if (companyId) {
-    notifyDataChange({ scope: 'budgets', companyId, action: 'delete' }).catch(() => {});
+  if (ctx.activeCompanyId) {
+    notifyDataChange({ scope: 'budgets', companyId: ctx.activeCompanyId, action: 'delete' }).catch(() => {});
   }
 
   return NextResponse.json({ budget: cancelled });
@@ -512,9 +544,18 @@ async function computeActualsForAccounts(
   const accountTypeMap = new Map(accounts.map((a) => [a.id, a.type]));
 
   // Fetch journal entry lines that reference our accounts
+  // ── Project Mode (FASE 4): scope actuals to the active project so the
+  // budget-vs-actual comparison only counts project transactions, not the
+  // whole tenant. JournalEntryLine has its own projectId column. ──
   const lines = await db.journalEntryLine.findMany({
     where: {
       accountId: { in: accountIds },
+      // In project mode, only count lines tagged to the active project.
+      // Outside project mode, count ALL lines (tenant + project-tagged)
+      // so the tenant budget sees the full picture.
+      ...(ctx.isProjectMode && ctx.activeProjectId
+        ? { projectId: ctx.activeProjectId }
+        : {}),
       journalEntry: {
         ...tenantFilter(ctx),
         status: 'POSTED',
