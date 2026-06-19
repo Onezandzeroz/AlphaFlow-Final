@@ -184,6 +184,40 @@ export const DELETE = withGuard(
         },
       });
 
+      // ── Cancel linked journal entries so amounts don't affect accounting ──
+      // When an invoice is sent, a POSTED journal entry is created with
+      // reference = invoice.invoiceNumber (see /api/invoices/[id]/send).
+      // That journal entry's debit/credit lines feed into the ledger, reports,
+      // budgets, cash-flow, aging, etc. If we don't cancel it, the cancelled
+      // invoice's amounts still show up in all accounting figures.
+      //
+      // Marking the journal entry as `cancelled: true` makes all calculation
+      // APIs (which filter `cancelled: false`) automatically exclude it —
+      // giving the same net effect as a manual reversal/modpostering, while
+      // preserving the original entries for the audit trail.
+      const linkedJournalEntries = await db.journalEntry.findMany({
+        where: {
+          reference: invoice.invoiceNumber,
+          ...tenantFilter(ctx),
+          cancelled: false,
+        },
+        select: { id: true },
+      });
+
+      if (linkedJournalEntries.length > 0) {
+        await db.journalEntry.updateMany({
+          where: { id: { in: linkedJournalEntries.map((je) => je.id) } },
+          data: {
+            cancelled: true,
+            status: 'CANCELLED',
+            cancelReason: `Invoice cancelled: ${reason}`,
+          },
+        });
+        logger.info(
+          `[INVOICE CANCEL] Cancelled ${linkedJournalEntries.length} linked journal entry(ies) for invoice ${invoice.invoiceNumber}`
+        );
+      }
+
       // Audit log
       await auditCancel(
         ctx.id,

@@ -460,6 +460,41 @@ export const DELETE = withGuard({
       },
     });
 
+    // ── Cancel the paired journal entry so amounts don't affect accounting ──
+    // When a PURCHASE transaction was created, a POSTED journal entry was
+    // created with reference `TX-<first 8 chars of tx id>`. That journal
+    // entry's debit/credit lines feed into the ledger, reports, budgets,
+    // cash-flow, aging, etc. If we don't cancel it, the cancelled
+    // transaction's amounts still show up in all accounting figures.
+    //
+    // Marking the journal entry as `cancelled: true` makes all calculation
+    // APIs (which filter `cancelled: false`) automatically exclude it —
+    // giving the same net effect as a manual reversal/modpostering, while
+    // preserving the original entries for the audit trail.
+    const txRefPrefix = `TX-${id.slice(0, 8)}`;
+    const linkedJournalEntries = await db.journalEntry.findMany({
+      where: {
+        reference: txRefPrefix,
+        ...tenantFilter(ctx),
+        cancelled: false,
+      },
+      select: { id: true },
+    });
+
+    if (linkedJournalEntries.length > 0) {
+      await db.journalEntry.updateMany({
+        where: { id: { in: linkedJournalEntries.map((je) => je.id) } },
+        data: {
+          cancelled: true,
+          status: 'CANCELLED',
+          cancelReason: `Transaction cancelled: ${reason}`,
+        },
+      });
+      logger.info(
+        `[TRANSACTION CANCEL] Cancelled ${linkedJournalEntries.length} linked journal entry(ies) for transaction ${id}`
+      );
+    }
+
     // Audit log
     await auditCancel(
       ctx.id,

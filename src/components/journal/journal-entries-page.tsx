@@ -905,12 +905,13 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                 const entryTotalDebit = entry.lines.reduce((s, l) => s + Number(l.debit || 0), 0);
                 const entryTotalCredit = entry.lines.reduce((s, l) => s + Number(l.credit || 0), 0);
                 const isEntryBalanced = Math.abs(entryTotalDebit - entryTotalCredit) < 0.005;
+                const isEntryCancelled = !!entry.cancelled || entry.status === 'CANCELLED';
 
                 return (
                   <div key={entry.id}>
                     {/* Entry Header Row */}
                     <div
-                      className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer"
+                      className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer ${isEntryCancelled ? 'opacity-50' : ''}`}
                       onClick={() => toggleExpand(entry.id)}
                     >
                       {/* Expand Toggle */}
@@ -935,7 +936,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                       )}
 
                       {/* Description */}
-                      <span className="text-sm text-gray-700 dark:text-gray-300 flex-1 truncate min-w-0">
+                      <span className={`text-sm text-gray-700 dark:text-gray-300 flex-1 truncate min-w-0 ${isEntryCancelled ? 'line-through' : ''}`}>
                         {entry.description}
                       </span>
 
