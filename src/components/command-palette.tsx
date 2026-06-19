@@ -211,10 +211,6 @@ function Kbd({ children, className }: { children: React.ReactNode; className?: s
   );
 }
 
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(' ');
-}
-
 // ── Nav Item Component ─────────────────────────────────────────────────
 
 function NavItem({
