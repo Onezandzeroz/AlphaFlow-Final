@@ -908,10 +908,21 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                 const isEntryCancelled = !!entry.cancelled || entry.status === 'CANCELLED';
 
                 return (
-                  <div key={entry.id}>
+                  <div key={entry.id} className={isEntryCancelled ? 'opacity-50' : ''}>
+                    {/* Cancelled banner — shown when the entry is cancelled */}
+                    {isEntryCancelled && (
+                      <div className="flex items-center gap-2 px-4 py-1.5 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-900/40 text-xs font-semibold text-red-600 dark:text-red-400">
+                        <span className="line-through uppercase tracking-wide">{isDanish ? 'Annulleret' : 'Cancelled'}</span>
+                        {entry.cancelReason && (
+                          <span className="font-normal text-red-500 dark:text-red-400/80 truncate">
+                            — {entry.cancelReason}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {/* Entry Header Row */}
                     <div
-                      className={`flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer ${isEntryCancelled ? 'opacity-50' : ''}`}
+                      className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer"
                       onClick={() => toggleExpand(entry.id)}
                     >
                       {/* Expand Toggle */}
@@ -924,13 +935,13 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                       </button>
 
                       {/* Date */}
-                      <span className="text-sm font-medium text-gray-900 dark:text-white shrink-0 min-w-[90px]">
+                      <span className={`text-sm font-medium text-gray-900 dark:text-white shrink-0 min-w-[90px] ${isEntryCancelled ? 'line-through' : ''}`}>
                         {formatDateStr(entry.date, language)}
                       </span>
 
                       {/* Reference */}
                       {entry.reference && (
-                        <Badge variant="outline" className="text-xs font-mono bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gray-300 shrink-0">
+                        <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gray-300 shrink-0 ${isEntryCancelled ? 'line-through' : ''}`}>
                           {entry.reference}
                         </Badge>
                       )}
@@ -1046,7 +1057,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           {entry.lines.map((line, idx) => (
                             <div
                               key={line.id || idx}
-                              className="grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t border-gray-100/50 dark:border-gray-800"
+                              className={`grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t border-gray-100/50 dark:border-gray-800 ${isEntryCancelled ? 'line-through' : ''}`}
                             >
                               {/* Account */}
                               <div className="col-span-4 sm:col-span-5">
@@ -1073,7 +1084,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           ))}
 
                           {/* Totals */}
-                          <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/30 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 font-semibold text-sm">
+                          <div className={`grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/30 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 font-semibold text-sm ${isEntryCancelled ? 'line-through' : ''}`}>
                             <div className="col-span-4 sm:col-span-5 text-gray-700 dark:text-gray-300">
                               {isDanish ? 'I alt' : 'Total'}
                             </div>
@@ -1099,8 +1110,8 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           </div>
                         </div>
 
-                        {/* Cancel reason */}
-                        {entry.cancelled && entry.cancelReason && (
+                        {/* Cancel reason — now shown in the red banner at the top, kept here for expanded detail */}
+                        {entry.cancelled && entry.cancelReason && isExpanded && (
                           <div className="mt-2 flex items-start gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2.5">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                             <span>
