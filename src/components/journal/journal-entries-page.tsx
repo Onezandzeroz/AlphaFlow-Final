@@ -909,17 +909,6 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
 
                 return (
                   <div key={entry.id} className={isEntryCancelled ? 'opacity-50' : ''}>
-                    {/* Cancelled banner — shown when the entry is cancelled */}
-                    {isEntryCancelled && (
-                      <div className="flex items-center gap-2 px-4 py-1.5 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-900/40 text-xs font-semibold text-red-600 dark:text-red-400">
-                        <span className="line-through uppercase tracking-wide">{isDanish ? 'Annulleret' : 'Cancelled'}</span>
-                        {entry.cancelReason && (
-                          <span className="font-normal text-red-500 dark:text-red-400/80 truncate">
-                            — {entry.cancelReason}
-                          </span>
-                        )}
-                      </div>
-                    )}
                     {/* Entry Header Row */}
                     <div
                       className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer"
@@ -1110,7 +1099,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           </div>
                         </div>
 
-                        {/* Cancel reason — now shown in the red banner at the top, kept here for expanded detail */}
+                        {/* Cancel reason — shown inside the collapsible field when expanded */}
                         {entry.cancelled && entry.cancelReason && isExpanded && (
                           <div className="mt-2 flex items-start gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2.5">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
