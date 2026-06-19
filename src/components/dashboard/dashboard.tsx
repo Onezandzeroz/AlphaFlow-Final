@@ -654,7 +654,11 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
     }
   }, [isLoading, onboardingDismissed, hasCompanyInfo, hasAccounts, hasDoubleEntryData, hasEInvoiceSetup]);
 
-  const isEmptyState = !isLoading && !hasDoubleEntryData && !onboardingDismissed;
+  // In project mode, never show the tenant-level onboarding empty state —
+  // those steps (company info, chart of accounts, e-delivery) are tenant
+  // setup concerns, not project concerns. The dashboard shows the main
+  // project content instead.
+  const isEmptyState = !isLoading && !hasDoubleEntryData && !onboardingDismissed && !user.isProjectMode;
 
   const onboardingSteps = useMemo(() => [
     {

@@ -172,6 +172,8 @@ interface Invoice {
   status: 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
   notes: string | null;
   createdAt: string;
+  projectId?: string | null;
+  project?: { id: string; name: string; color: string | null; code: string | null } | null;
 }
 
 interface Contact {
@@ -2812,6 +2814,8 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           filteredInvoices.map((invoice) => {
             const displayStatus = getInvoiceDisplayStatus(invoice);
             const countdown = getDueDateCountdown(invoice);
+            // ── Project Mode: dim invoices not belonging to the active project ──
+            const outsideProject = !!user.isProjectMode && !!user.activeProjectId && invoice.projectId !== user.activeProjectId;
             return (
               <div
                 key={invoice.id}
@@ -2821,7 +2825,8 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     : countdown.isUrgent
                       ? 'border-amber-200 dark:border-amber-900/30'
                       : 'border-gray-100 dark:border-white/5'
-                }`}
+                } ${outsideProject ? 'opacity-40' : ''}`}
+                title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : undefined}
                 onClick={() => setPreviewInvoice(invoice)}
               >
                 {/* Row 1: Invoice number + status badge + actions menu */}
@@ -3087,12 +3092,15 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                   {filteredInvoices.map((invoice) => {
                     const displayStatus = getInvoiceDisplayStatus(invoice);
                     const countdown = getDueDateCountdown(invoice);
+                    // ── Project Mode: dim invoices not belonging to the active project ──
+                    const outsideProject = !!user.isProjectMode && !!user.activeProjectId && invoice.projectId !== user.activeProjectId;
                     return (
                       <TableRow
                         key={invoice.id}
                         className={`border-b border-gray-50/50 table-row-teal-hover cursor-pointer ${
                           countdown.isOverdue ? 'bg-red-50/30 dark:bg-red-900/5' : ''
-                        } ${countdown.isUrgent && !countdown.isOverdue ? 'bg-amber-50/30 dark:bg-amber-900/5' : ''}`}
+                        } ${countdown.isUrgent && !countdown.isOverdue ? 'bg-amber-50/30 dark:bg-amber-900/5' : ''} ${outsideProject ? 'opacity-40' : ''}`}
+                        title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : undefined}
                         onClick={() => setPreviewInvoice(invoice)}
                       >
                         <TableCell className="font-mono font-semibold text-[#0d9488] dark:text-[#2dd4bf] whitespace-nowrap">

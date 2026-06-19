@@ -418,8 +418,12 @@ export function ReportsPage({ user }: ReportsPageProps) {
       <PageHeader
         title={language === 'da' ? 'Finansielle Rapporter' : 'Financial Reports'}
         description={language === 'da'
-          ? 'Resultatopgørelse og balance for din virksomhed'
-          : 'Income statement and balance sheet for your business'}
+          ? (user.isProjectMode
+            ? `Resultatopgørelse og balance for projektet${user.activeProjectName ? ' — ' + user.activeProjectName : ''}`
+            : 'Resultatopgørelse og balance for din virksomhed')
+          : (user.isProjectMode
+            ? `Income statement and balance sheet for the project${user.activeProjectName ? ' — ' + user.activeProjectName : ''}`
+            : 'Income statement and balance sheet for your business')}
         action={
           <Button
             onClick={handleRefresh}
@@ -1370,8 +1374,12 @@ export function ReportsPage({ user }: ReportsPageProps) {
             <div className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
               <p>
                 {language === 'da'
-                  ? 'Resultatopgørelsen viser virksomhedens indtægter og udgifter i en given periode. Balancen viser virksomhedens aktiver, passiver og egenkapital på et givet tidspunkt. Balancen er i balance, når total aktiver er lig med total passiver + egenkapital.'
-                  : 'The income statement shows the company\'s revenues and expenses over a given period. The balance sheet shows assets, liabilities, and equity at a specific point in time. The balance sheet is balanced when total assets equal total liabilities + equity.'}
+                  ? (user.isProjectMode
+                    ? 'Resultatopgørelsen viser projektets indtægter og udgifter i en given periode. Balancen viser projektets aktiver, passiver og egenkapital på et givet tidspunkt. Balancen er i balance, når total aktiver er lig med total passiver + egenkapital.'
+                    : 'Resultatopgørelsen viser virksomhedens indtægter og udgifter i en given periode. Balancen viser virksomhedens aktiver, passiver og egenkapital på et givet tidspunkt. Balancen er i balance, når total aktiver er lig med total passiver + egenkapital.')
+                  : (user.isProjectMode
+                    ? 'The income statement shows the project\'s revenues and expenses over a given period. The balance sheet shows assets, liabilities, and equity at a specific point in time. The balance sheet is balanced when total assets equal total liabilities + equity.'
+                    : 'The income statement shows the company\'s revenues and expenses over a given period. The balance sheet shows assets, liabilities, and equity at a specific point in time. The balance sheet is balanced when total assets equal total liabilities + equity.')}
               </p>
             </div>
           </div>

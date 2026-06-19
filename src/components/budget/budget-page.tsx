@@ -662,8 +662,12 @@ export function BudgetPage({ user }: { user: User }) {
       <PageHeader
         title={isDa ? 'Budgetter' : 'Budgets'}
         description={isDa
-          ? 'Budgetter og afvigelsesanalyse for din virksomhed'
-          : 'Budgets and variance analysis for your business'}
+          ? (user.isProjectMode
+            ? `Budgetter og afvigelsesanalyse for projektet${user.activeProjectName ? ' — ' + user.activeProjectName : ''}`
+            : 'Budgetter og afvigelsesanalyse for din virksomhed')
+          : (user.isProjectMode
+            ? `Budgets and variance analysis for the project${user.activeProjectName ? ' — ' + user.activeProjectName : ''}`
+            : 'Budgets and variance analysis for your business')}
         action={
           <Button
             onClick={() => guardWriteAccess(isDa ? 'Opret budget' : 'Create budget', handleOpenCreate)}

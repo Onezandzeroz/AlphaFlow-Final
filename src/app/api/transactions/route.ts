@@ -18,16 +18,14 @@ export const GET = withGuard({
 }, async (request, ctx) => {
   try {
     // ── Project Mode (FASE 4) ──
-    // When in project mode, scope the list to the active project's
-    // transactions only — tenant-level transactions stay hidden so the user
-    // only sees what belongs to the project they are working in.
-    // Outside project mode, all tenant transactions are shown (including
-    // any that carry a projectId, so users can still see project-tagged
-    // entries from the tenant view).
+    // In project mode we deliberately return ALL tenant transactions (not
+    // just the project's), so the UI can gray-out the non-project ones and
+    // give the user a strong visual signal of what belongs to the active
+    // project vs. the tenant. The `project` relation is included so the
+    // client can determine membership.
     const where = {
       ...tenantFilter(ctx),
       cancelled: false,
-      ...(ctx.isProjectMode && ctx.activeProjectId ? { projectId: ctx.activeProjectId } : {}),
     };
 
     const transactions = await db.transaction.findMany({

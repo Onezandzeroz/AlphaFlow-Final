@@ -15,6 +15,11 @@ export const GET = withGuard(
       const invoices = await db.invoice.findMany({
         where: { ...tenantFilter(ctx), cancelled: false },
         orderBy: { createdAt: 'desc' },
+        include: {
+          // Include the project relation so the UI can gray-out invoices
+          // that don't belong to the active project when in project mode.
+          project: { select: { id: true, name: true, color: true, code: true } },
+        },
       });
 
       return NextResponse.json({ invoices });

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -142,6 +143,16 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
   const transactionsVersion = useDataVersion('transactions');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // ── Project Mode: determine if a transaction is outside the active project ──
+  // In project mode, transactions that don't belong to the active project are
+  // grayed-out (dimmed) to give a strong visual signal of project vs. tenant.
+  const isProjectMode = !!user.isProjectMode;
+  const activeProjectId = user.activeProjectId;
+  const isOutsideProject = useCallback((t: Transaction) => {
+    if (!isProjectMode || !activeProjectId) return false;
+    return t.projectId !== activeProjectId;
+  }, [isProjectMode, activeProjectId]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedReceipt, setSelectedReceipt] = useState<string | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
@@ -721,10 +732,16 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
               <div className="lg:hidden p-3 space-y-3">
                 {mobileVisibleTransactions.map((transaction) => {
                   const typeInfo = getTypeInfo(transaction.type);
+                  const outsideProject = isOutsideProject(transaction);
                   return (
                     <div
                       key={transaction.id}
-                      className="bg-white dark:bg-[#1a1f1e] rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-white/5 active:scale-[0.98] transition-transform cursor-pointer"
+                      className={cn(
+                        "bg-white dark:bg-[#1a1f1e] rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-white/5 active:scale-[0.98] transition-transform cursor-pointer",
+                        // Project mode: dim transactions not belonging to the active project
+                        outsideProject && "opacity-40",
+                      )}
+                      title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : undefined}
                     >
                       {/* Row 1: Description + Amount */}
                       <div className="flex items-start justify-between gap-3">
@@ -936,10 +953,16 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedTransactions.map((transaction) => (
+                  {paginatedTransactions.map((transaction) => {
+                    const outsideProject = isOutsideProject(transaction);
+                    return (
                     <TableRow
                       key={transaction.id}
-                      className="border-b border-gray-50/50 table-row-teal-hover"
+                      className={cn(
+                        "border-b border-gray-50/50 table-row-teal-hover",
+                        outsideProject && "opacity-40",
+                      )}
+                      title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : undefined}
                     >
                       <TableCell>
                         {transaction.type === 'PURCHASE' ? (
@@ -1096,7 +1119,8 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                   {/* Summary Footer Row */}
                   <TableRow className="bg-[#f0fdf9]/50 dark:bg-[#1a2e2b]/30 font-semibold border-t-2 border-[#0d9488]/20">
                     <TableCell />
