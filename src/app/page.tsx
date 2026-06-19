@@ -4,6 +4,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useAuthStore, User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
+import { toast } from 'sonner';
+import { isViewBlockedInProjectMode } from '@/lib/project-mode-visibility';
 import { LoginForm } from '@/components/auth/login-form';
 import { RegisterForm } from '@/components/auth/register-form';
 import { VerifyEmailScreen } from '@/components/auth/verify-email-screen';
@@ -165,6 +167,27 @@ export default function Home() {
   const isNavigatingRef = useRef(false);
 
   const navigateToView = useCallback((view: View, search?: string) => {
+    // ── Project Mode click-guard (FASE 4) ──
+    // Block navigation to HIDDEN or GRAYED views when the user is in project
+    // mode. This catches direct URL entry, keyboard shortcuts, and any other
+    // navigation paths that bypass the (already-filtered) sidebar/nav UI.
+    // The user sees a toast explaining why and must exit project mode first.
+    const currentUser = useAuthStore.getState().user;
+    if (currentUser?.isProjectMode && isViewBlockedInProjectMode(view)) {
+      const isDa = language === 'da';
+      toast.error(
+        isDa
+          ? 'Denne funktion er begrænset i projekt-tilstand'
+          : 'This feature is limited in project mode',
+        {
+          description: isDa
+            ? 'Afslut projekt-tilstand for at få adgang.'
+            : 'Exit project mode to access this feature.',
+          duration: 4000,
+        }
+      );
+      return;
+    }
     isNavigatingRef.current = true;
     setCurrentView(view);
     const url = viewToPath(view, search);
@@ -173,7 +196,7 @@ export default function Home() {
     requestAnimationFrame(() => {
       isNavigatingRef.current = false;
     });
-  }, []);
+  }, [language]);
 
   // Listen for browser back/forward and sync view after hydration
   useEffect(() => {
@@ -182,6 +205,16 @@ export default function Home() {
     const handlePopState = (e: PopStateEvent) => {
       if (isNavigatingRef.current) return;
       const view = (e.state?.view as View) || getInitialView();
+      // ── Project Mode guard for browser back/forward ──
+      // If the user navigates (via back button) to a view that is blocked
+      // in project mode, redirect them to the dashboard instead of showing
+      // a blocked page. We can't show a toast here reliably (event timing),
+      // but this prevents landing on an inaccessible page.
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser?.isProjectMode && isViewBlockedInProjectMode(view)) {
+        setCurrentView('dashboard');
+        return;
+      }
       setCurrentView(view);
     };
 

@@ -6,6 +6,11 @@ import { useCommandState } from 'cmdk';
 import { useLanguageStore } from '@/lib/language-store';
 import { useAuthStore } from '@/lib/auth-store';
 import {
+  PROJECT_MODE_HIDDEN_VIEWS,
+  PROJECT_MODE_GRAYED_VIEWS,
+} from '@/lib/project-mode-visibility';
+import { cn } from '@/lib/utils';
+import {
   CommandDialog,
   CommandInput,
   CommandList,
@@ -216,20 +221,36 @@ function NavItem({
   item,
   isDa,
   onSelect,
+  isGrayed,
 }: {
   item: NavItemDef;
   isDa: boolean;
   onSelect: (id: string) => void;
+  isGrayed?: boolean;
 }) {
   const search = useCommandState((state) => state.search);
   const ItemIcon = item.icon;
   const itemName = isDa ? item.nameDa : item.nameEn;
+  const grayedTooltip = isGrayed
+    ? (isDa
+      ? 'Begrænset i projekt-tilstand — afslut projekt-tilstand for at bruge'
+      : 'Limited in project mode — exit project mode to use')
+    : undefined;
 
   return (
     <CommandItem
       value={`${itemName} ${item.nameDa} ${item.nameEn}`}
-      onSelect={() => onSelect(item.id)}
-      className="flex items-center gap-3 px-3 py-2.5 cursor-pointer data-[selected=true]:bg-[#f0fdf9] dark:data-[selected=true]:bg-[#1a2e2b] data-[selected=true]:text-[#0d9488] dark:data-[selected=true]:text-[#2dd4bf] rounded-md mx-1 my-0.5 transition-colors duration-100"
+      onSelect={() => {
+        // Block selection of grayed views in project mode
+        if (isGrayed) return;
+        onSelect(item.id);
+      }}
+      disabled={isGrayed}
+      title={grayedTooltip}
+      className={cn(
+        'flex items-center gap-3 px-3 py-2.5 cursor-pointer data-[selected=true]:bg-[#f0fdf9] dark:data-[selected=true]:bg-[#1a2e2b] data-[selected=true]:text-[#0d9488] dark:data-[selected=true]:text-[#2dd4bf] rounded-md mx-1 my-0.5 transition-colors duration-100',
+        isGrayed && 'opacity-40 cursor-not-allowed',
+      )}
     >
       <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-[#f0fdf9] dark:bg-[#1a2e2b] shrink-0 transition-colors duration-100 data-[selected=true]:bg-[#0d9488]/10 dark:data-[selected=true]:bg-[#2dd4bf]/10">
         <ItemIcon className="h-4 w-4 text-[#0d9488]/70 dark:text-[#2dd4bf]/70" />
@@ -252,15 +273,21 @@ export function CommandPalette({ open, onOpenChange, onNavigate }: CommandPalett
   // The Projects command is visible when EITHER projectModeEnabled is on for
   // this tenant OR the current user is a SuperDev (AppOwner), who always
   // sees Projects so they can configure/inspect it in any tenant.
+  // Additionally, when the user is IN project mode (isProjectMode=true),
+  // HIDDEN views are removed entirely and GRAYED views are kept but dimmed.
   const { user } = useAuthStore();
+  const isProjectMode = !!user?.isProjectMode;
   const visibleSections = useMemo(() => {
     const projectsVisible = !!user?.projectModeEnabled || !!user?.isSuperDev;
-    if (projectsVisible) return NAV_SECTIONS;
     return NAV_SECTIONS.map((section) => ({
       ...section,
-      items: section.items.filter((item) => item.id !== 'projects'),
+      items: section.items.filter((item) => {
+        if (item.id === 'projects' && !projectsVisible) return false;
+        if (isProjectMode && PROJECT_MODE_HIDDEN_VIEWS.has(item.id)) return false;
+        return true;
+      }),
     })).filter((section) => section.items.length > 0);
-  }, [user?.projectModeEnabled, user?.isSuperDev]);
+  }, [user?.projectModeEnabled, user?.isSuperDev, isProjectMode]);
 
   const handleSelect = useCallback(
     (viewId: string) => {
@@ -324,6 +351,7 @@ export function CommandPalette({ open, onOpenChange, onNavigate }: CommandPalett
                     item={item}
                     isDa={isDa}
                     onSelect={handleSelect}
+                    isGrayed={isProjectMode && PROJECT_MODE_GRAYED_VIEWS.has(item.id)}
                   />
                 ))}
               </CommandGroup>

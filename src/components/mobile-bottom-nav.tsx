@@ -1,6 +1,8 @@
 'use client';
 
 import { useLanguageStore } from '@/lib/language-store';
+import { useAuthStore } from '@/lib/auth-store';
+import { PROJECT_MODE_HIDDEN_VIEWS } from '@/lib/project-mode-visibility';
 import {
   LayoutDashboard,
   List,
@@ -56,9 +58,19 @@ const navItems: NavItem[] = [
 
 export function MobileBottomNav({ currentView, onViewChange }: MobileBottomNavProps) {
   const { language } = useLanguageStore();
+  // ── Project Mode (FASE 4) ──
+  // In project mode, filter HIDDEN views out of each item's matchViews so
+  // the bottom-nav items don't light up for inaccessible pages. The 4
+  // bottom-nav items themselves (dashboard/transactions/invoices/reports)
+  // are all VISIBLE in project mode, so none are removed entirely.
+  const { user } = useAuthStore();
+  const isProjectMode = !!user?.isProjectMode;
 
   const getIsActive = (item: NavItem) => {
-    return item.matchViews.includes(currentView);
+    const views = isProjectMode
+      ? item.matchViews.filter((v) => !PROJECT_MODE_HIDDEN_VIEWS.has(v))
+      : item.matchViews;
+    return views.includes(currentView);
   };
 
   return (

@@ -12,6 +12,10 @@ import {
 } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
 import {
+  PROJECT_MODE_HIDDEN_VIEWS,
+  PROJECT_MODE_GRAYED_VIEWS,
+} from '@/lib/project-mode-visibility';
+import {
   LayoutDashboard,
   Receipt,
   Calculator,
@@ -226,14 +230,24 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
   //     so they can configure/inspect it in any tenant — including their own
   //     AlphaAi tenant where projectModeEnabled defaults to false.
   // Declared before activeSectionId because that memo depends on it.
+  // Additionally, when the user is IN project mode (isProjectMode=true),
+  // HIDDEN views are removed entirely and GRAYED views are kept but marked
+  // so the renderer can dim + disable them.
+  const isProjectMode = !!user?.isProjectMode;
   const visibleSections = useMemo(() => {
     const projectsVisible = !!user?.projectModeEnabled || !!user?.isSuperDev;
-    if (projectsVisible) return NAV_SECTIONS;
     return NAV_SECTIONS.map((section) => ({
       ...section,
-      items: section.items.filter((item) => item.id !== 'projects'),
+      items: section.items.filter((item) => {
+        // Hide Projects entirely when the tenant doesn't have it enabled
+        // and the user isn't a SuperDev.
+        if (item.id === 'projects' && !projectsVisible) return false;
+        // In project mode, hide views that have no project meaning.
+        if (isProjectMode && PROJECT_MODE_HIDDEN_VIEWS.has(item.id)) return false;
+        return true;
+      }),
     })).filter((section) => section.items.length > 0);
-  }, [user?.projectModeEnabled, user?.isSuperDev]);
+  }, [user?.projectModeEnabled, user?.isSuperDev, isProjectMode]);
 
   // Find which section contains the currently active view
   const activeSectionId = useMemo(() => {
@@ -325,16 +339,32 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
                         const ItemIcon = item.icon;
                         const isItemActive = currentView === item.id;
                         const itemName = isDa ? item.nameDa : item.nameEn;
+                        // ── Project Mode: gray-out views that are tenant-level ──
+                        const isGrayedInProjectMode = isProjectMode && PROJECT_MODE_GRAYED_VIEWS.has(item.id);
+                        const grayedTooltip = isGrayedInProjectMode
+                          ? (isDa
+                            ? 'Begrænset i projekt-tilstand — afslut projekt-tilstand for at bruge'
+                            : 'Limited in project mode — exit project mode to use')
+                          : undefined;
 
                         return (
                           <button
                             key={item.id}
-                            onClick={() => handleNavClick(item.id)}
+                            onClick={() => {
+                              // Block navigation to grayed views in project mode —
+                              // they are visible as a signal but not accessible.
+                              if (isGrayedInProjectMode) return;
+                              handleNavClick(item.id);
+                            }}
+                            disabled={isGrayedInProjectMode}
+                            title={grayedTooltip}
                             className={cn(
                               'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative hover-lift',
                               isItemActive
                                 ? 'bg-[#0d9488] text-white shadow-sm sidebar-nav-item-active-glow'
-                                : 'text-slate-600 dark:text-gray-300 hover:bg-[#f0fdf9] dark:hover:bg-[#1a2e2b] hover:text-[#1a1d1c] dark:hover:text-white'
+                                : 'text-slate-600 dark:text-gray-300 hover:bg-[#f0fdf9] dark:hover:bg-[#1a2e2b] hover:text-[#1a1d1c] dark:hover:text-white',
+                              // Grayed-out in project mode: dim + no-pointer
+                              isGrayedInProjectMode && 'opacity-40 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent hover:text-slate-600 dark:hover:text-gray-300',
                             )}
                           >
                             <ItemIcon
