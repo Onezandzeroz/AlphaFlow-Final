@@ -127,8 +127,8 @@ export const translations = {
     en: 'Purchase',
   },
   createInvoice: {
-    da: 'Opret faktura',
-    en: 'Create Invoice',
+    da: 'Opret salg',
+    en: 'Create Sale',
   },
   createContact: {
     da: 'Opret kontakt',

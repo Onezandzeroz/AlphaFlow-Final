@@ -992,7 +992,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
                                 className="text-gray-500 hover:text-[#0d9488] dark:text-gray-400 dark:hover:text-[#2dd4bf]"
                                 onClick={() => {
                                   // Navigate to invoices page - we just show a toast for now
-                                  toast.info(isDanish ? 'Opret faktura for denne kontakt' : 'Create invoice for this contact', {
+                                  toast.info(isDanish ? 'Opret salg for denne kontakt' : 'Create sale for this contact', {
                                     description: contact.name,
                                   });
                                 }}
@@ -1001,7 +1001,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
                               </Button>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>{isDanish ? 'Opret faktura' : 'Create Invoice'}</p>
+                              <p>{isDanish ? 'Opret salg' : 'Create Sale'}</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>

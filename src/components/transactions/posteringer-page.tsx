@@ -125,7 +125,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
 
   // Unified open handler: desktop → full page, mobile → dialog
   const handleAddClick = useCallback(() => {
-    guardWriteAccess(isDa ? 'Tilføj indkøb' : 'Add Purchase', () => {
+    guardWriteAccess(isDa ? 'Tilføj køb' : 'Add Purchase', () => {
       setCurrentView('create');
       // Only open dialog on mobile (not desktop)
       if (!isDesktop) {
@@ -144,7 +144,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   const renderCreatePage = () => (
     <div className="p-3 lg:p-6 space-y-4 lg:space-y-6">
       <PageHeader
-        title={isDa ? 'Tilføj indkøb' : 'Add Purchase'}
+        title={isDa ? 'Tilføj køb' : 'Add Purchase'}
         description={isDa
           ? 'Vælg en omkostningskonto og bogfør købet i dobbelt-posteringsregnskabet'
           : 'Select an expense account and record the purchase in the double-entry ledger'}
@@ -175,7 +175,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
         <DialogHeader>
           <DialogTitle className="dark:text-white flex items-center gap-2">
             <Plus className="h-5 w-5 text-[#2dd4bf]" />
-            {isDa ? 'Tilføj indkøb' : 'Add Purchase'}
+            {isDa ? 'Tilføj køb' : 'Add Purchase'}
           </DialogTitle>
           <DialogDescription className="dark:text-gray-400">{isDa
             ? 'Vælg en omkostningskonto og bogfør købet i dobbelt-posteringsregnskabet'
@@ -224,7 +224,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
                 className="bg-[#0d9488] hover:bg-[#0f766e] text-white border border-[#0d9488] gap-2 lg:bg-white/20 lg:hover:bg-white/30 lg:border-white/30 lg:backdrop-blur-sm text-sm font-medium transition-all"
               >
                 <Plus className="h-4 w-4" />
-                {isDa ? 'Tilføj indkøb' : 'Add Purchase'}
+                {isDa ? 'Tilføj køb' : 'Add Purchase'}
               </Button>
             )}
           />

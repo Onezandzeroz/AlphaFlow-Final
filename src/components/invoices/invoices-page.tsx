@@ -689,7 +689,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       if (!response.ok) {
         const isAccess = await handleMutationError(
           response,
-          language === 'da' ? 'Opret faktura' : 'Create invoice'
+          language === 'da' ? 'Opret salg' : 'Create sale'
         );
         if (isAccess) { setIsSubmitting(false); return; }
         const data = await response.json();
@@ -2574,7 +2574,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           <div className="flex items-center gap-2">
             <Button
                 onClick={() => {
-                  guardWriteAccess(isDanish ? 'Opret faktura' : 'Create invoice', () => {
+                  guardWriteAccess(isDanish ? 'Opret salg' : 'Create sale', () => {
                     if (!companyInfo) {
                       setShowCompanySetup(true);
                     } else {
@@ -2789,7 +2789,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 {invoices.length === 0 ? (
                   <Button
                     onClick={() => {
-                      guardWriteAccess(isDanish ? 'Opret faktura' : 'Create invoice', () => {
+                      guardWriteAccess(isDanish ? 'Opret salg' : 'Create sale', () => {
                         if (!companyInfo) {
                           setShowCompanySetup(true);
                         } else {
@@ -3057,7 +3057,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               {invoices.length === 0 ? (
                 <Button
                   onClick={() => {
-                    guardWriteAccess(isDanish ? 'Opret faktura' : 'Create invoice', () => {
+                    guardWriteAccess(isDanish ? 'Opret salg' : 'Create sale', () => {
                       if (!companyInfo) {
                         setShowCompanySetup(true);
                       } else {
