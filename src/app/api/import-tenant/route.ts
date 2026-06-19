@@ -436,27 +436,39 @@ export const POST = withGuard(
         }
 
         for (const b of budgets) {
-          const budget = await tx.budget.upsert({
+          // Note: Budget's unique constraint is now (companyId, projectId, year).
+          // We can't use upsert with a compound unique where because projectId
+          // may be null (tenant-level budgets), and Prisma/SQLite don't treat
+          // NULL as a unique value. Use findFirst + create/update instead.
+          const existingBudget = await tx.budget.findFirst({
             where: {
-              companyId_year: {
-                companyId,
-                year: Number(b.year),
-              },
-            },
-            create: {
-              name: String(b.name),
-              year: Number(b.year),
-              notes: b.notes ?? undefined,
-              isActive: b.isActive !== false,
-              userId,
               companyId,
+              projectId: b.projectId ?? null,
+              year: Number(b.year),
             },
-            update: {
-              name: String(b.name),
-              notes: b.notes ?? undefined,
-              isActive: b.isActive !== false,
-            },
+            select: { id: true },
           });
+
+          const budget = existingBudget
+            ? await tx.budget.update({
+                where: { id: existingBudget.id },
+                data: {
+                  name: String(b.name),
+                  notes: b.notes ?? undefined,
+                  isActive: b.isActive !== false,
+                },
+              })
+            : await tx.budget.create({
+                data: {
+                  name: String(b.name),
+                  year: Number(b.year),
+                  notes: b.notes ?? undefined,
+                  isActive: b.isActive !== false,
+                  userId,
+                  companyId,
+                  projectId: b.projectId ?? null,
+                },
+              });
 
           if (Array.isArray(b.entries)) {
             for (const e of b.entries) {
