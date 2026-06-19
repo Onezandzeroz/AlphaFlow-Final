@@ -172,6 +172,7 @@ interface Invoice {
   status: 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
   notes: string | null;
   createdAt: string;
+  cancelled?: boolean;
   projectId?: string | null;
   project?: { id: string; name: string; color: string | null; code: string | null } | null;
 }
@@ -2816,6 +2817,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
             const countdown = getDueDateCountdown(invoice);
             // ── Project Mode: dim invoices not belonging to the active project ──
             const outsideProject = !!user.isProjectMode && !!user.activeProjectId && invoice.projectId !== user.activeProjectId;
+            const isCancelled = invoice.status === 'CANCELLED' || !!invoice.cancelled;
             return (
               <div
                 key={invoice.id}
@@ -2825,14 +2827,14 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     : countdown.isUrgent
                       ? 'border-amber-200 dark:border-amber-900/30'
                       : 'border-gray-100 dark:border-white/5'
-                } ${outsideProject ? 'opacity-40' : ''}`}
-                title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : undefined}
+                } ${outsideProject ? 'opacity-40' : ''} ${isCancelled ? 'opacity-50' : ''}`}
+                title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : isCancelled ? (language === 'da' ? 'Annulleret' : 'Cancelled') : undefined}
                 onClick={() => setPreviewInvoice(invoice)}
               >
                 {/* Row 1: Invoice number + status badge + actions menu */}
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-semibold text-sm text-[#0d9488] dark:text-[#2dd4bf]">
+                    <span className={`font-mono font-semibold text-sm text-[#0d9488] dark:text-[#2dd4bf] ${isCancelled ? 'line-through' : ''}`}>
                       {invoice.invoiceNumber}
                     </span>
                     <StatusBadge status={displayStatus} />
@@ -3094,16 +3096,17 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     const countdown = getDueDateCountdown(invoice);
                     // ── Project Mode: dim invoices not belonging to the active project ──
                     const outsideProject = !!user.isProjectMode && !!user.activeProjectId && invoice.projectId !== user.activeProjectId;
+                    const isCancelled = invoice.status === 'CANCELLED' || !!invoice.cancelled;
                     return (
                       <TableRow
                         key={invoice.id}
                         className={`border-b border-gray-50/50 table-row-teal-hover cursor-pointer ${
                           countdown.isOverdue ? 'bg-red-50/30 dark:bg-red-900/5' : ''
-                        } ${countdown.isUrgent && !countdown.isOverdue ? 'bg-amber-50/30 dark:bg-amber-900/5' : ''} ${outsideProject ? 'opacity-40' : ''}`}
-                        title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : undefined}
+                        } ${countdown.isUrgent && !countdown.isOverdue ? 'bg-amber-50/30 dark:bg-amber-900/5' : ''} ${outsideProject ? 'opacity-40' : ''} ${isCancelled ? 'opacity-50' : ''}`}
+                        title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : isCancelled ? (language === 'da' ? 'Annulleret' : 'Cancelled') : undefined}
                         onClick={() => setPreviewInvoice(invoice)}
                       >
-                        <TableCell className="font-mono font-semibold text-[#0d9488] dark:text-[#2dd4bf] whitespace-nowrap">
+                        <TableCell className={`font-mono font-semibold text-[#0d9488] dark:text-[#2dd4bf] whitespace-nowrap ${isCancelled ? 'line-through' : ''}`}>
                           {invoice.invoiceNumber}
                         </TableCell>
                         <TableCell className="font-medium dark:text-gray-300">{invoice.customerName}</TableCell>

@@ -13,7 +13,11 @@ export const GET = withGuard(
   async (request, ctx) => {
     try {
       const invoices = await db.invoice.findMany({
-        where: { ...tenantFilter(ctx), cancelled: false },
+        // Include cancelled invoices so the UI can show them struck-through
+        // + grayed-out. Danish bookkeeping law requires cancelled entries to
+        // be preserved (not deleted), and showing them crossed-out gives the
+        // user a clear audit trail.
+        where: { ...tenantFilter(ctx) },
         orderBy: { createdAt: 'desc' },
         include: {
           // Include the project relation so the UI can gray-out invoices

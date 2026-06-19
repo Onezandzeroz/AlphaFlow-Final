@@ -962,12 +962,13 @@ export function ProjectDetail({ projectId, user, onBack }: ProjectDetailProps) {
                           : inv.status === 'SENT' ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400'
                           : inv.status === 'CANCELLED' ? 'bg-gray-100 text-gray-500 dark:bg-gray-800/40 dark:text-gray-400'
                           : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400';
+                        const invCancelled = inv.status === 'CANCELLED';
                         return (
-                          <TableRow key={inv.id} className="text-xs">
-                            <TableCell className="whitespace-nowrap font-mono text-gray-900 dark:text-white">
+                          <TableRow key={inv.id} className={`text-xs ${invCancelled ? 'opacity-50' : ''}`}>
+                            <TableCell className={`whitespace-nowrap font-mono text-gray-900 dark:text-white ${invCancelled ? 'line-through' : ''}`}>
                               {inv.invoiceNumber || '—'}
                             </TableCell>
-                            <TableCell className="max-w-[200px] truncate text-gray-600 dark:text-gray-300" title={inv.customerName || ''}>
+                            <TableCell className={`max-w-[200px] truncate text-gray-600 dark:text-gray-300 ${invCancelled ? 'line-through' : ''}`} title={inv.customerName || ''}>
                               {inv.customerName || '—'}
                             </TableCell>
                             <TableCell className="whitespace-nowrap text-gray-500 dark:text-gray-400">{issueStr}</TableCell>

@@ -23,9 +23,13 @@ export const GET = withGuard({
     // give the user a strong visual signal of what belongs to the active
     // project vs. the tenant. The `project` relation is included so the
     // client can determine membership.
+    //
+    // Cancelled transactions ARE included (cancelled: true) so the UI can
+    // show them struck-through + grayed-out. Danish bookkeeping law requires
+    // cancelled entries to be preserved (not deleted), and showing them
+    // crossed-out gives the user a clear audit trail.
     const where = {
       ...tenantFilter(ctx),
-      cancelled: false,
     };
 
     const transactions = await db.transaction.findMany({

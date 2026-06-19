@@ -91,6 +91,7 @@ interface Transaction {
   invoiceId?: string | null;
   projectId?: string | null;
   project?: { id: string; name: string; color: string | null; code: string | null } | null;
+  cancelled?: boolean;
   // Journal-entry-derived VAT (authoritative) — from double-entry journal.
   // null when no journal entry exists.
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
@@ -733,6 +734,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                 {mobileVisibleTransactions.map((transaction) => {
                   const typeInfo = getTypeInfo(transaction.type);
                   const outsideProject = isOutsideProject(transaction);
+                  const isCancelled = !!transaction.cancelled;
                   return (
                     <div
                       key={transaction.id}
@@ -740,13 +742,19 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         "bg-white dark:bg-[#1a1f1e] rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-white/5 active:scale-[0.98] transition-transform cursor-pointer",
                         // Project mode: dim transactions not belonging to the active project
                         outsideProject && "opacity-40",
+                        // Cancelled: gray-out the whole card
+                        isCancelled && "opacity-50",
                       )}
-                      title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : undefined}
+                      title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : isCancelled ? (language === 'da' ? 'Annulleret' : 'Cancelled') : undefined}
                     >
                       {/* Row 1: Description + Amount */}
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          <p className={cn(
+                            "text-sm font-medium text-gray-900 dark:text-white truncate",
+                            // Cancelled: strike-through
+                            isCancelled && "line-through"
+                          )}>
                             {transaction.description}
                           </p>
                           <div className="flex items-center gap-1 mt-1 flex-wrap">
@@ -955,14 +963,17 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                 <TableBody>
                   {paginatedTransactions.map((transaction) => {
                     const outsideProject = isOutsideProject(transaction);
+                    const isCancelled = !!transaction.cancelled;
                     return (
                     <TableRow
                       key={transaction.id}
                       className={cn(
                         "border-b border-gray-50/50 table-row-teal-hover",
                         outsideProject && "opacity-40",
+                        // Cancelled: gray-out the whole row
+                        isCancelled && "opacity-50",
                       )}
-                      title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : undefined}
+                      title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : isCancelled ? (language === 'da' ? 'Annulleret' : 'Cancelled') : undefined}
                     >
                       <TableCell>
                         {transaction.type === 'PURCHASE' ? (
@@ -982,7 +993,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       </TableCell>
                       <TableCell className="max-w-[150px] lg:max-w-[250px] truncate">
                         <div className="flex items-center gap-1.5">
-                          <span className="truncate">{transaction.description}</span>
+                          <span className={cn("truncate", isCancelled && "line-through")}>{transaction.description}</span>
                           {transaction.project && (
                             <Badge
                               className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1"
