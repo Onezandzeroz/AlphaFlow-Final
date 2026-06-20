@@ -16,7 +16,7 @@ export const GET = withGuard(
       const typeFilter = searchParams.get('type');
       const search = searchParams.get('search');
 
-      const where: Record<string, unknown> = { ...tenantFilter(ctx) };
+      const where: Record<string, unknown> = { ...tenantFilter(ctx), isActive: true };
 
       if (typeFilter && Object.values(ContactType).includes(typeFilter as ContactType)) {
         where.type = typeFilter;

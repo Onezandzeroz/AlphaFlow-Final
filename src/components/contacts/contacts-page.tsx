@@ -493,15 +493,36 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
         throw new Error(data?.error || (isDanish ? 'Kunne ikke gemme kontakt' : 'Failed to save contact'));
       }
 
+      const data = await response.json().catch(() => null);
+
+      // Optimistic update: patch the contact in the local list immediately
+      // so the UI reflects the change even before fetchContacts completes.
+      if (editingContact && data?.contact) {
+        setContacts((prev) =>
+          prev.map((c) => (c.id === editingContact.id ? { ...c, ...data.contact } : c))
+        );
+      }
+
       // Clear the persisted draft now that the save succeeded. The hook's
       // clearDraft uses the current key (which matches the current mode).
       clearContactDraft();
       setIsFormOpen(false);
-      fetchContacts();
+      setEditingContact(null);
+
+      // Await the refresh so any error is surfaced to the user.
+      await fetchContacts();
+
+      toast.success(
+        editingContact
+          ? (isDanish ? 'Kontakt opdateret' : 'Contact updated')
+          : (isDanish ? 'Kontakt oprettet' : 'Contact created')
+      );
     } catch (err) {
       console.error('Save contact error:', err);
       if (err instanceof Error && err.message === '__access_denied__') return;
-      setFormError(err instanceof Error ? err.message : (isDanish ? 'Ukendt fejl' : 'Unknown error'));
+      const msg = err instanceof Error ? err.message : (isDanish ? 'Ukendt fejl' : 'Unknown error');
+      setFormError(msg);
+      toast.error(isDanish ? 'Kunne ikke gemme kontakt' : 'Failed to save contact', { description: msg });
     } finally {
       setIsSaving(false);
     }
@@ -522,12 +543,24 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
           isDanish ? 'Slet kontakt' : 'Delete contact'
         );
         if (isAccess) { setIsDeleting(false); return; }
-        throw new Error(isDanish ? 'Kunne ikke slette kontakt' : 'Failed to delete contact');
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || (isDanish ? 'Kunne ikke slette kontakt' : 'Failed to delete contact'));
       }
+
+      // Optimistic update: remove the contact from the local list immediately.
+      const deletedId = deleteTarget.id;
+      setContacts((prev) => prev.filter((c) => c.id !== deletedId));
       setDeleteTarget(null);
-      fetchContacts();
+
+      // Await the refresh so the server state is authoritative.
+      await fetchContacts();
+
+      toast.success(isDanish ? 'Kontakt slettet' : 'Contact deleted');
     } catch (err) {
       console.error('Delete contact error:', err);
+      if (err instanceof Error && err.message === '__access_denied__') return;
+      const msg = err instanceof Error ? err.message : (isDanish ? 'Ukendt fejl' : 'Unknown error');
+      toast.error(isDanish ? 'Kunne ikke slette kontakt' : 'Failed to delete contact', { description: msg });
     } finally {
       setIsDeleting(false);
     }
