@@ -56,10 +56,10 @@ const PLANS: Plan[] = [
     name: 'Free',
     priceDa: '0 kr.',
     priceEn: '0 kr.',
-    priceUnitDa: '60 dage',
-    priceUnitEn: '60 days',
-    descDa: 'Periodevist behov for bogføring f.eks. opstartsvirksomhed',
-    descEn: 'Periodic bookkeeping needs, e.g. startups',
+    priceUnitDa: 'Så længe jeres samlede omsætning er under 50.000 kr.',
+    priceUnitEn: 'As long as your total revenue is below 50,000 DKK',
+    descDa: 'Løsningen for jer som har periodevist behov for bogføring f.eks. opstartsvirksomhed',
+    descEn: 'The solution for you with periodic bookkeeping needs, e.g. startups',
     features: [
       { da: 'Fulgt bogføringssystem m. AI-afstemning', en: 'Full accounting w/ AI reconciliation' },
       { da: 'Fakturering', en: 'Invoicing' },
@@ -69,8 +69,8 @@ const PLANS: Plan[] = [
     ],
     limitDa: '',
     limitEn: '',
-    bindDa: 'Ingen',
-    bindEn: 'None',
+    bindDa: 'Betinget',
+    bindEn: 'Conditional',
     ctaDa: 'Prøv gratis nu',
     ctaEn: 'Try free now',
     isFree: true,
@@ -78,10 +78,10 @@ const PLANS: Plan[] = [
   {
     id: 'monthly',
     name: 'Månedlig',
-    priceDa: '129 kr./md.',
-    priceEn: '129 kr./mo.',
-    descDa: 'Godt i gang med virksomheden og ønsker stabil drift',
-    descEn: 'Growing business wanting stable operations',
+    priceDa: '179 kr./md.',
+    priceEn: '179 kr./mo.',
+    descDa: 'Pakken til jer som er godt i gang med virksomheden og ønsker stabil drift',
+    descEn: 'The package for you who are well underway with the business and want stable operations',
     features: [
       { da: 'Ingen begrænsninger', en: 'No limitations' },
       { da: 'Fuldt AI-drevet bogføring', en: 'Full AI-powered bookkeeping' },
@@ -97,14 +97,14 @@ const PLANS: Plan[] = [
   {
     id: 'annual',
     name: 'Årlig',
-    priceDa: '99 kr./md.',
-    priceEn: '99 kr./mo.',
-    priceUnitDa: '(1.188 kr./år)',
-    priceUnitEn: '(1,188 kr./yr)',
+    priceDa: '149 kr./md.',
+    priceEn: '149 kr./mo.',
+    priceUnitDa: '(1.788 kr./år)',
+    priceUnitEn: '(1,788 kr./yr)',
     savingsDa: 'Spar 360 kr./år',
     savingsEn: 'Save 360 kr./yr',
-    descDa: 'Stabil drift med blikket rette fremad',
-    descEn: 'Stable operations, looking ahead',
+    descDa: 'Planen for jer som er godt i gang med stabil drift og har blikket rette fremad',
+    descEn: 'The plan for you who are well underway with stable operations and looking ahead',
     features: [
       { da: '23 % rabat', en: '23% discount' },
       { da: 'Prioriteret support', en: 'Priority support' },
@@ -122,14 +122,14 @@ const PLANS: Plan[] = [
   {
     id: '2year',
     name: '2-årig',
-    priceDa: '89 kr./md.',
-    priceEn: '89 kr./mo.',
-    priceUnitDa: '(2.136 kr./24 md.)',
-    priceUnitEn: '(2,136 kr./24 mo.)',
+    priceDa: '139 kr./md.',
+    priceEn: '139 kr./mo.',
+    priceUnitDa: '(3.336 kr./24 md.)',
+    priceUnitEn: '(3,336 kr./24 mo.)',
     savingsDa: 'Spar 960 kr.',
     savingsEn: 'Save 960 kr.',
-    descDa: 'Stabil drift — spar mest muligt langsigtet',
-    descEn: 'Stable ops — maximize long-term savings',
+    descDa: 'Løsningen for jer som har stabil drift og gerne vil spare mest muligt langsigtet.',
+    descEn: 'The solution for you with stable operations who want to maximize long-term savings',
     features: [
       { da: '31 % rabat', en: '31% discount' },
       { da: 'Prioriteret + hurtigere support', en: 'Priority + faster support' },
@@ -143,10 +143,10 @@ const PLANS: Plan[] = [
   {
     id: '3year',
     name: '3-årig',
-    priceDa: '79 kr./md.',
-    priceEn: '79 kr./mo.',
-    priceUnitDa: '(2.844 kr./36 md.)',
-    priceUnitEn: '(2,844 kr./36 mo.)',
+    priceDa: '129 kr./md.',
+    priceEn: '129 kr./mo.',
+    priceUnitDa: '(4.644 kr./36 md.)',
+    priceUnitEn: '(4,644 kr./36 mo.)',
     savingsDa: 'Spar 1.800 kr.',
     savingsEn: 'Save 1,800 kr.',
     descDa: 'Størst rabat & eksklusiv adgang',
@@ -279,7 +279,7 @@ function PlanCard({
         <div className="mt-2 inline-flex items-center justify-center gap-1.5 mx-auto px-3 py-1 rounded-full bg-[#0d9488]/20 border border-[#0d9488]/30">
           <Gift className={`text-[#2dd4bf] ${isMobile ? 'h-3.5 w-3.5' : 'h-3 w-3 sm:h-3.5 sm:w-3.5'}`} />
           <span className={`font-semibold text-[#2dd4bf] tracking-wide leading-tight ${isMobile ? 'text-[10px]' : 'text-[9px] sm:text-[10px]'}`}>
-            {t('2 MDR. GRATIS · FULD ADGANG', '2 MOS. FREE · FULL ACCESS')}
+            {t('GRATIS · FULD ADGANG', 'FREE · FULL ACCESS')}
           </span>
         </div>
       )}
@@ -377,14 +377,14 @@ function ActivePlanLabel({
 
   // Build a short label for the active plan.
   const label = isFree
-    ? (isDa ? 'Gratis prøveperiode' : 'Free trial')
+    ? (isDa ? 'Gratis' : 'Free')
     : isPopular
       ? `${active.name} ${isDa ? '— Anbefalet' : '— Recommended'}`
       : active.name;
 
   // Sub-text: price for paid plans, duration for free.
   const sub = isFree
-    ? (isDa ? '60 dage fuld adgang' : '60 days full access')
+    ? (isDa ? '0 kr. · Fuld adgang' : '0 kr. · Full access')
     : (isDa ? active.priceDa : active.priceEn);
 
   return (

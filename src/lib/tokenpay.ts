@@ -506,8 +506,21 @@ export async function grantTrial(userId: string, email?: string, name?: string, 
 
 /**
  * Check if a user has read_write access.
- * The AlphaAi owner (isSuperDev + AlphaAi company) always returns true.
- * All other users are checked against the TokenPay service.
+ *
+ * Evaluation order:
+ *   1. AlphaAi owner bypass (isSuperDev + AlphaAi company) → always allowed.
+ *   2. Revenue-based free tier — if the user has actively chosen a plan
+ *      (trialClaimedAt set) AND their total revenue is ≤ 50.000 kr.,
+ *      access is granted without a .tbkey proof or paid subscription.
+ *   3. TokenPay check — a valid .tbkey proof or active subscription plan
+ *      period grants access. This is the fallback for paying customers
+ *      whose revenue exceeds the free threshold, and for anyone who has
+ *      purchased a plan.
+ *
+ * The first-login plan prompt is still enforced: a brand-new user with no
+ * trialClaimedAt will NOT pass step 2 (grantedByRevenue is false), and
+ * TokenPay will return read_only for them — so they see the plan prompt
+ * and must actively click a plan to gain access.
  *
  * @example
  * import { requireAccess } from '@/lib/tokenpay';
@@ -521,16 +534,38 @@ export async function requireAccess(userId: string): Promise<{
   allowed: boolean;
   access: AccessCheckResult;
 }> {
-  // Dynamic import to avoid circular dependency in edge cases
+  // Dynamic imports to avoid circular dependency in edge cases
   const { checkOwnerAccess } = await import('@/lib/access-guard');
+  const { checkRevenueAccess } = await import('@/lib/revenue-check');
 
-  // Owner bypass — AlphaAi owner always has access
+  // 1. Owner bypass — AlphaAi owner always has access
   const ownerAccess = await checkOwnerAccess(userId);
   if (ownerAccess) {
     return { allowed: true, access: ownerAccess };
   }
 
-  // Normal TokenPay check
+  // 2. Revenue-based free tier.
+  //    Only applies once the user has actively chosen a plan via the
+  //    first-login prompt (trialClaimedAt != null). Before that choice,
+  //    grantedByRevenue is false and we fall through to TokenPay.
+  const revenueResult = await checkRevenueAccess(userId);
+  if (revenueResult.grantedByRevenue) {
+    return {
+      allowed: true,
+      access: {
+        userId,
+        accessLevel: 'read_write',
+        accessExpiry: null,
+        daysRemaining: null,
+        isExpired: false,
+        cached: false,
+      },
+    };
+  }
+
+  // 3. TokenPay check — .tbkey proof or active subscription plan period.
+  //    This handles paying customers (revenue over 50.000 kr.) and
+  //    anyone who has purchased/activated a plan.
   const access = await tokenpay.checkAccess(userId);
   return { allowed: hasAccess(access), access };
 }
@@ -570,12 +605,30 @@ export async function requireTokenPayAccess(
 
     const isExpired = access.isExpired;
 
+    // Distinguish the "revenue over free tier" case from a generic denial
+    // so the frontend can show the right upgrade message. We re-check the
+    // revenue gate here (cheap — the DB call is cached by Prisma's query
+    // plan within the same request) to detect why access was denied.
+    let code: string = isExpired ? 'ACCESS_EXPIRED' : 'ACCESS_DENIED';
+    let error: string = isExpired
+      ? 'Access expired — please upload a new proof to continue'
+      : 'Access denied — upload a valid .tbkey proof file to activate write access';
+
+    try {
+      const { checkRevenueAccess, FREE_REVENUE_THRESHOLD } = await import('@/lib/revenue-check');
+      const revenue = await checkRevenueAccess(userId);
+      if (revenue.hasChosenPlan && !revenue.withinFreeTier) {
+        code = 'REVENUE_EXCEEDED';
+        error = `Din omsætning (${revenue.totalRevenue.toLocaleString('da-DK', { maximumFractionDigits: 0 })} kr.) overstiger gratisgrænsen på ${FREE_REVENUE_THRESHOLD.toLocaleString('da-DK')} kr. Vælg en abonnementsplan eller upload et .tbkey proof for at få skriveadgang.`;
+      }
+    } catch {
+      // Revenue check failed — keep the generic denial above.
+    }
+
     return NextResponse.json(
       {
-        error: isExpired
-          ? 'Access expired — please upload a new proof to continue'
-          : 'Access denied — upload a valid .tbkey proof file to activate write access',
-        code: isExpired ? 'ACCESS_EXPIRED' : 'ACCESS_DENIED',
+        error,
+        code,
         accessLevel: access.accessLevel,
         accessExpiry: access.accessExpiry,
         daysRemaining: access.daysRemaining,
