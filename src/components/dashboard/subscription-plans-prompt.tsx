@@ -258,31 +258,39 @@ function PlanCard({
         {plan.name}
       </p>
 
-      {/* Price block */}
+      {/* Price block — fixed height so the price line aligns across all cards.
+          Free + Månedlig have no priceUnit, but we still reserve the same
+          vertical space as cards that do (Årlig / 2-årig / 3-årig) so the
+          price itself sits on the same baseline. */}
       <div className={isMobile ? 'mt-3' : 'mt-1.5 sm:mt-2'}>
         <p className={`font-bold text-white tracking-tight leading-none
           ${isMobile ? 'text-3xl' : 'text-xl sm:text-2xl lg:text-3xl'}
         `}>
           {isDa ? plan.priceDa : plan.priceEn}
         </p>
-        {plan.priceUnitDa && (
-          <p className={`text-white/35 mt-0.5 ${isMobile ? 'text-xs' : 'text-[10px] sm:text-xs lg:text-sm'}`}>
-            {isDa ? plan.priceUnitDa : plan.priceUnitEn}
-          </p>
+        {/* Reserve the priceUnit line even when absent so subsequent
+            sections align across cards. */}
+        <p className={`text-white/35 mt-0.5 ${isMobile ? 'text-xs h-4' : 'text-[10px] sm:text-xs lg:text-sm h-[18px] sm:h-[20px]'}`}>
+          {plan.priceUnitDa ? (isDa ? plan.priceUnitDa : plan.priceUnitEn) : ''}
+        </p>
+      </div>
+
+      {/* Trial badge zone — fixed height so all cards align.
+          Free shows the "GRATIS · FULD ADGANG" badge; paid cards reserve
+          the same vertical space (empty) so the savings badge below
+          aligns across all cards. */}
+      <div className={`${isMobile ? 'mt-2 h-7' : 'mt-2 h-6 sm:h-7'} flex items-center justify-center`}>
+        {isFree && (
+          <div className="inline-flex items-center justify-center gap-1.5 mx-auto px-3 py-1 rounded-full bg-[#0d9488]/20 border border-[#0d9488]/30">
+            <Gift className={`text-[#2dd4bf] ${isMobile ? 'h-3.5 w-3.5' : 'h-3 w-3 sm:h-3.5 sm:w-3.5'}`} />
+            <span className={`font-semibold text-[#2dd4bf] tracking-wide leading-tight ${isMobile ? 'text-[10px]' : 'text-[9px] sm:text-[10px]'}`}>
+              {t('GRATIS · FULD ADGANG', 'FREE · FULL ACCESS')}
+            </span>
+          </div>
         )}
       </div>
 
-      {/* Trial badge (Free plan only) */}
-      {isFree && (
-        <div className="mt-2 inline-flex items-center justify-center gap-1.5 mx-auto px-3 py-1 rounded-full bg-[#0d9488]/20 border border-[#0d9488]/30">
-          <Gift className={`text-[#2dd4bf] ${isMobile ? 'h-3.5 w-3.5' : 'h-3 w-3 sm:h-3.5 sm:w-3.5'}`} />
-          <span className={`font-semibold text-[#2dd4bf] tracking-wide leading-tight ${isMobile ? 'text-[10px]' : 'text-[9px] sm:text-[10px]'}`}>
-            {t('GRATIS · FULD ADGANG', 'FREE · FULL ACCESS')}
-          </span>
-        </div>
-      )}
-
-      {/* Savings badge */}
+      {/* Savings badge — fixed height (unchanged) */}
       <div className={`${isMobile ? 'mt-2 h-7' : 'mt-1 sm:mt-1.5 h-[18px] sm:h-[22px]'} flex items-center justify-center`}>
         {plan.savingsDa && (
           <span className={`font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full ${isMobile ? 'text-xs' : 'text-[10px] sm:text-xs'}`}>
@@ -291,13 +299,18 @@ function PlanCard({
         )}
       </div>
 
-      {/* Description */}
-      <p className={`${isMobile ? 'mt-2.5 text-xs' : 'mt-2 sm:mt-2.5 text-[10px] sm:text-xs lg:text-sm'} text-white/45 leading-relaxed`}>
+      {/* Description — fixed height (2 lines) so the features list aligns
+          across cards regardless of description length. */}
+      <p className={`${isMobile ? 'mt-2.5 text-xs' : 'mt-2 sm:mt-2.5 text-[10px] sm:text-xs lg:text-sm'} text-white/45 leading-relaxed line-clamp-2 min-h-[2.5em] sm:min-h-[2.8em]`}>
         {isDa ? plan.descDa : plan.descEn}
       </p>
 
-      {/* Features list */}
-      <ul className={`flex-1 text-left ${isMobile ? 'mt-3 space-y-2' : 'mt-2.5 sm:mt-3 space-y-1.5'}`}>
+      {/* Features list — fixed minimum height so the binding row aligns
+          across cards regardless of how many features each plan has
+          (Free/Månedlig = 5, Årlig = 4, 2-årig/3-årig = 3). flex-1 still
+          stretches the list on the tallest card so the CTA stays pinned
+          to the bottom. */}
+      <ul className={`flex-1 text-left ${isMobile ? 'mt-3 space-y-2 min-h-[8.5rem]' : 'mt-2.5 sm:mt-3 space-y-1.5 sm:space-y-2 min-h-[7rem] sm:min-h-[8rem] lg:min-h-[9rem]'}`}>
         {plan.features.map((feat, i) => (
           <li key={i} className="flex items-start gap-2">
             <Check className={`shrink-0 mt-0.5 ${isMobile ? 'h-4 w-4' : 'h-3.5 w-3.5 sm:h-4 sm:w-4'}
