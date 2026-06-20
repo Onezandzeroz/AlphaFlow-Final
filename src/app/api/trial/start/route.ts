@@ -1,26 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
-import { grantTrial } from '@/lib/tokenpay';
 import { logger } from '@/lib/logger';
 import { auditLog, requestMetadata } from '@/lib/audit';
 
 // ─── POST /api/trial/start ─────────────────────────────────────────
 // Confirm the user's plan choice on first login.
 //
-// Called when the user actively clicks the Free plan on the subscription
-// plans prompt. The act of choosing a plan is what unlocks access — the
-// backend revenue-gate (see lib/revenue-check.ts) grants full read_write
-// access for tenants whose total revenue is ≤ 50.000 kr.
+// Called ONLY when the user actively clicks the Free plan on the
+// subscription plans prompt. The act of choosing a plan is what unlocks
+// access — the backend revenue-gate (see lib/revenue-check.ts) grants
+// full read_write access for tenants whose total revenue is ≤ 50.000 kr.
 //
-// This route's primary job is to record that the user has made an active
-// choice (trialClaimedAt). A long TokenPay trial (365 days) is ALSO granted
-// as a safety net so that access still works if the revenue check is ever
-// unavailable — but the revenue gate is the real authority.
+// This route's ONLY job is to record that the user has made an active
+// choice (trialClaimedAt). It does NOT call TokenPay's grantTrial — no
+// time-limited trial period is created. Access is controlled exclusively
+// by the revenue gate (free under 50.000 kr.) or a purchased plan/.tbkey
+// proof (over 50.000 kr.).
 //
 // Rules:
 //   - Each user can only self-claim ONCE (tracked by trialClaimedAt).
-//   - The app owner can still grant additional trials via oversight settings.
+//   - The app owner can still grant TokenPay trials via oversight settings.
 //   - SuperDev users and demo companies are not eligible.
 
 export const POST = withGuard({
@@ -37,10 +37,10 @@ export const POST = withGuard({
       );
     }
 
-    // Check if user has already claimed their one-time trial
+    // Check if user has already claimed their one-time plan choice
     const user = await db.user.findUnique({
       where: { id: ctx.id },
-      select: { id: true, email: true, businessName: true, trialClaimedAt: true },
+      select: { id: true, email: true, trialClaimedAt: true },
     });
 
     if (!user) {
@@ -62,26 +62,16 @@ export const POST = withGuard({
     // This is the key flag the revenue-gate checks before granting free-tier
     // access — without it, a brand-new user is NOT given access and still
     // sees the plan prompt.
+    //
+    // IMPORTANT: We do NOT call TokenPay's grantTrial here. No time-limited
+    // trial period is created. The revenue gate (revenue ≤ 50.000 kr.) is
+    // the sole authority for free-tier access. This prevents the bug where
+    // users were automatically granted 12 months of access without an
+    // explicit plan purchase.
     await db.user.update({
       where: { id: ctx.id },
       data: { trialClaimedAt: new Date() },
     });
-
-    // Grant a long TokenPay trial as a SAFETY NET. The revenue gate is the
-    // real authority, but if it ever fails (DB error, etc.) the user should
-    // still have working access. 365 days keeps this net active without
-    // interfering with the revenue-based model.
-    let trialExpiry: string | null = null;
-    try {
-      const result = await grantTrial(ctx.id, user.email, user.businessName || undefined, 365);
-      trialExpiry = result.trialExpiry;
-    } catch (trialError) {
-      // Non-fatal: the revenue gate still grants access. Log and continue.
-      logger.warn(
-        `[TRIAL] TokenPay grantTrial failed for ${user.email} (revenue gate still active):`,
-        trialError,
-      );
-    }
 
     // Audit log
     await auditLog({
@@ -90,7 +80,7 @@ export const POST = withGuard({
       entityId: ctx.id,
       userId: ctx.id,
       companyId: ctx.activeCompanyId,
-      changes: { planChosen: { old: null, new: trialExpiry ?? 'revenue-tier' } },
+      changes: { planChosen: { old: null, new: 'revenue-tier' } },
       metadata: requestMetadata(request),
     });
 
@@ -100,7 +90,6 @@ export const POST = withGuard({
 
     return NextResponse.json({
       success: true,
-      trialExpiry,
       message: 'Du har nu fuld adgang — gratis så længe din omsætning er under 50.000 kr.',
     });
   } catch (error) {

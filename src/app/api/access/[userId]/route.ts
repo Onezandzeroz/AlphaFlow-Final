@@ -9,8 +9,11 @@ import { withGuard } from '@/lib/route-guard';
 // Mirrors the evaluation order of requireAccess() in lib/tokenpay.ts so
 // the frontend sees the same access level that mutation guards enforce:
 //   1. Owner bypass
-//   2. Revenue-based free tier (trialClaimedAt set AND revenue ≤ 50.000 kr.)
-//   3. TokenPay (.tbkey proof / subscription plan period)
+//   2. Plan-choice gate — if trialClaimedAt is NOT set, return read_only
+//      immediately. This blocks stale TokenPay trials from granting
+//      access before the user has clicked a plan on the first-login prompt.
+//   3. Revenue-based free tier (trialClaimedAt set AND revenue ≤ 50.000 kr.)
+//   4. TokenPay (.tbkey proof / subscription plan period)
 export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
   try {
     const { userId } = await context.params as { userId: string };
@@ -24,12 +27,26 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
       return NextResponse.json(ownerAccess);
     }
 
-    // ─── 2. Revenue-based free tier ─────────────────────────────
-    //    Only applies once the user has actively chosen a plan via the
-    //    first-login prompt (trialClaimedAt set). Before that choice,
-    //    we fall through to TokenPay (which returns read_only for a
-    //    brand-new user — so the plan prompt is shown).
+    // ─── 2. Plan-choice gate + revenue check ───────────────────
+    //    checkRevenueAccess returns hasChosenPlan = false for users who
+    //    have never clicked a plan. We return read_only in that case so
+    //    the frontend shows the plan prompt — even if TokenPay has a
+    //    stale trial from before this rule existed.
     const revenueResult = await checkRevenueAccess(userId);
+
+    if (!revenueResult.hasChosenPlan) {
+      return NextResponse.json({
+        userId,
+        accessLevel: 'read_only',
+        accessExpiry: null,
+        daysRemaining: null,
+        isExpired: false,
+        cached: false,
+      });
+    }
+
+    // ─── 3. Revenue-based free tier ────────────────────────────
+    //    User has chosen a plan AND revenue ≤ 50.000 kr. → read_write.
     if (revenueResult.grantedByRevenue) {
       return NextResponse.json({
         userId,
@@ -41,7 +58,9 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
       });
     }
 
-    // ─── 3. Normal flow: check TokenPay service ────────────────
+    // ─── 4. TokenPay service (.tbkey proof / subscription) ─────
+    //    Reached only when the user HAS chosen a plan but revenue exceeds
+    //    50.000 kr. — they need a purchased plan or .tbkey proof.
     const access = await tokenpay.checkAccess(userId);
     return NextResponse.json(access);
   } catch (error) {

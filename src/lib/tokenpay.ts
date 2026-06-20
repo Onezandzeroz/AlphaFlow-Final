@@ -517,10 +517,12 @@ export async function grantTrial(userId: string, email?: string, name?: string, 
  *      whose revenue exceeds the free threshold, and for anyone who has
  *      purchased a plan.
  *
- * The first-login plan prompt is still enforced: a brand-new user with no
- * trialClaimedAt will NOT pass step 2 (grantedByRevenue is false), and
- * TokenPay will return read_only for them — so they see the plan prompt
- * and must actively click a plan to gain access.
+ * CRITICAL: Steps 2 AND 3 both require that the user has actively chosen
+ * a plan (trialClaimedAt is set). A brand-new user who has never clicked
+ * a plan on the first-login prompt is NEVER granted access — even if a
+ * stale TokenPay trial exists from before this rule was introduced. This
+ * enforces the requirement that access only begins after an explicit
+ * user action.
  *
  * @example
  * import { requireAccess } from '@/lib/tokenpay';
@@ -544,11 +546,30 @@ export async function requireAccess(userId: string): Promise<{
     return { allowed: true, access: ownerAccess };
   }
 
-  // 2. Revenue-based free tier.
-  //    Only applies once the user has actively chosen a plan via the
-  //    first-login prompt (trialClaimedAt != null). Before that choice,
-  //    grantedByRevenue is false and we fall through to TokenPay.
+  // Evaluate the revenue gate once — it also tells us whether the user
+  // has actively chosen a plan (trialClaimedAt set), which is a hard
+  // prerequisite for ANY non-owner access below.
   const revenueResult = await checkRevenueAccess(userId);
+
+  // If the user has NEVER chosen a plan, deny access immediately.
+  // This blocks stale TokenPay trials from granting access before the
+  // user has clicked a plan on the first-login prompt.
+  if (!revenueResult.hasChosenPlan) {
+    return {
+      allowed: false,
+      access: {
+        userId,
+        accessLevel: 'read_only',
+        accessExpiry: null,
+        daysRemaining: null,
+        isExpired: false,
+        cached: false,
+      },
+    };
+  }
+
+  // 2. Revenue-based free tier.
+  //    User has chosen a plan AND revenue is ≤ 50.000 kr. → grant access.
   if (revenueResult.grantedByRevenue) {
     return {
       allowed: true,
@@ -564,8 +585,8 @@ export async function requireAccess(userId: string): Promise<{
   }
 
   // 3. TokenPay check — .tbkey proof or active subscription plan period.
-  //    This handles paying customers (revenue over 50.000 kr.) and
-  //    anyone who has purchased/activated a plan.
+  //    Reached only when the user HAS chosen a plan but revenue exceeds
+  //    50.000 kr. They need a purchased plan or .tbkey proof to continue.
   const access = await tokenpay.checkAccess(userId);
   return { allowed: hasAccess(access), access };
 }
