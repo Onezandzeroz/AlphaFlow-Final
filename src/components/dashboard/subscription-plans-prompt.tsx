@@ -56,10 +56,8 @@ const PLANS: Plan[] = [
     name: 'Free',
     priceDa: '0 kr.',
     priceEn: '0 kr.',
-    priceUnitDa: 'Så længe jeres samlede omsætning er under 50.000 kr.',
-    priceUnitEn: 'As long as your total revenue is below 50,000 DKK',
-    descDa: 'Løsningen for jer som har periodevist behov for bogføring f.eks. opstartsvirksomhed',
-    descEn: 'The solution for you with periodic bookkeeping needs, e.g. startups',
+    descDa: 'Gratis prøveperiode så længe jeres samlede omsætning er under 50.000 kr.',
+    descEn: 'Free trial as long as your total revenue is below 50,000 DKK',
     features: [
       { da: 'Fulgt bogføringssystem m. AI-afstemning', en: 'Full accounting w/ AI reconciliation' },
       { da: 'Fakturering', en: 'Invoicing' },
