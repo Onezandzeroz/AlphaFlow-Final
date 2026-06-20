@@ -10,7 +10,7 @@
  *
  * Renders nothing if there are no drafts (so it's safe to always mount).
  *
- * Drafts auto-expire after 7 days (handled by the store), so this view is
+ * Drafts auto-expire after 30 minutes (handled by the store), so this view is
  * purely for explicit user control — most users will never need it.
  */
 
@@ -133,8 +133,8 @@ export function DraftRecoveryBanner() {
               </CardTitle>
               <CardDescription className="text-xs mt-0.5">
                 {danish
-                  ? `${draftList.length} udkast • udløber automatisk efter 7 dage`
-                  : `${draftList.length} draft(s) • expire automatically after 7 days`}
+                  ? `${draftList.length} udkast • udløber automatisk efter 30 minutter`
+                  : `${draftList.length} draft(s) • expire automatically after 30 minutes`}
               </CardDescription>
             </div>
           </div>

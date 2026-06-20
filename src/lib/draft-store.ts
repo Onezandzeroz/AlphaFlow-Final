@@ -10,7 +10,9 @@
  *   - Each entry stores { data, updatedAt, label? }
  *   - Persisted to localStorage via zustand persist middleware (same pattern
  *     as auth-store / sidebar-store / language-store already in the codebase)
- *   - Drafts auto-expire after DRAFT_TTL_MS (7 days) — pruned on store load
+ *   - Drafts auto-expire after DRAFT_TTL_MS (30 minutes) — pruned on store
+ *     load AND proactively every 60s while the app is open, so expired
+ *     drafts disappear even if the user never reloads the page.
  *
  * Security: NEVER use this for auth forms (passwords, OTP codes). The hook
  * callers are responsible for choosing safe draft keys.
@@ -21,8 +23,11 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 // ─── Constants ───────────────────────────────────────────────────────
 
-/** Drafts older than this are pruned on load (7 days) */
-const DRAFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+/** Drafts older than this are pruned (30 minutes). */
+const DRAFT_TTL_MS = 30 * 60 * 1000;
+
+/** How often the proactive expiry sweep runs (every 60 seconds). */
+const PRUNE_INTERVAL_MS = 60 * 1000;
 
 /** localStorage key — bump version suffix if the schema changes */
 const STORAGE_KEY = 'alphaflow-drafts-v1';
@@ -61,6 +66,13 @@ interface DraftState {
 
   /** Remove ALL drafts (used by the recovery UI "discard all"). */
   clearAllDrafts: () => void;
+
+  /**
+   * Remove every draft older than DRAFT_TTL_MS. Called automatically on
+   * store rehydration and by a 60s interval; safe to call manually too.
+   * Returns without notifying subscribers when nothing changed.
+   */
+  pruneExpiredDrafts: () => void;
 
   /** List all drafts as { key, updatedAt, label } — for the recovery UI. */
   listDrafts: () => DraftMeta[];
@@ -111,6 +123,14 @@ export const useDraftStore = create<DraftState>()(
         }),
 
       clearAllDrafts: () => set({ drafts: {} }),
+
+      pruneExpiredDrafts: () =>
+        set((state) => {
+          const next = pruneExpired(state.drafts);
+          // Return the same state ref when nothing changed so zustand
+          // skips notifying subscribers (no needless re-renders).
+          return next === state.drafts ? state : { drafts: next };
+        }),
 
       listDrafts: () =>
         Object.entries(get().drafts)
@@ -199,4 +219,25 @@ export function consumeExternalClear(key: string): boolean {
     return true;
   }
   return false;
+}
+
+// ─── Proactive expiry sweep ────────────────────────────────────────
+//
+// pruneExpired() already runs on store rehydration (page load), but if a
+// user keeps the app open for a long session, drafts that cross the
+// 30-minute TTL would otherwise linger in memory until the next reload.
+// This interval sweeps every 60 seconds so expired drafts are removed
+// promptly and the draft store stays invisible to the user.
+//
+// Guarded for the browser only — the store module may be imported during
+// SSR where setInterval / `window` are unavailable. A window-level flag
+// dedupes the timer so HMR in dev mode can't stack up duplicates.
+
+if (typeof window !== 'undefined') {
+  const w = window as unknown as { __alphaflowDraftPruneTimer?: ReturnType<typeof setInterval> };
+  if (!w.__alphaflowDraftPruneTimer) {
+    w.__alphaflowDraftPruneTimer = setInterval(() => {
+      useDraftStore.getState().pruneExpiredDrafts();
+    }, PRUNE_INTERVAL_MS);
+  }
 }
