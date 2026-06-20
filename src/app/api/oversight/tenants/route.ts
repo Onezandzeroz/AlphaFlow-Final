@@ -32,7 +32,7 @@ export const GET = withGuard(routeConfig['/api/oversight/tenants'].GET!, async (
       ];
     }
 
-    // Fetch all companies with member user IDs
+    // Fetch all companies with member user IDs (including subscriptionRevokedAt)
     const [companies, total] = await Promise.all([
       db.company.findMany({
         where,
@@ -51,7 +51,14 @@ export const GET = withGuard(routeConfig['/api/oversight/tenants'].GET!, async (
           members: {
             select: {
               userId: true,
-              user: { select: { id: true, email: true, businessName: true } },
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  businessName: true,
+                  subscriptionRevokedAt: true,
+                },
+              },
             },
           },
         },
@@ -113,6 +120,10 @@ export const GET = withGuard(routeConfig['/api/oversight/tenants'].GET!, async (
         memberCount: c._count.members,
         createdAt: c.createdAt,
         trial: getTrialInfo(c.members),
+        // True if ANY member has subscriptionRevokedAt set
+        subscriptionRevoked: c.members.some(
+          (m) => m.user.subscriptionRevokedAt !== null,
+        ),
       })),
       total,
       page,

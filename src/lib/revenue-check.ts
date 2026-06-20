@@ -29,14 +29,21 @@ export const FREE_REVENUE_THRESHOLD = 50_000;
 export interface RevenueCheckResult {
   /** True if the user has actively chosen a plan (trialClaimedAt set). */
   hasChosenPlan: boolean;
+  /** True if the App Owner has revoked subscription-based access for this user. */
+  revoked: boolean;
   /** Total revenue across all of the user's companies, in DKK. */
   totalRevenue: number;
   /** True if revenue is at or below the free threshold. */
   withinFreeTier: boolean;
   /**
    * True if this user should be granted access based on the revenue rule
-   * alone (hasChosenPlan AND withinFreeTier). Callers still need to fall
-   * through to TokenPay/.tbkey checks when this is false.
+   * alone (hasChosenPlan AND withinFreeTier AND NOT revoked). Callers still
+   * need to fall through to TokenPay/.tbkey checks when this is false.
+   *
+   * NOTE: revocation only blocks the revenue-based free tier. A user with
+   * a valid .tbkey proof still gets access via the TokenPay fallback in
+   * requireAccess() — revoking subscription access does NOT revoke proof
+   * access.
    */
   grantedByRevenue: boolean;
 }
@@ -126,13 +133,15 @@ export async function computeTenantRevenue(userId: string): Promise<number> {
  *      (caller must check TokenPay/.tbkey instead).
  */
 export async function checkRevenueAccess(userId: string): Promise<RevenueCheckResult> {
-  // 1. Has the user actively chosen a plan?
+  // 1. Has the user actively chosen a plan? Has the App Owner revoked
+  //    their subscription-based access?
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { trialClaimedAt: true },
+    select: { trialClaimedAt: true, subscriptionRevokedAt: true },
   });
 
   const hasChosenPlan = !!user?.trialClaimedAt;
+  const revoked = !!user?.subscriptionRevokedAt;
 
   // If the user hasn't chosen a plan yet, the revenue gate is not active.
   // Return a neutral result that does NOT grant access — the caller falls
@@ -140,6 +149,7 @@ export async function checkRevenueAccess(userId: string): Promise<RevenueCheckRe
   if (!hasChosenPlan) {
     return {
       hasChosenPlan: false,
+      revoked,
       totalRevenue: 0,
       withinFreeTier: false,
       grantedByRevenue: false,
@@ -150,10 +160,14 @@ export async function checkRevenueAccess(userId: string): Promise<RevenueCheckRe
   const totalRevenue = await computeTenantRevenue(userId);
   const withinFreeTier = totalRevenue <= FREE_REVENUE_THRESHOLD;
 
+  // 3. Grant by revenue only if: within free tier AND not revoked.
+  //    If revoked, the caller falls through to TokenPay/.tbkey — so a
+  //    revoked user with a valid .tbkey proof still gets access.
   return {
     hasChosenPlan: true,
+    revoked,
     totalRevenue,
     withinFreeTier,
-    grantedByRevenue: withinFreeTier,
+    grantedByRevenue: withinFreeTier && !revoked,
   };
 }

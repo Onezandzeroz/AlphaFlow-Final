@@ -461,6 +461,9 @@ export const routeConfig: RouteConfigMap = {
   '/api/oversight/trial': {
     POST: { auth: true, requireSuperDev: true },
   },
+  '/api/oversight/subscription': {
+    POST: { auth: true, requireSuperDev: true },
+  },
 
   '/api/hermes/config': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.COMPANY_VIEW_SETTINGS] },

@@ -355,6 +355,7 @@ model User {
   demoModeEnabled        Boolean            @default(false)
   isSuperDev             Boolean            @default(false)  // AlphaAi SUPER_DEV read-only cross-tenant access
   trialClaimedAt         DateTime?          // When user self-claimed their one-time free trial (not set for owner-granted trials)
+  subscriptionRevokedAt  DateTime?          // Set by App Owner to revoke subscription-based free-tier access (revenue gate). Does NOT affect .tbkey proof access.
 
   // Two-Factor Authentication (TOTP)
   // twoFactorSecret: AES-256-GCM encrypted TOTP secret (base32-encoded)

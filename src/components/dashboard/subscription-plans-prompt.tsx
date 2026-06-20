@@ -275,28 +275,23 @@ function PlanCard({
         </p>
       </div>
 
-      {/* Trial badge zone — fixed height so all cards align.
-          Free shows the "GRATIS · FULD ADGANG" badge; paid cards reserve
-          the same vertical space (empty) so the savings badge below
-          aligns across all cards. */}
-      <div className={`${isMobile ? 'mt-2 h-7' : 'mt-2 h-6 sm:h-7'} flex items-center justify-center`}>
-        {isFree && (
+      {/* Badge row — single fixed-height row that holds EITHER the trial
+          badge (Free) OR the savings badge (Årlig / 2-årig / 3-årig) OR
+          nothing (Månedlig). Putting both badges in the same row ensures
+          they vertically align across all cards. */}
+      <div className={`${isMobile ? 'mt-2 h-7' : 'mt-1.5 sm:mt-2 h-[22px] sm:h-[26px]'} flex items-center justify-center`}>
+        {isFree ? (
           <div className="inline-flex items-center justify-center gap-1.5 mx-auto px-3 py-1 rounded-full bg-[#0d9488]/20 border border-[#0d9488]/30">
             <Gift className={`text-[#2dd4bf] ${isMobile ? 'h-3.5 w-3.5' : 'h-3 w-3 sm:h-3.5 sm:w-3.5'}`} />
             <span className={`font-semibold text-[#2dd4bf] tracking-wide leading-tight ${isMobile ? 'text-[10px]' : 'text-[9px] sm:text-[10px]'}`}>
               {t('GRATIS · FULD ADGANG', 'FREE · FULL ACCESS')}
             </span>
           </div>
-        )}
-      </div>
-
-      {/* Savings badge — fixed height (unchanged) */}
-      <div className={`${isMobile ? 'mt-2 h-7' : 'mt-1 sm:mt-1.5 h-[18px] sm:h-[22px]'} flex items-center justify-center`}>
-        {plan.savingsDa && (
+        ) : plan.savingsDa ? (
           <span className={`font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full ${isMobile ? 'text-xs' : 'text-[10px] sm:text-xs'}`}>
             {isDa ? plan.savingsDa : plan.savingsEn}
           </span>
-        )}
+        ) : null}
       </div>
 
       {/* Description — fixed height (2 lines) so the features list aligns

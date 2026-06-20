@@ -49,6 +49,7 @@ interface Tenant {
   memberCount: number;
   createdAt: string;
   trial: TrialInfo;
+  subscriptionRevoked?: boolean;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ export function OversightSettings() {
   const [promoting, setPromoting] = useState(false);
   const [promoteConfirmOpen, setPromoteConfirmOpen] = useState(false);
   const [trialLoading, setTrialLoading] = useState<string | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState<string | null>(null);
   const [hermesLoading, setHermesLoading] = useState<string | null>(null);
   const [hermesTenants, setHermesTenants] = useState<Map<string, boolean>>(new Map());
   const [hermesDataAccessTenants, setHermesDataAccessTenants] = useState<Map<string, boolean>>(new Map());
@@ -199,6 +201,60 @@ export function OversightSettings() {
       );
     } finally {
       setTrialLoading(null);
+    }
+  };
+
+  // ─── Subscription access revocation (App Owner only) ───────────
+  //
+  // Revoke or restore the revenue-based free-tier access for all members
+  // of a tenant. This ONLY affects subscription access — a tenant with a
+  // valid .tbkey proof retains write access regardless.
+
+  const handleSubscriptionAction = async (tenant: Tenant, action: 'revoke' | 'restore') => {
+    const confirmMsg = action === 'revoke'
+      ? (isDa
+        ? `Fjern abonnementsadgang for ${tenant.name}?\n\nDette blokerer den gratis omsætningsbaserede adgang for alle ${tenant.memberCount} medlemmer. Medlemmer med et gyldigt .tbkey proof bevarer stadig skriveadgang.`
+        : `Revoke subscription access for ${tenant.name}?\n\nThis blocks the revenue-based free-tier access for all ${tenant.memberCount} members. Members with a valid .tbkey proof will still keep write access.`)
+      : (isDa
+        ? `Gendan abonnementsadgang for ${tenant.name}?`
+        : `Restore subscription access for ${tenant.name}?`);
+
+    if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) {
+      return;
+    }
+
+    setSubscriptionLoading(tenant.id);
+    try {
+      const res = await fetch('/api/oversight/subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: tenant.id, action }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        toast.success(
+          action === 'revoke'
+            ? (isDa ? 'Abonnementsadgang fjernet' : 'Subscription access revoked')
+            : (isDa ? 'Abonnementsadgang gendannet' : 'Subscription access restored'),
+          {
+            description: `${tenant.name} (${data.affected} ${isDa ? 'medlemmer' : 'members'})`,
+          },
+        );
+        await fetchTenants();
+      } else {
+        toast.error(
+          isDa ? 'Kunne ikke opdatere abonnementsadgang' : 'Failed to update subscription access',
+          { description: data.error || (isDa ? 'Ukendt fejl' : 'Unknown error') },
+        );
+      }
+    } catch (error) {
+      toast.error(
+        isDa ? 'Kunne ikke opdatere abonnementsadgang' : 'Failed to update subscription access',
+        { description: error instanceof Error ? error.message : undefined },
+      );
+    } finally {
+      setSubscriptionLoading(null);
     }
   };
 
@@ -637,24 +693,36 @@ export function OversightSettings() {
                           {isDa ? 'Inaktiv' : 'Inactive'}
                         </Badge>
                       )}
+                      {/* Subscription revoked badge (App Owner revocation) */}
+                      {tenant.subscriptionRevoked && (
+                        <Badge
+                          className="text-[10px] bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300 px-1.5 flex items-center gap-0.5"
+                          title={isDa
+                            ? 'Abonnementsadgang fjernet af App-ejer (.tbkey proof gælder stadig)'
+                            : 'Subscription access revoked by App Owner (.tbkey proof still valid)'}
+                        >
+                          <Ban className="h-2.5 w-2.5" />
+                          {isDa ? 'Abonnement blokeret' : 'Sub. blocked'}
+                        </Badge>
+                      )}
 
-                      {/* Trial actions dropdown */}
+                      {/* Actions dropdown */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 shrink-0"
-                            disabled={isTrialLoading || hermesLoading === tenant.id}
+                            disabled={isTrialLoading || hermesLoading === tenant.id || subscriptionLoading === tenant.id}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            {(isTrialLoading || hermesLoading === tenant.id)
+                            {(isTrialLoading || hermesLoading === tenant.id || subscriptionLoading === tenant.id)
                               ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6b7c75]" />
                               : <MoreVertical className="h-3.5 w-3.5 text-[#6b7c75]" />
                             }
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuContent align="end" className="w-52">
                           <DropdownMenuItem
                             onClick={() => handleToggleHermes(tenant, !hermesTenants.get(tenant.id))}
                             disabled={hermesLoading === tenant.id}
@@ -703,6 +771,27 @@ export function OversightSettings() {
                                       {isDa ? 'Annuller prøveperiode' : 'Cancel trial'}
                                     </DropdownMenuItem>
                                   </>
+                                )}
+                                {/* Subscription access revoke/restore (App Owner only) */}
+                                <DropdownMenuSeparator />
+                                {tenant.subscriptionRevoked ? (
+                                  <DropdownMenuItem
+                                    onClick={() => handleSubscriptionAction(tenant, 'restore')}
+                                    disabled={subscriptionLoading === tenant.id}
+                                    className="gap-2 text-sm text-emerald-600 dark:text-emerald-400 focus:text-emerald-600 dark:focus:text-emerald-400 focus:bg-emerald-50 dark:focus:bg-emerald-950/30"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    {isDa ? 'Gendan abonnementsadgang' : 'Restore subscription access'}
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem
+                                    onClick={() => handleSubscriptionAction(tenant, 'revoke')}
+                                    disabled={subscriptionLoading === tenant.id}
+                                    className="gap-2 text-sm text-orange-600 dark:text-orange-400 focus:text-orange-600 dark:focus:text-orange-400 focus:bg-orange-50 dark:focus:bg-orange-950/30"
+                                  >
+                                    <Ban className="h-3.5 w-3.5" />
+                                    {isDa ? 'Fjern abonnementsadgang' : 'Revoke subscription access'}
+                                  </DropdownMenuItem>
                                 )}
                               </>
                             )}
