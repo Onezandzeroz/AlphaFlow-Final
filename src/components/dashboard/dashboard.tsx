@@ -660,59 +660,74 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   // project content instead.
   const isEmptyState = !isLoading && !hasDoubleEntryData && !onboardingDismissed && !user.isProjectMode;
 
-  const onboardingSteps = useMemo(() => [
-    {
-      step: 1,
-      key: 'company',
-      title: language === 'da' ? 'Virksomhedsoplysninger' : 'Company Info',
-      description: language === 'da' ? 'Tilf\u00f8j virksomhedsnavn, adresse, CVR og bankoplysninger' : 'Add business name, address, CVR and bank details',
-      detail: language === 'da'
-        ? 'Virksomhedsoplysningerne bruges som udgangspunkt n\u00e5r du opretter fakturaer, forbinder til din bank, foretager bankafstemning og udf\u00e6rdiger rapporter. Indtast dem pr\u00e6cist som de fremg\u00e5r p\u00e5 dine officielle dokumenter.'
-        : 'Company details serve as the foundation when creating invoices, connecting to your bank, performing bank reconciliation, and generating reports. Enter them exactly as they appear on your official documents.',
-      bgImage: '/VidClips/Onboarding/CompInfo02.png',
-      icon: Building2,
-      done: hasCompanyInfo,
-      action: () => onNavigate?.('settings-company'),
-      gradient: 'from-[#14b8a6] to-[#99f6e4]',
-      iconBg: 'bg-[#f0fdf9] dark:bg-[#1a2e2b]',
-      iconColor: 'text-[#14b8a6] dark:text-[#99f6e4]',
-      completeGradient: 'from-[#22c55e] to-[#4ade80]',
-    },
-    {
-      step: 2,
-      key: 'accounts',
-      title: language === 'da' ? 'Opret kontoplan' : 'Chart of Accounts',
-      description: language === 'da' ? 'Opret standard danske konti' : 'Create standard Danish accounts',
-      detail: language === 'da'
-        ? 'Kontoplanen er hjertet i dit regnskab. Den definerer de kategorier, som alle posteringer f\u00f8res p\u00e5 \u2014 fra oms\u00e6tning og omkostninger til moms og bank. Uden en kontoplan kan du ikke bogf\u00f8re.'
-        : 'The chart of accounts is the backbone of your accounting. It defines the categories all transactions are posted to \u2014 from revenue and expenses to VAT and bank. Without it, you cannot record entries.',
-      bgImage: '/VidClips/Onboarding/Kontoplan01.png',
-      icon: ListChecks,
-      done: hasAccounts,
-      action: () => onNavigate?.('accounts'),
-      gradient: 'from-[#10b981] to-[#34d399]',
-      iconBg: 'bg-[#edf5ef] dark:bg-[#242e26]',
-      iconColor: 'text-[#10b981] dark:text-[#34d399]',
-      completeGradient: 'from-[#22c55e] to-[#4ade80]',
-    },
-    {
-      step: 3,
-      key: 'edelivery',
-      title: language === 'da' ? 'eLevering / eFaktura' : 'eDelivery / e-Invoice',
-      description: language === 'da' ? 'Aktiver e-faktura og registrer i NemHandel' : 'Enable e-invoicing and register with NemHandel',
-      detail: language === 'da'
-        ? 'NemHandel eDelivery g\u00f8r det muligt at sende og modtage e-fakturaer direkte fra AlphaFlow \u2014 uden manuel upload. Registrer din virksomhed i NemHandelsregisteret og forbind en Access Point udbyder (f.eks. Storecove) for automatisk levering via Peppol-netv\u00e6rket.'
-        : 'NemHandel eDelivery enables sending and receiving e-invoices directly from AlphaFlow \u2014 no manual upload needed. Register your company in NemHandelsregisteret and connect an Access Point provider (e.g. Storecove) for automatic delivery via the Peppol network.',
-      bgImage: undefined,
-      icon: Zap,
-      done: hasEInvoiceSetup,
-      action: () => onNavigate?.('settings-edelivery'),
-      gradient: 'from-[#8b5cf6] to-[#a78bfa]',
-      iconBg: 'bg-[#f5f3ff] dark:bg-[#2e1065]',
-      iconColor: 'text-[#8b5cf6] dark:text-[#a78bfa]',
-      completeGradient: 'from-[#22c55e] to-[#4ade80]',
-    },
-  ], [hasCompanyInfo, hasAccounts, hasEInvoiceSetup, onNavigate, language]);
+  // Check if the tenant has the auto e-invoice feature (Business+).
+  // Månedlig and Pro only have manual OIOUBL/Peppol download — they
+  // don't need the eDelivery onboarding step (step 3).
+  const hasAutoEinvoice = user.availableFeatures?.includes('AUTO_EINVOICE') ?? false;
+
+  const onboardingSteps = useMemo(() => {
+    const steps = [
+      {
+        step: 1,
+        key: 'company',
+        title: language === 'da' ? 'Virksomhedsoplysninger' : 'Company Info',
+        description: language === 'da' ? 'Tilf\u00f8j virksomhedsnavn, adresse, CVR og bankoplysninger' : 'Add business name, address, CVR and bank details',
+        detail: language === 'da'
+          ? 'Virksomhedsoplysningerne bruges som udgangspunkt n\u00e5r du opretter fakturaer, forbinder til din bank, foretager bankafstemning og udf\u00e6rdiger rapporter. Indtast dem pr\u00e6cist som de fremg\u00e5r p\u00e5 dine officielle dokumenter.'
+          : 'Company details serve as the foundation when creating invoices, connecting to your bank, performing bank reconciliation, and generating reports. Enter them exactly as they appear on your official documents.',
+        bgImage: '/VidClips/Onboarding/CompInfo02.png',
+        icon: Building2,
+        done: hasCompanyInfo,
+        action: () => onNavigate?.('settings-company'),
+        gradient: 'from-[#14b8a6] to-[#99f6e4]',
+        iconBg: 'bg-[#f0fdf9] dark:bg-[#1a2e2b]',
+        iconColor: 'text-[#14b8a6] dark:text-[#99f6e4]',
+        completeGradient: 'from-[#22c55e] to-[#4ade80]',
+      },
+      {
+        step: 2,
+        key: 'accounts',
+        title: language === 'da' ? 'Opret kontoplan' : 'Chart of Accounts',
+        description: language === 'da' ? 'Opret standard danske konti' : 'Create standard Danish accounts',
+        detail: language === 'da'
+          ? 'Kontoplanen er hjertet i dit regnskab. Den definerer de kategorier, som alle posteringer f\u00f8res p\u00e5 \u2014 fra oms\u00e6tning og omkostninger til moms og bank. Uden en kontoplan kan du ikke bogf\u00f8re.'
+          : 'The chart of accounts is the backbone of your accounting. It defines the categories all transactions are posted to \u2014 from revenue and expenses to VAT and bank. Without it, you cannot record entries.',
+        bgImage: '/VidClips/Onboarding/Kontoplan01.png',
+        icon: ListChecks,
+        done: hasAccounts,
+        action: () => onNavigate?.('accounts'),
+        gradient: 'from-[#10b981] to-[#34d399]',
+        iconBg: 'bg-[#edf5ef] dark:bg-[#242e26]',
+        iconColor: 'text-[#10b981] dark:text-[#34d399]',
+        completeGradient: 'from-[#22c55e] to-[#4ade80]',
+      },
+    ];
+
+    // Step 3 (eDelivery / auto e-invoice) is only for Business+ tiers
+    // that have the AUTO_EINVOICE feature. Månedlig and Pro only have
+    // manual OIOUBL/Peppol download, so they don't need this step.
+    if (hasAutoEinvoice) {
+      steps.push({
+        step: 3,
+        key: 'edelivery',
+        title: language === 'da' ? 'eLevering / eFaktura' : 'eDelivery / e-Invoice',
+        description: language === 'da' ? 'Aktiver e-faktura og registrer i NemHandel' : 'Enable e-invoicing and register with NemHandel',
+        detail: language === 'da'
+          ? 'NemHandel eDelivery g\u00f8r det muligt at sende og modtage e-fakturaer direkte fra AlphaFlow \u2014 uden manuel upload. Registrer din virksomhed i NemHandelsregisteret og forbind en Access Point udbyder (f.eks. Storecove) for automatisk levering via Peppol-netv\u00e6rket.'
+          : 'NemHandel eDelivery enables sending and receiving e-invoices directly from AlphaFlow \u2014 no manual upload needed. Register your company in NemHandelsregisteret and connect an Access Point provider (e.g. Storecove) for automatic delivery via the Peppol network.',
+        bgImage: '',
+        icon: Zap,
+        done: hasEInvoiceSetup,
+        action: () => onNavigate?.('settings-edelivery'),
+        gradient: 'from-[#8b5cf6] to-[#a78bfa]',
+        iconBg: 'bg-[#f5f3ff] dark:bg-[#2e1065]',
+        iconColor: 'text-[#8b5cf6] dark:text-[#a78bfa]',
+        completeGradient: 'from-[#22c55e] to-[#4ade80]',
+      });
+    }
+
+    return steps;
+  }, [hasCompanyInfo, hasAccounts, hasEInvoiceSetup, onNavigate, language, hasAutoEinvoice]);
 
   const completedSteps = onboardingSteps.filter(s => s.done).length;
 
