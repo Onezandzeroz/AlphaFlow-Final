@@ -467,6 +467,21 @@ export const routeConfig: RouteConfigMap = {
     GET: { auth: true, requireSuperDev: true },
   },
 
+  // ── Subscription payment flow (FASE 5 — Flatpay) ──
+  '/api/subscription/create-payment': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true },
+  },
+  // payment-callback is a GET redirect from Flatpay (no auth — it's a
+  // redirect target). The payment_id is verified against the DB.
+  '/api/subscription/payment-callback': {
+    GET: { auth: false },
+  },
+  // payment-webhook is a server-to-server POST from Flatpay (no auth —
+  // verified via the FLATPAY_WEBHOOK_SECRET signature).
+  '/api/subscription/payment-webhook': {
+    POST: { auth: false },
+  },
+
   '/api/hermes/config': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.COMPANY_VIEW_SETTINGS] },
   },

@@ -791,42 +791,53 @@ export function SubscriptionPlansPrompt() {
 
   const handleSelectPlan = useCallback(
     (plan: Plan) => {
-      // All plans (free + paid) call /api/trial/start with the planId.
-      // The backend records the user's choice (trialClaimedAt) and for
-      // free plans activates the tier immediately. For paid plans it
-      // records the intent — the App Owner activates paid tiers via
-      // oversight. After the response, navigate to the access settings
-      // so the user can upload a .tbkey proof or see their plan status.
+      if (plan.isFree) {
+        // ── Free plan: activate immediately via /api/trial/start ──
+        setStartingTrial(true);
+        fetch('/api/trial/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId: plan.id }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              dismiss();
+              window.dispatchEvent(new CustomEvent('access:refresh'));
+            } else if (data.alreadyClaimed) {
+              dismiss();
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            setStartingTrial(false);
+          });
+        return;
+      }
+
+      // ── Paid plan: create a Flatpay payment session and redirect ──
+      // The plan is activated ONLY after a confirmed payment (via the
+      // Flatpay callback redirect or the webhook).
       setStartingTrial(true);
-      fetch('/api/trial/start', {
+      fetch('/api/subscription/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId: plan.id }),
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data.success) {
+          if (data.checkoutUrl) {
+            // Redirect the user to Flatpay's hosted checkout page.
+            // After payment, Flatpay redirects back to our callback URL
+            // which activates the plan and sends the user back here.
             dismiss();
-            window.dispatchEvent(new CustomEvent('access:refresh'));
-
-            // For paid plans, navigate to the access settings tab so the
-            // user can see their plan status + upload a .tbkey proof.
-            // For free plans, stay on the current page (access is now active).
-            if (data.paidPlan) {
-              const targetSearch = '?tab=access';
-              window.history.pushState({ view: 'settings' }, '', `/settings${targetSearch}`);
-              window.dispatchEvent(
-                new CustomEvent('app:navigate', {
-                  detail: { view: 'settings', search: targetSearch },
-                }),
-              );
-            }
-          } else if (data.alreadyClaimed) {
-            dismiss();
+            window.location.href = data.checkoutUrl;
+          } else {
+            // Error creating the payment session — show a message
+            setStartingTrial(false);
           }
         })
-        .catch(() => {})
-        .finally(() => {
+        .catch(() => {
           setStartingTrial(false);
         });
     },

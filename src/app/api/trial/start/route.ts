@@ -6,25 +6,18 @@ import { auditLog, requestMetadata } from '@/lib/audit';
 import { frontendPlanIdToTier, PlanTier } from '@/lib/plan-features';
 
 // ─── POST /api/trial/start ─────────────────────────────────────────
-// Confirm the user's plan choice on first login.
+// Activate the FREE plan on first login.
 //
-// Called when the user actively clicks ANY plan on the subscription plans
-// prompt. The request body includes `{ planId }` so we know which plan
-// the user chose.
+// Called ONLY when the user clicks the Free (Gratis) plan on the
+// subscription plans prompt. For paid plans (Månedlig / Pro / Business /
+// Business Extended), the frontend calls /api/subscription/create-payment
+// instead — the plan is activated only after a confirmed Flatpay payment.
 //
-// For the Free plan:
+// For Free:
 //   - Set User.trialClaimedAt (the "has chosen a plan" gate)
 //   - Set Company.planTier = 'free' + planPurchasedAt = now
 //   - The revenue-gate (lib/revenue-check.ts) grants read_write access
 //     for tenants whose revenue ≤ 50.000 kr.
-//
-// For paid plans (monthly / annual / 2year / 3year):
-//   - Set User.trialClaimedAt (so the user doesn't see the prompt again)
-//   - Record the user's INTENT in Company.planNotes ("requested: <planId>")
-//   - The actual plan tier is NOT activated here — paid plans require
-//     App Owner activation via /api/oversight/subscription. The frontend
-//     navigates the user to the access settings to upload a .tbkey proof
-//     or wait for App Owner activation.
 //
 // Rules:
 //   - Each user can only self-claim ONCE (tracked by trialClaimedAt).
@@ -32,6 +25,7 @@ import { frontendPlanIdToTier, PlanTier } from '@/lib/plan-features';
 
 export const POST = withGuard({
   auth: true,
+  requireCompany: true,
   blockOversight: true,
   blockDemo: true,
 }, async (request: NextRequest, ctx) => {
@@ -48,6 +42,19 @@ export const POST = withGuard({
     const body = await request.json().catch(() => ({}));
     const planId: string = body.planId || 'free';
     const planTier = frontendPlanIdToTier(planId);
+
+    // This route ONLY handles the Free plan. Paid plans must go through
+    // /api/subscription/create-payment → Flatpay → webhook activation.
+    if (planTier !== PlanTier.Free) {
+      return NextResponse.json(
+        {
+          error: 'Paid plans require payment. Use /api/subscription/create-payment.',
+          code: 'PAID_PLAN_REQUIRES_PAYMENT',
+          paymentEndpoint: '/api/subscription/create-payment',
+        },
+        { status: 400 },
+      );
+    }
 
     // Check if user has already claimed their one-time plan choice
     const user = await db.user.findUnique({
@@ -76,31 +83,17 @@ export const POST = withGuard({
       data: { trialClaimedAt: new Date() },
     });
 
-    // Set the Company plan tier. For Free, activate immediately. For paid
-    // plans, record the user's intent in planNotes but keep the tier as
-    // 'free' until the App Owner activates the paid plan via oversight.
-    if (ctx.activeCompanyId) {
-      const now = new Date();
-      if (planTier === PlanTier.Free) {
-        await db.company.update({
-          where: { id: ctx.activeCompanyId },
-          data: {
-            planTier: PlanTier.Free,
-            planPurchasedAt: now,
-            planExpiresAt: null,
-          },
-        });
-      } else {
-        // Paid plan selected — record intent, keep tier as-is (likely 'free').
-        // The App Owner activates the paid tier via /api/oversight/subscription.
-        await db.company.update({
-          where: { id: ctx.activeCompanyId },
-          data: {
-            planNotes: `Bruger anmodede om: ${planId} (${planTier}) — afventer App-ejer aktivering`,
-          },
-        });
-      }
-    }
+    // Activate the Free plan on the company immediately.
+    const now = new Date();
+    await db.company.update({
+      where: { id: ctx.activeCompanyId! },
+      data: {
+        planTier: PlanTier.Free,
+        planPurchasedAt: now,
+        planExpiresAt: null,
+        planActivatedBy: ctx.id,
+      },
+    });
 
     // Audit log
     await auditLog({
@@ -110,24 +103,22 @@ export const POST = withGuard({
       userId: ctx.id,
       companyId: ctx.activeCompanyId,
       changes: {
-        planChosen: { old: null, new: planTier },
+        planChosen: { old: null, new: PlanTier.Free },
         planId: { old: null, new: planId },
       },
       metadata: requestMetadata(request),
     });
 
     logger.info(
-      `[TRIAL] User ${user.email} chose plan ${planId} (tier: ${planTier}). trialClaimedAt set.`,
+      `[TRIAL] User ${user.email} chose the Free plan. trialClaimedAt set. Revenue gate now active.`,
     );
 
     return NextResponse.json({
       success: true,
       planId,
-      planTier,
-      paidPlan: planTier !== PlanTier.Free,
-      message: planTier === PlanTier.Free
-        ? 'Du har nu fuld adgang — gratis så længe din omsætning er under 50.000 kr.'
-        : 'Din plan-anmodning er registreret. App-ejeren aktiverer den betalte plan.',
+      planTier: PlanTier.Free,
+      paidPlan: false,
+      message: 'Du har nu fuld adgang — gratis så længe din omsætning er under 50.000 kr.',
     });
   } catch (error) {
     logger.error('[TRIAL START] Error:', error);

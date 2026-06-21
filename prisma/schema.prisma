@@ -314,6 +314,7 @@ model Company {
   eInvoiceSendings      EInvoiceSending[]
   vatSubmissions         VATSubmission[]
   projects               Project[]
+  payments               Payment[]
 
   @@unique([name])
   @@index([isActive])
@@ -422,6 +423,7 @@ model User {
   notificationReads NotificationRead[]
   vatSubmissions    VATSubmission[]
   projects          Project[]
+  payments          Payment[]
 }
 
 // ─── SESSION (with activeCompanyId) ───────────────────────────────
@@ -1309,4 +1311,51 @@ model ProjectBudgetEntry {
   @@index([projectId])
   @@index([companyId])
   @@index([accountId])
+}
+
+// ─── SUBSCRIPTION PAYMENTS (FASE 5 — Flatpay integration) ──────────
+// Tracks payment sessions created with Flatpay for paid subscription
+// plans. A Payment row is created when the user selects a paid plan and
+// is redirected to Flatpay's hosted checkout. The status is updated
+// when Flatpay redirects back (callback) or sends a webhook.
+
+enum PaymentStatus {
+  pending     // Created, waiting for the user to complete payment
+  succeeded   // Payment confirmed by Flatpay — plan activated
+  failed      // Payment failed or was declined
+  cancelled   // User cancelled / abandoned the payment
+  refunded    // Payment was refunded
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  // The AlphaFlow user + company that initiated the payment
+  userId            String
+  companyId         String
+  // The plan tier the user is paying for
+  planTier          PlanTier
+  // The amount + currency charged (in minor units? No — DKK øre as integer)
+  amount            Int           // Amount in øre (1 DKK = 100 øre)
+  currency          String        @default("DKK")
+  // Binding period in months (12 / 24 / 36) — stored for the activation step
+  bindingMonths     Int           @default(0)
+  // Flatpay's payment/session identifier (returned when the session is created)
+  flatpayPaymentId  String?       // Flatpay's payment ID
+  flatpaySessionUrl String?       // Hosted checkout URL the user is redirected to
+  // Status tracking
+  status            PaymentStatus @default(pending)
+  // Metadata from Flatpay (raw webhook payload, error messages, etc.)
+  metadata          Json?
+  // Timestamps
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  completedAt       DateTime?     // When the payment was confirmed/failed
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company           Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([status])
+  @@index([flatpayPaymentId])
 }
