@@ -479,11 +479,11 @@ export function AppLayout({
         <div className="flex items-center px-4 pt-6 pb-4 border-b border-[#e2e8e6] dark:border-[#2a3330]">
           <div className={cn('flex-1 flex items-center justify-center overflow-hidden', sidebarCollapsed && 'px-1')}>
             <Image
-              src="/logo-notext.png"
+              src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
               alt="AlphaFlow"
               width={sidebarCollapsed ? 36 : 140}
               height={sidebarCollapsed ? 36 : 94}
-              className={cn('object-contain dark:invert transition-all duration-300', sidebarCollapsed && 'rounded-lg')}
+              className={cn('object-contain transition-all duration-300', sidebarCollapsed && 'rounded-lg')}
               priority
             />
           </div>
@@ -565,11 +565,11 @@ export function AppLayout({
           {/* Center: Logo */}
           <div className="flex-1 flex justify-center">
             <Image
-              src="/logo-notext.png"
+              src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
               alt="AlphaFlow"
               width={90}
               height={60}
-              className="object-contain dark:invert"
+              className="object-contain"
             />
           </div>
 
@@ -586,11 +586,11 @@ export function AppLayout({
               {/* Mobile Logo */}
               <div className="flex h-16 items-center justify-center px-6 border-b border-[#e2e8e6] dark:border-[#2a3330] shrink-0">
                 <Image
-                  src="/logo-notext.png"
+                  src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
                   alt="AlphaFlow"
                   width={120}
                   height={81}
-                  className="object-contain dark:invert"
+                  className="object-contain"
                   priority
                 />
               </div>
