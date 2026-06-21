@@ -5,9 +5,18 @@ import { routeConfig } from '@/lib/route-config';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { notifyDataChange } from '@/lib/notify-data-change';
+import { hasFeature, Feature } from '@/lib/plan-features';
 
 /**
  * POST /api/hermes/toggle
+ *
+ * Enable or disable Hermes AI for a company.
+ *
+ * Access rules:
+ *   - SuperDev (App Owner): can toggle Hermes for ANY company (override)
+ *   - Owner/Admin: can toggle Hermes for their OWN company IF their plan
+ *     tier includes the Hermes feature (Pro, Business, Business Extended)
+ *   - Lower tiers (Free, Månedlig): 403 — Hermes is not in their plan
  */
 export const POST = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (request, ctx) => {
   try {
@@ -27,6 +36,30 @@ export const POST = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (re
         { error: 'Missing or invalid enabled flag' },
         { status: 400 }
       );
+    }
+
+    // SuperDev can toggle Hermes for any company. Non-SuperDev can only
+    // toggle for their own active company AND only if their plan includes
+    // the Hermes feature.
+    if (!ctx.isSuperDev) {
+      if (companyId !== ctx.activeCompanyId) {
+        return NextResponse.json(
+          { error: 'You can only toggle Hermes for your own company.' },
+          { status: 403 }
+        );
+      }
+
+      // Check that the tenant's plan includes Hermes
+      if (!hasFeature(ctx, Feature.Hermes)) {
+        return NextResponse.json(
+          {
+            error: 'Hermes AI requires a Pro plan or higher. Upgrade to enable Hermes.',
+            code: 'PLAN_FEATURE_REQUIRED',
+            feature: 'HERMES',
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Verify the company exists

@@ -492,7 +492,7 @@ export const routeConfig: RouteConfigMap = {
     GET: { auth: true, requireSuperDev: true },
   },
   '/api/hermes/toggle': {
-    POST: { auth: true, requireSuperDev: true, blockOversight: true },
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, permissions: [Permission.COMPANY_EDIT_SETTINGS] },
   },
 
   // ═══════════════════════════════════════════════════════════

@@ -42,6 +42,12 @@ export function HermesSettings({ user }: HermesSettingsProps) {
 
   const canToggle = user.activeCompanyRole === 'OWNER' || user.activeCompanyRole === 'ADMIN';
   const isSuperDev = user.isSuperDev === true;
+  // Pro+ tenants have HERMES in their availableFeatures. They can enable/
+  // disable Hermes themselves without contacting the App Owner.
+  const hasHermesFeature = user.availableFeatures?.includes('HERMES') ?? false;
+  // Can the user toggle Hermes? SuperDev (any company) OR owner/admin with
+  // Hermes in their plan.
+  const canToggleHermes = isSuperDev || (canToggle && hasHermesFeature);
 
   // ── Fetch Hermes config ──
   const fetchConfig = useCallback(async () => {
@@ -99,9 +105,10 @@ export function HermesSettings({ user }: HermesSettingsProps) {
     }
   }, [canToggle]);
 
-  // ── Toggle Hermes enable/disable (SuperDev only) ──
+  // ── Toggle Hermes enable/disable ──
+  // Available to SuperDev (any company) and Owner/Admin of Pro+ tenants.
   const handleHermesToggle = useCallback(async (enabled: boolean) => {
-    if (!isSuperDev || !user.activeCompanyId) return;
+    if (!canToggleHermes || !user.activeCompanyId) return;
     setIsToggling(true);
     try {
       const response = await fetch('/api/hermes/toggle', {
@@ -122,7 +129,7 @@ export function HermesSettings({ user }: HermesSettingsProps) {
     } finally {
       setIsToggling(false);
     }
-  }, [isSuperDev, user.activeCompanyId]);
+  }, [canToggleHermes, user.activeCompanyId]);
 
   // ── Loading skeleton ──
   if (isLoading) {
@@ -140,8 +147,8 @@ export function HermesSettings({ user }: HermesSettingsProps) {
 
   // ── Hermes not enabled ──
   if (!config?.enabled) {
-    // SuperDev gets a toggle to enable it
-    if (isSuperDev) {
+    // SuperDev OR Pro+ tenant owner/admin gets a toggle to enable it
+    if (canToggleHermes) {
       return (
         <div className="space-y-4 lg:space-y-6">
           <div className="flex items-center gap-3">
@@ -153,7 +160,9 @@ export function HermesSettings({ user }: HermesSettingsProps) {
                 Hermes AI Consultant
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                AI-powered Danish accounting assistant — Platform Administration
+                {isSuperDev
+                  ? 'AI-powered Danish accounting assistant — Platform Administration'
+                  : 'AI-powered Danish accounting assistant — included in your plan'}
               </p>
             </div>
           </div>
@@ -196,11 +205,11 @@ export function HermesSettings({ user }: HermesSettingsProps) {
       );
     }
 
-    // Regular user sees the contact admin message
+    // User's plan does NOT include Hermes — show upgrade prompt
     return (
       <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
         <CardContent className="py-8 flex flex-col items-center justify-center text-center gap-4">
-          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
+          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center shadow-lg">
             <Bot className="h-8 w-8 text-white" />
           </div>
           <div className="space-y-2 max-w-md">
@@ -208,12 +217,12 @@ export function HermesSettings({ user }: HermesSettingsProps) {
               Hermes AI Consultant
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Hermes AI is not enabled for your company. Contact the platform administrator to enable it.
+              Hermes AI er inkluderet i Pro, Business og Business Extended abonnementer. Opgrader din plan for at få adgang til AI-drevet bogføringsrådgivning.
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-full bg-amber-100 dark:bg-amber-900/30 px-4 py-2 text-amber-700 dark:text-amber-400">
             <Info className="h-4 w-4" />
-            <span className="text-xs font-medium">Not activated</span>
+            <span className="text-xs font-medium">Kræver Pro eller højere</span>
           </div>
         </CardContent>
       </Card>
@@ -271,8 +280,8 @@ export function HermesSettings({ user }: HermesSettingsProps) {
             </p>
           </div>
         </div>
-        {/* SuperDev can disable Hermes from here too */}
-        {isSuperDev && (
+        {/* SuperDev OR Pro+ owner/admin can disable Hermes from here too */}
+        {canToggleHermes && (
           <div className="flex items-center gap-3 shrink-0">
             <Label htmlFor="hermes-disable" className="text-xs font-medium text-gray-500 dark:text-gray-400">
               Enabled

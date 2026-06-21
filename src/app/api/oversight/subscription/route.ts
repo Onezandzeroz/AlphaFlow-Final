@@ -5,6 +5,7 @@ import { routeConfig } from '@/lib/route-config';
 import { logger } from '@/lib/logger';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { PlanTier, getBindingMonths, frontendPlanIdToTier, ALL_PLAN_TIERS } from '@/lib/plan-features';
+import { ensureHermesForTier } from '@/lib/plan-activation';
 
 /**
  * POST /api/oversight/subscription — Manage a tenant's subscription plan.
@@ -79,6 +80,9 @@ export const POST = withGuard(routeConfig['/api/oversight/subscription'].POST!, 
         },
         data: { subscriptionRevokedAt: null },
       });
+
+      // Auto-create HermesAgent (enabled=true) for Pro+ tiers
+      await ensureHermesForTier(companyId, newTier);
 
       await auditLog({
         action: 'UPDATE',
