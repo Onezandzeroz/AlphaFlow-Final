@@ -719,9 +719,9 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
         icon: Zap,
         done: hasEInvoiceSetup,
         action: () => onNavigate?.('settings-edelivery'),
-        gradient: 'from-[#8b5cf6] to-[#a78bfa]',
-        iconBg: 'bg-[#f5f3ff] dark:bg-[#2e1065]',
-        iconColor: 'text-[#8b5cf6] dark:text-[#a78bfa]',
+        gradient: 'from-[#0d9488] to-[#2dd4bf]',
+        iconBg: 'bg-[#f0fdfa] dark:bg-[#042f2e]',
+        iconColor: 'text-[#0d9488] dark:text-[#2dd4bf]',
         completeGradient: 'from-[#22c55e] to-[#4ade80]',
       });
     }
