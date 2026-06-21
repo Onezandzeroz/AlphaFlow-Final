@@ -426,12 +426,14 @@ function MobileCarousel({
   isDa,
   onSelect,
   startingTrial,
+  currentPlanId,
   t,
 }: {
   plans: Plan[];
   isDa: boolean;
   onSelect: (plan: Plan) => void;
   startingTrial: boolean;
+  currentPlanId: string | null;
   t: (da: string, en: string) => string;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -933,6 +935,7 @@ export function SubscriptionPlansPrompt() {
                 isDa={isDa}
                 onSelect={handleSelectPlan}
                 startingTrial={startingTrial}
+                currentPlanId={currentPlanId}
                 t={t}
               />
             </div>

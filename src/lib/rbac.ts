@@ -12,7 +12,7 @@ import { NextResponse } from 'next/server';
 // plan-features.ts imports only the AuthContext TYPE from this module
 // (type-only, erased at compile time), so there is no runtime circular
 // dependency. Safe to import at the top level.
-import { hasFeature as planHasFeature, Feature as PlanFeature } from '@/lib/plan-features';
+import { hasFeature as planHasFeature, Feature as PlanFeature, PlanTier } from '@/lib/plan-features';
 
 // ─── AUTH CONTEXT ────────────────────────────────────────────────────
 // Defined inline here; consolidated export from session.ts
@@ -48,13 +48,13 @@ export interface AuthContext {
   isProjectMode: boolean;
   // ── Subscription plan (FASE 5 — feature gating) ──
   /** Active company's plan tier (null when no active company or SuperDev without company) */
-  planTier: import('@/lib/plan-features').PlanTier | null;
+  planTier: PlanTier | null;
   /** When the current plan was activated (ISO string or null) */
   planPurchasedAt: string | null;
   /** End of binding period (ISO string or null for free + monthly) */
   planExpiresAt: string | null;
   /** Pre-computed list of features available to this user+company (includes SuperDev overrides) */
-  availableFeatures: import('@/lib/plan-features').Feature[];
+  availableFeatures: PlanFeature[];
 }
 
 // ─── ROLE HIERARCHY ──────────────────────────────────────────────────

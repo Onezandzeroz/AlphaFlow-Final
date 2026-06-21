@@ -50,6 +50,15 @@ export interface AuthContext {
   activeProjectEndDate: string | null;
   /** True when activeProjectId is set */
   isProjectMode: boolean;
+  // ── Subscription plan (FASE 5 — feature gating) ──
+  /** Active company's plan tier (null when no active company) */
+  planTier: PlanTier | null;
+  /** When the current plan was activated (ISO string or null) */
+  planPurchasedAt: string | null;
+  /** End of binding period (ISO string or null for free + monthly) */
+  planExpiresAt: string | null;
+  /** Pre-computed list of features available to this user+company (includes SuperDev + .tbkey overrides) */
+  availableFeatures: Feature[];
 }
 
 // ─── TOKEN GENERATION ────────────────────────────────────────────────
