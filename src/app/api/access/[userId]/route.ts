@@ -4,6 +4,7 @@ import { checkOwnerAccess } from '@/lib/access-guard';
 import { checkRevenueAccess, FREE_REVENUE_THRESHOLD } from '@/lib/revenue-check';
 import { db } from '@/lib/db';
 import { withGuard } from '@/lib/route-guard';
+import { PlanTier, getPlanFeatures, tierToFrontendPlanId } from '@/lib/plan-features';
 
 // GET /api/access/[userId]
 //
@@ -26,6 +27,34 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
       return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
     }
 
+    // ─── Fetch the user's active company + plan tier ──────────
+    // We need the actual Company.planTier to show the correct tier in the
+    // settings UI (e.g. "Pro" instead of always "free tier").
+    const userRow = await db.user.findUnique({
+      where: { id: userId },
+      select: {
+        trialClaimedAt: true,
+        subscriptionRevokedAt: true,
+        companies: {
+          take: 1,
+          select: {
+            company: {
+              select: {
+                id: true,
+                planTier: true,
+                planPurchasedAt: true,
+                planExpiresAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const companyPlanTier = (userRow?.companies?.[0]?.company?.planTier ?? PlanTier.Free) as PlanTier;
+    const planPurchasedAt = userRow?.companies?.[0]?.company?.planPurchasedAt?.toISOString() ?? null;
+    const planExpiresAt = userRow?.companies?.[0]?.company?.planExpiresAt?.toISOString() ?? null;
+
     // ─── 1. Owner bypass: AlphaAi owner always has read_write ───
     const ownerAccess = await checkOwnerAccess(userId);
     if (ownerAccess) {
@@ -34,6 +63,10 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
         source: 'owner',
         sourceLabelDa: 'App-ejer (permanent)',
         sourceLabelEn: 'App Owner (permanent)',
+        planTier: companyPlanTier,
+        planId: tierToFrontendPlanId(companyPlanTier),
+        planPurchasedAt,
+        planExpiresAt,
         revenue: null,
         withinFreeTier: null,
         subscriptionRevoked: false,
@@ -55,6 +88,10 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
         source: 'no_plan',
         sourceLabelDa: 'Ingen plan valgt',
         sourceLabelEn: 'No plan chosen',
+        planTier: companyPlanTier,
+        planId: tierToFrontendPlanId(companyPlanTier),
+        planPurchasedAt,
+        planExpiresAt,
         revenue: revenueResult.totalRevenue,
         withinFreeTier: revenueResult.withinFreeTier,
         subscriptionRevoked: revenueResult.revoked,
@@ -63,7 +100,45 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
       });
     }
 
-    // ─── 3. Revenue-based free tier ────────────────────────────
+    // ─── 3. Paid plan (non-free tier) — access granted by plan ──
+    //    If the company has a paid plan tier (monthly/annual/twoyear/threeyear),
+    //    access is granted by the plan itself — not the revenue gate.
+    if (companyPlanTier !== PlanTier.Free) {
+      // Plan tier labels for the source field
+      const tierLabels: Record<PlanTier, { da: string; en: string }> = {
+        [PlanTier.Free]: { da: 'Gratis', en: 'Free' },
+        [PlanTier.Monthly]: { da: 'Månedlig', en: 'Monthly' },
+        [PlanTier.Annual]: { da: 'Pro', en: 'Pro' },
+        [PlanTier.TwoYear]: { da: 'Business', en: 'Business' },
+        [PlanTier.ThreeYear]: { da: 'Business Extended', en: 'Business Extended' },
+      };
+
+      return NextResponse.json({
+        userId,
+        accessLevel: 'read_write',
+        accessExpiry: planExpiresAt,
+        daysRemaining: planExpiresAt
+          ? Math.max(0, Math.ceil((new Date(planExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+          : null,
+        isExpired: false,
+        cached: false,
+        source: 'subscription_plan',
+        sourceLabelDa: tierLabels[companyPlanTier].da,
+        sourceLabelEn: tierLabels[companyPlanTier].en,
+        planTier: companyPlanTier,
+        planId: tierToFrontendPlanId(companyPlanTier),
+        planPurchasedAt,
+        planExpiresAt,
+        revenue: revenueResult.totalRevenue,
+        withinFreeTier: revenueResult.withinFreeTier,
+        subscriptionRevoked: revenueResult.revoked,
+        hasChosenPlan: true,
+        freeRevenueThreshold: FREE_REVENUE_THRESHOLD,
+      });
+    }
+
+    // ─── 4. Revenue-based free tier ────────────────────────────
+    //    Company is on the Free plan. If revenue ≤ 50.000 kr. → granted.
     if (revenueResult.grantedByRevenue) {
       return NextResponse.json({
         userId,
@@ -73,8 +148,12 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
         isExpired: false,
         cached: false,
         source: 'subscription',
-        sourceLabelDa: 'Abonnement (gratis tier)',
-        sourceLabelEn: 'Subscription (free tier)',
+        sourceLabelDa: 'Gratis (omsætning < 50.000 kr.)',
+        sourceLabelEn: 'Free (revenue < 50,000 DKK)',
+        planTier: companyPlanTier,
+        planId: tierToFrontendPlanId(companyPlanTier),
+        planPurchasedAt,
+        planExpiresAt,
         revenue: revenueResult.totalRevenue,
         withinFreeTier: true,
         subscriptionRevoked: false,
@@ -83,15 +162,11 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
       });
     }
 
-    // ─── 4. TokenPay service (.tbkey proof / subscription) ─────
-    //    Reached when the user HAS chosen a plan but revenue exceeds
-    //    50.000 kr. (or access was revoked) — they need a purchased plan
-    //    or .tbkey proof.
+    // ─── 5. TokenPay service (.tbkey proof) ────────────────────
+    //    Reached when the company is on Free, revenue > 50.000 kr. (or
+    //    access was revoked) — they need a .tbkey proof.
     const access = await tokenpay.checkAccess(userId);
 
-    // Determine the source label for the TokenPay path. If the user has
-    // an active proof, it's .tbkey-based; otherwise it's a subscription
-    // plan period (or denied).
     let source: string;
     let sourceLabelDa: string;
     let sourceLabelEn: string;
@@ -101,8 +176,7 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
       sourceLabelDa = 'Udløbet';
       sourceLabelEn = 'Expired';
     } else if (access.accessLevel === 'read_write') {
-      // Distinguish .tbkey proof from a subscription plan by checking
-      // whether the user has an active proof on file.
+      // Check for active .tbkey proof
       try {
         const status = await tokenpay.getUserStatus(userId);
         if (status.activeProof) {
@@ -115,7 +189,6 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
           sourceLabelEn = 'Subscription plan';
         }
       } catch {
-        // Status check failed — fall back to a generic label.
         source = 'subscription_plan';
         sourceLabelDa = 'Abonnementsplan';
         sourceLabelEn = 'Subscription plan';
@@ -126,28 +199,20 @@ export const GET = withGuard({ auth: true }, async (request, ctx, context) => {
       sourceLabelEn = 'Access denied';
     }
 
-    // Fetch trialClaimedAt + subscriptionRevokedAt for the metadata block.
-    let trialClaimedAt: string | null = null;
-    try {
-      const userRow = await db.user.findUnique({
-        where: { id: userId },
-        select: { trialClaimedAt: true, subscriptionRevokedAt: true },
-      });
-      trialClaimedAt = userRow?.trialClaimedAt?.toISOString() ?? null;
-    } catch {
-      // Non-critical — leave null.
-    }
-
     return NextResponse.json({
       ...access,
       source,
       sourceLabelDa,
       sourceLabelEn,
+      planTier: companyPlanTier,
+      planId: tierToFrontendPlanId(companyPlanTier),
+      planPurchasedAt,
+      planExpiresAt,
       revenue: revenueResult.totalRevenue,
       withinFreeTier: revenueResult.withinFreeTier,
       subscriptionRevoked: revenueResult.revoked,
       hasChosenPlan: true,
-      trialClaimedAt,
+      trialClaimedAt: userRow?.trialClaimedAt?.toISOString() ?? null,
       freeRevenueThreshold: FREE_REVENUE_THRESHOLD,
     });
   } catch (error) {

@@ -65,8 +65,10 @@ export interface CreatePaymentSessionInput {
   currency: string;
   /** Human-readable description (e.g. "AlphaFlow Pro — 12 måneder") */
   description: string;
-  /** URL Flatpay redirects the user to after payment (success or cancel) */
+  /** FRONTEND URL Flatpay redirects the user to after payment (the app page) */
   returnUrl: string;
+  /** SERVER-side URL Flatpay calls to confirm the payment (our callback handler) */
+  callbackUrl: string;
   /** URL Flatpay sends the server-to-server webhook to */
   webhookUrl: string;
   /** Customer email (for receipt) */
@@ -96,12 +98,16 @@ export interface PaymentStatusResult {
 /**
  * In mock mode, we generate a fake checkout URL that points to our own
  * callback endpoint with a `mock=1` flag. The callback handler detects
- * this and auto-succeeds the payment (so the full flow can be tested
- * without a real Flatpay account).
+ * this, auto-succeeds the payment (activating the plan), and then
+ * redirects the user to the frontend returnUrl (the app page).
+ *
+ * This simulates the full Flatpay flow: user is "redirected to Flatpay"
+ * (actually to our callback), payment is "completed" (auto-succeeded),
+ * and the user is sent back to the app.
  */
-function mockCheckoutUrl(paymentId: string, returnUrl: string): string {
-  // Encode the real return URL so the callback can forward to it
-  const encodedReturn = encodeURIComponent(returnUrl);
+function mockCheckoutUrl(paymentId: string, frontendReturnUrl: string): string {
+  // Encode the frontend return URL so the callback can forward to it
+  const encodedReturn = encodeURIComponent(frontendReturnUrl);
   return `/api/subscription/payment-callback?payment_id=${paymentId}&mock=1&return_url=${encodedReturn}`;
 }
 
@@ -144,9 +150,12 @@ export async function createPaymentSession(
       amount: input.amount,
       currency: input.currency,
       description: input.description,
-      // URLs Flatpay uses to redirect the user + send the webhook
+      // redirect_url: the FRONTEND URL Flatpay sends the user to after payment
       redirect_url: input.returnUrl,
-      callback_url: input.webhookUrl,
+      // callback_url: the SERVER-side URL Flatpay calls to confirm (our callback handler)
+      callback_url: input.callbackUrl,
+      // notify_url: the server-to-server webhook URL
+      notify_url: input.webhookUrl,
       ...(input.customerEmail ? { customer_email: input.customerEmail } : {}),
     }),
   });

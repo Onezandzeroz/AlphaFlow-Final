@@ -68,9 +68,17 @@ export const POST = withGuard(
         },
       });
 
-      // Build the URLs Flatpay needs
+      // Build the URLs Flatpay needs.
+      // - returnUrl: the FRONTEND URL Flatpay redirects the user to after
+      //   payment. This is the app's root page with a payment status query
+      //   param so the app can show a success/pending message. The callback
+      //   handler (which activates the plan) is a SEPARATE URL that Flatpay
+      //   calls server-side (or that we handle internally in mock mode).
+      // - callbackUrl: the server-side URL Flatpay calls to confirm the
+      //   payment. In mock mode this is handled internally.
       const origin = request.nextUrl.origin;
-      const returnUrl = `${origin}/api/subscription/payment-callback?payment_id=${payment.id}`;
+      const frontendReturnUrl = `${origin}/?payment=processing`;
+      const callbackUrl = `${origin}/api/subscription/payment-callback?payment_id=${payment.id}`;
       const webhookUrl = `${origin}/api/subscription/payment-webhook`;
 
       // Create the payment session with Flatpay
@@ -79,7 +87,8 @@ export const POST = withGuard(
         amount: pricing.totalAmountOre,
         currency: 'DKK',
         description: pricing.descriptionDa,
-        returnUrl,
+        returnUrl: frontendReturnUrl,
+        callbackUrl,
         webhookUrl,
         customerEmail: ctx.email,
       });

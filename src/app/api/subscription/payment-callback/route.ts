@@ -34,6 +34,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const paymentId = searchParams.get('payment_id');
     const isMock = searchParams.get('mock') === '1';
+    // return_url is the FRONTEND URL to send the user to after processing.
+    // In mock mode this is passed as a query param. In real mode, Flatpay
+    // redirects directly to the returnUrl (the frontend page) and calls
+    // this callback server-side — so return_url won't be set.
     const returnUrl = searchParams.get('return_url') || '/';
 
     if (!paymentId) {
@@ -50,9 +54,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(new URL('/?payment=error', request.url));
     }
 
-    // If already processed (by the webhook), just redirect
+    // If already processed (by the webhook), just redirect to the app
     if (payment.status === 'succeeded') {
-      return NextResponse.redirect(new URL(`${returnUrl}?payment=success`, request.url));
+      const url = new URL(returnUrl, request.url);
+      url.searchParams.set('payment', 'success');
+      return NextResponse.redirect(url);
     }
 
     // Determine the payment status
@@ -73,7 +79,9 @@ export async function GET(request: NextRequest) {
     if (status === 'succeeded') {
       // Activate the plan
       await activatePlanAfterPayment(paymentId, payment.userId);
-      return NextResponse.redirect(new URL(`${returnUrl}?payment=success`, request.url));
+      const url = new URL(returnUrl, request.url);
+      url.searchParams.set('payment', 'success');
+      return NextResponse.redirect(url);
     }
 
     if (status === 'failed' || status === 'cancelled') {
@@ -82,11 +90,15 @@ export async function GET(request: NextRequest) {
         where: { id: paymentId },
         data: { status, completedAt: new Date() },
       });
-      return NextResponse.redirect(new URL(`${returnUrl}?payment=failed`, request.url));
+      const url = new URL(returnUrl, request.url);
+      url.searchParams.set('payment', 'failed');
+      return NextResponse.redirect(url);
     }
 
     // Still pending — redirect with a "processing" flag
-    return NextResponse.redirect(new URL(`${returnUrl}?payment=pending`, request.url));
+    const url = new URL(returnUrl, request.url);
+    url.searchParams.set('payment', 'pending');
+    return NextResponse.redirect(url);
   } catch (error) {
     logger.error('[PAYMENT CALLBACK] Error:', error);
     return NextResponse.redirect(new URL('/?payment=error', request.url));

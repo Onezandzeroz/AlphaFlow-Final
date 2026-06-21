@@ -36,6 +36,10 @@ interface DetailedAccessResult extends AccessCheckResult {
   source?: string;
   sourceLabelDa?: string;
   sourceLabelEn?: string;
+  planTier?: string;
+  planId?: string;
+  planPurchasedAt?: string | null;
+  planExpiresAt?: string | null;
   revenue?: number | null;
   withinFreeTier?: boolean | null;
   subscriptionRevoked?: boolean;
