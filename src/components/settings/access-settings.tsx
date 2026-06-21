@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { useSubscriptionPlansStore } from '@/lib/subscription-plans-store';
 import { toast } from 'sonner';
 import {
   KeyRound,
@@ -28,6 +30,9 @@ import {
   CreditCard,
   Ban,
   Crown,
+  ChevronDown,
+  ChevronRight,
+  Zap,
 } from 'lucide-react';
 
 // ── Extended access result with source/metadata fields from the API ──
@@ -102,10 +107,12 @@ function formatExpiryCountdown(isoString: string | null, language: 'da' | 'en'):
 
 export function AccessSettings({ userId }: AccessSettingsProps) {
   const { t, language } = useTranslation();
+  const showPlanPrompt = useSubscriptionPlansStore((s) => s.show);
 
   // ── State ──
   const [accessResult, setAccessResult] = useState<DetailedAccessResult | null>(null);
   const [isLoadingAccess, setIsLoadingAccess] = useState(true);
+  const [isStatusExpanded, setIsStatusExpanded] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<ProofUploadResult | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -270,282 +277,257 @@ export function AccessSettings({ userId }: AccessSettingsProps) {
 
   return (
     <div className="space-y-4 lg:space-y-6">
-      {/* ═══ TWO-FACTOR AUTHENTICATION ═══ */}
-      <TwoFactorSettings userId={userId} />
-
-      <Separator />
-
-      {/* ═══ ACCESS STATUS CARD ═══ */}
-      <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#14b8a6] to-[#0d9488] flex items-center justify-center shrink-0">
-              <KeyRound className="h-4 w-4 text-white" />
-            </div>
-            {t('accessStatus')}
-          </CardTitle>
-          <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
-            {t('accessStatusDescription')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* ── Status Banner ── */}
-          <div
-            className={`rounded-xl p-4 flex items-center gap-4 transition-all ${
-              isGranted
-                ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40'
-                : 'bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10'
-            }`}
-          >
-            {/* Active indicator dot */}
-            <div className="relative shrink-0">
-              <div
-                className={`h-12 w-12 rounded-xl flex items-center justify-center ${
-                  isGranted
-                    ? 'bg-gradient-to-br from-emerald-500 to-green-500'
-                    : 'bg-gradient-to-br from-gray-400 to-gray-500'
-                }`}
-              >
-                {isGranted
-                  ? <ShieldCheck className="h-6 w-6 text-white" />
-                  : <ShieldX className="h-6 w-6 text-white" />
-                }
-              </div>
-              {isGranted && (
-                <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 bg-emerald-400 rounded-full border-2 border-white dark:border-gray-900 animate-pulse" />
-              )}
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {isGranted
-                    ? t('accessGranted')
-                    : t('accessDenied')
-                  }
-                </span>
-                <Badge
-                  variant={isGranted ? 'default' : 'secondary'}
-                  className={
-                    isGranted
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-0'
-                      : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-white/15 border-0'
-                  }
-                >
-                  {getAccessLevelLabel(accessResult?.accessLevel || 'read_only', language)}
-                </Badge>
-              </div>
-
-              {/* Access level description */}
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                {getAccessLevelDescription(accessResult?.accessLevel || 'read_only', language)}
-              </p>
-
-              {/* Expiry countdown */}
-              {accessResult?.accessExpiry && (
-                <div className={`flex items-center gap-1.5 mt-2 text-xs ${
-                  (accessResult.daysRemaining ?? 999) <= 7
-                    ? 'text-amber-600 dark:text-amber-400'
-                    : 'text-gray-500 dark:text-gray-400'
-                }`}>
-                  <Clock className="h-3.5 w-3.5" />
-                  <span className="font-medium">
-                    {formatExpiryCountdown(accessResult.accessExpiry, language)}
-                  </span>
-                  {(accessResult.daysRemaining ?? 999) <= 7 && (
-                    <AlertTriangle className="h-3.5 w-3.5 ml-1" />
+      {/* ═══ ACCESS STATUS CARD (top — collapsible) ═══ */}
+      <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
+        <Collapsible open={isStatusExpanded} onOpenChange={setIsStatusExpanded}>
+          {/* ── Collapsible header (always visible) ── */}
+          <CollapsibleTrigger asChild>
+            <div className="flex items-center justify-between w-full p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 rounded-t-xl transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="relative shrink-0">
+                  <div
+                    className={`h-10 w-10 rounded-xl flex items-center justify-center ${
+                      isGranted
+                        ? 'bg-gradient-to-br from-emerald-500 to-green-500'
+                        : 'bg-gradient-to-br from-gray-400 to-gray-500'
+                    }`}
+                  >
+                    {isGranted
+                      ? <ShieldCheck className="h-5 w-5 text-white" />
+                      : <ShieldX className="h-5 w-5 text-white" />
+                    }
+                  </div>
+                  {isGranted && (
+                    <span className="absolute -top-0.5 -right-0.5 h-3 w-3 bg-emerald-400 rounded-full border-2 border-white dark:border-gray-900 animate-pulse" />
                   )}
                 </div>
-              )}
-            </div>
-
-            {/* Refresh button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={fetchAccessStatus}
-              className="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              title={t('refreshStatus')}
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {/* ── Access Details Grid ── */}
-          {/* Detailed breakdown of the access type, source, revenue and
-              plan status so the user can see exactly WHY they have (or
-              don't have) write access. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* Access type / source */}
-            <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
-                {accessResult?.source === 'owner' ? (
-                  <Crown className="h-3.5 w-3.5 text-amber-500" />
-                ) : accessResult?.source === 'tbkey' ? (
-                  <FileKey2 className="h-3.5 w-3.5 text-[#0d9488]" />
-                ) : accessResult?.source === 'subscription' || accessResult?.source === 'subscription_plan' ? (
-                  <CreditCard className="h-3.5 w-3.5 text-[#0d9488]" />
-                ) : accessResult?.source === 'no_plan' ? (
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                ) : accessResult?.source === 'expired' ? (
-                  <Clock className="h-3.5 w-3.5 text-red-500" />
-                ) : (
-                  <ShieldX className="h-3.5 w-3.5 text-gray-400" />
-                )}
-                {language === 'da' ? 'Adgangstype' : 'Access type'}
-              </p>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                {accessResult?.sourceLabelDa
-                  ? (language === 'da' ? accessResult.sourceLabelDa : accessResult.sourceLabelEn)
-                  : (language === 'da' ? 'Ukendt' : 'Unknown')
-                }
-              </p>
-            </div>
-
-            {/* Expiry / duration */}
-            <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
-                <Calendar className="h-3.5 w-3.5 text-gray-400" />
-                {language === 'da' ? 'Udløb' : 'Expiry'}
-              </p>
-              <p className="text-sm font-medium text-gray-900 dark:text-white">
-                {accessResult?.source === 'owner'
-                  ? (language === 'da' ? 'Permanent' : 'Permanent')
-                  : accessResult?.source === 'subscription'
-                    ? (language === 'da' ? 'Ingen udløb (gratis tier)' : 'No expiry (free tier)')
-                    : accessResult?.accessExpiry
-                      ? new Date(accessResult.accessExpiry).toLocaleDateString(
-                          language === 'da' ? 'da-DK' : 'en-GB',
-                          { day: 'numeric', month: 'short', year: 'numeric' }
-                        )
-                      : (language === 'da' ? '—' : '—')
-                }
-              </p>
-              {accessResult?.accessExpiry && accessResult.source !== 'owner' && accessResult.source !== 'subscription' && (
-                <p className={`text-xs mt-0.5 ${(accessResult.daysRemaining ?? 999) <= 7
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : 'text-gray-500 dark:text-gray-400'}`}
-                >
-                  {formatExpiryCountdown(accessResult.accessExpiry, language)}
-                </p>
-              )}
-            </div>
-
-            {/* Revenue + free tier status (only relevant for non-owner) */}
-            {accessResult?.source !== 'owner' && accessResult?.revenue !== undefined && accessResult?.revenue !== null && (
-              <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
-                  <TrendingUp className="h-3.5 w-3.5 text-gray-400" />
-                  {language === 'da' ? 'Omsætning i år' : 'Revenue this year'}
-                </p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {accessResult.revenue.toLocaleString(language === 'da' ? 'da-DK' : 'en-GB', { maximumFractionDigits: 0 })} kr.
-                </p>
-                <p className={`text-xs mt-0.5 ${
-                  accessResult.withinFreeTier
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-amber-600 dark:text-amber-400'
-                }`}>
-                  {accessResult.freeRevenueThreshold
-                    ? (language === 'da'
-                        ? `Gratis tier: ≤ ${accessResult.freeRevenueThreshold.toLocaleString('da-DK')} kr.`
-                        : `Free tier: ≤ ${accessResult.freeRevenueThreshold.toLocaleString('en-GB')} DKK`)
-                    : ''
-                  }
-                  {accessResult.withinFreeTier
-                    ? (language === 'da' ? ' ✓' : ' ✓')
-                    : (language === 'da' ? ' (overskredet)' : ' (exceeded)')
-                  }
-                </p>
-              </div>
-            )}
-
-            {/* Plan status */}
-            {accessResult?.source !== 'owner' && (
-              <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
-                  {accessResult?.subscriptionRevoked
-                    ? <Ban className="h-3.5 w-3.5 text-orange-500" />
-                    : <CheckCircle2 className="h-3.5 w-3.5 text-gray-400" />
-                  }
-                  {language === 'da' ? 'Plan status' : 'Plan status'}
-                </p>
-                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                  {accessResult?.hasChosenPlan
-                    ? (language === 'da' ? 'Plan valgt' : 'Plan chosen')
-                    : (language === 'da' ? 'Ingen plan valgt' : 'No plan chosen')
-                  }
-                </p>
-                {accessResult?.subscriptionRevoked && (
-                  <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
-                    {language === 'da'
-                      ? 'Abonnement blokeret af App-ejer'
-                      : 'Subscription blocked by App Owner'}
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {t('accessStatus')}
+                    </span>
+                    <Badge
+                      variant={isGranted ? 'default' : 'secondary'}
+                      className={
+                        isGranted
+                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-0'
+                          : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-400 hover:bg-gray-300 dark:hover:bg-white/15 border-0'
+                      }
+                    >
+                      {accessResult?.sourceLabelDa
+                        ? (language === 'da' ? accessResult.sourceLabelDa : accessResult.sourceLabelEn)
+                        : getAccessLevelLabel(accessResult?.accessLevel || 'read_only', language)
+                      }
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {isGranted
+                      ? (language === 'da' ? 'Klik for detaljer' : 'Click for details')
+                      : (language === 'da' ? 'Ingen adgang — vælg en plan' : 'No access — choose a plan')
+                    }
                   </p>
-                )}
-                {!accessResult?.hasChosenPlan && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                    {language === 'da'
-                      ? 'Vælg en plan for at få adgang'
-                      : 'Choose a plan to get access'}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* ── Proof Details (after successful upload) ── */}
-          {uploadResult?.success && uploadResult.manifest && (
-            <>
-              <Separator />
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                  {t('proofDetails')}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                      Proof ID
-                    </p>
-                    <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
-                      {uploadResult.proofId.slice(0, 12)}...
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                      Escrow ID
-                    </p>
-                    <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
-                      {uploadResult.manifest.escrowId.slice(0, 12)}...
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                      {t('issuer')}
-                    </p>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {uploadResult.manifest.issuer || '—'}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">
-                      {t('expiryDate')}
-                    </p>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {uploadResult.manifest.expiresAt
-                        ? new Date(uploadResult.manifest.expiresAt).toLocaleDateString(
-                            language === 'da' ? 'da-DK' : 'en-GB',
-                            { day: 'numeric', month: 'short', year: 'numeric' }
-                          )
-                        : '—'}
-                    </p>
-                  </div>
                 </div>
               </div>
-            </>
-          )}
-        </CardContent>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => { e.stopPropagation(); fetchAccessStatus(); }}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  title={t('refreshStatus')}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+                {isStatusExpanded
+                  ? <ChevronDown className="h-5 w-5 text-gray-400" />
+                  : <ChevronRight className="h-5 w-5 text-gray-400" />
+                }
+              </div>
+            </div>
+          </CollapsibleTrigger>
+
+          {/* ── Collapsible content (only when expanded) ── */}
+          <CollapsibleContent>
+            <CardContent className="space-y-4 pt-2">
+              {/* ── Current access summary ── */}
+              {/* Shows ONLY info relevant to the current access source. */}
+              <div
+                className={`rounded-xl p-4 ${
+                  isGranted
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40'
+                    : 'bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0 space-y-2">
+                    {/* Status line */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {isGranted
+                          ? (language === 'da' ? 'Adgang tildelt' : 'Access granted')
+                          : (language === 'da' ? 'Adgang nægtet' : 'Access denied')
+                        }
+                      </span>
+                    </div>
+
+                    {/* Source-specific info — only show what's relevant */}
+                    {accessResult?.source === 'owner' && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {language === 'da'
+                          ? 'Du er App-ejer med permanent fuld adgang til alle features.'
+                          : 'You are the App Owner with permanent full access to all features.'}
+                      </p>
+                    )}
+
+                    {accessResult?.source === 'subscription_plan' && accessResult?.planTier && accessResult.planTier !== 'free' && (
+                      <>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {language === 'da'
+                            ? `Aktiv plan: ${accessResult.sourceLabelDa}`
+                            : `Active plan: ${accessResult.sourceLabelEn}`}
+                        </p>
+                        {accessResult.planExpiresAt && (
+                          <div className={`flex items-center gap-1.5 text-xs ${
+                            (accessResult.daysRemaining ?? 999) <= 7
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-gray-500 dark:text-gray-400'
+                          }`}>
+                            <Calendar className="h-3.5 w-3.5" />
+                            <span>
+                              {language === 'da' ? 'Binding udløber: ' : 'Binding expires: '}
+                              {new Date(accessResult.planExpiresAt).toLocaleDateString(
+                                language === 'da' ? 'da-DK' : 'en-GB',
+                                { day: 'numeric', month: 'short', year: 'numeric' }
+                              )}
+                              {' '}({formatExpiryCountdown(accessResult.planExpiresAt, language)})
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {accessResult?.source === 'subscription' && (
+                      <>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {language === 'da'
+                            ? 'Gratis plan — fuld adgang så længe omsætningen er under 50.000 kr.'
+                            : 'Free plan — full access as long as revenue is below 50,000 DKK.'}
+                        </p>
+                        {accessResult?.revenue !== undefined && accessResult?.revenue !== null && (
+                          <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            <span>
+                              {language === 'da' ? 'Omsætning i år: ' : 'Revenue this year: '}
+                              {accessResult.revenue.toLocaleString(language === 'da' ? 'da-DK' : 'en-GB', { maximumFractionDigits: 0 })} kr.
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {accessResult?.source === 'tbkey' && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {language === 'da'
+                          ? 'Adgang via .tbkey proof — alle features er tilgængelige.'
+                          : 'Access via .tbkey proof — all features are available.'}
+                      </p>
+                    )}
+
+                    {accessResult?.source === 'no_plan' && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        {language === 'da'
+                          ? 'Ingen plan valgt. Vælg en plan for at få adgang.'
+                          : 'No plan chosen. Choose a plan to get access.'}
+                      </p>
+                    )}
+
+                    {accessResult?.source === 'expired' && (
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        {language === 'da'
+                          ? 'Din adgang er udløbet. Vælg en plan for at få adgang igen.'
+                          : 'Your access has expired. Choose a plan to regain access.'}
+                      </p>
+                    )}
+
+                    {accessResult?.source === 'denied' && (
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        {language === 'da'
+                          ? 'Adgang nægtet. Vælg en plan eller kontakt support.'
+                          : 'Access denied. Choose a plan or contact support.'}
+                      </p>
+                    )}
+
+                    {/* Revoked warning */}
+                    {accessResult?.subscriptionRevoked && (
+                      <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1.5">
+                        <Ban className="h-3.5 w-3.5" />
+                        {language === 'da'
+                          ? 'Abonnement blokeret af App-ejer'
+                          : 'Subscription blocked by App Owner'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Upgrade button — shown for non-owner, non-tbkey users */}
+                  {accessResult?.source !== 'owner' && accessResult?.source !== 'tbkey' && (
+                    <Button
+                      onClick={() => showPlanPrompt()}
+                      size="sm"
+                      className="shrink-0 bg-[#0d9488] hover:bg-[#0f766e] text-white gap-1.5"
+                    >
+                      <Zap className="h-3.5 w-3.5" />
+                      {language === 'da' ? 'Opgrader' : 'Upgrade'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Proof Details (after successful upload) ── */}
+              {uploadResult?.success && uploadResult.manifest && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      {t('proofDetails')}
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Proof ID</p>
+                        <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
+                          {uploadResult.proofId.slice(0, 12)}...
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">Escrow ID</p>
+                        <p className="text-sm font-mono font-medium text-gray-900 dark:text-white">
+                          {uploadResult.manifest.escrowId.slice(0, 12)}...
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t('issuer')}</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {uploadResult.manifest.issuer || '—'}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t('expiryDate')}</p>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {uploadResult.manifest.expiresAt
+                            ? new Date(uploadResult.manifest.expiresAt).toLocaleDateString(
+                                language === 'da' ? 'da-DK' : 'en-GB',
+                                { day: 'numeric', month: 'short', year: 'numeric' }
+                              )
+                            : '—'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
       </Card>
 
       {/* ═══ PROOF UPLOAD CARD ═══ */}
@@ -701,6 +683,11 @@ export function AccessSettings({ userId }: AccessSettingsProps) {
           )}
         </CardContent>
       </Card>
+
+      <Separator />
+
+      {/* ═══ TWO-FACTOR AUTHENTICATION (now below access status) ═══ */}
+      <TwoFactorSettings userId={userId} />
     </div>
   );
 }
