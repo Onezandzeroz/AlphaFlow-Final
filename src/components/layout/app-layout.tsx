@@ -154,6 +154,36 @@ export function AppLayout({
     setDraftCompanyId(user.activeCompanyId ?? null);
   }, [user.activeCompanyId, setDraftCompanyId]);
 
+  // ─── Auto-refresh auth (plan tier + features) ──────────────────────
+  //
+  // Polling: genhent /api/auth/me hvert 60. sekund så ændringer i
+  // subscription plan (f.eks. når en SuperDev opgraderer tenanten via
+  // oversight) bliver synlige uden at brugeren skal logge ud og ind.
+  //
+  // Event-baseret: lyt efter 'access:refresh' og 'auth:refresh' events
+  // (dispatchet efter payment callback, plan-valg, etc.) og genhent
+  // brugerdata med det samme.
+  const checkAuth = useAuthStore((s) => s.checkAuth);
+  useEffect(() => {
+    // Polling — hvert 60. sekund
+    const interval = setInterval(() => {
+      checkAuth();
+    }, 60_000);
+
+    // Event-baseret — genhent med det samme når en event modtages
+    const handleRefresh = () => {
+      checkAuth();
+    };
+    window.addEventListener('access:refresh', handleRefresh);
+    window.addEventListener('auth:refresh', handleRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('access:refresh', handleRefresh);
+      window.removeEventListener('auth:refresh', handleRefresh);
+    };
+  }, [checkAuth]);
+
   // Global keyboard shortcut: ? to open shortcuts modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

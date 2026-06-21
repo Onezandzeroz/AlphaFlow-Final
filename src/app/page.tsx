@@ -143,6 +143,25 @@ export default function Home() {
     checkAuth();
   }, [hydrated, checkAuth, verifyToken, resetPasswordToken]);
 
+  // ── Detect ?payment= query param (redirect back from Flatpay) ──
+  // When the user returns from a Flatpay payment, the URL contains
+  // ?payment=success|failed|pending|error. We dispatch an 'auth:refresh'
+  // event so the app-layout listener re-fetches /api/auth/me and picks
+  // up the new planTier + availableFeatures immediately.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const paymentStatus = params.get('payment');
+    if (paymentStatus) {
+      // Clean the URL (remove the ?payment= param)
+      window.history.replaceState({}, '', window.location.pathname);
+      // Trigger auth refresh so the new plan tier is loaded
+      window.dispatchEvent(new CustomEvent('auth:refresh'));
+      // Also trigger access refresh so the access-settings UI updates
+      window.dispatchEvent(new CustomEvent('access:refresh'));
+    }
+  }, []);
+
   // Handle ?invite=TOKEN for already-logged-in users:
   // The login route auto-accepts, but if the user is already logged in
   // (e.g. clicked invite link while having a session), accept server-side.
