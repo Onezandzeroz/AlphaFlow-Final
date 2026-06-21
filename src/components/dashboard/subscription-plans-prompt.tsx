@@ -38,37 +38,39 @@ interface Plan {
   descDa: string;
   descEn: string;
   features: PlanFeature[];
+  /** Small label shown above the features list (e.g. "Basis funktioner", "Udover Gratis"). */
+  includesLabelDa?: string;
+  includesLabelEn?: string;
   limitDa?: string;
   limitEn?: string;
   bindDa: string;
   bindEn: string;
   ctaDa: string;
   ctaEn: string;
-  popular?: boolean;
-  badgeDa?: string;
-  badgeEn?: string;
   isFree?: boolean;
 }
 
 const PLANS: Plan[] = [
   {
     id: 'free',
-    name: 'Free',
+    name: 'Gratis',
     priceDa: '0 kr.',
     priceEn: '0 kr.',
-    descDa: 'Gratis prøveperiode så længe jeres samlede omsætning er under 50.000 kr.',
-    descEn: 'Free trial as long as your total revenue is below 50,000 DKK',
+    priceUnitDa: 'Årlig omsætning < 50.000 kr.',
+    priceUnitEn: 'Annual revenue < 50,000 DKK',
+    descDa: 'Kom i gang — ingen omkostninger',
+    descEn: 'Get started — no cost',
+    includesLabelDa: 'Basis funktioner',
+    includesLabelEn: 'Basic features',
     features: [
-      { da: 'Fulgt bogføringssystem m. AI-afstemning', en: 'Full accounting w/ AI reconciliation' },
-      { da: 'Fakturering', en: 'Invoicing' },
-      { da: 'Momsindberetning', en: 'VAT reporting' },
-      { da: 'Bilagsupload & OCR-scanning', en: 'Receipt upload & OCR scanning' },
-      { da: 'Bankintegration', en: 'Bank integration' },
+      { da: 'Alle grundlæggende regnskabsfunktioner', en: 'All basic accounting functions' },
+      { da: 'E-fakturering (manuel XML-download)', en: 'E-invoicing (manual XML download)' },
+      { da: 'Bankintegration (demo-tilstand)', en: 'Bank integration (demo mode)' },
     ],
     limitDa: '',
     limitEn: '',
-    bindDa: 'Betinget',
-    bindEn: 'Conditional',
+    bindDa: 'Ingen binding',
+    bindEn: 'No commitment',
     ctaDa: 'Prøv gratis nu',
     ctaEn: 'Try free now',
     isFree: true,
@@ -76,16 +78,18 @@ const PLANS: Plan[] = [
   {
     id: 'monthly',
     name: 'Månedlig',
-    priceDa: '179 kr./md.',
-    priceEn: '179 kr./mo.',
-    descDa: 'Pakken til jer som er godt i gang med virksomheden og ønsker stabil drift',
-    descEn: 'The package for you who are well underway with the business and want stable operations',
+    priceDa: '199 kr./md.',
+    priceEn: '199 kr./mo.',
+    priceUnitDa: 'Ingen omsætningsgrænse',
+    priceUnitEn: 'No revenue limit',
+    descDa: 'Fleksibelt — ingen binding',
+    descEn: 'Flexible — no commitment',
+    includesLabelDa: 'Udover Gratis',
+    includesLabelEn: 'In addition to Free',
     features: [
-      { da: 'Ingen begrænsninger', en: 'No limitations' },
-      { da: 'Fuldt AI-drevet bogføring', en: 'Full AI-powered bookkeeping' },
-      { da: 'Rådgivnings AI-Agent', en: 'Advisory AI agent' },
-      { da: 'Revisoradgang', en: 'Auditor access' },
-      { da: 'Mail & chat support', en: 'Mail & chat support' },
+      { da: 'Ubegrænset omsætning', en: 'Unlimited revenue' },
+      { da: 'Avancerede rapporter (cash flow, aldersopdeling, budget vs. actual)', en: 'Advanced reports (cash flow, aging, budget vs. actual)' },
+      { da: 'Eksport af alle data (CSV, PDF)', en: 'Export all data (CSV, PDF)' },
     ],
     bindDa: 'Ingen binding',
     bindEn: 'No commitment',
@@ -94,70 +98,72 @@ const PLANS: Plan[] = [
   },
   {
     id: 'annual',
-    name: 'Årlig',
-    priceDa: '149 kr./md.',
-    priceEn: '149 kr./mo.',
-    priceUnitDa: '(1.788 kr./år)',
-    priceUnitEn: '(1,788 kr./yr)',
+    name: 'Pro',
+    priceDa: '169 kr./md.',
+    priceEn: '169 kr./mo.',
+    priceUnitDa: '2.028 kr./år',
+    priceUnitEn: '2,028 DKK/yr',
     savingsDa: 'Spar 360 kr./år',
-    savingsEn: 'Save 360 kr./yr',
-    descDa: 'Planen for jer som er godt i gang med stabil drift og har blikket rette fremad',
-    descEn: 'The plan for you who are well underway with stable operations and looking ahead',
+    savingsEn: 'Save 360 DKK/yr',
+    descDa: 'AI-rådgivning & stabil pris',
+    descEn: 'AI advisory & stable price',
+    includesLabelDa: 'Udover Månedlig',
+    includesLabelEn: 'In addition to Monthly',
     features: [
-      { da: '23 % rabat', en: '23% discount' },
+      { da: 'Hermes AI-rådgivning', en: 'Hermes AI advisory' },
       { da: 'Prioriteret support', en: 'Priority support' },
-      { da: 'Stabil pris i 12 måneder', en: 'Fixed price 12 months' },
-      { da: 'AI-Agent m. fuld indblik (Din digitale Revisor)', en: 'AI agent full insight (Digital Auditor)' },
+      { da: 'Stabil pris i 12 måneder', en: 'Fixed price for 12 months' },
     ],
-    bindDa: '12 måneder',
-    bindEn: '12 months',
-    ctaDa: 'Vælg årlig',
-    ctaEn: 'Choose annual',
-    popular: true,
-    badgeDa: 'ANBEFALET',
-    badgeEn: 'RECOMMENDED',
+    bindDa: '12 måneders binding',
+    bindEn: '12-month commitment',
+    ctaDa: 'Vælg Pro',
+    ctaEn: 'Choose Pro',
   },
   {
     id: '2year',
-    name: '2-årig',
-    priceDa: '139 kr./md.',
-    priceEn: '139 kr./mo.',
-    priceUnitDa: '(3.336 kr./24 md.)',
-    priceUnitEn: '(3,336 kr./24 mo.)',
-    savingsDa: 'Spar 960 kr.',
-    savingsEn: 'Save 960 kr.',
-    descDa: 'Løsningen for jer som har stabil drift og gerne vil spare mest muligt langsigtet.',
-    descEn: 'The solution for you with stable operations who want to maximize long-term savings',
+    name: 'Business',
+    priceDa: '149 kr./md.',
+    priceEn: '149 kr./mo.',
+    priceUnitDa: '3.576 kr./24 md.',
+    priceUnitEn: '3,576 DKK/24 mo.',
+    savingsDa: 'Spar 1.200 kr.',
+    savingsEn: 'Save 1,200 DKK',
+    descDa: 'Til etablerede virksomheder',
+    descEn: 'For established businesses',
+    includesLabelDa: 'Udover Pro',
+    includesLabelEn: 'In addition to Pro',
     features: [
-      { da: '31 % rabat', en: '31% discount' },
-      { da: 'Prioriteret + hurtigere support', en: 'Priority + faster support' },
-      { da: 'Hurtigere feature-requests', en: 'Faster feature requests' },
+      { da: 'Auto e-faktura (Peppol / NemHandel)', en: 'Auto e-invoice (Peppol / NemHandel)' },
+      { da: 'Årsrapport (iXBRL for Erhvervsstyrelsen)', en: 'Annual report (iXBRL for the Danish Business Authority)' },
+      { da: 'Ubegrænsede teammedlemmer', en: 'Unlimited team members' },
     ],
-    bindDa: '24 måneder',
-    bindEn: '24 months',
-    ctaDa: 'Vælg 2-årig',
-    ctaEn: 'Choose 2-year',
+    bindDa: '24 måneders binding',
+    bindEn: '24-month commitment',
+    ctaDa: 'Vælg Business',
+    ctaEn: 'Choose Business',
   },
   {
     id: '3year',
-    name: '3-årig',
-    priceDa: '129 kr./md.',
-    priceEn: '129 kr./mo.',
-    priceUnitDa: '(4.644 kr./36 md.)',
-    priceUnitEn: '(4,644 kr./36 mo.)',
-    savingsDa: 'Spar 1.800 kr.',
-    savingsEn: 'Save 1,800 kr.',
-    descDa: 'Størst rabat & eksklusiv adgang',
-    descEn: 'Best discount & exclusive access',
+    name: 'Business Extended',
+    priceDa: '145 kr./md.',
+    priceEn: '145 kr./mo.',
+    priceUnitDa: '5.220 kr./36 md.',
+    priceUnitEn: '5,220 DKK/36 mo.',
+    savingsDa: 'Spar 1.944 kr.',
+    savingsEn: 'Save 1,944 DKK',
+    descDa: 'Fuld pakke — maksimal rabat',
+    descEn: 'Full package — maximum discount',
+    includesLabelDa: 'Udover Business',
+    includesLabelEn: 'In addition to Business',
     features: [
-      { da: '39 % rabat', en: '39% discount' },
+      { da: 'Projektregnskab', en: 'Project accounting' },
       { da: 'Højeste prioritet på support', en: 'Highest priority support' },
-      { da: 'Eksklusive kommende AI-moduler', en: 'Exclusive upcoming AI modules' },
+      { da: 'Nye funktioner først', en: 'New features first' },
     ],
-    bindDa: '36 måneder',
-    bindEn: '36 months',
-    ctaDa: 'Vælg 3-årig',
-    ctaEn: 'Choose 3-year',
+    bindDa: '36 måneders binding',
+    bindEn: '36-month commitment',
+    ctaDa: 'Vælg Business Extended',
+    ctaEn: 'Choose Business Extended',
   },
 ];
 
@@ -184,7 +190,6 @@ function PlanCard({
   startingTrial: boolean;
   t: (da: string, en: string) => string;
 }) {
-  const isPopular = plan.popular;
   const isFree = plan.isFree;
   const isLoading = isFree && startingTrial;
   // On mobile, the highlight follows the centered card.
@@ -210,8 +215,11 @@ function PlanCard({
             ? 'bg-[#0a1628]/60 border border-[#1e3a5f]/50 dark:border-[#1a2d4d]/30'
             : 'bg-[#0e1f3d]/80 border border-[#1e3a5f]/60 dark:border-[#1a2d4d]/40'
         }
-        ${!isMobile && isPopular
-          ? 'border-2 border-[#f59e0b]/80 dark:border-[#f59e0b]/60 ring-1 ring-[#f59e0b]/20 shadow-lg shadow-[#f59e0b]/5'
+        ${!isMobile
+          // Desktop: orange highlight follows the hovered card.
+          // No plan is statically recommended — the highlight jumps to
+          // whichever card the mouse is over.
+          ? 'hover:border-[#f59e0b]/80 dark:hover:border-[#f59e0b]/60 hover:ring-1 hover:ring-[#f59e0b]/20 hover:shadow-[#f59e0b]/10'
           : ''
         }
       `}
@@ -220,25 +228,12 @@ function PlanCard({
       tabIndex={isLoading ? -1 : 0}
       onKeyDown={(e) => { if (e.key === 'Enter' && !isLoading) onSelect(plan); }}
     >
-      {/* Active-slide badge (mobile) — replaces the static popular badge */}
-      {isActiveMobile && (isFree || isPopular) && (
+      {/* Active-slide badge (mobile) — shows on the centered card */}
+      {isActiveMobile && isFree && (
         <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-10">
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-[#f59e0b] text-white shadow-sm shadow-[#f59e0b]/30 whitespace-nowrap text-[11px]">
             <Star className="h-3 w-3" />
-            {isFree
-              ? (isDa ? 'GRATIS' : 'FREE')
-              : (isDa ? plan.badgeDa : plan.badgeEn)
-            }
-          </span>
-        </div>
-      )}
-
-      {/* Popular badge (desktop only) */}
-      {!isMobile && isPopular && (
-        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 z-10">
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider bg-[#f59e0b] text-white shadow-sm shadow-[#f59e0b]/30 whitespace-nowrap text-[9px] sm:text-[10px]">
-            <Star className="h-3 w-3 sm:h-3 sm:w-3" />
-            {isDa ? plan.badgeDa : plan.badgeEn}
+            {isDa ? 'GRATIS' : 'FREE'}
           </span>
         </div>
       )}
@@ -248,20 +243,15 @@ function PlanCard({
         ${isMobile ? 'text-sm mt-1' : 'text-xs sm:text-sm lg:text-base'}
         ${isActiveMobile
           ? 'text-[#f59e0b]'
-          : isPopular && !isMobile
-            ? 'text-[#f59e0b]'
-            : isFree
-              ? 'text-[#2dd4bf]/70'
-              : 'text-[#2dd4bf]'
+          : isFree
+            ? 'text-[#2dd4bf]/70'
+            : 'text-[#2dd4bf]'
         }
       `}>
         {plan.name}
       </p>
 
-      {/* Price block — fixed height so the price line aligns across all cards.
-          Free + Månedlig have no priceUnit, but we still reserve the same
-          vertical space as cards that do (Årlig / 2-årig / 3-årig) so the
-          price itself sits on the same baseline. */}
+      {/* Price block — fixed height so the price line aligns across all cards. */}
       <div className={isMobile ? 'mt-3' : 'mt-1.5 sm:mt-2'}>
         <p className={`font-bold text-white tracking-tight leading-none
           ${isMobile ? 'text-3xl' : 'text-xl sm:text-2xl lg:text-3xl'}
@@ -276,9 +266,8 @@ function PlanCard({
       </div>
 
       {/* Badge row — single fixed-height row that holds EITHER the trial
-          badge (Free) OR the savings badge (Årlig / 2-årig / 3-årig) OR
-          nothing (Månedlig). Putting both badges in the same row ensures
-          they vertically align across all cards. */}
+          badge (Free) OR the savings badge (Pro / Business / Business Extended)
+          OR nothing (Månedlig). */}
       <div className={`${isMobile ? 'mt-2 h-7' : 'mt-1.5 sm:mt-2 h-[22px] sm:h-[26px]'} flex items-center justify-center`}>
         {isFree ? (
           <div className="inline-flex items-center justify-center gap-1.5 mx-auto px-3 py-1 rounded-full bg-[#0d9488]/20 border border-[#0d9488]/30">
@@ -300,12 +289,16 @@ function PlanCard({
         {isDa ? plan.descDa : plan.descEn}
       </p>
 
+      {/* Includes label — small uppercase label above the features list */}
+      {plan.includesLabelDa && (
+        <p className={`${isMobile ? 'mt-3 text-[10px]' : 'mt-2.5 sm:mt-3 text-[9px] sm:text-[10px]'} font-semibold uppercase tracking-wide text-white/40 text-left`}>
+          {isDa ? plan.includesLabelDa : plan.includesLabelEn}
+        </p>
+      )}
+
       {/* Features list — fixed minimum height so the binding row aligns
-          across cards regardless of how many features each plan has
-          (Free/Månedlig = 5, Årlig = 4, 2-årig/3-årig = 3). flex-1 still
-          stretches the list on the tallest card so the CTA stays pinned
-          to the bottom. */}
-      <ul className={`flex-1 text-left ${isMobile ? 'mt-3 space-y-2 min-h-[8.5rem]' : 'mt-2.5 sm:mt-3 space-y-1.5 sm:space-y-2 min-h-[7rem] sm:min-h-[8rem] lg:min-h-[9rem]'}`}>
+          across cards regardless of how many features each plan has. */}
+      <ul className={`flex-1 text-left ${isMobile ? 'mt-2 space-y-2 min-h-[7rem]' : 'mt-1.5 sm:mt-2 space-y-1.5 sm:space-y-2 min-h-[6rem] sm:min-h-[7rem] lg:min-h-[8rem]'}`}>
         {plan.features.map((feat, i) => (
           <li key={i} className="flex items-start gap-2">
             <Check className={`shrink-0 mt-0.5 ${isMobile ? 'h-4 w-4' : 'h-3.5 w-3.5 sm:h-4 sm:w-4'}
@@ -313,9 +306,7 @@ function PlanCard({
                 ? 'text-[#f59e0b]/90'
                 : isFree
                   ? 'text-[#2dd4bf]/60'
-                  : isPopular && !isMobile
-                    ? 'text-[#f59e0b]/80'
-                    : 'text-[#2dd4bf]/80'
+                  : 'text-[#2dd4bf]/80'
               }`}
             />
             <span className={`text-white/55 leading-snug ${isMobile ? 'text-xs' : 'text-[10px] sm:text-xs lg:text-sm'}`}>
@@ -342,11 +333,9 @@ function PlanCard({
           transition-all duration-200 hover:shadow-md active:scale-[0.97]
           ${isMobile ? 'h-12 text-sm mt-4' : 'h-9 sm:h-10 lg:h-11 px-2 sm:px-3 text-xs sm:text-sm lg:text-base'}
           ${isLoading ? 'opacity-60 cursor-wait' : ''}
-          ${isPopular
-            ? 'bg-[#f59e0b] hover:bg-[#d97706] text-white shadow-[#f59e0b]/20'
-            : isFree
-              ? 'bg-[#0d9488]/60 hover:bg-[#0d9488]/80 text-white/80 hover:text-white border border-[#0d9488]/30'
-              : 'bg-[#0d9488]/80 hover:bg-[#0d9488] text-white/90 hover:text-white border border-[#0d9488]/40'
+          ${isFree
+            ? 'bg-[#0d9488]/60 hover:bg-[#0d9488]/80 text-white/80 hover:text-white border border-[#0d9488]/30'
+            : 'bg-[#0d9488]/80 hover:bg-[#0d9488] text-white/90 hover:text-white border border-[#0d9488]/40'
           }
         `}
       >
@@ -379,14 +368,11 @@ function ActivePlanLabel({
   if (!active) return null;
 
   const isFree = active.isFree;
-  const isPopular = active.popular;
 
   // Build a short label for the active plan.
   const label = isFree
     ? (isDa ? 'Gratis' : 'Free')
-    : isPopular
-      ? `${active.name} ${isDa ? '— Anbefalet' : '— Recommended'}`
-      : active.name;
+    : active.name;
 
   // Sub-text: price for paid plans, duration for free.
   const sub = isFree
@@ -398,7 +384,6 @@ function ActivePlanLabel({
       {/* Label row */}
       <p className="text-sm font-semibold text-white/90 tracking-wide">
         {isFree && <Gift className="inline h-3.5 w-3.5 mr-1 -mt-0.5 text-[#2dd4bf]" />}
-        {isPopular && <Star className="inline h-3.5 w-3.5 mr-1 -mt-0.5 text-[#f59e0b]" />}
         {label}
       </p>
       {/* Sub-label */}
