@@ -3,6 +3,7 @@
 import { useState, useEffect, useSyncExternalStore, memo } from 'react';
 import Image from 'next/image';
 import { User, useAuthStore } from '@/lib/auth-store';
+import { useDraftStore } from '@/lib/draft-store';
 import { cn } from '@/lib/utils';
 import { useLanguageStore } from '@/lib/language-store';
 import { useTranslation } from '@/lib/use-translation';
@@ -140,6 +141,18 @@ export function AppLayout({
   const { language, toggleLanguage } = useLanguageStore();
   const { open: commandPaletteOpen, setOpen: setCommandPaletteOpen } = useCommandPalette();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // ─── Tenant isolation for form drafts ──────────────────────────────
+  //
+  // Keep the draft store's currentCompanyId in sync with the active
+  // company. This ensures drafts saved in one tenant are NEVER visible
+  // in another tenant's forms — the draft store transparently namespaces
+  // all keys by company ID. When the user switches companies or logs out,
+  // the previous tenant's drafts become invisible immediately.
+  const setDraftCompanyId = useDraftStore((s) => s.setCurrentCompanyId);
+  useEffect(() => {
+    setDraftCompanyId(user.activeCompanyId ?? null);
+  }, [user.activeCompanyId, setDraftCompanyId]);
 
   // Global keyboard shortcut: ? to open shortcuts modal
   useEffect(() => {

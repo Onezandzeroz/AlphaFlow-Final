@@ -14,6 +14,17 @@
  *     load AND proactively every 60s while the app is open, so expired
  *     drafts disappear even if the user never reloads the page.
  *
+ * TENANT ISOLATION (critical):
+ *   Drafts are namespaced by the active company (tenant) ID. A draft saved
+ *   in tenant A is stored under the key `${companyIdA}::contact:new` and is
+ *   NEVER visible when the user switches to tenant B. This prevents
+ *   cross-tenant data leakage when a user logs out of one tenant and into
+ *   another, or switches between companies in the same session.
+ *
+ *   The currentCompanyId is set by the app layer (see AppLayout) via
+ *   setCurrentCompanyId() whenever the active company changes. All
+ *   key-based operations transparently scope to the current tenant.
+ *
  * Security: NEVER use this for auth forms (passwords, OTP codes). The hook
  * callers are responsible for choosing safe draft keys.
  */
@@ -30,7 +41,10 @@ const DRAFT_TTL_MS = 30 * 60 * 1000;
 const PRUNE_INTERVAL_MS = 60 * 1000;
 
 /** localStorage key — bump version suffix if the schema changes */
-const STORAGE_KEY = 'alphaflow-drafts-v1';
+const STORAGE_KEY = 'alphaflow-drafts-v2';
+
+/** Separator between the tenant ID prefix and the user-facing draft key. */
+const TENANT_SEPARATOR = '::';
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -50,7 +64,13 @@ export interface DraftMeta {
 }
 
 interface DraftState {
+  /** The raw drafts map (keys are tenant-scoped: `${companyId}::${key}`). */
   drafts: Record<string, DraftEntry>;
+  /** The active tenant ID used to scope all draft operations. Set by AppLayout. */
+  currentCompanyId: string | null;
+
+  /** Set the active tenant ID. All subsequent draft ops scope to this tenant. */
+  setCurrentCompanyId: (id: string | null) => void;
 
   /** Write (or overwrite) a draft. */
   setDraft: (key: string, data: Record<string, unknown>, label?: string) => void;
@@ -64,18 +84,49 @@ interface DraftState {
   /** Remove a single draft (call after successful submit). */
   clearDraft: (key: string) => void;
 
-  /** Remove ALL drafts (used by the recovery UI "discard all"). */
+  /** Remove ALL drafts for the CURRENT tenant only. */
   clearAllDrafts: () => void;
 
   /**
-   * Remove every draft older than DRAFT_TTL_MS. Called automatically on
-   * store rehydration and by a 60s interval; safe to call manually too.
-   * Returns without notifying subscribers when nothing changed.
+   * Remove every draft older than DRAFT_TTL_MS (across ALL tenants —
+   * this is a global GC sweep). Called automatically on store rehydration
+   * and by a 60s interval; safe to call manually too.
    */
   pruneExpiredDrafts: () => void;
 
-  /** List all drafts as { key, updatedAt, label } — for the recovery UI. */
+  /** List all drafts for the CURRENT tenant as { key, updatedAt, label }. */
   listDrafts: () => DraftMeta[];
+}
+
+// ─── Tenant-scoped key helpers ───────────────────────────────────────
+
+/**
+ * Build the internal storage key by prefixing the user-facing key with the
+ * current tenant ID. This is what gets stored in the `drafts` record.
+ *
+ * If no company is selected (null), we use a sentinel prefix that won't
+ * collide with any real tenant — drafts written in this state are
+ * effectively orphaned and will be pruned by the TTL sweep. This is
+ * intentional: no forms should be open during login/logout transitions,
+ * and if they are, their drafts must NOT leak to any real tenant.
+ */
+function scopedKey(companyId: string | null, key: string): string {
+  const prefix = companyId ?? '__no_tenant__';
+  return `${prefix}${TENANT_SEPARATOR}${key}`;
+}
+
+/** The prefix used to filter drafts belonging to a specific tenant. */
+function tenantPrefix(companyId: string | null): string {
+  const prefix = companyId ?? '__no_tenant__';
+  return `${prefix}${TENANT_SEPARATOR}`;
+}
+
+/** Strip the tenant prefix from an internal key, returning the user-facing key. */
+function unscopeKey(companyId: string | null, internalKey: string): string {
+  const prefix = tenantPrefix(companyId);
+  return internalKey.startsWith(prefix)
+    ? internalKey.slice(prefix.length)
+    : internalKey;
 }
 
 // ─── Expiry helper ───────────────────────────────────────────────────
@@ -101,28 +152,56 @@ export const useDraftStore = create<DraftState>()(
   persist(
     (set, get) => ({
       drafts: {},
+      currentCompanyId: null,
+
+      setCurrentCompanyId: (id) => set({ currentCompanyId: id }),
 
       setDraft: (key, data, label) =>
-        set((state) => ({
-          drafts: {
-            ...state.drafts,
-            [key]: { data, updatedAt: Date.now(), label },
-          },
-        })),
+        set((state) => {
+          const sk = scopedKey(state.currentCompanyId, key);
+          return {
+            drafts: {
+              ...state.drafts,
+              [sk]: { data, updatedAt: Date.now(), label },
+            },
+          };
+        }),
 
-      getDraft: (key) => get().drafts[key],
+      getDraft: (key) => {
+        const state = get();
+        const sk = scopedKey(state.currentCompanyId, key);
+        return state.drafts[sk];
+      },
 
-      hasDraft: (key) => Boolean(get().drafts[key]),
+      hasDraft: (key) => {
+        const state = get();
+        const sk = scopedKey(state.currentCompanyId, key);
+        return Boolean(state.drafts[sk]);
+      },
 
       clearDraft: (key) =>
         set((state) => {
-          if (!state.drafts[key]) return state;
+          const sk = scopedKey(state.currentCompanyId, key);
+          if (!state.drafts[sk]) return state;
           const next = { ...state.drafts };
-          delete next[key];
+          delete next[sk];
           return { drafts: next };
         }),
 
-      clearAllDrafts: () => set({ drafts: {} }),
+      clearAllDrafts: () =>
+        set((state) => {
+          const prefix = tenantPrefix(state.currentCompanyId);
+          const next: Record<string, DraftEntry> = {};
+          let changed = false;
+          for (const [k, v] of Object.entries(state.drafts)) {
+            if (k.startsWith(prefix)) {
+              changed = true; // drop it
+            } else {
+              next[k] = v;
+            }
+          }
+          return changed ? { drafts: next } : state;
+        }),
 
       pruneExpiredDrafts: () =>
         set((state) => {
@@ -132,19 +211,23 @@ export const useDraftStore = create<DraftState>()(
           return next === state.drafts ? state : { drafts: next };
         }),
 
-      listDrafts: () =>
-        Object.entries(get().drafts)
-          .map(([key, entry]) => ({
-            key,
+      listDrafts: () => {
+        const state = get();
+        const prefix = tenantPrefix(state.currentCompanyId);
+        return Object.entries(state.drafts)
+          .filter(([k]) => k.startsWith(prefix))
+          .map(([k, entry]) => ({
+            key: unscopeKey(state.currentCompanyId, k),
             updatedAt: entry.updatedAt,
             label: entry.label,
           }))
-          .sort((a, b) => b.updatedAt - a.updatedAt),
+          .sort((a, b) => b.updatedAt - a.updatedAt);
+      },
     }),
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
-      // Only persist the drafts map (not the action functions)
+      // Only persist the drafts map (not the action functions or currentCompanyId)
       partialize: (state) => ({ drafts: state.drafts }),
       // Prune expired drafts after rehydration from localStorage
       onRehydrateStorage: () => (state) => {
@@ -152,16 +235,24 @@ export const useDraftStore = create<DraftState>()(
           state.drafts = pruneExpired(state.drafts);
         }
       },
-      version: 1,
+      version: 2,
+      // Discard any drafts from the old v1 store (which had no tenant
+      // prefixing) — they are a cross-tenant leak risk.
+      migrate: () => ({}),
     }
   )
 );
 
 // ─── Non-reactive accessors (for use inside event handlers / effects) ─
+//
+// These read currentCompanyId from the store at call time so they always
+// use the correct tenant scope.
 
 /** Read a draft without subscribing to the store. */
 export function readDraft(key: string): DraftEntry | undefined {
-  return useDraftStore.getState().drafts[key];
+  const state = useDraftStore.getState();
+  const sk = scopedKey(state.currentCompanyId, key);
+  return state.drafts[sk];
 }
 
 /** Write a draft without subscribing to the store. */
@@ -176,7 +267,7 @@ export function removeDraft(key: string): void {
 
 /** Check if a draft exists without subscribing. */
 export function draftExists(key: string): boolean {
-  return Boolean(useDraftStore.getState().drafts[key]);
+  return useDraftStore.getState().hasDraft(key);
 }
 
 // ─── External-clear handshake (parent → hook) ────────────────────────
@@ -190,6 +281,9 @@ export function draftExists(key: string): boolean {
 // cleanup knows to SKIP the flush. The flag is auto-cleared after 500ms
 // (safety net in case the form doesn't actually unmount) and is also
 // consumed on the next unmount.
+//
+// The pending set uses the tenant-scoped key so that a clear signal for
+// tenant A can't accidentally suppress the flush for tenant B.
 
 const pendingExternalClear = new Set<string>();
 
@@ -199,12 +293,14 @@ const pendingExternalClear = new Set<string>();
  * (e.g. in a Dialog onOpenChange handler when closing).
  */
 export function clearDraftBeforeUnmount(key: string): void {
-  pendingExternalClear.add(key);
-  useDraftStore.getState().clearDraft(key);
+  const state = useDraftStore.getState();
+  const sk = scopedKey(state.currentCompanyId, key);
+  pendingExternalClear.add(sk);
+  state.clearDraft(key);
   // Safety net: if the form doesn't actually unmount within 500ms
   // (e.g. close was vetoed), clear the flag so future unmounts flush normally.
   setTimeout(() => {
-    pendingExternalClear.delete(key);
+    pendingExternalClear.delete(sk);
   }, 500);
 }
 
@@ -214,8 +310,10 @@ export function clearDraftBeforeUnmount(key: string): void {
  * should be skipped.
  */
 export function consumeExternalClear(key: string): boolean {
-  if (pendingExternalClear.has(key)) {
-    pendingExternalClear.delete(key);
+  const state = useDraftStore.getState();
+  const sk = scopedKey(state.currentCompanyId, key);
+  if (pendingExternalClear.has(sk)) {
+    pendingExternalClear.delete(sk);
     return true;
   }
   return false;
