@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useSyncExternalStore, memo } from 'react';
+import { useState, useEffect, useSyncExternalStore, memo, useCallback } from 'react';
 import Image from 'next/image';
 import { User, useAuthStore } from '@/lib/auth-store';
 import { useDraftStore } from '@/lib/draft-store';
@@ -87,27 +87,30 @@ function useDarkMode() {
 
   const getServerSnapshot = () => false;
 
-  const darkMode = useSyncExternalStore(
-    (callback) => {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      mediaQuery.addEventListener('change', callback);
-      window.addEventListener('storage', callback);
-      return () => {
-        mediaQuery.removeEventListener('change', callback);
-        window.removeEventListener('storage', callback);
-      };
-    },
-    getSnapshot,
-    getServerSnapshot
-  );
+  const subscribe = (callback: () => void) => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', callback);
+    window.addEventListener('storage', callback);
+    return () => {
+      mediaQuery.removeEventListener('change', callback);
+      window.removeEventListener('storage', callback);
+    };
+  };
 
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
+  const darkMode = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  const toggleDarkMode = useCallback(() => {
+    const newMode = !getSnapshot();
     localStorage.setItem('theme', newMode ? 'dark' : 'light');
     document.documentElement.classList.toggle('dark', newMode);
-    // Force re-render
-    window.dispatchEvent(new StorageEvent('storage'));
-  };
+    // Force useSyncExternalStore to re-check getSnapshot by dispatching
+    // a storage event. The event triggers the subscribe callback which
+    // calls getSnapshot — which now returns the new value.
+    window.dispatchEvent(new StorageEvent('storage', {
+      key: 'theme',
+      newValue: newMode ? 'dark' : 'light',
+    }));
+  }, []);
 
   return { darkMode, toggleDarkMode };
 }
@@ -479,6 +482,7 @@ export function AppLayout({
         <div className="flex items-center px-4 pt-6 pb-4 border-b border-[#e2e8e6] dark:border-[#2a3330]">
           <div className={cn('flex-1 flex items-center justify-center overflow-hidden', sidebarCollapsed && 'px-1')}>
             <Image
+              key={darkMode ? 'logo-dark' : 'logo-light'}
               src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
               alt="AlphaFlow"
               width={sidebarCollapsed ? 36 : 140}
@@ -565,6 +569,7 @@ export function AppLayout({
           {/* Center: Logo */}
           <div className="flex-1 flex justify-center">
             <Image
+              key={darkMode ? 'logo-dark-mobile' : 'logo-light-mobile'}
               src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
               alt="AlphaFlow"
               width={90}
@@ -586,6 +591,7 @@ export function AppLayout({
               {/* Mobile Logo */}
               <div className="flex h-16 items-center justify-center px-6 border-b border-[#e2e8e6] dark:border-[#2a3330] shrink-0">
                 <Image
+                  key={darkMode ? 'logo-dark-sheet' : 'logo-light-sheet'}
                   src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
                   alt="AlphaFlow"
                   width={120}
