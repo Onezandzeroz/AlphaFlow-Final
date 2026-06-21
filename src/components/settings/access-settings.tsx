@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, type DragEvent } from 'react';
 import { useTranslation } from '@/lib/use-translation';
-import { tokenpayClient, getAccessLevelLabel, getAccessLevelDescription, type AccessCheckResult, type ProofUploadResult } from '@/lib/tokenpay';
+import { tokenpayClient, getAccessLevelLabel, getAccessLevelDescription, type AccessCheckResult } from '@/lib/tokenpay';
 import { TwoFactorSettings } from '@/components/settings/two-factor-settings';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +23,45 @@ import {
   Loader2,
   Info,
   RotateCcw,
+  Calendar,
+  TrendingUp,
+  CreditCard,
+  Ban,
+  Crown,
 } from 'lucide-react';
+
+// ── Extended access result with source/metadata fields from the API ──
+
+interface DetailedAccessResult extends AccessCheckResult {
+  source?: string;
+  sourceLabelDa?: string;
+  sourceLabelEn?: string;
+  revenue?: number | null;
+  withinFreeTier?: boolean | null;
+  subscriptionRevoked?: boolean;
+  hasChosenPlan?: boolean;
+  trialClaimedAt?: string | null;
+  freeRevenueThreshold?: number;
+}
+
+interface ProofUploadResult {
+  success: boolean;
+  proofId: string;
+  tier?: string;
+  expiresAt?: string;
+  filename: string;
+  message?: string;
+  error?: string;
+  manifest?: {
+    version: number;
+    proofId: string;
+    escrowId: string;
+    tier: string;
+    issuedAt: string;
+    expiresAt: string;
+    issuer: string;
+  };
+}
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -62,7 +100,7 @@ export function AccessSettings({ userId }: AccessSettingsProps) {
   const { t, language } = useTranslation();
 
   // ── State ──
-  const [accessResult, setAccessResult] = useState<AccessCheckResult | null>(null);
+  const [accessResult, setAccessResult] = useState<DetailedAccessResult | null>(null);
   const [isLoadingAccess, setIsLoadingAccess] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<ProofUploadResult | null>(null);
@@ -78,7 +116,7 @@ export function AccessSettings({ userId }: AccessSettingsProps) {
   const fetchAccessStatus = useCallback(async () => {
     setIsLoadingAccess(true);
     try {
-      const result = await tokenpayClient.checkAccess(userId);
+      const result = await tokenpayClient.checkAccess(userId) as DetailedAccessResult;
       setAccessResult(result);
     } catch (error) {
       console.error('Failed to fetch access status:', error);
@@ -327,6 +365,129 @@ export function AccessSettings({ userId }: AccessSettingsProps) {
             >
               <RotateCcw className="h-4 w-4" />
             </Button>
+          </div>
+
+          {/* ── Access Details Grid ── */}
+          {/* Detailed breakdown of the access type, source, revenue and
+              plan status so the user can see exactly WHY they have (or
+              don't have) write access. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Access type / source */}
+            <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
+                {accessResult?.source === 'owner' ? (
+                  <Crown className="h-3.5 w-3.5 text-amber-500" />
+                ) : accessResult?.source === 'tbkey' ? (
+                  <FileKey2 className="h-3.5 w-3.5 text-[#0d9488]" />
+                ) : accessResult?.source === 'subscription' || accessResult?.source === 'subscription_plan' ? (
+                  <CreditCard className="h-3.5 w-3.5 text-[#0d9488]" />
+                ) : accessResult?.source === 'no_plan' ? (
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                ) : accessResult?.source === 'expired' ? (
+                  <Clock className="h-3.5 w-3.5 text-red-500" />
+                ) : (
+                  <ShieldX className="h-3.5 w-3.5 text-gray-400" />
+                )}
+                {language === 'da' ? 'Adgangstype' : 'Access type'}
+              </p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                {accessResult?.sourceLabelDa
+                  ? (language === 'da' ? accessResult.sourceLabelDa : accessResult.sourceLabelEn)
+                  : (language === 'da' ? 'Ukendt' : 'Unknown')
+                }
+              </p>
+            </div>
+
+            {/* Expiry / duration */}
+            <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5 text-gray-400" />
+                {language === 'da' ? 'Udløb' : 'Expiry'}
+              </p>
+              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                {accessResult?.source === 'owner'
+                  ? (language === 'da' ? 'Permanent' : 'Permanent')
+                  : accessResult?.source === 'subscription'
+                    ? (language === 'da' ? 'Ingen udløb (gratis tier)' : 'No expiry (free tier)')
+                    : accessResult?.accessExpiry
+                      ? new Date(accessResult.accessExpiry).toLocaleDateString(
+                          language === 'da' ? 'da-DK' : 'en-GB',
+                          { day: 'numeric', month: 'short', year: 'numeric' }
+                        )
+                      : (language === 'da' ? '—' : '—')
+                }
+              </p>
+              {accessResult?.accessExpiry && accessResult.source !== 'owner' && accessResult.source !== 'subscription' && (
+                <p className={`text-xs mt-0.5 ${(accessResult.daysRemaining ?? 999) <= 7
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : 'text-gray-500 dark:text-gray-400'}`}
+                >
+                  {formatExpiryCountdown(accessResult.accessExpiry, language)}
+                </p>
+              )}
+            </div>
+
+            {/* Revenue + free tier status (only relevant for non-owner) */}
+            {accessResult?.source !== 'owner' && accessResult?.revenue !== undefined && accessResult?.revenue !== null && (
+              <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
+                  <TrendingUp className="h-3.5 w-3.5 text-gray-400" />
+                  {language === 'da' ? 'Omsætning i år' : 'Revenue this year'}
+                </p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {accessResult.revenue.toLocaleString(language === 'da' ? 'da-DK' : 'en-GB', { maximumFractionDigits: 0 })} kr.
+                </p>
+                <p className={`text-xs mt-0.5 ${
+                  accessResult.withinFreeTier
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-amber-600 dark:text-amber-400'
+                }`}>
+                  {accessResult.freeRevenueThreshold
+                    ? (language === 'da'
+                        ? `Gratis tier: ≤ ${accessResult.freeRevenueThreshold.toLocaleString('da-DK')} kr.`
+                        : `Free tier: ≤ ${accessResult.freeRevenueThreshold.toLocaleString('en-GB')} DKK`)
+                    : ''
+                  }
+                  {accessResult.withinFreeTier
+                    ? (language === 'da' ? ' ✓' : ' ✓')
+                    : (language === 'da' ? ' (overskredet)' : ' (exceeded)')
+                  }
+                </p>
+              </div>
+            )}
+
+            {/* Plan status */}
+            {accessResult?.source !== 'owner' && (
+              <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-3">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1.5">
+                  {accessResult?.subscriptionRevoked
+                    ? <Ban className="h-3.5 w-3.5 text-orange-500" />
+                    : <CheckCircle2 className="h-3.5 w-3.5 text-gray-400" />
+                  }
+                  {language === 'da' ? 'Plan status' : 'Plan status'}
+                </p>
+                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                  {accessResult?.hasChosenPlan
+                    ? (language === 'da' ? 'Plan valgt' : 'Plan chosen')
+                    : (language === 'da' ? 'Ingen plan valgt' : 'No plan chosen')
+                  }
+                </p>
+                {accessResult?.subscriptionRevoked && (
+                  <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">
+                    {language === 'da'
+                      ? 'Abonnement blokeret af App-ejer'
+                      : 'Subscription blocked by App Owner'}
+                  </p>
+                )}
+                {!accessResult?.hasChosenPlan && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                    {language === 'da'
+                      ? 'Vælg en plan for at få adgang'
+                      : 'Choose a plan to get access'}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ── Proof Details (after successful upload) ── */}

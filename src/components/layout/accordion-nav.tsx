@@ -223,31 +223,43 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
   // Keep server in sync with debounced saves
   useSyncToServer();
 
-  // ── Project Mode gating (FASE 4) ──
-  // The Projects nav item is visible when EITHER:
-  //   - the SuperDev has enabled projectModeEnabled for this tenant, OR
-  //   - the current user is a SuperDev (AppOwner), who always sees Projects
-  //     so they can configure/inspect it in any tenant — including their own
-  //     AlphaAi tenant where projectModeEnabled defaults to false.
+  // ── Project Mode gating (FASE 4) + Feature gating (FASE 5) ──
+  // Nav items are filtered based on the tenant's available features (from
+  // the subscription plan tier). SuperDev always sees everything.
   // Declared before activeSectionId because that memo depends on it.
   // Additionally, when the user is IN project mode (isProjectMode=true),
   // HIDDEN views are removed entirely and GRAYED views are kept but marked
   // so the renderer can dim + disable them.
   const isProjectMode = !!user?.isProjectMode;
+  const availableFeatures = user?.availableFeatures ?? [];
+  const isSuperDev = !!user?.isSuperDev;
+
+  // Map nav item IDs to the Feature they require. Items not in this map
+  // are visible to all tiers. SuperDev bypasses all checks.
+  const NAV_FEATURE_GATE: Record<string, string> = {
+    projects: 'PROJECT_ACCOUNTING',
+    aging: 'ADVANCED_REPORTS',
+    'cash-flow': 'ADVANCED_REPORTS',
+    'annual-report': 'ANNUAL_REPORT_IXBRL',
+    exports: 'DATA_EXPORT',
+  };
+
   const visibleSections = useMemo(() => {
-    const projectsVisible = !!user?.projectModeEnabled || !!user?.isSuperDev;
     return NAV_SECTIONS.map((section) => ({
       ...section,
       items: section.items.filter((item) => {
-        // Hide Projects entirely when the tenant doesn't have it enabled
-        // and the user isn't a SuperDev.
-        if (item.id === 'projects' && !projectsVisible) return false;
+        // Feature gate (FASE 5): hide nav items whose required feature
+        // is not in the tenant's availableFeatures. SuperDev sees all.
+        const requiredFeature = NAV_FEATURE_GATE[item.id];
+        if (requiredFeature && !isSuperDev && !availableFeatures.includes(requiredFeature)) {
+          return false;
+        }
         // In project mode, hide views that have no project meaning.
         if (isProjectMode && PROJECT_MODE_HIDDEN_VIEWS.has(item.id)) return false;
         return true;
       }),
     })).filter((section) => section.items.length > 0);
-  }, [user?.projectModeEnabled, user?.isSuperDev, isProjectMode]);
+  }, [availableFeatures, isSuperDev, isProjectMode]);
 
   // Find which section contains the currently active view
   const activeSectionId = useMemo(() => {

@@ -42,6 +42,7 @@ import {
   requireNotDemoCompany,
 } from '@/lib/rbac';
 import { requireTokenPayAccess } from '@/lib/tokenpay';
+import { hasFeature, Feature, getFeatureLabel } from '@/lib/plan-features';
 import { NextRequest, NextResponse } from 'next/server';
 
 // ─── Next.js 16 Route Context Type ──────────────────────────────
@@ -75,6 +76,12 @@ export interface GuardConfig {
 
   /** Require SuperDev status */
   requireSuperDev?: boolean;
+
+  /** Require a specific subscription plan feature (FASE 5). SuperDev + oversight always pass. */
+  requireFeature?: Feature;
+
+  /** Require multiple features (all must pass). SuperDev + oversight always pass. */
+  requireFeatures?: Feature[];
 }
 
 // ─── Convenience Presets ──────────────────────────────────────
@@ -200,6 +207,30 @@ async function executeGuard(
     for (const perm of config.permissions) {
       const denied = requirePermission(ctx, perm);
       if (denied) return { ctx, error: denied };
+    }
+  }
+
+  // 8. Subscription plan feature gate (FASE 5)
+  //    SuperDev + oversight mode always pass (handled inside hasFeature).
+  //    Returns 403 with code 'PLAN_FEATURE_REQUIRED' so the frontend can
+  //    show an upgrade prompt.
+  const requiredFeatures: Feature[] = [];
+  if (config.requireFeature) requiredFeatures.push(config.requireFeature);
+  if (config.requireFeatures?.length) requiredFeatures.push(...config.requireFeatures);
+
+  for (const feature of requiredFeatures) {
+    if (!hasFeature(ctx, feature)) {
+      return {
+        ctx,
+        error: NextResponse.json(
+          {
+            error: `Dit abonnement inkluderer ikke "${getFeatureLabel(feature, 'da')}". Opgrader for at få adgang.`,
+            code: 'PLAN_FEATURE_REQUIRED',
+            feature,
+          },
+          { status: 403 }
+        ),
+      };
     }
   }
 

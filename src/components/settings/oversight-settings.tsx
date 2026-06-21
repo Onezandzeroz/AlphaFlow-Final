@@ -24,7 +24,7 @@ import {
 import {
   Shield, Eye, Search, Building2, Users, AlertTriangle, X, Loader2,
   ChevronRight, Crown, Clock, MoreVertical, Play, Ban, Timer,
-  Bot, CheckCircle2, XCircle,
+  Bot, CheckCircle2, XCircle, CreditCard,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -50,6 +50,11 @@ interface Tenant {
   createdAt: string;
   trial: TrialInfo;
   subscriptionRevoked?: boolean;
+  // ── Plan tier info (FASE 5) ──
+  planTier?: string;
+  planPurchasedAt?: string | null;
+  planExpiresAt?: string | null;
+  planNotes?: string | null;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────
@@ -251,6 +256,60 @@ export function OversightSettings() {
     } catch (error) {
       toast.error(
         isDa ? 'Kunne ikke opdatere abonnementsadgang' : 'Failed to update subscription access',
+        { description: error instanceof Error ? error.message : undefined },
+      );
+    } finally {
+      setSubscriptionLoading(null);
+    }
+  };
+
+  // ─── Plan tier management (App Owner only) ────────────────────
+  //
+  // Activate a specific plan tier for a tenant. Sets Company.planTier,
+  // planPurchasedAt, planExpiresAt (based on binding period).
+
+  const handleSetPlanTier = async (tenant: Tenant, planId: string) => {
+    const planLabels: Record<string, { da: string; en: string }> = {
+      free: { da: 'Gratis', en: 'Free' },
+      monthly: { da: 'Månedlig', en: 'Monthly' },
+      annual: { da: 'Pro (årlig)', en: 'Pro (annual)' },
+      '2year': { da: 'Business (2-årig)', en: 'Business (2-year)' },
+      '3year': { da: 'Business Extended (3-årig)', en: 'Business Extended (3-year)' },
+    };
+    const label = planLabels[planId]?.[isDa ? 'da' : 'en'] || planId;
+
+    const confirmMsg = isDa
+      ? `Aktivér "${label}" for ${tenant.name}?\n\nDette sætter tenantens plan-tier og opdaterer tilgængelige features for alle ${tenant.memberCount} medlemmer.`
+      : `Activate "${label}" for ${tenant.name}?\n\nThis sets the tenant's plan tier and updates available features for all ${tenant.memberCount} members.`;
+
+    if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) {
+      return;
+    }
+
+    setSubscriptionLoading(tenant.id);
+    try {
+      const res = await fetch('/api/oversight/subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyId: tenant.id, action: 'setPlan', planId }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        toast.success(
+          isDa ? `Plan aktiveret: ${label}` : `Plan activated: ${label}`,
+          { description: tenant.name },
+        );
+        await fetchTenants();
+      } else {
+        toast.error(
+          isDa ? 'Kunne ikke aktivere plan' : 'Failed to activate plan',
+          { description: data.error || (isDa ? 'Ukendt fejl' : 'Unknown error') },
+        );
+      }
+    } catch (error) {
+      toast.error(
+        isDa ? 'Kunne ikke aktivere plan' : 'Failed to activate plan',
         { description: error instanceof Error ? error.message : undefined },
       );
     } finally {
@@ -705,6 +764,37 @@ export function OversightSettings() {
                           {isDa ? 'Abonnement blokeret' : 'Sub. blocked'}
                         </Badge>
                       )}
+                      {/* Plan tier badge (FASE 5) */}
+                      {(() => {
+                        const tier = tenant.planTier || 'free';
+                        const tierColors: Record<string, string> = {
+                          free: 'bg-gray-100 text-gray-600 dark:bg-gray-800/30 dark:text-gray-400',
+                          monthly: 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300',
+                          annual: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+                          twoyear: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+                          threeyear: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+                        };
+                        const tierLabels: Record<string, { da: string; en: string }> = {
+                          free: { da: 'Gratis', en: 'Free' },
+                          monthly: { da: 'Månedlig', en: 'Monthly' },
+                          annual: { da: 'Pro', en: 'Pro' },
+                          twoyear: { da: 'Business', en: 'Business' },
+                          threeyear: { da: 'Business+', en: 'Business+' },
+                        };
+                        return (
+                          <Badge
+                            className={`text-[10px] px-1.5 ${tierColors[tier] || tierColors.free}`}
+                            title={tenant.planExpiresAt
+                              ? (isDa
+                                  ? `Aktiveret: ${new Date(tenant.planPurchasedAt || '').toLocaleDateString('da-DK')} — binding udløber: ${new Date(tenant.planExpiresAt).toLocaleDateString('da-DK')}`
+                                  : `Activated: ${new Date(tenant.planPurchasedAt || '').toLocaleDateString('en-GB')} — binding expires: ${new Date(tenant.planExpiresAt).toLocaleDateString('en-GB')}`)
+                              : undefined
+                            }
+                          >
+                            {tierLabels[tier]?.[isDa ? 'da' : 'en'] || tier}
+                          </Badge>
+                        );
+                      })()}
 
                       {/* Actions dropdown */}
                       <DropdownMenu>
@@ -793,6 +883,35 @@ export function OversightSettings() {
                                     {isDa ? 'Fjern abonnementsadgang' : 'Revoke subscription access'}
                                   </DropdownMenuItem>
                                 )}
+                                {/* Plan tier selector (FASE 5 — App Owner activates paid plans) */}
+                                <DropdownMenuSeparator />
+                                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                                  {isDa ? 'Sæt plan-tier' : 'Set plan tier'}
+                                </p>
+                                {([
+                                  { id: 'free', da: 'Gratis', en: 'Free' },
+                                  { id: 'monthly', da: 'Månedlig (199 kr/md)', en: 'Monthly (199 DKK/mo)' },
+                                  { id: 'annual', da: 'Pro — 12 mdr (169 kr/md)', en: 'Pro — 12 mo (169 DKK/mo)' },
+                                  { id: '2year', da: 'Business — 24 mdr (149 kr/md)', en: 'Business — 24 mo (149 DKK/mo)' },
+                                  { id: '3year', da: 'Business+ — 36 mdr (145 kr/md)', en: 'Business+ — 36 mo (145 DKK/mo)' },
+                                ]).map((opt) => {
+                                  const currentTier = tenant.planTier || 'free';
+                                  const isActive = currentTier === opt.id;
+                                  return (
+                                    <DropdownMenuItem
+                                      key={opt.id}
+                                      onClick={() => handleSetPlanTier(tenant, opt.id)}
+                                      disabled={subscriptionLoading === tenant.id || isActive}
+                                      className={`gap-2 text-sm ${isActive ? 'font-semibold text-[#0d9488]' : ''}`}
+                                    >
+                                      {isActive
+                                        ? <CheckCircle2 className="h-3.5 w-3.5 text-[#0d9488]" />
+                                        : <CreditCard className="h-3.5 w-3.5 text-gray-400" />
+                                      }
+                                      {isDa ? opt.da : opt.en}
+                                    </DropdownMenuItem>
+                                  );
+                                })}
                               </>
                             )}
                           </DropdownMenuContent>

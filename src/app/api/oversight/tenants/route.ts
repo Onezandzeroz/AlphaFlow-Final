@@ -45,6 +45,10 @@ export const GET = withGuard(routeConfig['/api/oversight/tenants'].GET!, async (
           isDemo: true,
           isActive: true,
           createdAt: true,
+          planTier: true,
+          planPurchasedAt: true,
+          planExpiresAt: true,
+          planNotes: true,
           _count: {
             select: { members: true },
           },
@@ -124,6 +128,11 @@ export const GET = withGuard(routeConfig['/api/oversight/tenants'].GET!, async (
         subscriptionRevoked: c.members.some(
           (m) => m.user.subscriptionRevokedAt !== null,
         ),
+        // ── Plan tier info (FASE 5) ──
+        planTier: c.planTier,
+        planPurchasedAt: c.planPurchasedAt?.toISOString() ?? null,
+        planExpiresAt: c.planExpiresAt?.toISOString() ?? null,
+        planNotes: c.planNotes,
       })),
       total,
       page,

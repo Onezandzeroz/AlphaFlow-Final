@@ -17,6 +17,7 @@
  */
 
 import { Permission } from '@/lib/rbac';
+import { Feature } from '@/lib/plan-features';
 import type { GuardConfig } from '@/lib/route-guard';
 
 // ─── Config Type ──────────────────────────────────────────────
@@ -128,10 +129,10 @@ export const routeConfig: RouteConfigMap = {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_CREATE] },
   },
   '/api/transactions/export': {
-    GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_EXPORT] },
+    GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_EXPORT], requireFeature: Feature.DataExport },
   },
   '/api/transactions/export-peppol': {
-    GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_EXPORT] },
+    GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_EXPORT], requireFeature: Feature.AutoEinvoice },
   },
   '/api/transactions/recent-descriptions': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
@@ -183,7 +184,7 @@ export const routeConfig: RouteConfigMap = {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
   },
   '/api/invoices/[id]/send-einvoice': {
-    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT], requireFeature: Feature.AutoEinvoice },
   },
   '/api/invoices/[id]/einvoice-sends': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
@@ -234,10 +235,10 @@ export const routeConfig: RouteConfigMap = {
     GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
   },
   '/api/reports/annual-xbrl': {
-    GET: { auth: true, requireCompany: true, blockOversight: true, requireTokenPay: true, permissions: [Permission.REPORTS_EXPORT] },
+    GET: { auth: true, requireCompany: true, blockOversight: true, requireTokenPay: true, permissions: [Permission.REPORTS_EXPORT], requireFeature: Feature.AnnualReportIxbnl },
   },
   '/api/reports/annual-csv': {
-    GET: { auth: true, requireCompany: true, blockOversight: true, requireTokenPay: true, permissions: [Permission.REPORTS_EXPORT] },
+    GET: { auth: true, requireCompany: true, blockOversight: true, requireTokenPay: true, permissions: [Permission.REPORTS_EXPORT], requireFeature: Feature.DataExport },
   },
 
   '/api/profit-loss': {
@@ -251,14 +252,14 @@ export const routeConfig: RouteConfigMap = {
     DELETE: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_DELETE] },
   },
   '/api/budget-vs-actual': {
-    GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
+    GET: { auth: true, requireCompany: true, requireFeature: Feature.AdvancedReports },
   },
 
   '/api/cash-flow': {
-    GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
+    GET: { auth: true, requireCompany: true, requireFeature: Feature.AdvancedReports },
   },
   '/api/cash-flow-forecast': {
-    GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
+    GET: { auth: true, requireCompany: true, requireFeature: Feature.AdvancedReports },
   },
   '/api/account-trend': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
@@ -267,7 +268,7 @@ export const routeConfig: RouteConfigMap = {
     GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
   },
   '/api/aging-reports': {
-    GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
+    GET: { auth: true, requireCompany: true, requireFeature: Feature.AdvancedReports },
   },
 
   '/api/vat-register': {
@@ -325,19 +326,19 @@ export const routeConfig: RouteConfigMap = {
 
   '/api/bank-connections': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.BANK_CONNECT] },
-    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT], requireFeature: Feature.RealBankIntegration },
   },
   '/api/bank-connections/[id]': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.BANK_CONNECT] },
-    DELETE: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
-    PATCH: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
+    DELETE: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT], requireFeature: Feature.RealBankIntegration },
+    PATCH: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT], requireFeature: Feature.RealBankIntegration },
   },
   '/api/bank-connections/[id]/sync': {
-    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_SYNC] },
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_SYNC], requireFeature: Feature.RealBankIntegration },
   },
   '/api/bank-connections/[id]/consent': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.BANK_CONNECT] },
-    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT], requireFeature: Feature.RealBankIntegration },
   },
 
   '/api/bank-reconciliation': {
@@ -463,6 +464,7 @@ export const routeConfig: RouteConfigMap = {
   },
   '/api/oversight/subscription': {
     POST: { auth: true, requireSuperDev: true },
+    GET: { auth: true, requireSuperDev: true },
   },
 
   '/api/hermes/config': {

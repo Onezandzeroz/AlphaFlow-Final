@@ -12,6 +12,8 @@
 import { db } from '@/lib/db';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
+import { PlanTier, Feature, getPlanFeatures } from '@/lib/plan-features';
+import { tokenpay } from '@/lib/tokenpay';
 
 export const SESSION_COOKIE_NAME = 'session';
 const SESSION_MAX_AGE_DAYS = 7;
@@ -158,6 +160,9 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
           isDemo: true,
           cvrNumber: true,
           projectModeEnabled: true,
+          planTier: true,
+          planPurchasedAt: true,
+          planExpiresAt: true,
         },
       },
       oversightCompany: {
@@ -248,6 +253,65 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
     }).catch(() => { /* ignore */ });
   }
 
+  // ── Compute available features (FASE 5) ──
+  // Start from the plan tier's feature set, then add SuperDev override
+  // expansions (projectModeEnabled / HermesAgent.enabled). SuperDev users
+  // get ALL features regardless of plan tier.
+  const rawPlanTier = (session.activeCompany?.planTier as PlanTier) ?? PlanTier.Free;
+  const featureSet = getPlanFeatures(rawPlanTier);
+
+  // SuperDev override: projectModeEnabled adds PROJECT_ACCOUNTING even on
+  // sub-Business-Extended tiers (manual App Owner flag for beta testers).
+  if (session.activeCompany?.projectModeEnabled) {
+    featureSet.add(Feature.ProjectAccounting);
+  }
+
+  // HermesAgent.enabled override is checked separately at the Hermes route
+  // level (isHermesAvailable). We add HERMES to availableFeatures here too
+  // so the frontend nav/settings show Hermes when the override is active.
+  // We need to query HermesAgent — but only if the tier doesn't already
+  // include Hermes (avoid the extra query for Pro+ tenants).
+  if (!featureSet.has(Feature.Hermes) && session.activeCompanyId) {
+    try {
+      const hermesAgent = await db.hermesAgent.findUnique({
+        where: { companyId: session.activeCompanyId },
+        select: { enabled: true },
+      });
+      if (hermesAgent?.enabled) {
+        featureSet.add(Feature.Hermes);
+      }
+    } catch {
+      // Non-critical — leave Hermes out.
+    }
+  }
+
+  // ── .tbkey proof override (FASE 5) ──
+  // A valid .tbkey proof grants ALL features (highest tier = Business Extended).
+  // This makes .tbkey proofs override the plan tier for feature access — a
+  // proof holder on the Free plan gets Hermes, advanced reports, project
+  // accounting, etc.
+  //
+  // We only check TokenPay if the user doesn't already have all features
+  // (avoids the extra API call for SuperDev + threeyear tier). The check is
+  // best-effort: if the TokenPay service is unreachable, the user falls back
+  // to their plan-tier features only.
+  if (!session.user.isSuperDev && !featureSet.has(Feature.ProjectAccounting)) {
+    try {
+      const status = await tokenpay.getUserStatus(session.user.id);
+      if (status.activeProof) {
+        // .tbkey proof holder — grant ALL features
+        Object.values(Feature).forEach((f) => featureSet.add(f));
+      }
+    } catch {
+      // TokenPay unavailable — fall back to plan-tier features only.
+    }
+  }
+
+  // SuperDev always gets all features (for testing/inspection in any tenant)
+  if (session.user.isSuperDev) {
+    Object.values(Feature).forEach((f) => featureSet.add(f));
+  }
+
   return {
     id: session.user.id,
     email: session.user.email,
@@ -275,6 +339,11 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
       ? effectiveActiveProject.endDate.toISOString()
       : null,
     isProjectMode: effectiveActiveProject != null,
+    // ── Subscription plan (FASE 5) ──
+    planTier: rawPlanTier,
+    planPurchasedAt: session.activeCompany?.planPurchasedAt?.toISOString() ?? null,
+    planExpiresAt: session.activeCompany?.planExpiresAt?.toISOString() ?? null,
+    availableFeatures: Array.from(featureSet),
   };
 }
 

@@ -32,6 +32,19 @@ export interface User {
   activeProjectEndDate?: string | null;
   /** True when activeProjectId is set */
   isProjectMode?: boolean;
+  // ── Subscription plan (FASE 5 — feature gating) ──
+  /** Active company's plan tier ('free' | 'monthly' | 'annual' | 'twoyear' | 'threeyear') */
+  planTier?: string | null;
+  /** When the current plan was activated (ISO string or null) */
+  planPurchasedAt?: string | null;
+  /** End of binding period (ISO string or null for free + monthly) */
+  planExpiresAt?: string | null;
+  /** Pre-computed list of features available to this user+company */
+  availableFeatures?: string[];
+  /** Team member seat cap for the active company (null = unlimited) */
+  seatCap?: number | null;
+  /** Current team member count (members + pending invitations) */
+  seatCount?: number;
 }
 
 export interface CompanyInfo {

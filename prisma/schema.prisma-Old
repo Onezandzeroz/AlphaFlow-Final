@@ -254,6 +254,12 @@ model Company {
   storecoveConnectedAt     DateTime?           // When Storecove was connected
   storecoveLastTestedAt    DateTime?           // Last successful connection test
 
+  // ── Project Mode gating (FASE 4 — SuperDev controls per-tenant visibility) ──
+  // When false, the Projects section, ProjectSelector dropdowns, project
+  // accounts and the project-mode banner are all HIDDEN for this tenant.
+  // SuperDev (AppOwner) toggles this per company from company settings.
+  projectModeEnabled       Boolean             @default(false)
+
   // Meta
   isDemo               Boolean  @default(false)  // Demo company flag — only the shared demo company should be true
   isActive             Boolean  @default(true)
@@ -349,6 +355,7 @@ model User {
   demoModeEnabled        Boolean            @default(false)
   isSuperDev             Boolean            @default(false)  // AlphaAi SUPER_DEV read-only cross-tenant access
   trialClaimedAt         DateTime?          // When user self-claimed their one-time free trial (not set for owner-granted trials)
+  subscriptionRevokedAt  DateTime?          // Set by App Owner to revoke subscription-based free-tier access (revenue gate). Does NOT affect .tbkey proof access.
 
   // Two-Factor Authentication (TOTP)
   // twoFactorSecret: AES-256-GCM encrypted TOTP secret (base32-encoded)
@@ -399,6 +406,11 @@ model Session {
   userId             String
   activeCompanyId    String?
   oversightCompanyId String?   // When set, the App Owner is overseeing this tenant in read-only mode
+  // ── Project Mode (FASE 4) ──
+  // When set, the user is working inside this project's context: the project
+  // banner is shown, forms auto-attach new entries to this project, and the
+  // ProjectSelector is locked. Cleared by "Tilbage til tenant-regnskabet".
+  activeProjectId    String?
   ipAddress          String?
   userAgent          String?
   expiresAt          DateTime
@@ -407,12 +419,14 @@ model Session {
   user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   activeCompany      Company?  @relation(fields: [activeCompanyId], references: [id], onDelete: SetNull)
   oversightCompany   Company?  @relation("OversightCompany", fields: [oversightCompanyId], references: [id], onDelete: SetNull)
+  activeProject      Project?  @relation("ActiveProjectSession", fields: [activeProjectId], references: [id], onDelete: SetNull)
 
   @@index([token])
   @@index([userId])
   @@index([expiresAt])
   @@index([activeCompanyId])
   @@index([oversightCompanyId])
+  @@index([activeProjectId])
 }
 
 // ─── TRANSACTIONS ─────────────────────────────────────────────────
@@ -430,6 +444,7 @@ model Transaction {
   receiptImage    String?
   invoiceId       String?
   accountId       String?
+  projectId       String?                                   // FASE 4: project this transaction belongs to (null = tenant-level)
   cancelled       Boolean         @default(false)
   cancelReason    String?
   originalId      String?
@@ -439,6 +454,7 @@ model Transaction {
   user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   invoice         Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   account         Account?        @relation(fields: [accountId], references: [id])
+  project         Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   companyId       String
   company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
@@ -446,6 +462,7 @@ model Transaction {
   @@index([companyId, type, date])
   @@index([userId])
   @@index([accountId])
+  @@index([projectId])
 }
 
 // ─── INVOICES ─────────────────────────────────────────────────────
@@ -827,10 +844,18 @@ model Budget {
   entries     BudgetEntry[]
   companyId   String
   company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  // ── Project Mode (FASE 4) ──
+  // When set, this budget belongs to a specific project. When null, it is a
+  // tenant-level budget. Each project can have its own budget per year.
+  projectId   String?
+  project     Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
-  @@unique([companyId, year])
+  // One budget per (company, project, year): tenant budgets have projectId=null,
+  // project budgets have projectId=<id>. Both can coexist for the same year.
+  @@unique([companyId, projectId, year])
   @@index([companyId])
   @@index([userId])
+  @@index([projectId])
 }
 
 model BudgetEntry {
@@ -1215,6 +1240,10 @@ model Project {
   journalLines JournalEntryLine[]
   invoices     Invoice[]
   budgetEntries ProjectBudgetEntry[]
+  transactions Transaction[]   // FASE 4: transactions attached to this project
+  budgets      Budget[]        // FASE 4: project-scoped budgets
+  // Sessions that currently have this project active (project mode)
+  activeSessions Session[] @relation("ActiveProjectSession")
 
   // Meta
   createdAt   DateTime      @default(now())

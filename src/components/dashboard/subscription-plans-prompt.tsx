@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/lib/use-translation';
 import { useAuthStore } from '@/lib/auth-store';
+import { tierToFrontendPlanId, type PlanTier } from '@/lib/plan-features';
 import { useSubscriptionPlansStore } from '@/lib/subscription-plans-store';
 import { useAccessCacheStore } from '@/hooks/use-write-access-guard';
 import { hasAccess } from '@/lib/tokenpay';
@@ -180,6 +181,7 @@ function PlanCard({
   isActiveSlide,
   isMobile,
   startingTrial,
+  isCurrentPlan,
   t,
 }: {
   plan: Plan;
@@ -188,6 +190,7 @@ function PlanCard({
   isActiveSlide?: boolean;
   isMobile?: boolean;
   startingTrial: boolean;
+  isCurrentPlan?: boolean;
   t: (da: string, en: string) => string;
 }) {
   const isFree = plan.isFree;
@@ -326,24 +329,28 @@ function PlanCard({
       {/* CTA button */}
       <button
         type="button"
-        disabled={isLoading}
+        disabled={isLoading || isCurrentPlan}
         className={`
           mt-auto w-full flex items-center justify-center gap-2
           rounded-xl font-semibold
           transition-all duration-200 hover:shadow-md active:scale-[0.97]
           ${isMobile ? 'h-12 text-sm mt-4' : 'h-9 sm:h-10 lg:h-11 px-2 sm:px-3 text-xs sm:text-sm lg:text-base'}
           ${isLoading ? 'opacity-60 cursor-wait' : ''}
-          ${isFree
-            ? 'bg-[#0d9488]/60 hover:bg-[#0d9488]/80 text-white/80 hover:text-white border border-[#0d9488]/30'
-            : 'bg-[#0d9488]/80 hover:bg-[#0d9488] text-white/90 hover:text-white border border-[#0d9488]/40'
+          ${isCurrentPlan
+            ? 'bg-white/10 text-white/50 border border-white/10 cursor-default'
+            : isFree
+              ? 'bg-[#0d9488]/60 hover:bg-[#0d9488]/80 text-white/80 hover:text-white border border-[#0d9488]/30'
+              : 'bg-[#0d9488]/80 hover:bg-[#0d9488] text-white/90 hover:text-white border border-[#0d9488]/40'
           }
         `}
       >
-        <span>{isLoading
-          ? (isDa ? 'Starter prøveperiode...' : 'Starting trial...')
-          : (isDa ? plan.ctaDa : plan.ctaEn)
+        <span>{isCurrentPlan
+          ? (isDa ? 'Aktuel plan' : 'Current plan')
+          : isLoading
+            ? (isDa ? 'Starter prøveperiode...' : 'Starting trial...')
+            : (isDa ? plan.ctaDa : plan.ctaEn)
         }</span>
-        {!isLoading && (
+        {!isLoading && !isCurrentPlan && (
           <ArrowRight className={`opacity-60 group-hover:opacity-100 transition-opacity ${isMobile ? 'h-4 w-4' : 'h-3.5 w-3.5 sm:h-4 sm:w-4'}`} />
         )}
       </button>
@@ -542,6 +549,7 @@ function MobileCarousel({
                 isActiveSlide={i === activeIndex}
                 isMobile
                 startingTrial={startingTrial}
+                isCurrentPlan={currentPlanId === plan.id}
                 t={t}
               />
             </div>
@@ -578,6 +586,12 @@ export function SubscriptionPlansPrompt() {
   const user = useAuthStore((s) => s.user);
   const { language } = useTranslation();
   const isDa = language === 'da';
+
+  // Current plan tier from the user's active company (FASE 5).
+  // Used to show "Aktuel" badge on the matching plan card.
+  const currentPlanId = user?.planTier
+    ? tierToFrontendPlanId(user.planTier as PlanTier)
+    : null;
 
   const [visible, setVisible] = useState(false);
   const [animatingIn, setAnimatingIn] = useState(false);
@@ -775,36 +789,44 @@ export function SubscriptionPlansPrompt() {
 
   const handleSelectPlan = useCallback(
     (plan: Plan) => {
-      if (plan.isFree) {
-        setStartingTrial(true);
-        fetch('/api/trial/start', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success) {
-              dismiss();
-              window.dispatchEvent(new CustomEvent('access:refresh'));
-            } else if (data.alreadyClaimed) {
-              dismiss();
-            }
-          })
-          .catch(() => {})
-          .finally(() => {
-            setStartingTrial(false);
-          });
-        return;
-      }
+      // All plans (free + paid) call /api/trial/start with the planId.
+      // The backend records the user's choice (trialClaimedAt) and for
+      // free plans activates the tier immediately. For paid plans it
+      // records the intent — the App Owner activates paid tiers via
+      // oversight. After the response, navigate to the access settings
+      // so the user can upload a .tbkey proof or see their plan status.
+      setStartingTrial(true);
+      fetch('/api/trial/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId: plan.id }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            dismiss();
+            window.dispatchEvent(new CustomEvent('access:refresh'));
 
-      const targetSearch = '?tab=access';
-      window.history.pushState({ view: 'settings' }, '', `/settings${targetSearch}`);
-      window.dispatchEvent(
-        new CustomEvent('app:navigate', {
-          detail: { view: 'settings', search: targetSearch },
-        }),
-      );
-      dismiss();
+            // For paid plans, navigate to the access settings tab so the
+            // user can see their plan status + upload a .tbkey proof.
+            // For free plans, stay on the current page (access is now active).
+            if (data.paidPlan) {
+              const targetSearch = '?tab=access';
+              window.history.pushState({ view: 'settings' }, '', `/settings${targetSearch}`);
+              window.dispatchEvent(
+                new CustomEvent('app:navigate', {
+                  detail: { view: 'settings', search: targetSearch },
+                }),
+              );
+            }
+          } else if (data.alreadyClaimed) {
+            dismiss();
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setStartingTrial(false);
+        });
     },
     [dismiss],
   );
@@ -925,6 +947,7 @@ export function SubscriptionPlansPrompt() {
                     isDa={isDa}
                     onSelect={handleSelectPlan}
                     startingTrial={startingTrial}
+                    isCurrentPlan={currentPlanId === plan.id}
                     t={t}
                   />
                 ))}

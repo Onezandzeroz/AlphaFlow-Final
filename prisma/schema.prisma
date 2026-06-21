@@ -194,6 +194,20 @@ enum ProjectStatus {
   CANCELLED
 }
 
+// ─── SUBSCRIPTION PLAN TIERS ───────────────────────────────────────
+// The tier determines which features a tenant can access. Set on the
+// Company model because plans are purchased by the tenant OWNER and
+// apply to ALL team members. The App Owner activates paid tiers via
+// the oversight UI (/api/oversight/subscription).
+
+enum PlanTier {
+  free       // Gratis — revenue ≤ 50.000 kr.
+  monthly    // Månedlig — 199 kr./md., no commitment
+  annual     // Pro — 169 kr./md., 12-month binding
+  twoyear    // Business — 149 kr./md., 24-month binding (frontend id: "2year")
+  threeyear  // Business Extended — 145 kr./md., 36-month binding (frontend id: "3year")
+}
+
 // ─── COMPANY (TENANT ENTITY) ──────────────────────────────────────
 // Replaces the old CompanyInfo model. This IS the tenant boundary.
 
@@ -260,6 +274,17 @@ model Company {
   // SuperDev (AppOwner) toggles this per company from company settings.
   projectModeEnabled       Boolean             @default(false)
 
+  // ── Subscription plan (FASE 5 — feature gating) ──
+  // The active plan tier determines which features the tenant can access.
+  // Defaults to 'free' for all new + legacy tenants. Paid tiers are activated
+  // by the App Owner via /api/oversight/subscription. See lib/plan-features.ts
+  // for the tier → feature mapping.
+  planTier                 PlanTier            @default(free)
+  planPurchasedAt          DateTime?           // When the current plan was activated
+  planExpiresAt            DateTime?           // End of binding period (null for free + monthly)
+  planActivatedBy          String?             // userId of the App Owner who set the paid plan (audit trail)
+  planNotes                String?             // SuperDev free-text note (e.g. "granted as courtesy")
+
   // Meta
   isDemo               Boolean  @default(false)  // Demo company flag — only the shared demo company should be true
   isActive             Boolean  @default(true)
@@ -293,6 +318,7 @@ model Company {
   @@unique([name])
   @@index([isActive])
   @@index([cvrNumber])
+  @@index([planTier])
 }
 
 // ─── USER-COMPANY JUNCTION ────────────────────────────────────────

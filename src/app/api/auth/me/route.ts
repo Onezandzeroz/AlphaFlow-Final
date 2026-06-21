@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { withGuard } from '@/lib/route-guard';
+import { getSeatCap, type PlanTier } from '@/lib/plan-features';
 
 export const GET = withGuard({ auth: 'optional' }, async (request, ctx) => {
   try {
@@ -50,6 +51,23 @@ export const GET = withGuard({ auth: 'optional' }, async (request, ctx) => {
       isActive: c.company.isActive,
     }));
 
+    // ── Compute seat usage for the active company (FASE 5) ──
+    let seatCap: number | null = null;
+    let seatCount = 0;
+    if (ctx.activeCompanyId) {
+      seatCap = getSeatCap(ctx.planTier as PlanTier);
+      const [memberCount, pendingInvites] = await Promise.all([
+        db.userCompany.count({ where: { companyId: ctx.activeCompanyId } }),
+        db.invitation.count({
+          where: {
+            companyId: ctx.activeCompanyId,
+            status: 'PENDING',
+          },
+        }),
+      ]);
+      seatCount = memberCount + pendingInvites;
+    }
+
     return NextResponse.json({
       user: {
         id: ctx.id,
@@ -75,6 +93,13 @@ export const GET = withGuard({ auth: 'optional' }, async (request, ctx) => {
         activeProjectStartDate: ctx.activeProjectStartDate,
         activeProjectEndDate: ctx.activeProjectEndDate,
         isProjectMode: ctx.isProjectMode,
+        // ── Subscription plan (FASE 5 — feature gating) ──
+        planTier: ctx.planTier,
+        planPurchasedAt: ctx.planPurchasedAt,
+        planExpiresAt: ctx.planExpiresAt,
+        availableFeatures: ctx.availableFeatures,
+        seatCap,
+        seatCount,
         companies: mappedCompanies,
       },
     });

@@ -7,6 +7,7 @@ import { hashPassword } from '@/lib/password';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
 import { auditCreate, requestMetadata } from '@/lib/audit';
+import { getSeatCap, type PlanTier } from '@/lib/plan-features';
 
 /** Generate a readable 12-char password: mix of upper, lower, digits */
 function generateInvitePassword(): string {
@@ -56,10 +57,10 @@ export const POST = withGuard(guard.POST!, async (request, ctx, context) => {
     const { id: companyId } = await context.params as { id: string };
     const { email, role } = await request.json();
 
-    // Look up company for invitation email
+    // Look up company for invitation email + plan tier (seat cap)
     const company = await db.company.findUnique({
       where: { id: companyId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, planTier: true },
     });
     if (!company) {
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
@@ -67,6 +68,29 @@ export const POST = withGuard(guard.POST!, async (request, ctx, context) => {
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
+    }
+
+    // ── Seat cap check (FASE 5) ──
+    // Count current members + pending invitations and compare to the
+    // plan tier's seat cap. SuperDev bypasses (they manage all tenants).
+    const seatCap = getSeatCap(company.planTier as PlanTier);
+    if (seatCap !== null && !ctx.isSuperDev) {
+      const [memberCount, pendingInvites] = await Promise.all([
+        db.userCompany.count({ where: { companyId } }),
+        db.invitation.count({ where: { companyId, status: 'PENDING' } }),
+      ]);
+      const currentSeats = memberCount + pendingInvites;
+      if (currentSeats >= seatCap) {
+        return NextResponse.json(
+          {
+            error: `Seat limit reached (${currentSeats}/${seatCap}). Opgrader til en højere plan for at invitere flere medlemmer.`,
+            code: 'SEAT_LIMIT_REACHED',
+            seatCap,
+            seatCount: currentSeats,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const normalizedEmail = email.toLowerCase().trim();

@@ -9,6 +9,10 @@
 
 import { CompanyRole } from '@prisma/client';
 import { NextResponse } from 'next/server';
+// plan-features.ts imports only the AuthContext TYPE from this module
+// (type-only, erased at compile time), so there is no runtime circular
+// dependency. Safe to import at the top level.
+import { hasFeature as planHasFeature, Feature as PlanFeature } from '@/lib/plan-features';
 
 // ─── AUTH CONTEXT ────────────────────────────────────────────────────
 // Defined inline here; consolidated export from session.ts
@@ -42,6 +46,15 @@ export interface AuthContext {
   activeProjectEndDate: string | null;
   /** True when activeProjectId is set */
   isProjectMode: boolean;
+  // ── Subscription plan (FASE 5 — feature gating) ──
+  /** Active company's plan tier (null when no active company or SuperDev without company) */
+  planTier: import('@/lib/plan-features').PlanTier | null;
+  /** When the current plan was activated (ISO string or null) */
+  planPurchasedAt: string | null;
+  /** End of binding period (ISO string or null for free + monthly) */
+  planExpiresAt: string | null;
+  /** Pre-computed list of features available to this user+company (includes SuperDev overrides) */
+  availableFeatures: import('@/lib/plan-features').Feature[];
 }
 
 // ─── ROLE HIERARCHY ──────────────────────────────────────────────────
@@ -367,9 +380,18 @@ export function blockOversightMutation(
 // ─── PROJECT MODE GUARDS (FASE 4) ───────────────────────────────────
 
 /**
- * Block access to project-related APIs when project mode is disabled for the
- * active tenant. SuperDev (AppOwner) is always allowed to read project data
- * so they can configure / inspect tenants, but writes follow normal rules.
+ * Block access to project-related APIs when the tenant's plan tier does not
+ * include project accounting (Business Extended) AND no SuperDev override
+ * (projectModeEnabled) is active.
+ *
+ * This is a thin wrapper around hasFeature(ctx, Feature.ProjectAccounting)
+ * so that the 30+ project route files that import it don't need touching.
+ *
+ * The resolution includes:
+ *   - SuperDev always passes
+ *   - Oversight mode passes (read-only — writes blocked elsewhere)
+ *   - planTier == threeyear (Business Extended) passes
+ *   - Company.projectModeEnabled override passes (manual SuperDev flag)
  *
  * Usage in every project API route (GET/POST/PUT/DELETE):
  * ```ts
@@ -384,25 +406,18 @@ export function requireProjectModeEnabled(
 ): NextResponse | null {
   if (!ctx) return null; // Let requirePermission handle unauthenticated
 
-  // Oversight mode always sees project data (read-only) — guard below blocks writes
-  if (ctx.isOversightMode) return null;
-
-  // SuperDev (AppOwner) always has access to project data so they can
-  // configure + inspect Projects in ANY tenant — including their own
-  // AlphaAi tenant where projectModeEnabled may be off by default.
-  if (ctx.isSuperDev) return null;
-
-  if (!ctx.projectModeEnabled) {
-    return NextResponse.json(
-      {
-        error: 'Projekt-tilstand er ikke aktiveret for denne virksomhed',
-        code: 'PROJECT_MODE_DISABLED',
-      },
-      { status: 403 }
-    );
+  if (planHasFeature(ctx, PlanFeature.ProjectAccounting)) {
+    return null;
   }
 
-  return null;
+  return NextResponse.json(
+    {
+      error: 'Projektregnskab kræver Business Extended abonnement',
+      code: 'PLAN_FEATURE_REQUIRED',
+      feature: 'PROJECT_ACCOUNTING',
+    },
+    { status: 403 }
+  );
 }
 
 /**
