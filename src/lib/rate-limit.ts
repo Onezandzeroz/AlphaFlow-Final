@@ -17,6 +17,8 @@
  * (Redis, database-backed) for this layer.
  */
 
+import { registerCache } from '@/lib/cache-registry';
+
 interface RateLimitEntry {
   count: number;
   resetAt: number;
@@ -39,6 +41,18 @@ function cleanup() {
     }
   }
 }
+
+// Register with the central cache registry so a single 10-minute sweep
+// also evicts expired entries even when traffic is low (the local
+// cleanup() above only runs when a request triggers rateLimit()).
+registerCache('rate-limit', () => {
+  const now = Date.now();
+  for (const [key, entry] of store) {
+    if (entry.resetAt <= now) {
+      store.delete(key);
+    }
+  }
+});
 
 export interface RateLimitConfig {
   /** Maximum number of requests in the window */

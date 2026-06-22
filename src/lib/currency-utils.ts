@@ -148,6 +148,8 @@ export function getCurrencySymbol(currency: string): string {
 
 // ─── EXCHANGE RATE SYSTEM ────────────────────────────────────────────
 
+import { registerCache } from '@/lib/cache-registry';
+
 /** Cache entry for an exchange rate fetch */
 interface CacheEntry {
   rates: Record<string, number>;
@@ -158,6 +160,18 @@ interface CacheEntry {
 /** In-memory cache with 1-hour TTL */
 const exchangeRateCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Register with central cache registry so stale exchange-rate entries are
+// evicted periodically (entries are only read on currency conversion, so
+// without this the map grows with every distinct base/date combination).
+registerCache('exchange-rates', () => {
+  const now = Date.now();
+  for (const [key, entry] of exchangeRateCache) {
+    if (now - entry.fetchedAt > CACHE_TTL_MS) {
+      exchangeRateCache.delete(key);
+    }
+  }
+});
 
 /** The primary API source for exchange rates (Frankfurter — free, EU-based, no key required) */
 const FRANKFURTER_API = 'https://api.frankfurter.app';

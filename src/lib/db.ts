@@ -74,10 +74,95 @@ const globalForPrisma = globalThis as unknown as {
   prisma: ReturnType<typeof createDbClient> | undefined
 }
 
+// ─── NEON CONNECTION RESILIENCE ─────────────────────────────────
+//
+// Neon (Postgres serverless) suspends idle compute after ~5 min of
+// inactivity. The next request hits a closed connection and fails with
+// errors like:
+//   - "Error in PostgreSQL connection: Error { kind: Closed, cause: None }"
+//   - PrismaClientKnownRequestError with code P1001 / P1002 / P1008
+//
+// This retry extension wraps every query: on a transient connection
+// error it waits briefly (200ms) and retries, up to 3 attempts. The
+// first successful retry wakes Neon's compute so subsequent queries
+// succeed immediately.
+//
+// Retries only on these signals (safe — never retries constraint
+// violations or business-logic errors):
+//   - connection closed / reset / timed out
+//   - Prisma codes P1001 (can't reach DB), P1002 (connection lost),
+//     P1008 (timed out), P1017 (server closed connection)
+//   - Transaction Already Rolled Back (TARB) during nested transactions
+
+const RETRYABLE_PRISMA_CODES = new Set(['P1001', 'P1002', 'P1008', 'P1017'])
+const MAX_DB_RETRIES = 3
+const RETRY_DELAY_MS = 200
+
+function isRetryableError(error: unknown): boolean {
+  if (error == null) return false
+  // Prisma known errors carry a `code` property (P1xxx)
+  if (typeof error === 'object' && 'code' in error) {
+    const code = (error as { code: string }).code
+    if (RETRYABLE_PRISMA_CODES.has(code)) return true
+  }
+  // Network-level errors: closed / reset / timed out
+  const msg =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : ''
+  return (
+    /connection.*closed/i.test(msg) ||
+    /connection.*reset/i.test(msg) ||
+    /timed?\s*out/i.test(msg) ||
+    /kind:\s*["']?Closed/i.test(msg) ||
+    /ECONNRESET|EPIPE|ETIMEDOUT/.test(msg) ||
+    /Transaction\s+already\s+rolled\s+back/i.test(msg)
+  )
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Query extension that transparently retries transient connection errors
+ * (Neon idle-suspend, network blips). Runs AFTER the decimal serializer
+ * so both concerns stay isolated.
+ */
+const retryExtension = Prisma.defineExtension({
+  name: 'neonConnectionRetry',
+  query: {
+    $allModels: {
+      $allOperations: async ({ args, query }) => {
+        let lastError: unknown
+        for (let attempt = 1; attempt <= MAX_DB_RETRIES; attempt++) {
+          try {
+            return await query(args)
+          } catch (error) {
+            lastError = error
+            if (attempt === MAX_DB_RETRIES || !isRetryableError(error)) {
+              throw error
+            }
+            // Brief backoff: 200ms, 400ms. Keeps latency low while
+            // giving Neon's cold-start a moment to complete.
+            await sleep(RETRY_DELAY_MS * attempt)
+          }
+        }
+        // Should be unreachable, but keep TS happy.
+        throw lastError
+      },
+    },
+  },
+})
+
 function createDbClient() {
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-  }).$extends(decimalExtension)
+  })
+    .$extends(decimalExtension)
+    .$extends(retryExtension)
 }
 
 export const db = globalForPrisma.prisma ?? createDbClient()

@@ -33,6 +33,7 @@
  */
 
 import { logger } from '@/lib/logger';
+import { registerCache } from '@/lib/cache-registry';
 
 // ─── CONFIG ──────────────────────────────────────────────────────
 
@@ -146,6 +147,17 @@ export class CvrClient {
     const hasCreds = !!(this.username && this.password);
     this.simulationMode = flag === undefined ? !hasCreds : flag !== 'false';
     this.timeout = DEFAULT_TIMEOUT;
+
+    // Register with central cache registry so expired CVR entries are
+    // evicted every 10 minutes even if no new lookups arrive.
+    registerCache('cvr-client', () => {
+      const now = Date.now();
+      for (const [key, entry] of this.cache) {
+        if (entry.expiresAt <= now) {
+          this.cache.delete(key);
+        }
+      }
+    });
   }
 
   /** True when running against the real CVR register. */
