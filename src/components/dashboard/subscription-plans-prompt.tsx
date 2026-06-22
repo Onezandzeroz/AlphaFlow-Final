@@ -682,6 +682,12 @@ export function SubscriptionPlansPrompt() {
     if (user.isDemoCompany) return;
     if (typeof window === 'undefined') return;
 
+    // Don't re-evaluate visibility while the payment result overlay is
+    // showing — auth:refresh fires after payment and would otherwise
+    // re-run this effect with the new planTier, potentially toggling
+    // visible/resultOverlay state and causing the welcome card to blink.
+    if (resultOverlay.open) return;
+
     const dismissedKey = `${DISMISSED_PREFIX}${user.id}`;
     const everLoggedKey = `${EVER_LOGGED_PREFIX}${user.id}`;
     if (localStorage.getItem(dismissedKey) === 'true') return;
@@ -747,7 +753,7 @@ export function SubscriptionPlansPrompt() {
       }, 800);
       return;
     }
-  }, [user, accessResult, accessIsLoading, accessIsOwner, fetchAccess]);
+  }, [user, accessResult, accessIsLoading, accessIsOwner, fetchAccess, resultOverlay.open]);
 
   // ── Separate function to check for active tbkey proof ───────────
   // Calls the /status endpoint which returns activeProof info.
