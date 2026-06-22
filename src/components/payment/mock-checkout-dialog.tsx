@@ -87,7 +87,7 @@ export function MockCheckoutDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleCancel()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" style={{ zIndex: 300 }}>
         <DialogHeader>
           <div className="flex items-center gap-2 mb-1">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
