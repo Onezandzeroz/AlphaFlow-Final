@@ -856,10 +856,13 @@ export function SubscriptionPlansPrompt() {
 
           // Shared success handler — used by both mock dialog and real overlay.
           // Shows the fullscreen PaymentResultOverlay (animated checkmark +
-          // welcome card) instead of a toast.
+          // welcome card) instead of a toast. 300ms delay so any closing
+          // modal/overlay finishes fading out first (avoids blink).
           const handleSuccess = () => {
             dismiss();
-            setResultOverlay({ open: true, type: 'success', planName: plan.name });
+            setTimeout(() => {
+              setResultOverlay({ open: true, type: 'success', planName: plan.name });
+            }, 300);
             fetch(
               `/api/subscription/payment-callback?payment_id=${encodeURIComponent(data.paymentId)}`
             )
@@ -875,12 +878,16 @@ export function SubscriptionPlansPrompt() {
 
           const handleCancel = () => {
             setStartingTrial(false);
-            setResultOverlay({ open: true, type: 'cancel' });
+            setTimeout(() => {
+              setResultOverlay({ open: true, type: 'cancel' });
+            }, 300);
           };
 
           const handleError = () => {
             setStartingTrial(false);
-            setResultOverlay({ open: true, type: 'error' });
+            setTimeout(() => {
+              setResultOverlay({ open: true, type: 'error' });
+            }, 300);
           };
 
           // ── Mock mode: show visible MockCheckoutDialog ──
@@ -940,13 +947,15 @@ export function SubscriptionPlansPrompt() {
     if (!mockCheckout) return;
     const paymentId = mockCheckout.paymentId;
     const planName = mockCheckout.planName;
-    setMockCheckout((prev) => (prev ? { ...prev, open: false } : null));
+    setMockCheckout(null);
     dismiss();
-    // Show the fullscreen success overlay with animated checkmark + welcome card
-    setResultOverlay({ open: true, type: 'success', planName });
+    // Delay opening the result overlay by 300ms so the checkout modal
+    // finishes fading out first — otherwise the checkmark animation
+    // briefly flashes on top of the fading checkout modal.
+    setTimeout(() => {
+      setResultOverlay({ open: true, type: 'success', planName });
+    }, 300);
     // Trigger plan activation via the callback endpoint (auto-succeeds in mock mode).
-    // AWAIT the activation to complete before dispatching refresh events —
-    // otherwise auth:refresh fires before the new planTier is in the DB.
     fetch(`/api/subscription/payment-callback?payment_id=${encodeURIComponent(paymentId)}`)
       .then(() => {
         window.dispatchEvent(new CustomEvent('auth:refresh'));
@@ -961,13 +970,17 @@ export function SubscriptionPlansPrompt() {
   const handleMockCancel = useCallback(() => {
     setMockCheckout(null);
     setStartingTrial(false);
-    setResultOverlay({ open: true, type: 'cancel' });
+    setTimeout(() => {
+      setResultOverlay({ open: true, type: 'cancel' });
+    }, 300);
   }, []);
 
   const handleMockError = useCallback(() => {
     setMockCheckout(null);
     setStartingTrial(false);
-    setResultOverlay({ open: true, type: 'error' });
+    setTimeout(() => {
+      setResultOverlay({ open: true, type: 'error' });
+    }, 300);
   }, []);
 
   useEffect(() => {

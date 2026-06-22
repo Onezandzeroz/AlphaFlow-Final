@@ -157,51 +157,66 @@ export function PaymentResultOverlay({
         </div>
 
         {/* ── Welcome card (success only) — ABSOLUTE, overlaps icon ── */}
-        {/* Positioned in FRONT of the icon + title, centered. Fades in
-            without shifting anything — the icon stays exactly where it was. */}
+        {/* Sized to match the plans prompt (max-w-[1280px], 16:9) so it
+            feels like a natural replacement of the plans prompt. Fades
+            in IN FRONT of the icon without shifting it. */}
         {isSuccess && showWelcome && planName && (
           <div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-              w-full max-w-2xl aspect-video sm:aspect-[16/9]
-              rounded-2xl overflow-hidden
-              border border-[#1e3a5f]/60
-              bg-gradient-to-br from-[#0a1628]/98 to-[#0e1f3d]/98
+              w-full max-w-[1280px] aspect-[16/9] max-h-[95vh]
+              rounded-t-3xl sm:rounded-2xl overflow-hidden
+              border border-[#1a2d4d]/60
+              bg-[#0c1a33]
               shadow-2xl shadow-black/60
               animate-fade-in-scale-overlay z-10"
           >
-            {/* Decorative gradient header — top ~35% of the 16:9 card */}
-            <div className="relative overflow-hidden h-[38%]
-              bg-gradient-to-br from-[#0d9488] via-[#0f766e] to-[#134e4a]">
-              <div className="absolute inset-0 opacity-25 pointer-events-none
-                bg-[radial-gradient(circle_at_top_right,rgba(45,212,191,0.6),transparent_60%)]" />
-              <div className="relative h-full flex items-center px-6 sm:px-8 gap-4">
-                <div className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl
-                  bg-white/15 border border-white/25 backdrop-blur-sm shrink-0">
-                  <Sparkles className="h-7 w-7 sm:h-8 sm:w-8 text-white" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-white/70 text-xs sm:text-sm uppercase tracking-wider font-semibold">
-                    {isDa ? 'Velkommen til' : 'Welcome to'}
-                  </p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-white tracking-tight truncate">
-                    AlphaFlow {planName}
-                  </h3>
+            {/* Inner card — matches plans prompt structure */}
+            <div className="relative flex flex-col h-full overflow-hidden bg-[#0c1a33] border border-[#1a2d4d]/60 sm:rounded-2xl rounded-t-3xl">
+              {/* Background dot grid (matches plans prompt) */}
+              <div
+                className="absolute inset-0 opacity-[0.08] pointer-events-none"
+                style={{
+                  backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)',
+                  backgroundSize: '24px 24px',
+                }}
+              />
+
+              {/* ── Gradient header band (top ~30%) ── */}
+              <div className="relative overflow-hidden h-[32%]
+                bg-gradient-to-br from-[#0d9488] via-[#0f766e] to-[#134e4a]">
+                <div className="absolute inset-0 opacity-25 pointer-events-none
+                  bg-[radial-gradient(circle_at_top_right,rgba(45,212,191,0.6),transparent_60%)]" />
+                <div className="relative h-full flex items-center justify-center px-6 sm:px-10 gap-5">
+                  <div className="flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl
+                    bg-white/15 border border-white/25 backdrop-blur-sm shrink-0">
+                    <Sparkles className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                  </div>
+                  <div className="min-w-0 text-center sm:text-left">
+                    <p className="text-white/70 text-sm sm:text-base uppercase tracking-wider font-semibold">
+                      {isDa ? 'Velkommen til' : 'Welcome to'}
+                    </p>
+                    <h3 className="text-3xl sm:text-5xl font-bold text-white tracking-tight truncate">
+                      AlphaFlow {planName}
+                    </h3>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Card body — fills remaining ~62% of the 16:9 card */}
-            <div className="h-[62%] px-6 sm:px-8 py-4 sm:py-6 flex flex-col items-center justify-center text-center">
-              <p className="text-white/75 text-sm sm:text-base leading-relaxed max-w-lg">
-                {isDa
-                  ? 'Tak for din tillid. Du har nu adgang til alle funktioner i din nye plan. God arbejdslyst!'
-                  : 'Thank you for your trust. You now have access to all features in your new plan. Enjoy!'}
-              </p>
-              <div className="mt-3 sm:mt-4 flex items-center justify-center gap-2 text-[#2dd4bf]">
-                <PartyPopper className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-xs sm:text-sm font-medium uppercase tracking-wider">
-                  {isDa ? 'Abonnement aktiv' : 'Subscription active'}
-                </span>
+              {/* ── Card body — fills remaining ~68% ── */}
+              <div className="relative h-[68%] px-6 sm:px-10 py-6 sm:py-8
+                flex flex-col items-center justify-center text-center">
+                <p className="text-white/80 text-base sm:text-xl leading-relaxed max-w-2xl">
+                  {isDa
+                    ? 'Tak for din tillid. Du har nu adgang til alle funktioner i din nye plan. God arbejdslyst!'
+                    : 'Thank you for your trust. You now have access to all features in your new plan. Enjoy!'}
+                </p>
+                <div className="mt-5 sm:mt-7 flex items-center justify-center gap-2.5 text-[#2dd4bf]">
+                  <PartyPopper className="h-5 w-5 sm:h-6 sm:w-6" />
+                  <span className="text-sm sm:text-base font-semibold uppercase tracking-widest">
+                    {isDa ? 'Abonnement aktiv' : 'Subscription active'}
+                  </span>
+                  <PartyPopper className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
               </div>
             </div>
           </div>
