@@ -613,12 +613,20 @@ export function SubscriptionPlansPrompt() {
     currency: string;
     paymentId: string;
     planName: string;
+    planTagline: string;
+    planPrice: string;
+    planBinding: string;
+    planFeatures: { da: string; en: string }[];
   } | null>(null);
   // Result overlay — shows animated checkmark/X + welcome card after payment
   const [resultOverlay, setResultOverlay] = useState<{
     open: boolean;
     type: 'success' | 'error' | 'cancel';
     planName?: string;
+    planTagline?: string;
+    planPrice?: string;
+    planBinding?: string;
+    planFeatures?: { da: string; en: string }[];
   }>({ open: false, type: 'success' });
   const overlayRef = useRef<HTMLDivElement>(null);
   const hasScheduled = useRef(false);
@@ -867,7 +875,15 @@ export function SubscriptionPlansPrompt() {
           const handleSuccess = () => {
             dismiss();
             setTimeout(() => {
-              setResultOverlay({ open: true, type: 'success', planName: plan.name });
+              setResultOverlay({
+                open: true,
+                type: 'success',
+                planName: plan.name,
+                planTagline: language === 'da' ? plan.descDa : plan.descEn,
+                planPrice: language === 'da' ? plan.priceDa : plan.priceEn,
+                planBinding: language === 'da' ? plan.bindDa : plan.bindEn,
+                planFeatures: plan.features,
+              });
             }, 300);
             fetch(
               `/api/subscription/payment-callback?payment_id=${encodeURIComponent(data.paymentId)}`
@@ -906,6 +922,10 @@ export function SubscriptionPlansPrompt() {
               currency: data.currency || 'DKK',
               paymentId: data.paymentId,
               planName: plan.name,
+              planTagline: language === 'da' ? plan.descDa : plan.descEn,
+              planPrice: language === 'da' ? plan.priceDa : plan.priceEn,
+              planBinding: language === 'da' ? plan.bindDa : plan.bindEn,
+              planFeatures: plan.features,
             });
             return;
           }
@@ -952,14 +972,21 @@ export function SubscriptionPlansPrompt() {
   const handleMockSuccess = useCallback(() => {
     if (!mockCheckout) return;
     const paymentId = mockCheckout.paymentId;
-    const planName = mockCheckout.planName;
     setMockCheckout(null);
     dismiss();
     // Delay opening the result overlay by 300ms so the checkout modal
     // finishes fading out first — otherwise the checkmark animation
     // briefly flashes on top of the fading checkout modal.
     setTimeout(() => {
-      setResultOverlay({ open: true, type: 'success', planName });
+      setResultOverlay({
+        open: true,
+        type: 'success',
+        planName: mockCheckout.planName,
+        planTagline: mockCheckout.planTagline,
+        planPrice: mockCheckout.planPrice,
+        planBinding: mockCheckout.planBinding,
+        planFeatures: mockCheckout.planFeatures,
+      });
     }, 300);
     // Trigger plan activation via the callback endpoint (auto-succeeds in mock mode).
     fetch(`/api/subscription/payment-callback?payment_id=${encodeURIComponent(paymentId)}`)
@@ -1024,6 +1051,10 @@ export function SubscriptionPlansPrompt() {
       open={resultOverlay.open}
       type={resultOverlay.type}
       planName={resultOverlay.planName}
+      planTagline={resultOverlay.planTagline}
+      planPrice={resultOverlay.planPrice}
+      planBinding={resultOverlay.planBinding}
+      planFeatures={resultOverlay.planFeatures}
       onDismiss={dismissResultOverlay}
     />
   );
