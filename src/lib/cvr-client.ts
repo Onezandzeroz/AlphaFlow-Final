@@ -36,9 +36,16 @@ import { logger } from '@/lib/logger';
 import { registerCache } from '@/lib/cache-registry';
 
 // ─── CONFIG ──────────────────────────────────────────────────────
-
-const DEFAULT_BASE_URL = 'https://distribution.virk.dk';
-const DEFAULT_TIMEOUT = 10_000; // 10s — CVR can be slow under load
+//
+// NOTE: The CVR API serves HTTP only — HTTPS is not available on
+// distribution.virk.dk (the TCP connection never establishes on 443).
+// This matches the official Erhvervsstyrelsen documentation, which uses
+// http:// in all curl examples. Basic Auth credentials are therefore
+// transmitted in clear text; this is the official API's design.
+// Restrict network exposure accordingly (the VPS ↔ AWS eu-north-1 hop
+// is the relevant segment).
+const DEFAULT_BASE_URL = 'http://distribution.virk.dk';
+const DEFAULT_TIMEOUT = 15_000; // 15s — CVR can be slow under load
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // ─── TYPES ───────────────────────────────────────────────────────
