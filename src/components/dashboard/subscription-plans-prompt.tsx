@@ -19,7 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { openFrisbiiOverlay } from '@/lib/frisbii-checkout';
+import { openFrisbiiOverlay, isMockSession } from '@/lib/frisbii-checkout';
+import { MockCheckoutDialog } from '@/components/payment/mock-checkout-dialog';
 import { toast } from 'sonner';
 
 // ─── Plan definitions ──────────────────────────────────────────────────
@@ -601,6 +602,16 @@ export function SubscriptionPlansPrompt() {
   const [animatingIn, setAnimatingIn] = useState(false);
   const [animatingOut, setAnimatingOut] = useState(false);
   const [startingTrial, setStartingTrial] = useState(false);
+  // Mock checkout dialog state (only used when FLATPAY_API_KEY is not set).
+  // The `paymentId` is captured so the success handler can trigger
+  // plan activation via the callback endpoint.
+  const [mockCheckout, setMockCheckout] = useState<{
+    open: boolean;
+    planDescription: string;
+    amountOre: number;
+    currency: string;
+    paymentId: string;
+  } | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const hasScheduled = useRef(false);
 
@@ -817,11 +828,9 @@ export function SubscriptionPlansPrompt() {
         return;
       }
 
-      // ── Paid plan: create a Frisbii charge session and open overlay ──
-      // The user stays on alphaflow.dk — Frisbii's PCI-compliant payment
-      // form opens as a full-page overlay on top of the current page.
-      // The plan is activated by the server-side webhook (authoritative)
-      // after the Accept event fires.
+      // ── Paid plan: create a Frisbii charge session ──
+      // In mock mode → show MockCheckoutDialog (visible test checkout)
+      // In production → open Frisbii Overlay Checkout (real payment)
       setStartingTrial(true);
       fetch('/api/subscription/create-payment', {
         method: 'POST',
@@ -837,70 +846,81 @@ export function SubscriptionPlansPrompt() {
             return;
           }
 
-          // Open the Frisbii Overlay Checkout modal.
-          // The user enters card details in Frisbii's iframe — AlphaFlow
-          // never touches the card data.
+          // Shared success handler — used by both mock dialog and real overlay
+          const handleSuccess = () => {
+            dismiss();
+            toast.success(
+              language === 'da' ? 'Betaling gennemført!' : 'Payment successful!',
+              {
+                description:
+                  language === 'da'
+                    ? 'Dit abonnement aktiveres nu.'
+                    : 'Your subscription is being activated.',
+              }
+            );
+            // Trigger plan activation via the callback endpoint.
+            // In mock mode this auto-succeeds; in production it verifies
+            // the session via the Frisbii API. Both idempotent — the
+            // webhook is still the authoritative source in production.
+            fetch(
+              `/api/subscription/payment-callback?payment_id=${encodeURIComponent(data.paymentId)}`
+            )
+              .catch(() => {})
+              .finally(() => {
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('auth:refresh'));
+                  window.dispatchEvent(new CustomEvent('access:refresh'));
+                }, 600);
+              });
+          };
+
+          const handleCancel = () => {
+            setStartingTrial(false);
+            toast(
+              language === 'da' ? 'Betaling annulleret' : 'Payment cancelled',
+              {
+                description:
+                  language === 'da'
+                    ? 'Du har annulleret betalingen.'
+                    : 'You cancelled the payment.',
+              }
+            );
+          };
+
+          const handleError = () => {
+            setStartingTrial(false);
+            toast.error(
+              language === 'da' ? 'Betaling mislykkedes' : 'Payment failed',
+              {
+                description:
+                  language === 'da'
+                    ? 'Der opstod en fejl. Prøv igen senere.'
+                    : 'An error occurred. Please try again later.',
+              }
+            );
+          };
+
+          // ── Mock mode: show visible MockCheckoutDialog ──
+          if (isMockSession(data.sessionId)) {
+            setStartingTrial(false);
+            setMockCheckout({
+              open: true,
+              planDescription: language === 'da' ? plan.descDa : plan.descEn,
+              amountOre: data.amount,
+              currency: data.currency || 'DKK',
+              paymentId: data.paymentId,
+            });
+            return;
+          }
+
+          // ── Production mode: open real Frisbii Overlay Checkout ──
           try {
             await openFrisbiiOverlay(data.sessionId, {
-              onSuccess: () => {
-                // Payment accepted. In production, the Frisbii webhook
-                // activates the plan. In mock mode (no FLATPAY_API_KEY),
-                // there is no webhook — so we call our own callback
-                // endpoint which verifies + activates the plan. This is
-                // harmless in production too (it just verifies + no-ops
-                // if already activated).
-                dismiss();
-                toast.success(
-                  language === 'da' ? 'Betaling gennemført!' : 'Payment successful!',
-                  {
-                    description:
-                      language === 'da'
-                        ? 'Dit abonnement aktiveres nu.'
-                        : 'Your subscription is being activated.',
-                  }
-                );
-                // Trigger plan activation via the callback endpoint.
-                // In mock mode this auto-succeeds; in production it
-                // verifies the session via the Frisbii API. Both are
-                // idempotent — the webhook is still the authoritative source.
-                fetch(
-                  `/api/subscription/payment-callback?payment_id=${encodeURIComponent(data.paymentId)}`
-                )
-                  .catch(() => {})
-                  .finally(() => {
-                    // Refresh auth so the new planTier is picked up
-                    setTimeout(() => {
-                      window.dispatchEvent(new CustomEvent('auth:refresh'));
-                      window.dispatchEvent(new CustomEvent('access:refresh'));
-                    }, 600);
-                  });
-              },
-              onCancel: () => {
-                setStartingTrial(false);
-                toast(
-                  language === 'da' ? 'Betaling annulleret' : 'Payment cancelled',
-                  {
-                    description:
-                      language === 'da'
-                        ? 'Du har annulleret betalingen.'
-                        : 'You cancelled the payment.',
-                  }
-                );
-              },
-              onError: () => {
-                setStartingTrial(false);
-                toast.error(
-                  language === 'da' ? 'Betaling mislykkedes' : 'Payment failed',
-                  {
-                    description:
-                      language === 'da'
-                        ? 'Der opstod en fejl. Prøv igen senere.'
-                        : 'An error occurred. Please try again later.',
-                  }
-                );
-              },
+              onSuccess: handleSuccess,
+              onCancel: handleCancel,
+              onError: handleError,
             });
-          } catch (err) {
+          } catch {
             // SDK failed to load — fall back to redirect checkout
             setStartingTrial(false);
             if (data.checkoutUrl) {
@@ -927,6 +947,62 @@ export function SubscriptionPlansPrompt() {
     },
     [dismiss, language],
   );
+
+  // ── Mock checkout dialog handlers ──
+  // These fire when the user interacts with the MockCheckoutDialog
+  // (mock mode only). They mirror the real Frisbii overlay callbacks.
+  const handleMockSuccess = useCallback(() => {
+    if (!mockCheckout) return;
+    const paymentId = mockCheckout.paymentId;
+    setMockCheckout((prev) => (prev ? { ...prev, open: false } : null));
+    dismiss();
+    toast.success(
+      language === 'da' ? 'Betaling gennemført!' : 'Payment successful!',
+      {
+        description:
+          language === 'da'
+            ? 'Dit abonnement aktiveres nu.'
+            : 'Your subscription is being activated.',
+      }
+    );
+    // Trigger plan activation via the callback endpoint (auto-succeeds in mock mode)
+    fetch(`/api/subscription/payment-callback?payment_id=${encodeURIComponent(paymentId)}`)
+      .catch(() => {})
+      .finally(() => {
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('auth:refresh'));
+          window.dispatchEvent(new CustomEvent('access:refresh'));
+        }, 600);
+      });
+  }, [mockCheckout, dismiss, language]);
+
+  const handleMockCancel = useCallback(() => {
+    setMockCheckout(null);
+    setStartingTrial(false);
+    toast(
+      language === 'da' ? 'Betaling annulleret' : 'Payment cancelled',
+      {
+        description:
+          language === 'da'
+            ? 'Du har annulleret betalingen.'
+            : 'You cancelled the payment.',
+      }
+    );
+  }, [language]);
+
+  const handleMockError = useCallback(() => {
+    setMockCheckout(null);
+    setStartingTrial(false);
+    toast.error(
+      language === 'da' ? 'Betaling mislykkedes' : 'Payment failed',
+      {
+        description:
+          language === 'da'
+            ? 'Der opstod en fejl. Prøv igen senere.'
+            : 'An error occurred. Please try again later.',
+      }
+    );
+  }, [language]);
 
   useEffect(() => {
     if (!visible) return;
@@ -1088,6 +1164,19 @@ export function SubscriptionPlansPrompt() {
           </div>
         </div>
       </div>
+
+      {/* Mock checkout dialog — only shown in mock mode (no FLATPAY_API_KEY) */}
+      {mockCheckout && (
+        <MockCheckoutDialog
+          open={mockCheckout.open}
+          planDescription={mockCheckout.planDescription}
+          amountOre={mockCheckout.amountOre}
+          currency={mockCheckout.currency}
+          onSuccess={handleMockSuccess}
+          onCancel={handleMockCancel}
+          onError={handleMockError}
+        />
+      )}
     </div>
   );
 }

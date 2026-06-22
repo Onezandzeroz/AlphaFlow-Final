@@ -115,16 +115,21 @@ function loadSdk(): Promise<void> {
  * Open a Frisbii charge session as a full-page overlay on top of the
  * current page. The user stays on alphaflow.dk — no redirect.
  *
+ * This function handles REAL Frisbii sessions only. For mock sessions
+ * (mock_<paymentId>), the caller should render <MockCheckoutDialog>
+ * instead — use isMockSession() to check before calling this.
+ *
  * Usage:
- *   const res = await fetch('/api/subscription/create-payment', {...});
  *   const { sessionId } = await res.json();
- *   openFrisbiiOverlay(sessionId, {
- *     onSuccess: () => { window.location.href = '/?payment=success'; },
- *     onCancel: () => { /* user cancelled *\/ },
- *   });
+ *   if (isMockSession(sessionId)) {
+ *     // render MockCheckoutDialog
+ *   } else {
+ *     await openFrisbiiOverlay(sessionId, { onSuccess, onCancel, onError });
+ *   }
  *
  * @param sessionId — Frisbii charge session ID (cs_...) from create-payment
  * @param callbacks — event handlers for success/cancel/error/close
+ * @throws if sessionId is a mock session or SDK fails to load
  */
 export async function openFrisbiiOverlay(
   sessionId: string,
@@ -134,22 +139,12 @@ export async function openFrisbiiOverlay(
     throw new Error('sessionId is required to open Frisbii Overlay Checkout');
   }
 
-  // ── Mock mode ──
-  // When the backend runs in mock mode (no FLATPAY_API_KEY configured),
-  // the session ID looks like "mock_<paymentId>". The real Frisbii SDK
-  // would reject this with "session could not be found", so we simulate
-  // the Accept event instead. This lets the full overlay flow be tested
-  // locally without real Frisbii credentials.
+  // Mock sessions should be handled by the caller via MockCheckoutDialog.
+  // If we get here, it's a bug — throw so it's visible.
   if (isMockSessionId(sessionId)) {
-    // Simulate a brief payment delay (feels like a real checkout)
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    const mockData: FrisbiiCheckoutEvent = {
-      id: sessionId,
-      invoice: sessionId,
-    };
-    callbacks.onSuccess?.(mockData);
-    callbacks.onClose?.(mockData);
-    return;
+    throw new Error(
+      'Mock sessions cannot use openFrisbiiOverlay — render MockCheckoutDialog instead'
+    );
   }
 
   await loadSdk();
@@ -179,3 +174,9 @@ export async function openFrisbiiOverlay(
   // The SDK opens the modal automatically upon construction.
   // No explicit .show() / .open() call is needed per the Frisbii docs.
 }
+
+/**
+ * Check whether a session ID is a mock session (mock_<paymentId>).
+ * Convenience re-export so callers don't need to import from flatpay-client.
+ */
+export { isMockSessionId as isMockSession } from '@/lib/flatpay-client';
