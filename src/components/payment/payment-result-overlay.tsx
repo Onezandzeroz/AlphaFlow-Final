@@ -44,13 +44,13 @@ export function PaymentResultOverlay({
     if (!open) return;
 
     if (type === 'success') {
-      // Phase 1: icon visible for 2.8s
+      // Phase 1: icon visible for 1.5s
       // Phase 2: fade out (0.5s)
       // Phase 3: welcome card visible
-      // Phase 4: auto-dismiss at 6.5s
-      const t1 = setTimeout(() => setPhase('fading'), 2800);
-      const t2 = setTimeout(() => setPhase('welcome'), 3300);
-      const dismiss = setTimeout(() => onDismiss(), 6500);
+      // Phase 4: auto-dismiss at 5.2s
+      const t1 = setTimeout(() => setPhase('fading'), 1500);
+      const t2 = setTimeout(() => setPhase('welcome'), 2000);
+      const dismiss = setTimeout(() => onDismiss(), 5200);
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
@@ -58,9 +58,13 @@ export function PaymentResultOverlay({
       };
     }
 
-    // Error/cancel: show icon 2.5s then dismiss
-    const dismiss = setTimeout(() => onDismiss(), 2500);
-    return () => clearTimeout(dismiss);
+    // Error/cancel: icon visible 1.5s → fade out (0.5s) → dismiss at 2.0s
+    const t1 = setTimeout(() => setPhase('fading'), 1500);
+    const dismiss = setTimeout(() => onDismiss(), 2000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(dismiss);
+    };
   }, [open, type, onDismiss]);
 
   if (!open) return null;
