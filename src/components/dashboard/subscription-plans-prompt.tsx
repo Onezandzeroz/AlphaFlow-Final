@@ -1007,6 +1007,13 @@ export function SubscriptionPlansPrompt() {
     };
   }, [visible]);
 
+  // Stable dismiss callback for the result overlay — must be referentially
+  // stable (useCallback) so the memoized PaymentResultOverlay doesn't
+  // re-render on every parent render (which happens on auth:refresh).
+  const dismissResultOverlay = useCallback(() => {
+    setResultOverlay((prev) => ({ ...prev, open: false }));
+  }, []);
+
   // Payment result overlay — rendered OUTSIDE the `if (!visible) return null`
   // check so it survives dismiss(). When a payment succeeds, we call dismiss()
   // to close the plans prompt, but the result overlay (checkmark animation +
@@ -1017,7 +1024,7 @@ export function SubscriptionPlansPrompt() {
       open={resultOverlay.open}
       type={resultOverlay.type}
       planName={resultOverlay.planName}
-      onDismiss={() => setResultOverlay((prev) => ({ ...prev, open: false }))}
+      onDismiss={dismissResultOverlay}
     />
   );
 
