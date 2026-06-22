@@ -1034,7 +1034,6 @@ export function SubscriptionPlansPrompt() {
         bg-black/70 dark:bg-black/85 backdrop-blur-sm
         transition-opacity duration-300
         ${animatingIn && !animatingOut ? 'opacity-100' : animatingOut ? 'opacity-0' : 'opacity-0'}
-        ${mockCheckout?.open ? 'hidden' : ''}
       `}
     >
       {/* ── Card container ── */}
