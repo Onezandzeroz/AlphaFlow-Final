@@ -141,6 +141,23 @@ export function AccessSettings({ userId }: AccessSettingsProps) {
     fetchAccessStatus();
   }, [fetchAccessStatus]);
 
+  // ── Listen for refresh events (dispatched after payment, plan change, etc.) ──
+  // When a subscription payment succeeds, the subscription-plans-prompt
+  // dispatches 'auth:refresh' + 'access:refresh' so this component re-fetches
+  // its access status immediately — no need for the user to navigate away
+  // and back to see the updated "Aktiv plan" + "Adgangsstatus".
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchAccessStatus();
+    };
+    window.addEventListener('access:refresh', handleRefresh);
+    window.addEventListener('auth:refresh', handleRefresh);
+    return () => {
+      window.removeEventListener('access:refresh', handleRefresh);
+      window.removeEventListener('auth:refresh', handleRefresh);
+    };
+  }, [fetchAccessStatus]);
+
   // ── Determine access state ──
   const isGranted = accessResult ? !accessResult.isExpired && accessResult.accessLevel === 'read_write' : false;
 

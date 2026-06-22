@@ -859,18 +859,18 @@ export function SubscriptionPlansPrompt() {
               }
             );
             // Trigger plan activation via the callback endpoint.
-            // In mock mode this auto-succeeds; in production it verifies
-            // the session via the Frisbii API. Both idempotent — the
-            // webhook is still the authoritative source in production.
+            // AWAIT activation before dispatching refresh events so the
+            // UI picks up the new planTier immediately.
             fetch(
               `/api/subscription/payment-callback?payment_id=${encodeURIComponent(data.paymentId)}`
             )
-              .catch(() => {})
-              .finally(() => {
-                setTimeout(() => {
-                  window.dispatchEvent(new CustomEvent('auth:refresh'));
-                  window.dispatchEvent(new CustomEvent('access:refresh'));
-                }, 600);
+              .then(() => {
+                window.dispatchEvent(new CustomEvent('auth:refresh'));
+                window.dispatchEvent(new CustomEvent('access:refresh'));
+              })
+              .catch(() => {
+                window.dispatchEvent(new CustomEvent('auth:refresh'));
+                window.dispatchEvent(new CustomEvent('access:refresh'));
               });
           };
 
@@ -965,14 +965,21 @@ export function SubscriptionPlansPrompt() {
             : 'Your subscription is being activated.',
       }
     );
-    // Trigger plan activation via the callback endpoint (auto-succeeds in mock mode)
+    // Trigger plan activation via the callback endpoint (auto-succeeds in mock mode).
+    // AWAIT the activation to complete before dispatching refresh events —
+    // otherwise auth:refresh fires before the new planTier is in the DB,
+    // and the UI shows the old plan until the next 60s poll.
     fetch(`/api/subscription/payment-callback?payment_id=${encodeURIComponent(paymentId)}`)
-      .catch(() => {})
-      .finally(() => {
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('auth:refresh'));
-          window.dispatchEvent(new CustomEvent('access:refresh'));
-        }, 600);
+      .then(() => {
+        // Activation complete — dispatch refresh events so the UI updates
+        // immediately (auth/me + access status).
+        window.dispatchEvent(new CustomEvent('auth:refresh'));
+        window.dispatchEvent(new CustomEvent('access:refresh'));
+      })
+      .catch(() => {
+        // Activation failed (e.g. network) — still refresh to show current state
+        window.dispatchEvent(new CustomEvent('auth:refresh'));
+        window.dispatchEvent(new CustomEvent('access:refresh'));
       });
   }, [mockCheckout, dismiss, language]);
 
