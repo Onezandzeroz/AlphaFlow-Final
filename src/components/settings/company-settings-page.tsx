@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { CvrVerifyButton, type CvrInfo } from '@/components/shared/cvr-verify-button';
 import {
   Settings,
   Building2,
@@ -950,17 +951,36 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                   <Label htmlFor="cvrNumber" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {t('cvrNumber')} <span className="text-red-500">*</span>
                   </Label>
-                  <Input
-                    id="cvrNumber"
-                    value={form.cvrNumber}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '').slice(0, 8);
-                      updateField('cvrNumber', val);
-                    }}
-                    placeholder={language === 'da' ? 'f.eks. 12345678' : 'e.g. 12345678'}
-                    maxLength={8}
-                    className={`h-10 focus-ring-teal ${validationErrors.cvrNumber ? 'border-red-500 dark:border-red-500' : ''}`}
-                  />
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="cvrNumber"
+                      value={form.cvrNumber}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 8);
+                        updateField('cvrNumber', val);
+                      }}
+                      placeholder={language === 'da' ? 'f.eks. 12345678' : 'e.g. 12345678'}
+                      maxLength={8}
+                      className={`h-10 focus-ring-teal ${validationErrors.cvrNumber ? 'border-red-500 dark:border-red-500' : ''}`}
+                    />
+                    <CvrVerifyButton
+                      cvr={form.cvrNumber}
+                      compact
+                      onVerified={(info: CvrInfo) => {
+                        // Auto-fill company name + combined address from CVR.
+                        // Only fill fields that are empty OR that we just
+                        // filled — never overwrite user-edited data silently.
+                        if (info.name) updateField('companyName', info.name);
+                        if (info.address) {
+                          const parts = [
+                            info.address,
+                            [info.postalCode, info.city].filter(Boolean).join(' '),
+                          ].filter(Boolean);
+                          updateField('address', parts.join(', '));
+                        }
+                      }}
+                    />
+                  </div>
                   {validationErrors.cvrNumber && (
                     <div className="flex items-center gap-1 text-xs text-red-500">
                       <AlertTriangle className="h-3 w-3" />

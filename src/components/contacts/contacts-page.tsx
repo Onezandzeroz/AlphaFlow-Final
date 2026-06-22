@@ -79,6 +79,7 @@ import {
   Receipt,
   ChevronDown,
 } from 'lucide-react';
+import { CvrVerifyButton, type CvrInfo } from '@/components/shared/cvr-verify-button';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1241,15 +1242,39 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
               <Label htmlFor="contact-cvr">
                 {isDanish ? 'CVR-nr.' : 'CVR Number'} <span className="text-gray-400 text-xs">({isDanish ? 'valgfrit' : 'optional'})</span>
               </Label>
-              <Input
-                id="contact-cvr"
-                name="cvr"
-                autoComplete="off"
-                value={formData.cvrNumber}
-                onChange={(e) => setFormData((prev) => ({ ...prev, cvrNumber: e.target.value }))}
-                placeholder={isDanish ? 'fx 12345678' : 'e.g. 12345678'}
-                className="bg-gray-50 dark:bg-white/5"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  id="contact-cvr"
+                  name="cvr"
+                  autoComplete="off"
+                  value={formData.cvrNumber}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, cvrNumber: e.target.value }))}
+                  placeholder={isDanish ? 'fx 12345678' : 'e.g. 12345678'}
+                  className="bg-gray-50 dark:bg-white/5"
+                />
+                <CvrVerifyButton
+                  cvr={formData.cvrNumber}
+                  compact
+                  onVerified={(info: CvrInfo) => {
+                    // Auto-fill contact fields from the CVR register.
+                    // Only fills fields that are currently empty so the
+                    // user's manual entries are preserved.
+                    setFormData((prev) => ({
+                      ...prev,
+                      name: prev.name.trim() === '' && info.name ? info.name : prev.name,
+                      address:
+                        prev.address.trim() === '' && info.address ? info.address : prev.address,
+                      postalCode:
+                        prev.postalCode.trim() === '' && info.postalCode
+                          ? info.postalCode
+                          : prev.postalCode,
+                      city: prev.city.trim() === '' && info.city ? info.city : prev.city,
+                      country:
+                        prev.country.trim() === '' && info.country ? info.country : prev.country,
+                    }));
+                  }}
+                />
+              </div>
             </div>
 
             {/* Email & Phone */}

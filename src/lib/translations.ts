@@ -1550,6 +1550,34 @@ export const translations = {
     da: 'Ugyldigt CVR-nummer (8 cifre)',
     en: 'Invalid CVR number (8 digits)',
   },
+  cvrVerify: {
+    da: 'Tjek CVR',
+    en: 'Verify CVR',
+  },
+  cvrVerifying: {
+    da: 'Tjekker CVR...',
+    en: 'Checking CVR...',
+  },
+  cvrVerified: {
+    da: 'Bekræftet',
+    en: 'Verified',
+  },
+  cvrNotFound: {
+    da: 'CVR-nummeret findes ikke i CVR-registeret',
+    en: 'CVR number not found in the CVR register',
+  },
+  cvrLookupError: {
+    da: 'CVR-opslag fejlede. Tjek forbindelsen og prøv igen.',
+    en: 'CVR lookup failed. Check your connection and try again.',
+  },
+  cvrAutoFilled: {
+    da: 'Oplysninger udfyldt fra CVR-registeret',
+    en: 'Details filled from the CVR register',
+  },
+  cvrSimulationBadge: {
+    da: 'Simuleret',
+    en: 'Simulated',
+  },
   invalidIban: {
     da: 'Ugyldigt IBAN-format (f.eks. DK9066952003084399)',
     en: 'Invalid IBAN format (e.g. DK9066952003084399)',
