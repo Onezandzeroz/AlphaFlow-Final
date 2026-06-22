@@ -793,6 +793,81 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         txVatPercent = Number(Object.entries(vatCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 25);
       }
 
+      // ─── If recurring is ON: only create a recurring entry ──
+      // The recurring entry's backfill logic will post the first occurrence
+      // (and any missed past occurrences) as journal entries automatically.
+      // We do NOT post a separate /api/transactions call — that would
+      // create a duplicate.
+      if (isRecurring && txAccountId) {
+        try {
+          const recurringBody: Record<string, unknown> = {
+            name: txDescription || (isDa ? 'Køb' : 'Purchase'),
+            description: txDescription || '',
+            frequency: recurringFrequency,
+            startDate: recurringStartDate || txDate,
+            endDate: recurringEndDate || null,
+            accountId: txAccountId,
+            amount: txAmount,
+            vatPercent: txVatPercent,
+          };
+          const recurringResponse = await fetch('/api/recurring-entries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(recurringBody),
+          });
+          if (recurringResponse.ok) {
+            toast.success(isDa ? 'Gentagende indkøb oprettet' : 'Recurring purchase created', {
+              description: isDa
+                ? `Gentagende postering oprettet med frekvens: ${FREQUENCY_LABELS[recurringFrequency]?.da || recurringFrequency}`
+                : `Recurring entry created with frequency: ${FREQUENCY_LABELS[recurringFrequency]?.en || recurringFrequency}`,
+              duration: 4000,
+            });
+          } else {
+            const errData = await recurringResponse.json().catch(() => ({ error: 'Failed' }));
+            toast.warning(isDa ? 'Gentagende postering ikke oprettet' : 'Recurring entry not created', {
+              description: errData.error || (isDa ? 'Kunne ikke oprette gentagende postering' : 'Could not create recurring entry'),
+              duration: 5000,
+            });
+          }
+        } catch {
+          toast.warning(isDa ? 'Gentagende postering ikke oprettet' : 'Recurring entry not created', {
+            description: isDa ? 'Kunne ikke oprette gentagende postering' : 'Could not create recurring entry',
+            duration: 5000,
+          });
+        }
+
+        // Reset form
+        setDate(defaultToday());
+        setPurchaseLinesDate(defaultToday());
+        purchaseLinesDateManuallySetRef.current = false;
+        setAmount('');
+        setCurrency('DKK');
+        setExchangeRate('');
+        setIncludesVAT(true);
+        setDescription('');
+        setVatPercent('25');
+        setSelectedAccountId('');
+        setProjectId(null);
+        setPurchaseLines([{ ...EMPTY_LINE_ITEM }]);
+        resetOCR();
+        clearReceipt();
+        setIsRecurring(false);
+        setRecurringFrequency('MONTHLY');
+        setRecurringStartDate('');
+        setRecurringEndDate('');
+
+        toast.success(isDa ? 'Indkøb bogført' : 'Purchase recorded', {
+          description: isDa
+            ? 'Dit indkøb er bogført i dobbelt-posteringsregnskabet'
+            : 'Your purchase has been recorded in the double-entry ledger',
+        });
+
+        clearDraft();
+        onSuccess();
+        return;
+      }
+
+      // ─── Non-recurring: post a single transaction ──
       const response = await fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -842,46 +917,6 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         // and showed a toast for non-access errors — just return
         setIsLoading(false);
         return;
-      }
-
-      // If recurring, create a recurring entry based on purchase data
-      if (isRecurring && txAccountId) {
-        try {
-          const recurringBody: Record<string, unknown> = {
-            name: txDescription || (isDa ? 'Køb' : 'Purchase'),
-            description: txDescription || '',
-            frequency: recurringFrequency,
-            startDate: recurringStartDate || txDate,
-            endDate: recurringEndDate || null,
-            accountId: txAccountId,
-            amount: txAmount,
-            vatPercent: txVatPercent,
-          };
-          const recurringResponse = await fetch('/api/recurring-entries', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(recurringBody),
-          });
-          if (recurringResponse.ok) {
-            toast.success(isDa ? 'Gentagende indkøb oprettet' : 'Recurring purchase created', {
-              description: isDa
-                ? `Gentagende postering oprettet med frekvens: ${FREQUENCY_LABELS[recurringFrequency]?.da || recurringFrequency}`
-                : `Recurring entry created with frequency: ${FREQUENCY_LABELS[recurringFrequency]?.en || recurringFrequency}`,
-              duration: 4000,
-            });
-          } else {
-            const errData = await recurringResponse.json().catch(() => ({ error: 'Failed' }));
-            toast.warning(isDa ? 'Gentagende postering ikke oprettet' : 'Recurring entry not created', {
-              description: errData.error || (isDa ? 'Kunne ikke oprette gentagende postering' : 'Could not create recurring entry'),
-              duration: 5000,
-            });
-          }
-        } catch {
-          toast.warning(isDa ? 'Gentagende postering ikke oprettet' : 'Recurring entry not created', {
-            description: isDa ? 'Kunne ikke oprette gentagende postering' : 'Could not create recurring entry',
-            duration: 5000,
-          });
-        }
       }
 
       // Reset form
