@@ -23,7 +23,7 @@ import {
 import { toast } from 'sonner';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useDataVersion } from '@/hooks/use-data-version';
-import { CvrVerifyButton, type CvrInfo } from '@/components/shared/cvr-verify-button';
+import { CvrVerifyButton, mapCvrFormToCompanyType, type CvrInfo } from '@/components/shared/cvr-verify-button';
 import {
   Settings,
   Building2,
@@ -967,10 +967,13 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                       cvr={form.cvrNumber}
                       compact
                       onVerified={(info: CvrInfo) => {
-                        // Auto-fill company name + combined address from CVR.
-                        // Only fill fields that are empty OR that we just
-                        // filled — never overwrite user-edited data silently.
+                        // Auto-fill company name, type + combined address from CVR.
+                        // companyType is always set from CVR's virksomhedsform
+                        // (kortBeskrivelse mapped to AlphaFlow's select values)
+                        // since the CVR register is the authoritative source.
                         if (info.name) updateField('companyName', info.name);
+                        const mappedType = mapCvrFormToCompanyType(info.companyForm);
+                        if (mappedType) updateField('companyType', mappedType);
                         if (info.address) {
                           const parts = [
                             info.address,
@@ -1010,6 +1013,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                       <SelectItem value="Andet">{t('companyTypeOther')}</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    {t('companyTypeAutoFromCvr')}
+                  </p>
                 </div>
               </div>
             </div>

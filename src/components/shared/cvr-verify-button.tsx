@@ -52,10 +52,47 @@ export interface CvrInfo {
   postalCode?: string;
   city?: string;
   country?: string;
+  /** Short company form from CVR, e.g. "ApS", "A/S", "ENK" — mapped to companyType by the parent form */
+  companyForm?: string;
+  /** Long company form from CVR, e.g. "Anpartsselskab" */
+  companyFormLong?: string;
   simulated?: boolean;
 }
 
 type LookupState = 'idle' | 'loading' | 'success' | 'notfound' | 'error';
+
+/**
+ * Map a CVR company form short code (kortBeskrivelse) to AlphaFlow's
+ * companyType select values. AlphaFlow supports: ApS, A/S, IVS,
+ * Enkeltmandsvirksomhed, Holdingselskab, Andet.
+ *
+ * CVR uses: ApS, A/S, ENK (Enkeltmandsvirksomhed), IVS, I/S, K/S,
+ * A.M.B.A, FFO, Forening, Fond, etc. Anything without a direct match
+ * falls back to "Andet".
+ *
+ * Note: "Holdingselskab" is not a CVR form — a holding company is
+ * typically an ApS or A/S legally, so CVR returns the underlying form.
+ * The user can manually change the type afterwards if they want the
+ * "Holdingselskab" label for their own categorisation.
+ */
+export function mapCvrFormToCompanyType(companyForm?: string): string | undefined {
+  if (!companyForm) return undefined;
+  const form = companyForm.trim().toUpperCase();
+  switch (form) {
+    case 'APS':
+      return 'ApS';
+    case 'A/S':
+      return 'A/S';
+    case 'IVS':
+      return 'IVS';
+    case 'ENK':
+      return 'Enkeltmandsvirksomhed';
+    // All other forms (I/S, K/S, A.M.B.A, FFO, Forening, Fond, G/S, etc.)
+    // have no direct AlphaFlow equivalent — use "Andet".
+    default:
+      return 'Andet';
+  }
+}
 
 interface CvrVerifyButtonProps {
   /** Current CVR value from the parent form (8 digits expected). */
@@ -138,6 +175,8 @@ export function CvrVerifyButton({
           onVerified(info);
           const filledFields: string[] = [];
           if (info.name) filledFields.push(language === 'da' ? 'navn' : 'name');
+          if (info.companyForm)
+            filledFields.push(language === 'da' ? 'virksomhedstype' : 'company type');
           if (info.address) filledFields.push(language === 'da' ? 'adresse' : 'address');
           if (info.postalCode || info.city)
             filledFields.push(language === 'da' ? 'postnr./by' : 'postal/city');

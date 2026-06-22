@@ -1518,6 +1518,10 @@ export const translations = {
     da: 'Vælg virksomhedstype',
     en: 'Select company type',
   },
+  companyTypeAutoFromCvr: {
+    da: 'Sættes automatisk fra CVR',
+    en: 'Set automatically from CVR',
+  },
   invoiceNotesTemplate: {
     da: 'Faktura notesskabelon',
     en: 'Invoice Notes Template',

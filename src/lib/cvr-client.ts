@@ -68,6 +68,14 @@ export interface CvrResult {
   city?: string;
   /** Country, e.g. "Danmark" */
   country?: string;
+  /**
+   * Company form short code from CVR (kortBeskrivelse), e.g. "ApS",
+   * "A/S", "ENK", "IVS", "I/S", "K/S", "A.M.B.A".
+   * Mapped to AlphaFlow's companyType by the UI.
+   */
+  companyForm?: string;
+  /** Full company form description (langBeskrivelse), e.g. "Anpartsselskab" */
+  companyFormLong?: string;
   /** Whether the result came from simulation mode */
   simulated?: boolean;
 }
@@ -108,6 +116,14 @@ interface CvrHitSource {
       nyesteHovedbranche?: {
         branchekode?: string;
         branchetekst?: string;
+      } | null;
+      nyesteVirksomhedsform?: {
+        /** Numeric form code from CVR (e.g. 60 for A/S, 10 for ApS) */
+        virksomhedsformkode?: number;
+        /** Short form, e.g. "A/S", "ApS", "ENK" */
+        kortBeskrivelse?: string;
+        /** Long form, e.g. "Aktieselskab", "Anpartsselskab" */
+        langBeskrivelse?: string;
       } | null;
       virksomhedstatus?: {
         kode?: string;
@@ -220,6 +236,7 @@ export class CvrClient {
         'Vrvirksomhed.cvrNummer',
         'Vrvirksomhed.virksomhedMetadata.nyesteNavn.navn',
         'Vrvirksomhed.virksomhedMetadata.nyesteBeliggenhedsadresse',
+        'Vrvirksomhed.virksomhedMetadata.nyesteVirksomhedsform',
         'Vrvirksomhed.virksomhedMetadata.virksomhedstatus',
       ],
       query: {
@@ -273,6 +290,7 @@ export class CvrClient {
       const name = meta?.nyesteNavn?.navn ?? undefined;
       const status = meta?.virksomhedstatus?.kode ?? undefined;
       const address = this.extractAddress(meta?.nyesteBeliggenhedsadresse ?? null);
+      const form = meta?.nyesteVirksomhedsform ?? null;
 
       return {
         exists: true,
@@ -283,6 +301,8 @@ export class CvrClient {
         postalCode: address.postalCode,
         city: address.city,
         country: address.country,
+        companyForm: form?.kortBeskrivelse ?? undefined,
+        companyFormLong: form?.langBeskrivelse ?? undefined,
       };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -306,9 +326,9 @@ export class CvrClient {
   private simulateLookup(cvrNumber: string): CvrResult {
     // Small set of well-known CVR numbers returns realistic data.
     const known: Record<string, Partial<CvrResult>> = {
-      '30714024': { name: 'Nine A/S', status: 'AKTIV', address: 'Strandvejen 100', postalCode: '2900', city: 'Hellerup', country: 'Danmark' },
-      '25992658': { name: 'Erhvervsstyrelsen', status: 'AKTIV', address: 'Landskronagade 33', postalCode: '2100', city: 'København', country: 'Danmark' },
-      '17519385': { name: 'DSV A/S', status: 'AKTIV', address: 'Gl. Kongevej 23', postalCode: '1610', city: 'København', country: 'Danmark' },
+      '30714024': { name: 'Nine A/S', status: 'AKTIV', address: 'Strandvejen 100', postalCode: '2900', city: 'Hellerup', country: 'Danmark', companyForm: 'A/S', companyFormLong: 'Aktieselskab' },
+      '25992658': { name: 'Erhvervsstyrelsen', status: 'AKTIV', address: 'Landskronagade 33', postalCode: '2100', city: 'København', country: 'Danmark', companyForm: 'Andet', companyFormLong: 'Myndighed' },
+      '17519385': { name: 'DSV A/S', status: 'AKTIV', address: 'Gl. Kongevej 23', postalCode: '1610', city: 'København', country: 'Danmark', companyForm: 'A/S', companyFormLong: 'Aktieselskab' },
     };
 
     const base = known[cvrNumber] ?? {
@@ -318,6 +338,8 @@ export class CvrClient {
       postalCode: '1000',
       city: 'København',
       country: 'Danmark',
+      companyForm: 'ApS',
+      companyFormLong: 'Anpartsselskab',
     };
 
     return { exists: true, cvrNumber, simulated: true, ...base };
