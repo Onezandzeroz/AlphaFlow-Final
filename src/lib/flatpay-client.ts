@@ -72,6 +72,16 @@ const FRISBII_WEBHOOK_SECRET = process.env.FLATPAY_WEBHOOK_SECRET || FRISBII_API
 /** True when Frisbii is configured (real API mode). False = mock mode. */
 export const FLATPAY_CONFIGURED = Boolean(FRISBII_API_KEY && FRISBII_API_BASE_URL);
 
+/**
+ * Detect whether a session ID came from mock mode (mock_<paymentId>).
+ * The Overlay Checkout helper uses this to simulate the Accept event
+ * instead of calling the real Frisbii SDK (which would reject the
+ * fake session with "session could not be found").
+ */
+export function isMockSessionId(sessionId: string): boolean {
+  return sessionId.startsWith('mock_');
+}
+
 // ─── Types ────────────────────────────────────────────────────────────
 
 export interface CreatePaymentSessionInput {

@@ -843,9 +843,12 @@ export function SubscriptionPlansPrompt() {
           try {
             await openFrisbiiOverlay(data.sessionId, {
               onSuccess: () => {
-                // Payment accepted — the webhook activates the plan.
-                // Give the webhook a brief moment, then refresh auth so
-                // the new planTier is picked up.
+                // Payment accepted. In production, the Frisbii webhook
+                // activates the plan. In mock mode (no FLATPAY_API_KEY),
+                // there is no webhook — so we call our own callback
+                // endpoint which verifies + activates the plan. This is
+                // harmless in production too (it just verifies + no-ops
+                // if already activated).
                 dismiss();
                 toast.success(
                   language === 'da' ? 'Betaling gennemført!' : 'Payment successful!',
@@ -856,11 +859,21 @@ export function SubscriptionPlansPrompt() {
                         : 'Your subscription is being activated.',
                   }
                 );
-                // Small delay to let the webhook process, then refresh
-                setTimeout(() => {
-                  window.dispatchEvent(new CustomEvent('auth:refresh'));
-                  window.dispatchEvent(new CustomEvent('access:refresh'));
-                }, 800);
+                // Trigger plan activation via the callback endpoint.
+                // In mock mode this auto-succeeds; in production it
+                // verifies the session via the Frisbii API. Both are
+                // idempotent — the webhook is still the authoritative source.
+                fetch(
+                  `/api/subscription/payment-callback?payment_id=${encodeURIComponent(data.paymentId)}`
+                )
+                  .catch(() => {})
+                  .finally(() => {
+                    // Refresh auth so the new planTier is picked up
+                    setTimeout(() => {
+                      window.dispatchEvent(new CustomEvent('auth:refresh'));
+                      window.dispatchEvent(new CustomEvent('access:refresh'));
+                    }, 600);
+                  });
               },
               onCancel: () => {
                 setStartingTrial(false);

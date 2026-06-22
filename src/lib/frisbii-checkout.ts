@@ -56,6 +56,8 @@ export interface OverlayCheckoutCallbacks {
 
 // ─── SDK LOADING ──────────────────────────────────────────────────
 
+import { isMockSessionId } from '@/lib/flatpay-client';
+
 const SDK_URL = 'https://checkout.reepay.com/checkout.js';
 const SDK_GLOBAL = 'Reepay';
 
@@ -130,6 +132,24 @@ export async function openFrisbiiOverlay(
 ): Promise<void> {
   if (!sessionId) {
     throw new Error('sessionId is required to open Frisbii Overlay Checkout');
+  }
+
+  // ── Mock mode ──
+  // When the backend runs in mock mode (no FLATPAY_API_KEY configured),
+  // the session ID looks like "mock_<paymentId>". The real Frisbii SDK
+  // would reject this with "session could not be found", so we simulate
+  // the Accept event instead. This lets the full overlay flow be tested
+  // locally without real Frisbii credentials.
+  if (isMockSessionId(sessionId)) {
+    // Simulate a brief payment delay (feels like a real checkout)
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const mockData: FrisbiiCheckoutEvent = {
+      id: sessionId,
+      invoice: sessionId,
+    };
+    callbacks.onSuccess?.(mockData);
+    callbacks.onClose?.(mockData);
+    return;
   }
 
   await loadSdk();
