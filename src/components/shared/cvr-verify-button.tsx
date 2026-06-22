@@ -40,6 +40,45 @@ import {
   Building2,
 } from 'lucide-react';
 
+// ─── PERSISTENCE ─────────────────────────────────────────────────
+//
+// Verification status is persisted to localStorage so it survives
+// navigation away and back. We key by CVR number and store the result
+// plus a timestamp. Entries expire after 24h (a company's CVR data can
+// change, so we don't want to show stale "Verified" forever).
+//
+// Format: "alphaflow:cvr-verify:<cvr>" → JSON { info, verifiedAt }
+
+const CVR_VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function readPersistedVerification(cvr: string): CvrInfo | null {
+  if (!cvr || cvr.length !== 8 || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(`alphaflow:cvr-verify:${cvr}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { info: CvrInfo; verifiedAt: number };
+    if (Date.now() - parsed.verifiedAt > CVR_VERIFY_TTL_MS) {
+      window.localStorage.removeItem(`alphaflow:cvr-verify:${cvr}`);
+      return null;
+    }
+    return parsed.info;
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedVerification(cvr: string, info: CvrInfo): void {
+  if (!cvr || cvr.length !== 8 || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(
+      `alphaflow:cvr-verify:${cvr}`,
+      JSON.stringify({ info, verifiedAt: Date.now() })
+    );
+  } catch {
+    // localStorage quota / disabled — non-fatal, verification still works in-session.
+  }
+}
+
 // ─── TYPES ───────────────────────────────────────────────────────
 
 /** Shape returned by /api/cvr/lookup — mirrors CvrResult from cvr-client.ts. */
@@ -121,16 +160,34 @@ export function CvrVerifyButton({
   className,
 }: CvrVerifyButtonProps) {
   const { t, language } = useTranslation();
-  const [state, setState] = useState<LookupState>('idle');
-  const [result, setResult] = useState<CvrInfo | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string>('');
-  // The CVR that was last verified. When the input changes away from
-  // this value, the displayed status resets to idle (derived below).
-  const [verifiedCvr, setVerifiedCvr] = useState<string>('');
-  const loadingRef = useRef(false);
 
+  // Normalise the incoming CVR once — used for the lazy initial state below
+  // so the "Bekræftet" badge restores immediately on mount when the user
+  // navigates away and back to the page.
   const cvrDigits = (cvr || '').toUpperCase().replace(/^DK/, '').replace(/\D/g, '');
   const isValid = cvrDigits.length === 8;
+
+  // Lazy initial state: if this CVR was verified before (within 24h) and
+  // is still in localStorage, restore the "success" state immediately.
+  // This runs only ONCE per mount (useState initializer), so there's no
+  // setState-in-effect lint issue.
+  const [state, setState] = useState<LookupState>(() => {
+    if (!isValid) return 'idle';
+    const persisted = readPersistedVerification(cvrDigits);
+    return persisted && persisted.exists ? 'success' : 'idle';
+  });
+  const [result, setResult] = useState<CvrInfo | null>(() => {
+    if (!isValid) return null;
+    return readPersistedVerification(cvrDigits);
+  });
+  const [errorMsg, setErrorMsg] = useState<string>('');
+  // The CVR that was last verified. Initialised from persistence so the
+  // isStale check below keeps the restored badge visible.
+  const [verifiedCvr, setVerifiedCvr] = useState<string>(() => {
+    if (!isValid) return '';
+    return readPersistedVerification(cvrDigits) ? cvrDigits : '';
+  });
+  const loadingRef = useRef(false);
 
   // Derived: the verification result is only relevant while the input
   // still matches the verified CVR. If the user edits the field, we
@@ -170,6 +227,9 @@ export function CvrVerifyButton({
 
       if (info.exists) {
         setState('success');
+        // Persist the verification so the "Bekræftet" badge survives
+        // navigation away and back (expires after 24h).
+        writePersistedVerification(cvrDigits, info);
         // Auto-fill parent form + toast confirmation
         if (onVerified) {
           onVerified(info);
