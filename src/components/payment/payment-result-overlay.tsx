@@ -67,11 +67,11 @@ function PaymentResultOverlayComponent({
     if (type === 'success') {
       // Phase 1: icon visible for 1.5s
       // Phase 2: fade out (0.5s)
-      // Phase 3: welcome card visible
-      // Phase 4: auto-dismiss at 5.2s
+      // Phase 3: welcome card visible for 15s (user can click to close earlier)
+      // Phase 4: auto-dismiss at 17s (2s icon + 15s welcome)
       const t1 = setTimeout(() => setPhase('fading'), 1500);
       const t2 = setTimeout(() => setPhase('welcome'), 2000);
-      const dismiss = setTimeout(() => onDismiss(), 5200);
+      const dismiss = setTimeout(() => onDismiss(), 17000);
       return () => {
         clearTimeout(t1);
         clearTimeout(t2);
@@ -183,19 +183,21 @@ function PaymentResultOverlayComponent({
       </div>
 
       {/* ── Welcome card (Phase 3) — magazine-style layout ── */}
+      {/* Card background is semi-transparent (bg-[#0c1a33]/80) so the dark
+          overlay behind shows through. Text stays fully opaque for readability. */}
       {isSuccess && showWelcome && planName && (
         <div
           className="relative w-full max-w-[1280px] aspect-[16/9] max-h-[95vh]
             rounded-t-3xl sm:rounded-3xl overflow-hidden
             border border-[#1a2d4d]/60
-            bg-[#0c1a33]/95
+            bg-[#0c1a33]/80 backdrop-blur-md
             shadow-2xl shadow-black/60
             animate-welcome-in
             mx-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Inner card */}
-          <div className="relative flex h-full overflow-hidden bg-[#0c1a33] border border-[#1a2d4d]/60 sm:rounded-3xl rounded-t-3xl">
+          <div className="relative flex h-full overflow-hidden bg-transparent">
             {/* Background dot grid */}
             <div
               className="absolute inset-0 opacity-[0.06] pointer-events-none"
@@ -206,8 +208,9 @@ function PaymentResultOverlayComponent({
             />
 
             {/* ── LEFT PANEL (40%) — hero / brand side ── */}
-            <div className="relative w-[40%] flex flex-col justify-between p-8 sm:p-12
-              bg-gradient-to-br from-[#0d9488] via-[#0f766e] to-[#134e4a] overflow-hidden">
+            {/* Gradient with 85% opacity so the dark overlay behind shows through */}
+            <div className="relative w-[40%] flex flex-col justify-between p-8 sm:p-12 overflow-hidden
+              bg-gradient-to-br from-[#0d9488]/85 via-[#0f766e]/85 to-[#134e4a]/85">
               {/* Radial glow */}
               <div className="absolute inset-0 opacity-30 pointer-events-none
                 bg-[radial-gradient(circle_at_top_right,rgba(45,212,191,0.7),transparent_55%)]" />
