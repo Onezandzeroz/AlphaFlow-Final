@@ -76,24 +76,27 @@ interface NormalisedAddress {
 // Only the fields we read are typed; the CVR payload is large and
 // deeply nested, so unknown is used for everything we ignore.
 
+/** CVR beliggenhedsadresse (current address) field shape. */
+interface CvrBeliggenhedsadresse {
+  vejnavn?: string;
+  husnummerFra?: string;
+  husnummerTil?: string;
+  bogstavFra?: string;
+  bogstavTil?: string;
+  etage?: string;
+  sidedoer?: string;
+  postnummer?: number | string;
+  postdistrikt?: string;
+  landekode?: string;
+  kommunekode?: number;
+}
+
 interface CvrHitSource {
   Vrvirksomhed?: {
     cvrNummer?: number;
     virksomhedMetadata?: {
       nyesteNavn?: { navn?: string };
-      nyesteBeliggenhedsadresse?: {
-        vejnavn?: string;
-        husnummerFra?: string;
-        husnummerTil?: string;
-        bogstavFra?: string;
-        bogstavTil?: string;
-        etage?: string;
-        sidedoer?: string;
-        postnummer?: number | string;
-        postdistrikt?: string;
-        landekode?: string;
-        kommunekode?: number;
-      } | null;
+      nyesteBeliggenhedsadresse?: CvrBeliggenhedsadresse | null;
       nyesteHovedbranche?: {
         branchekode?: string;
         branchetekst?: string;
@@ -170,9 +173,9 @@ export class CvrClient {
       return cached.result;
     }
 
-    const result = this.simulationMode
+    const result = await (this.simulationMode
       ? this.simulateLookup(normalised)
-      : await this.liveLookup(normalised);
+      : this.liveLookup(normalised));
 
     this.cache.set(normalised, { result, expiresAt: Date.now() + CACHE_TTL_MS });
     return result;
@@ -281,7 +284,7 @@ export class CvrClient {
    * Any 8-digit CVR returns exists:true with synthetic data so the
    * UI flow can be exercised. A curated list returns realistic names.
    */
-  private async simulateLookup(cvrNumber: string): Promise<CvrResult> {
+  private simulateLookup(cvrNumber: string): CvrResult {
     // Small set of well-known CVR numbers returns realistic data.
     const known: Record<string, Partial<CvrResult>> = {
       '30714024': { name: 'Nine A/S', status: 'AKTIV', address: 'Strandvejen 100', postalCode: '2900', city: 'Hellerup', country: 'Danmark' },
@@ -320,11 +323,7 @@ export class CvrClient {
   }
 
   /** Build an address string + components from the CVR beliggenhedsadresse. */
-  private extractAddress(addr: CvrHitSource['Vrvirksomhed'] extends infer V
-    ? V extends { virksomhedMetadata?: { nyesteBeliggenhedsadresse?: infer B } }
-      ? B
-      : never
-    : never): NormalisedAddress {
+  private extractAddress(addr: CvrBeliggenhedsadresse | null | undefined): NormalisedAddress {
     if (!addr || typeof addr !== 'object') return {};
 
     const vej = addr.vejnavn ?? '';
