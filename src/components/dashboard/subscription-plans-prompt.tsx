@@ -988,6 +988,26 @@ export function SubscriptionPlansPrompt() {
     };
   }, [visible]);
 
+  // Payment result overlay — rendered OUTSIDE the `if (!visible) return null`
+  // check so it survives dismiss(). When a payment succeeds, we call dismiss()
+  // to close the plans prompt, but the result overlay (checkmark animation +
+  // welcome card) must stay visible.
+  const resultOverlayNode = (
+    <PaymentResultOverlay
+      key={resultOverlay.open ? `${resultOverlay.type}-${resultOverlay.planName ?? ''}` : 'closed'}
+      open={resultOverlay.open}
+      type={resultOverlay.type}
+      planName={resultOverlay.planName}
+      onDismiss={() => setResultOverlay((prev) => ({ ...prev, open: false }))}
+    />
+  );
+
+  // If the plans prompt is dismissed but the result overlay is still showing,
+  // render ONLY the result overlay (not the plans prompt behind it).
+  if (!visible && resultOverlay.open) {
+    return <>{resultOverlayNode}</>;
+  }
+
   if (!visible) return null;
 
   const t = (da: string, en: string) => (isDa ? da : en);
@@ -1144,14 +1164,10 @@ export function SubscriptionPlansPrompt() {
         />
       )}
 
-      {/* Payment result overlay — animated checkmark/X + welcome card */}
-      <PaymentResultOverlay
-        key={resultOverlay.open ? `${resultOverlay.type}-${resultOverlay.planName ?? ''}` : 'closed'}
-        open={resultOverlay.open}
-        type={resultOverlay.type}
-        planName={resultOverlay.planName}
-        onDismiss={() => setResultOverlay((prev) => ({ ...prev, open: false }))}
-      />
+      {/* Payment result overlay — animated checkmark/X + welcome card.
+          Rendered here (when prompt is visible) AND via the early-return
+          above (when prompt is dismissed but overlay still showing). */}
+      {resultOverlayNode}
     </div>
   );
 }
