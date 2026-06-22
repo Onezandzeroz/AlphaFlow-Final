@@ -1,96 +1,127 @@
 /**
- * Flatpay API Client
+ * Frisbii (formerly Flatpay / Billwerk+) Checkout API Client
  *
- * Integration with Flatpay's hosted payment page for subscription plan
- * purchases. When a user selects a paid plan (Månedlig / Pro / Business /
- * Business Extended), we create a payment session with Flatpay, redirect
- * the user to Flatpay's hosted checkout, and activate the plan only after
- * a confirmed payment (via callback redirect or webhook).
+ * Integration with Frisbii's hosted payment page for subscription plan
+ * purchases. When a user selects a paid plan, we create a charge session
+ * with Frisbii, redirect the user to Frisbii's hosted checkout, and
+ * activate the plan only after a confirmed payment (via callback or
+ * webhook).
+ *
+ * ─── Frisbii API ──
+ *
+ * API base URL:  https://checkout-api.frisbii.com/v1
+ * Create session: POST /session/charge
+ * Get session:    GET  /session/charge/{id}
+ * Auth:           HTTP Basic Auth — username = private API key (priv_...),
+ *                 password = empty. base64(priv_XXXX:).
+ * Docs:           https://docs.frisbii.com/docs/new-web-shop
+ * API credentials: https://app.frisbii.com under Developers → API Credentials
  *
  * ─── Configuration ──
  *
  * Set these environment variables in .env:
- *   FLATPAY_API_KEY       — Your Flatpay API key (from the Flatpay Portal)
- *   FLATPAY_API_BASE_URL  — Flatpay's API base URL (e.g. https://api.flatpay.com/v1)
- *   FLATPAY_MERCHANT_ID   — Your Flatpay merchant ID
- *   FLATPAY_WEBHOOK_SECRET— Secret used to verify webhook signatures
+ *   FLATPAY_API_KEY        — Your Frisbii private API key (priv_...)
+ *   FLATPAY_API_BASE_URL   — Frisbii API base (default: https://checkout-api.frisbii.com/v1)
+ *   FLATPAY_WEBHOOK_SECRET — Optional override for webhook HMAC key (defaults to API key)
+ *
+ * Note: FLATPAY_MERCHANT_ID is NOT used by Frisbii (kept for backward compat).
  *
  * ─── Mock mode ──
  *
  * When FLATPAY_API_KEY is NOT set, the client runs in "mock mode" — it
- * simulates the payment flow without calling Flatpay. This lets you test
+ * simulates the payment flow without calling Frisbii. This lets you test
  * the full subscription-purchase flow locally (the mock checkout page
- * auto-succeeds). In production, set the env vars to use the real API.
+ * auto-succeeds). In production, set FLATPAY_API_KEY to use the real API.
  *
- * ─── Standard hosted-checkout flow ──
+ * ─── Hosted-checkout flow ──
  *
  *   1. User picks a paid plan → frontend calls POST /api/subscription/create-payment
- *   2. Backend creates a Payment row (status=pending) + calls Flatpay to
- *      create a payment session → gets back a hosted checkout URL
- *   3. Frontend redirects the user to the Flatpay URL
- *   4. User completes payment on Flatpay's hosted page
- *   5. Flatpay redirects back to /api/subscription/payment-callback?payment_id=...
- *      (user-facing redirect — shows a success/pending page)
- *   6. Flatpay also sends a server-to-server webhook to
- *      /api/subscription/payment-webhook with the final status
- *   7. Backend verifies the payment status (via API or webhook), sets
- *      Payment.status = succeeded, and activates Company.planTier
+ *   2. Backend creates a Payment row (status=pending) + calls Frisbii to
+ *      create a charge session → gets back { id, url }
+ *   3. Frontend redirects the user to `url` (Frisbii's hosted checkout)
+ *   4. User completes payment on Frisbii's hosted page
+ *   5. Frisbii redirects the user back to `accept_url` (our callback)
+ *      → callback verifies status, activates plan, redirects to app
+ *   6. Frisbii also sends a webhook (invoice_authorized / invoice_settled)
+ *      → webhook handler verifies HMAC signature, activates plan
  *
- * NOTE: The exact Flatpay API endpoints may differ from what's implemented
- * here. Once you have the official Flatpay API documentation from your
- * account manager, adjust the createPaymentSession / getPaymentStatus /
- * verifyWebhookSignature methods to match. The surrounding flow (Payment
- * model, routes, activation logic) stays the same.
+ * ─── Webhook configuration ──
+ *
+ * Webhooks are configured in the Frisbii admin UI (https://app.frisbii.com),
+ * NOT via the API call. Set the webhook URL to:
+ *   https://your-domain.com/api/subscription/payment-webhook
+ * Listen for: invoice_authorized, invoice_settled, invoice_failed events.
+ *
+ * @see https://docs.frisbii.com/docs/new-web-shop
+ * @see https://docs.frisbii.com/docs/billwerk-checkout
  */
 
 import { logger } from '@/lib/logger';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 // ─── Config ───────────────────────────────────────────────────────────
 
-const FLATPAY_API_KEY = process.env.FLATPAY_API_KEY || '';
-const FLATPAY_API_BASE_URL = process.env.FLATPAY_API_BASE_URL || 'https://api.flatpay.com/v1';
-const FLATPAY_MERCHANT_ID = process.env.FLATPAY_MERCHANT_ID || '';
-const FLATPAY_WEBHOOK_SECRET = process.env.FLATPAY_WEBHOOK_SECRET || '';
+const FRISBII_API_KEY = process.env.FLATPAY_API_KEY || '';
+const FRISBII_API_BASE_URL = (
+  process.env.FLATPAY_API_BASE_URL || 'https://checkout-api.frisbii.com/v1'
+).replace(/\/$/, '');
+// Frisbii webhook HMAC uses the private API key by default. Allow a
+// separate secret override for flexibility (some setups use a distinct key).
+const FRISBII_WEBHOOK_SECRET = process.env.FLATPAY_WEBHOOK_SECRET || FRISBII_API_KEY;
 
-/** True when Flatpay is configured (real API mode). False = mock mode. */
-export const FLATPAY_CONFIGURED = Boolean(FLATPAY_API_KEY && FLATPAY_API_BASE_URL);
+/** True when Frisbii is configured (real API mode). False = mock mode. */
+export const FLATPAY_CONFIGURED = Boolean(FRISBII_API_KEY && FRISBII_API_BASE_URL);
 
 // ─── Types ────────────────────────────────────────────────────────────
 
 export interface CreatePaymentSessionInput {
-  /** AlphaFlow's internal payment ID (Payment.id) — used as the order reference */
+  /** AlphaFlow's internal payment ID (Payment.id) — used as order.handle */
   paymentId: string;
   /** Amount in øre (1 DKK = 100 øre) */
   amount: number;
   currency: string;
-  /** Human-readable description (e.g. "AlphaFlow Pro — 12 måneder") */
+  /** Human-readable description (stored locally; Frisbii charge sessions don't have a description field) */
   description: string;
-  /** FRONTEND URL Flatpay redirects the user to after payment (the app page) */
-  returnUrl: string;
-  /** SERVER-side URL Flatpay calls to confirm the payment (our callback handler) */
-  callbackUrl: string;
-  /** URL Flatpay sends the server-to-server webhook to */
-  webhookUrl: string;
-  /** Customer email (for receipt) */
+  /** URL Frisbii redirects the user to on SUCCESS (our callback handler) */
+  acceptUrl: string;
+  /** URL Frisbii redirects the user to on CANCEL (frontend page) */
+  cancelUrl: string;
+  /** Customer email */
   customerEmail?: string;
+  /** Customer handle (unique reference, e.g. user ID) */
+  customerHandle?: string;
+  /** Customer first name */
+  customerFirstName?: string;
+  /** Customer last name */
+  customerLastName?: string;
 }
 
 export interface CreatePaymentSessionResult {
-  /** Flatpay's payment/session ID */
+  /** Frisbii charge session ID (cs_...) */
   flatpayPaymentId: string;
   /** The hosted checkout URL the user should be redirected to */
   checkoutUrl: string;
-  /** Raw response from Flatpay (for debugging/logging) */
+  /** Raw response from Frisbii (for debugging/logging) */
   raw?: unknown;
 }
 
 export interface PaymentStatusResult {
-  /** Flatpay's payment ID */
+  /** Frisbii charge session ID */
   flatpayPaymentId: string;
   /** Final status: 'succeeded' | 'pending' | 'failed' | 'cancelled' */
   status: 'succeeded' | 'pending' | 'failed' | 'cancelled';
-  /** Raw response from Flatpay */
+  /** Raw response from Frisbii */
   raw?: unknown;
+}
+
+// ─── Auth helper ──────────────────────────────────────────────────────
+
+/**
+ * Build the Basic Auth header for Frisbii.
+ * Format: Basic base64(priv_XXXX:) — username = API key, password = empty.
+ */
+function basicAuthHeader(): string {
+  return 'Basic ' + Buffer.from(`${FRISBII_API_KEY}:`).toString('base64');
 }
 
 // ─── Mock mode helpers ────────────────────────────────────────────────
@@ -99,86 +130,106 @@ export interface PaymentStatusResult {
  * In mock mode, we generate a fake checkout URL that points to our own
  * callback endpoint with a `mock=1` flag. The callback handler detects
  * this, auto-succeeds the payment (activating the plan), and then
- * redirects the user to the frontend returnUrl (the app page).
- *
- * This simulates the full Flatpay flow: user is "redirected to Flatpay"
- * (actually to our callback), payment is "completed" (auto-succeeded),
- * and the user is sent back to the app.
+ * redirects the user to the frontend.
  */
-function mockCheckoutUrl(paymentId: string, frontendReturnUrl: string): string {
-  // Encode the frontend return URL so the callback can forward to it
-  const encodedReturn = encodeURIComponent(frontendReturnUrl);
-  return `/api/subscription/payment-callback?payment_id=${paymentId}&mock=1&return_url=${encodedReturn}`;
+function mockCheckoutUrl(paymentId: string, acceptUrl: string): string {
+  // Point to our callback which auto-succeeds and redirects
+  const url = new URL(acceptUrl);
+  url.searchParams.set('mock', '1');
+  return url.toString();
 }
 
 // ─── API methods ──────────────────────────────────────────────────────
 
 /**
- * Create a payment session with Flatpay.
+ * Create a Frisbii Pay Checkout charge session.
  *
- * Returns the hosted checkout URL the user should be redirected to.
- * In mock mode, returns a URL pointing to our own callback (auto-succeed).
+ * POST /session/charge with the order details, accept_url, and cancel_url.
+ * Returns the session ID and hosted checkout URL.
+ *
+ * @see https://docs.frisbii.com/docs/new-web-shop
  */
 export async function createPaymentSession(
   input: CreatePaymentSessionInput
 ): Promise<CreatePaymentSessionResult> {
   // ── Mock mode ──
   if (!FLATPAY_CONFIGURED) {
-    logger.info(`[Flatpay] MOCK MODE — createPaymentSession for ${input.paymentId} (${input.amount} ${input.currency})`);
+    logger.info(
+      `[Frisbii] MOCK MODE — createPaymentSession for ${input.paymentId} (${input.amount} ${input.currency})`
+    );
     return {
       flatpayPaymentId: `mock_${input.paymentId}`,
-      checkoutUrl: mockCheckoutUrl(input.paymentId, input.returnUrl),
+      checkoutUrl: mockCheckoutUrl(input.paymentId, input.acceptUrl),
     };
   }
 
   // ── Real API mode ──
-  //
-  // NOTE: The exact endpoint and request body shape depend on Flatpay's
-  // API documentation. This is a standard hosted-checkout pattern. Adjust
-  // the endpoint path + field names to match Flatpay's actual API once
-  // you have the official docs.
-  const response = await fetch(`${FLATPAY_API_BASE_URL}/payments`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${FLATPAY_API_KEY}`,
-      'Content-Type': 'application/json',
-      ...(FLATPAY_MERCHANT_ID ? { 'X-Merchant-Id': FLATPAY_MERCHANT_ID } : {}),
-    },
-    body: JSON.stringify({
-      // AlphaFlow's order reference
-      reference: input.paymentId,
+  // Build the Frisbii charge session request body.
+  // The order.handle is our Payment.id — Frisbii echoes it back in webhooks
+  // as `order_handle`, so we can match webhook events to our Payment rows.
+  const requestBody: Record<string, unknown> = {
+    order: {
+      handle: input.paymentId,
       amount: input.amount,
       currency: input.currency,
-      description: input.description,
-      // redirect_url: the FRONTEND URL Flatpay sends the user to after payment
-      redirect_url: input.returnUrl,
-      // callback_url: the SERVER-side URL Flatpay calls to confirm (our callback handler)
-      callback_url: input.callbackUrl,
-      // notify_url: the server-to-server webhook URL
-      notify_url: input.webhookUrl,
-      ...(input.customerEmail ? { customer_email: input.customerEmail } : {}),
-    }),
+      ...(input.customerEmail || input.customerHandle || input.customerFirstName || input.customerLastName
+        ? {
+            customer: {
+              ...(input.customerHandle ? { handle: input.customerHandle } : {}),
+              ...(input.customerEmail ? { email: input.customerEmail } : {}),
+              ...(input.customerFirstName ? { first_name: input.customerFirstName } : {}),
+              ...(input.customerLastName ? { last_name: input.customerLastName } : {}),
+            },
+          }
+        : {}),
+    },
+    accept_url: input.acceptUrl,
+    cancel_url: input.cancelUrl,
+  };
+
+  const response = await fetch(`${FRISBII_API_BASE_URL}/session/charge`, {
+    method: 'POST',
+    headers: {
+      Authorization: basicAuthHeader(),
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    logger.error(`[Flatpay] createPaymentSession failed (${response.status}): ${body}`);
-    throw new Error(`Flatpay API error (${response.status}): ${body}`);
+    logger.error(`[Frisbii] createPaymentSession failed (${response.status}): ${body}`);
+    throw new Error(`Frisbii API error (${response.status}): ${body}`);
   }
 
-  const data = await response.json();
+  const data = (await response.json()) as { id?: string; url?: string };
+
+  if (!data.id || !data.url) {
+    logger.error('[Frisbii] createPaymentSession — missing id or url in response:', data);
+    throw new Error('Frisbii API returned an invalid response (missing id or url)');
+  }
+
   return {
-    flatpayPaymentId: data.id || data.payment_id || data.reference,
-    checkoutUrl: data.checkout_url || data.url || data.hosted_page_url,
+    flatpayPaymentId: data.id,
+    checkoutUrl: data.url,
     raw: data,
   };
 }
 
 /**
- * Get the status of a payment from Flatpay.
+ * Get the status of a Frisbii charge session.
+ *
+ * GET /session/charge/{id} — returns the session with a `state` field.
  * Used by the callback handler to verify the payment before activating
- * the plan (defence in depth — the webhook is the primary confirmation,
- * but the callback also checks).
+ * the plan (defence in depth — the webhook is the primary confirmation).
+ *
+ * Frisbii session states:
+ *   new        — session created, no payment yet
+ *   authorized — payment authorized (reserved)
+ *   settled    — payment settled (captured) ← success
+ *   failed     — payment failed
+ *   cancelled  — session cancelled
  */
 export async function getPaymentStatus(
   flatpayPaymentId: string
@@ -192,30 +243,35 @@ export async function getPaymentStatus(
   }
 
   // ── Real API mode ──
-  const response = await fetch(`${FLATPAY_API_BASE_URL}/payments/${flatpayPaymentId}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${FLATPAY_API_KEY}`,
-      ...(FLATPAY_MERCHANT_ID ? { 'X-Merchant-Id': FLATPAY_MERCHANT_ID } : {}),
-    },
-  });
+  const response = await fetch(
+    `${FRISBII_API_BASE_URL}/session/charge/${encodeURIComponent(flatpayPaymentId)}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: basicAuthHeader(),
+        Accept: 'application/json',
+      },
+    }
+  );
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    logger.error(`[Flatpay] getPaymentStatus failed (${response.status}): ${body}`);
-    throw new Error(`Flatpay API error (${response.status}): ${body}`);
+    logger.error(`[Frisbii] getPaymentStatus failed (${response.status}): ${body}`);
+    throw new Error(`Frisbii API error (${response.status}): ${body}`);
   }
 
-  const data = await response.json();
-  // Map Flatpay's status to our internal status. The exact field names
-  // depend on Flatpay's API — adjust once you have the docs.
-  const rawStatus = (data.status || data.state || '').toLowerCase();
+  const data = (await response.json()) as { state?: string; status?: string };
+  const rawState = (data.state || data.status || '').toLowerCase();
+
   let status: PaymentStatusResult['status'] = 'pending';
-  if (['succeeded', 'captured', 'completed', 'paid', 'settled'].includes(rawStatus)) {
+  if (rawState === 'settled' || rawState === 'authorized') {
+    // authorized = payment reserved (will be auto-settled for instant-settle sessions)
+    // settled = payment captured
+    // Both count as success for plan activation.
     status = 'succeeded';
-  } else if (['failed', 'declined', 'error'].includes(rawStatus)) {
+  } else if (rawState === 'failed') {
     status = 'failed';
-  } else if (['cancelled', 'canceled', 'expired', 'abandoned'].includes(rawStatus)) {
+  } else if (rawState === 'cancelled') {
     status = 'cancelled';
   }
 
@@ -223,37 +279,30 @@ export async function getPaymentStatus(
 }
 
 /**
- * Verify the signature of a Flatpay webhook request.
+ * Verify the signature of a Frisbii (Reepay) webhook.
  *
- * Flatpay typically sends a signature header (e.g. `Flatpay-Signature`)
- * computed as HMAC-SHA256 of the raw request body using the webhook
- * secret. This function verifies that signature to ensure the webhook
- * is genuinely from Flatpay.
+ * Frisbii sends the `Reepay-Signature` header containing a base64-encoded
+ * HMAC-SHA256 of the raw request body, using the private API key as the
+ * HMAC secret. This function recomputes the HMAC and compares it
+ * timing-safely.
  *
- * NOTE: The exact header name + signature algorithm depend on Flatpay's
- * API. Adjust once you have the official docs.
+ * @see https://docs.frisbii.com/reference/intro_webhooks
  */
 export function verifyWebhookSignature(
   rawBody: string,
   signatureHeader: string | null
 ): boolean {
-  // In mock mode (no secret configured), accept all webhooks
-  if (!FLATPAY_WEBHOOK_SECRET) return true;
-
+  // In mock mode (no key configured), accept all webhooks
+  if (!FRISBII_WEBHOOK_SECRET) return true;
   if (!signatureHeader) return false;
 
-  // Standard HMAC-SHA256 verification
-  const crypto = require('crypto');
-  const expected = crypto
-    .createHmac('sha256', FLATPAY_WEBHOOK_SECRET)
+  const expected = createHmac('sha256', FRISBII_WEBHOOK_SECRET)
     .update(rawBody)
-    .digest('hex');
+    .digest('base64');
 
-  // Timing-safe comparison
-  if (expected.length !== signatureHeader.length) return false;
-  let result = 0;
-  for (let i = 0; i < signatureHeader.length; i++) {
-    result |= expected.charCodeAt(i) ^ signatureHeader.charCodeAt(i);
-  }
-  return result === 0;
+  // Timing-safe comparison (both are base64 strings of equal length)
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signatureHeader);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }

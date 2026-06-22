@@ -68,29 +68,33 @@ export const POST = withGuard(
         },
       });
 
-      // Build the URLs Flatpay needs.
-      // - returnUrl: the FRONTEND URL Flatpay redirects the user to after
-      //   payment. This is the app's root page with a payment status query
-      //   param so the app can show a success/pending message. The callback
-      //   handler (which activates the plan) is a SEPARATE URL that Flatpay
-      //   calls server-side (or that we handle internally in mock mode).
-      // - callbackUrl: the server-side URL Flatpay calls to confirm the
-      //   payment. In mock mode this is handled internally.
+      // Build the URLs Frisbii needs.
+      // - acceptUrl: the URL Frisbii redirects the user to on SUCCESS.
+      //   This is our server-side callback that verifies the payment status
+      //   via the Frisbii API, activates the plan, and redirects to the app.
+      // - cancelUrl: the URL Frisbii redirects the user to on CANCEL.
+      //   This is the app's root page with a payment=cancelled flag.
+      //
+      // Note: Frisbii webhooks are configured in the Frisbii admin UI
+      // (https://app.frisbii.com), not passed in the API call. The webhook
+      // URL should be: https://your-domain.com/api/subscription/payment-webhook
       const origin = request.nextUrl.origin;
-      const frontendReturnUrl = `${origin}/?payment=processing`;
-      const callbackUrl = `${origin}/api/subscription/payment-callback?payment_id=${payment.id}`;
-      const webhookUrl = `${origin}/api/subscription/payment-webhook`;
+      const acceptUrl = `${origin}/api/subscription/payment-callback?payment_id=${payment.id}`;
+      const cancelUrl = `${origin}/?payment=cancelled`;
 
-      // Create the payment session with Flatpay
+      // Create the charge session with Frisbii
       const session = await createPaymentSession({
         paymentId: payment.id,
         amount: pricing.totalAmountOre,
         currency: 'DKK',
         description: pricing.descriptionDa,
-        returnUrl: frontendReturnUrl,
-        callbackUrl,
-        webhookUrl,
+        acceptUrl,
+        cancelUrl,
         customerEmail: ctx.email,
+        customerHandle: `user-${ctx.id}`,
+        // Use the active company name as the customer name (B2B context)
+        customerFirstName: ctx.activeCompanyName || undefined,
+        customerLastName: ctx.activeCompanyName || undefined,
       });
 
       // Store Flatpay's payment ID + checkout URL on the Payment row
@@ -123,6 +127,9 @@ export const POST = withGuard(
 
       return NextResponse.json({
         checkoutUrl: session.checkoutUrl,
+        // Frisbii charge session ID (cs_...) — used by the Overlay Checkout
+        // JS SDK: new Reepay.ModalCheckout(sessionId)
+        sessionId: session.flatpayPaymentId,
         paymentId: payment.id,
         planTier,
         amount: pricing.totalAmountOre,

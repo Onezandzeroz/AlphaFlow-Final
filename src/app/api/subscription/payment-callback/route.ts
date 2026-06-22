@@ -7,41 +7,42 @@ import { activatePlanAfterPayment } from '@/lib/plan-activation';
 /**
  * GET /api/subscription/payment-callback
  *
- * The URL Flatpay redirects the user to after they complete (or cancel)
- * the payment on Flatpay's hosted checkout page.
+ * The `accept_url` that Frisbii redirects the user to after they complete
+ * (or cancel) the payment on Frisbii's hosted checkout page.
  *
  * Query params:
- *   - payment_id   AlphaFlow's internal Payment.id
+ *   - payment_id   AlphaFlow's internal Payment.id (passed in our accept_url)
  *   - mock=1       (mock mode only) — auto-succeed the payment
- *   - return_url   (mock mode only) — where to send the user after
+ *
+ * Frisbii also appends `id` (the charge session id) and `invoice` to the
+ * accept_url on success — but we rely on our own `payment_id` param.
  *
  * This handler:
  *   1. Looks up the Payment row by payment_id
- *   2. If mock mode, auto-succeeds (no Flatpay API call)
- *   3. Otherwise, calls Flatpay's API to verify the payment status
- *   4. If succeeded, activates the plan via activatePlanAfterPayment
- *   5. Redirects the user to the app's subscription-success page
+ *   2. If mock mode, auto-succeeds (no Frisbii API call)
+ *   3. Otherwise, calls Frisbii's API to verify the session status
+ *   4. If succeeded/authorized, activates the plan via activatePlanAfterPayment
+ *   5. Redirects the user to the app root with a payment status flag
  *
  * NOTE: The redirect-back is user-facing and can be spoofed (the user
  * could manually visit this URL). The ACTUAL payment confirmation must
  * come from the webhook (/api/subscription/payment-webhook) which is
- * server-to-server and signature-verified. This callback is a UX
- * convenience — it activates the plan immediately if the Flatpay API
- * confirms success, so the user doesn't have to wait for the webhook.
+ * server-to-server and HMAC-signed. This callback is a UX convenience —
+ * it activates the plan immediately if the Frisbii API confirms success,
+ * so the user doesn't have to wait for the webhook.
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const paymentId = searchParams.get('payment_id');
     const isMock = searchParams.get('mock') === '1';
-    // return_url is the FRONTEND URL to send the user to after processing.
-    // In mock mode this is passed as a query param. In real mode, Flatpay
-    // redirects directly to the returnUrl (the frontend page) and calls
-    // this callback server-side — so return_url won't be set.
-    const returnUrl = searchParams.get('return_url') || '/';
+    // The frontend URL to redirect to after processing.
+    // Always send to the app root with a payment status query param.
+    const appUrl = new URL('/', request.url);
 
     if (!paymentId) {
-      return NextResponse.redirect(new URL('/?payment=error', request.url));
+      appUrl.searchParams.set('payment', 'error');
+      return NextResponse.redirect(appUrl);
     }
 
     const payment = await db.payment.findUnique({
@@ -51,14 +52,20 @@ export async function GET(request: NextRequest) {
 
     if (!payment) {
       logger.warn(`[PAYMENT CALLBACK] Payment ${paymentId} not found`);
-      return NextResponse.redirect(new URL('/?payment=error', request.url));
+      appUrl.searchParams.set('payment', 'error');
+      return NextResponse.redirect(appUrl);
     }
 
     // If already processed (by the webhook), just redirect to the app
     if (payment.status === 'succeeded') {
-      const url = new URL(returnUrl, request.url);
-      url.searchParams.set('payment', 'success');
-      return NextResponse.redirect(url);
+      appUrl.searchParams.set('payment', 'success');
+      return NextResponse.redirect(appUrl);
+    }
+
+    // If already failed/cancelled, redirect with that status
+    if (payment.status === 'failed' || payment.status === 'cancelled') {
+      appUrl.searchParams.set('payment', payment.status);
+      return NextResponse.redirect(appUrl);
     }
 
     // Determine the payment status
@@ -68,20 +75,19 @@ export async function GET(request: NextRequest) {
       // Mock mode — auto-succeed
       status = 'succeeded';
     } else if (payment.flatpayPaymentId) {
-      // Real mode — verify with Flatpay API
+      // Real mode — verify with Frisbii API
       const result = await getPaymentStatus(payment.flatpayPaymentId);
       status = result.status;
     } else {
-      // No Flatpay payment ID — can't verify
+      // No Frisbii session ID — can't verify, wait for webhook
       status = 'pending';
     }
 
     if (status === 'succeeded') {
-      // Activate the plan
+      // Activate the plan (also updates Payment.status)
       await activatePlanAfterPayment(paymentId, payment.userId);
-      const url = new URL(returnUrl, request.url);
-      url.searchParams.set('payment', 'success');
-      return NextResponse.redirect(url);
+      appUrl.searchParams.set('payment', 'success');
+      return NextResponse.redirect(appUrl);
     }
 
     if (status === 'failed' || status === 'cancelled') {
@@ -90,17 +96,18 @@ export async function GET(request: NextRequest) {
         where: { id: paymentId },
         data: { status, completedAt: new Date() },
       });
-      const url = new URL(returnUrl, request.url);
-      url.searchParams.set('payment', 'failed');
-      return NextResponse.redirect(url);
+      appUrl.searchParams.set('payment', status);
+      return NextResponse.redirect(appUrl);
     }
 
-    // Still pending — redirect with a "processing" flag
-    const url = new URL(returnUrl, request.url);
-    url.searchParams.set('payment', 'pending');
-    return NextResponse.redirect(url);
+    // Still pending — redirect with a "processing" flag.
+    // The webhook will activate the plan when the payment settles.
+    appUrl.searchParams.set('payment', 'pending');
+    return NextResponse.redirect(appUrl);
   } catch (error) {
     logger.error('[PAYMENT CALLBACK] Error:', error);
-    return NextResponse.redirect(new URL('/?payment=error', request.url));
+    const appUrl = new URL('/', request.url);
+    appUrl.searchParams.set('payment', 'error');
+    return NextResponse.redirect(appUrl);
   }
 }

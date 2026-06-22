@@ -19,6 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { openFrisbiiOverlay } from '@/lib/frisbii-checkout';
+import { toast } from 'sonner';
 
 // ─── Plan definitions ──────────────────────────────────────────────────
 
@@ -815,9 +817,11 @@ export function SubscriptionPlansPrompt() {
         return;
       }
 
-      // ── Paid plan: create a Flatpay payment session and redirect ──
-      // The plan is activated ONLY after a confirmed payment (via the
-      // Flatpay callback redirect or the webhook).
+      // ── Paid plan: create a Frisbii charge session and open overlay ──
+      // The user stays on alphaflow.dk — Frisbii's PCI-compliant payment
+      // form opens as a full-page overlay on top of the current page.
+      // The plan is activated by the server-side webhook (authoritative)
+      // after the Accept event fires.
       setStartingTrial(true);
       fetch('/api/subscription/create-payment', {
         method: 'POST',
@@ -825,23 +829,90 @@ export function SubscriptionPlansPrompt() {
         body: JSON.stringify({ planId: plan.id }),
       })
         .then((res) => res.json())
-        .then((data) => {
-          if (data.checkoutUrl) {
-            // Redirect the user to Flatpay's hosted checkout page.
-            // After payment, Flatpay redirects back to our callback URL
-            // which activates the plan and sends the user back here.
-            dismiss();
-            window.location.href = data.checkoutUrl;
-          } else {
+        .then(async (data) => {
+          if (!data.sessionId) {
             // Error creating the payment session — show a message
             setStartingTrial(false);
+            toast.error(language === 'da' ? 'Kunne ikke starte betaling' : 'Could not start payment');
+            return;
+          }
+
+          // Open the Frisbii Overlay Checkout modal.
+          // The user enters card details in Frisbii's iframe — AlphaFlow
+          // never touches the card data.
+          try {
+            await openFrisbiiOverlay(data.sessionId, {
+              onSuccess: () => {
+                // Payment accepted — the webhook activates the plan.
+                // Give the webhook a brief moment, then refresh auth so
+                // the new planTier is picked up.
+                dismiss();
+                toast.success(
+                  language === 'da' ? 'Betaling gennemført!' : 'Payment successful!',
+                  {
+                    description:
+                      language === 'da'
+                        ? 'Dit abonnement aktiveres nu.'
+                        : 'Your subscription is being activated.',
+                  }
+                );
+                // Small delay to let the webhook process, then refresh
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('auth:refresh'));
+                  window.dispatchEvent(new CustomEvent('access:refresh'));
+                }, 800);
+              },
+              onCancel: () => {
+                setStartingTrial(false);
+                toast(
+                  language === 'da' ? 'Betaling annulleret' : 'Payment cancelled',
+                  {
+                    description:
+                      language === 'da'
+                        ? 'Du har annulleret betalingen.'
+                        : 'You cancelled the payment.',
+                  }
+                );
+              },
+              onError: () => {
+                setStartingTrial(false);
+                toast.error(
+                  language === 'da' ? 'Betaling mislykkedes' : 'Payment failed',
+                  {
+                    description:
+                      language === 'da'
+                        ? 'Der opstod en fejl. Prøv igen senere.'
+                        : 'An error occurred. Please try again later.',
+                  }
+                );
+              },
+            });
+          } catch (err) {
+            // SDK failed to load — fall back to redirect checkout
+            setStartingTrial(false);
+            if (data.checkoutUrl) {
+              window.location.href = data.checkoutUrl;
+            } else {
+              toast.error(
+                language === 'da' ? 'Betaling kunne ikke startes' : 'Payment could not be started'
+              );
+            }
           }
         })
         .catch(() => {
           setStartingTrial(false);
+          toast.error(
+            language === 'da' ? 'Netværksfejl' : 'Network error',
+            {
+              description:
+                language === 'da'
+                  ? 'Kunne ikke kontakte serveren. Prøv igen.'
+                  : 'Could not reach the server. Please try again.',
+            }
+          );
         });
     },
-    [dismiss],
+    [dismiss, language],
   );
 
   useEffect(() => {

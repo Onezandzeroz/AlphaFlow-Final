@@ -143,11 +143,12 @@ export default function Home() {
     checkAuth();
   }, [hydrated, checkAuth, verifyToken, resetPasswordToken]);
 
-  // ── Detect ?payment= query param (redirect back from Flatpay) ──
-  // When the user returns from a Flatpay payment, the URL contains
-  // ?payment=success|failed|pending|error. We dispatch an 'auth:refresh'
-  // event so the app-layout listener re-fetches /api/auth/me and picks
-  // up the new planTier + availableFeatures immediately.
+  // ── Detect ?payment= query param (redirect back from Frisbii) ──
+  // When the user returns from a Frisbii payment, the URL contains
+  // ?payment=success|failed|pending|cancelled|error. We dispatch an
+  // 'auth:refresh' event so the app-layout listener re-fetches
+  // /api/auth/me and picks up the new planTier immediately, and show a
+  // toast so the user gets visual confirmation.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -159,7 +160,63 @@ export default function Home() {
       window.dispatchEvent(new CustomEvent('auth:refresh'));
       // Also trigger access refresh so the access-settings UI updates
       window.dispatchEvent(new CustomEvent('access:refresh'));
+
+      // Show a toast based on the payment status
+      const isDa = language === 'da';
+      switch (paymentStatus) {
+        case 'success':
+          toast.success(
+            isDa ? 'Betaling gennemført!' : 'Payment successful!',
+            {
+              description: isDa
+                ? 'Dit abonnement er nu aktiveret.'
+                : 'Your subscription is now active.',
+            }
+          );
+          break;
+        case 'pending':
+          toast(
+            isDa ? 'Betaling behandles…' : 'Payment processing…',
+            {
+              description: isDa
+                ? 'Vi aktiverer dit abonnement så snart betalingen er bekræftet.'
+                : 'We will activate your subscription as soon as the payment is confirmed.',
+            }
+          );
+          break;
+        case 'failed':
+          toast.error(
+            isDa ? 'Betaling mislykkedes' : 'Payment failed',
+            {
+              description: isDa
+                ? 'Der opstod en fejl. Prøv igen senere.'
+                : 'An error occurred. Please try again later.',
+            }
+          );
+          break;
+        case 'cancelled':
+          toast(
+            isDa ? 'Betaling annulleret' : 'Payment cancelled',
+            {
+              description: isDa
+                ? 'Du har annulleret betalingen.'
+                : 'You cancelled the payment.',
+            }
+          );
+          break;
+        case 'error':
+          toast.error(
+            isDa ? 'Fejl' : 'Error',
+            {
+              description: isDa
+                ? 'Der opstod en uventet fejl. Kontakt support hvis problemet fortsætter.'
+                : 'An unexpected error occurred. Contact support if the problem persists.',
+            }
+          );
+          break;
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle ?invite=TOKEN for already-logged-in users:
