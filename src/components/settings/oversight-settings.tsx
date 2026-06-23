@@ -703,12 +703,14 @@ export function OversightSettings() {
                             <span className="flex items-center gap-1">
                               CVR: {tenant.cvrNumber}
                               {tenant.cvrVerifiedAt && (
-                                <CheckCircle2
-                                  className="h-3 w-3 text-emerald-500 dark:text-emerald-400 shrink-0"
+                                <span
+                                  className="inline-flex items-center"
                                   title={isDa
                                     ? `CVR bekræftet ${new Date(tenant.cvrVerifiedAt).toLocaleDateString('da-DK')}`
                                     : `CVR verified ${new Date(tenant.cvrVerifiedAt).toLocaleDateString()}`}
-                                />
+                                >
+                                  <CheckCircle2 className="h-3 w-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                                </span>
                               )}
                             </span>
                           )}
