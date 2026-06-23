@@ -547,7 +547,7 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
 
         {/* ═══ ACCESS TAB ═══ */}
         <TabsContent value="access" className="border-l-4 border-[#0d9488] dark:border-[#2dd4bf] pl-4">
-          <AccessSettings userId={user.id} />
+          <AccessSettings userId={user.id} user={user} />
         </TabsContent>
 
         {/* ═══ HERMES AI TAB ═══ */}

@@ -49,7 +49,7 @@ import {
   Receipt,
   Sparkles,
 } from 'lucide-react';
-import { ProviderSwitchChecklist } from '@/components/exports/provider-switch-checklist';
+
 import { PageHeader } from '@/components/shared/page-header';
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { da } from 'date-fns/locale';
@@ -1321,8 +1321,7 @@ export function ExportsPage({ user }: ExportsPageProps) {
         </CardContent>
       </Card>
 
-      {/* Provider Switch Checklist (D8) */}
-      <ProviderSwitchChecklist user={user} />
+
     </div>
   );
 }

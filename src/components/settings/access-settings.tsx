@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback, useRef, type DragEvent } from 'react';
 import { useTranslation } from '@/lib/use-translation';
 import { tokenpayClient, getAccessLevelLabel, getAccessLevelDescription, type AccessCheckResult } from '@/lib/tokenpay';
+import { User } from '@/lib/auth-store';
 import { TwoFactorSettings } from '@/components/settings/two-factor-settings';
+import { ProviderSwitchChecklist } from '@/components/exports/provider-switch-checklist';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,6 +35,7 @@ import {
   ChevronDown,
   ChevronRight,
   Zap,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 // ── Extended access result with source/metadata fields from the API ──
@@ -76,6 +79,7 @@ interface ProofUploadResult {
 
 interface AccessSettingsProps {
   userId: string;
+  user: User;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -105,7 +109,7 @@ function formatExpiryCountdown(isoString: string | null, language: 'da' | 'en'):
 
 // ── Component ──────────────────────────────────────────────────────────
 
-export function AccessSettings({ userId }: AccessSettingsProps) {
+export function AccessSettings({ userId, user }: AccessSettingsProps) {
   const { t, language } = useTranslation();
   const showPlanPrompt = useSubscriptionPlansStore((s) => s.show);
 
@@ -705,6 +709,25 @@ export function AccessSettings({ userId }: AccessSettingsProps) {
 
       {/* ═══ TWO-FACTOR AUTHENTICATION (now below access status) ═══ */}
       <TwoFactorSettings userId={userId} />
+
+      {/* ═══ PROVIDER SWITCH (collapsible) ═══ */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between mt-2 mb-1 border-amber-300 dark:border-amber-700/50 bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+              <ArrowRightLeft className="h-4 w-4" />
+              {language === 'da' ? 'Udbyderskift af bogføringssystem' : 'Switch Bookkeeping Provider'}
+            </span>
+            <ChevronDown className="h-4 w-4 text-amber-600 dark:text-amber-400 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <ProviderSwitchChecklist user={user} />
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }
