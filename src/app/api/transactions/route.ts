@@ -429,7 +429,7 @@ export const DELETE = withGuard({
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    const reason = searchParams.get('reason') || 'User requested cancellation';
+    const reason = searchParams.get('reason') || 'SYSTEM:USER_REQUESTED';
 
     if (!id) {
       return NextResponse.json(

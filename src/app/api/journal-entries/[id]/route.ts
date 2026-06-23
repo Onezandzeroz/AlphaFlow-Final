@@ -222,7 +222,7 @@ export const DELETE = withGuard(
     try {
       const { id } = await context.params as { id: string };
       const { searchParams } = new URL(request.url);
-      const reason = searchParams.get('reason') || 'Cancelled via DELETE request';
+      const reason = searchParams.get('reason') || 'SYSTEM:DELETE_REQUEST';
 
       // demo filter now included in tenantFilter
       const existing = await db.journalEntry.findFirst({

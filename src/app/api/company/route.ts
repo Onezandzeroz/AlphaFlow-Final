@@ -428,13 +428,13 @@ export const DELETE = withGuard(guard.DELETE!, async (request, ctx) => {
     // Cancel all transactions (soft-delete)
     await db.transaction.updateMany({
       where: { ...filter, cancelled: false },
-      data: { cancelled: true, cancelReason: 'Full data reset by user' },
+      data: { cancelled: true, cancelReason: 'SYSTEM:DATA_RESET' },
     });
 
     // Cancel all invoices (soft-delete)
     await db.invoice.updateMany({
       where: { ...filter, cancelled: false },
-      data: { cancelled: true, cancelReason: 'Full data reset by user', status: 'CANCELLED' },
+      data: { cancelled: true, cancelReason: 'SYSTEM:DATA_RESET', status: 'CANCELLED' },
     });
 
     return NextResponse.json({ success: true, message: 'All data cleared successfully' });

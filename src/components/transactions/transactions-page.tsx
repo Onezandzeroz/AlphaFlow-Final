@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { cn } from '@/lib/utils';
+import { translateSystemReason } from '@/lib/system-reason-i18n';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -921,7 +922,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       {isCancelled && transaction.cancelReason && (
                         <div className="mt-2 flex items-start gap-1.5 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2">
                           <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                          <span>{transaction.cancelReason}</span>
+                          <span>{translateSystemReason(transaction.cancelReason, language)}</span>
                         </div>
                       )}
                     </div>
@@ -1225,7 +1226,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         <TableCell colSpan={7} className="py-1.5 px-4">
                           <div className="flex items-start gap-1.5 text-xs text-red-500 dark:text-red-400">
                             <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                            <span>{language === 'da' ? 'Annulleringsårsag: ' : 'Cancel reason: '}{transaction.cancelReason}</span>
+                            <span>{language === 'da' ? 'Annulleringsårsag: ' : 'Cancel reason: '}{translateSystemReason(transaction.cancelReason, language)}</span>
                           </div>
                         </TableCell>
                       </TableRow>

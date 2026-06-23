@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
+import { translateSystemReason } from '@/lib/system-reason-i18n';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -920,7 +921,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                 const entryTotalCredit = entry.lines.reduce((s, l) => s + Number(l.credit || 0), 0);
                 const isEntryBalanced = Math.abs(entryTotalDebit - entryTotalCredit) < 0.005;
                 const isEntryCancelled = !!entry.cancelled || entry.status === 'CANCELLED';
-                const isReversal = !!entry.reference?.startsWith('REVERSAL-') || !!entry.description?.startsWith('Annullering');
+                const isReversal = !!entry.reference?.startsWith('REVERSAL-');
                 const isOriginalReversed = !isReversal && !!entry.reference && reversedOriginalRefs.has(entry.reference);
                 const isDimmed = isEntryCancelled || isReversal || isOriginalReversed;
 
@@ -1138,7 +1139,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                             <span>
                               {isDanish ? 'Annulleringsårsag: ' : 'Cancel reason: '}
-                              {entry.cancelReason}
+                              {translateSystemReason(entry.cancelReason, isDanish ? 'da' : 'en')}
                             </span>
                           </div>
                         )}

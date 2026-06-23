@@ -320,7 +320,7 @@ function buildInvoices(): InvoiceSeed[] {
           if (key === CANCELLED_KEY && i === 1) {
             status = 'CANCELLED'
             cancelled = true
-            cancelReason = 'Dublet faktura – annulleret'
+            cancelReason = 'SYSTEM:DUPLICATE_INVOICE'
           } else {
             status = 'PAID'
           }
