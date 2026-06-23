@@ -1567,9 +1567,10 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       <Dialog open={!!previewInvoice} onOpenChange={() => setPreviewInvoice(null)}>
         <DialogContent className="bg-white dark:bg-[#1a1f1e] dark:border-[#232740] max-w-[1100px] w-[95vw] sm:max-w-[1100px] flex flex-col items-center">
           <DialogHeader className="flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <DialogTitle className="dark:text-white">{t('invoicePreview')}</DialogTitle>
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <DialogTitle className="dark:text-white text-base sm:text-lg">{t('invoicePreview')}</DialogTitle>
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+                {/* Primary status actions – always visible, icon-only on mobile */}
                 {previewInvoice.status !== 'PAID' && previewInvoice.status !== 'CANCELLED' && (
                   <>
                     {previewInvoice.status === 'DRAFT' && (
@@ -1578,19 +1579,19 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                           variant="outline"
                           size="sm"
                           onClick={() => handleEditDraft(previewInvoice)}
-                          className="gap-1.5 text-gray-600 dark:text-gray-300"
+                          className="gap-1.5 text-gray-600 dark:text-gray-300 h-8 px-2 sm:px-3"
                         >
                           <Pencil className="h-3.5 w-3.5" />
-                          {language === 'da' ? 'Rediger kladde' : 'Edit Draft'}
+                          <span className="hidden md:inline">{language === 'da' ? 'Rediger kladde' : 'Edit Draft'}</span>
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => { setSendDialogInvoice(previewInvoice); }}
-                          className="gap-1.5 text-[#7dabb5] dark:text-[#80c0cc]"
+                          className="gap-1.5 text-[#7dabb5] dark:text-[#80c0cc] h-8 px-2 sm:px-3"
                         >
                           <Send className="h-3.5 w-3.5" />
-                          {language === 'da' ? 'Send' : 'Send'}
+                          <span className="hidden md:inline">{language === 'da' ? 'Send' : 'Send'}</span>
                         </Button>
                       </>
                     )}
@@ -1599,78 +1600,74 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                         variant="outline"
                         size="sm"
                         onClick={() => { setSendDialogInvoice(previewInvoice); }}
-                        className="gap-1.5 text-[#7dabb5] dark:text-[#80c0cc]"
+                        className="gap-1.5 text-[#7dabb5] dark:text-[#80c0cc] h-8 px-2 sm:px-3"
                       >
                         <Send className="h-3.5 w-3.5" />
-                        {language === 'da' ? 'Send igen' : 'Send Again'}
+                        <span className="hidden md:inline">{language === 'da' ? 'Send igen' : 'Send Again'}</span>
                       </Button>
                     )}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleUpdateStatus(previewInvoice.id, 'PAID')}
-                      className="gap-1.5 text-green-600 dark:text-green-400"
+                      className="gap-1.5 text-green-600 dark:text-green-400 h-8 px-2 sm:px-3"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      {t('markAsPaid')}
+                      <span className="hidden md:inline">{t('markAsPaid')}</span>
                     </Button>
                   </>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handlePrintInvoice(previewInvoice)}
-                  className="gap-1.5"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  {t('printInvoice')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDownloadPDF(previewInvoice)}
-                  disabled={downloadingInvoiceId === previewInvoice.id}
-                  className="gap-1.5"
-                >
-                  {downloadingInvoiceId === previewInvoice.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Download className="h-3.5 w-3.5" />
-                  )}
-                  {t('downloadPDF')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDownloadOIOUBL(previewInvoice)}
-                  disabled={downloadingInvoiceId === previewInvoice.id}
-                  className="gap-1.5"
-                >
-                  {downloadingInvoiceId === previewInvoice.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5" />
-                  )}
-                  {t('downloadOIOUBL')}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSendEInvoiceInvoice(previewInvoice)}
-                  className="gap-1.5"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  {language === 'da' ? 'Send E-faktura' : 'Send E-invoice'}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowEInvoiceSendStatus(previewInvoice.id)}
-                  className="gap-1.5"
-                >
-                  <Inbox className="h-3.5 w-3.5" />
-                  {language === 'da' ? 'Send-historik' : 'Send history'}
-                </Button>
+                {/* Document & utility actions – compact dropdown */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5 h-8 px-2 sm:px-3">
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">{language === 'da' ? 'Handlinger' : 'Actions'}</span>
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {language === 'da' ? 'Dokument' : 'Document'}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => handlePrintInvoice(previewInvoice)}>
+                      <Printer className="h-4 w-4 mr-2" />
+                      {t('printInvoice')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleDownloadPDF(previewInvoice)}
+                      disabled={downloadingInvoiceId === previewInvoice.id}
+                    >
+                      {downloadingInvoiceId === previewInvoice.id
+                        ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        : <Download className="h-4 w-4 mr-2" />
+                      }
+                      {t('downloadPDF')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => handleDownloadOIOUBL(previewInvoice)}
+                      disabled={downloadingInvoiceId === previewInvoice.id}
+                    >
+                      {downloadingInvoiceId === previewInvoice.id
+                        ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        : <FileText className="h-4 w-4 mr-2" />
+                      }
+                      {t('downloadOIOUBL')}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                      {language === 'da' ? 'E-faktura' : 'E-invoice'}
+                    </DropdownMenuLabel>
+                    <DropdownMenuItem onClick={() => setSendEInvoiceInvoice(previewInvoice)}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      {language === 'da' ? 'Send E-faktura' : 'Send E-invoice'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowEInvoiceSendStatus(previewInvoice.id)}>
+                      <Inbox className="h-4 w-4 mr-2" />
+                      {language === 'da' ? 'Send-historik' : 'Send history'}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </DialogHeader>
