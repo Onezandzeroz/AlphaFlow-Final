@@ -21,7 +21,7 @@ export type OCRSource = 'camera' | 'upload' | 'unknown';
 export type OCRInputType = 'image' | 'pdf';
 
 /** Which OCR processor handled the document */
-export type OCRProcessor = 'tesseract' | 'vlm';
+export type OCRProcessor = 'tesseract' | 'vlm' | 'text_pdf' | 'hybrid' | 'cache' | 'error';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // STRUCTURED DATA TYPES
@@ -84,6 +84,20 @@ export interface OCRResult {
   processor: OCRProcessor;
   /** Where the input document came from */
   source: OCRSource;
+
+  // ── Scanner-service extensions (from _extensions block) ──
+  /** Document type classification (receipt/invoice/credit_note/unknown) */
+  documentType?: string;
+  /** Supplier/vendor name extracted from the document */
+  supplierName?: string;
+  /** Supplier CVR number (validated with Mod-11 checksum) */
+  supplierCvr?: string;
+  /** Invoice number from the document */
+  invoiceNumber?: string;
+  /** Due date in ISO format (YYYY-MM-DD) */
+  dueDate?: string;
+  /** Whether the result needs manual review (confidence < 70) */
+  needsReview?: boolean;
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
