@@ -1,20 +1,19 @@
 /**
  * VLM Processor Client
  *
- * Client-side wrapper for the /api/ocr/pdf server endpoint.
- * Sends PDF or image files to a Vision Language Model (Claude Sonnet 4)
- * for structured data extraction.
+ * Client-side wrapper for the /api/ocr/pdf server endpoint,
+ * which proxies to the Python scanner-service mini-service.
  *
  * Pipeline:
  *   1. Upload file to /api/ocr/pdf via FormData
- *   2. Server renders PDF pages to images (if PDF) or uses image directly
- *   3. Server sends images to VLM for structured extraction
- *   4. Returns unified OCRResult with enriched fields (lineItems, description)
+ *   2. Server proxies to scanner-service (port 3005)
+ *   3. Scanner-service runs: PDF text extraction / image enhancement /
+ *      Tesseract OCR / VLM (Claude Sonnet 4) / Danish validation
+ *   4. Returns unified OCRResult with enriched fields
  *
- * Features:
- *   - Handles both PDF and image inputs
- *   - Transforms raw VLM API response into unified OCRResult
- *   - Proper error handling with descriptive messages
+ * The scanner-service response is backward-compatible with the old
+ * VLMApiResponse shape, plus an optional _extensions block with
+ * documentType, supplierCvr, accountSuggestion, etc.
  */
 
 import type {
@@ -26,11 +25,11 @@ import type {
 import { createEmptyOCRResult } from './types';
 
 /**
- * Process a file (PDF or image) using the server-side VLM endpoint.
+ * Process a file (PDF or image) using the server-side scanner service.
  *
  * @param file - The file to process (PDF or image)
  * @param source - Where the file came from ('camera' | 'upload')
- * @returns Unified OCRResult with enriched fields from VLM
+ * @returns Unified OCRResult with enriched fields from scanner service
  * @throws Error if the server request fails
  */
 export async function processWithVLM(
@@ -66,7 +65,7 @@ export async function processWithVLM(
   }
 
   // ── Parse and transform response ──
-  const data: VLMApiResponse = await response.json();
+  const data: VLMApiResponse & { _extensions?: Record<string, unknown> } = await response.json();
 
   if (data.error) {
     throw new Error(data.error);
@@ -79,7 +78,7 @@ export async function processWithVLM(
  * Transform a raw VLM API response into a unified OCRResult.
  */
 function transformVLMResponse(
-  data: VLMApiResponse,
+  data: VLMApiResponse & { _extensions?: Record<string, unknown> },
   source: OCRSource,
 ): OCRResult {
   // Build raw lines for backward compatibility and display
@@ -93,6 +92,15 @@ function transformVLMResponse(
       rawLines.push(`${line.description} - ${line.quantity}x ${line.unitPrice}`);
     }
   }
+
+  // Extract enriched fields from _extensions (scanner-service)
+  const ext = data._extensions || {};
+  const documentType = (ext.documentType as string) || undefined;
+  const supplierName = (ext.supplierName as string) || undefined;
+  const supplierCvr = (ext.supplierCvr as string) || undefined;
+  const invoiceNumber = (ext.invoiceNumber as string) || undefined;
+  const dueDate = (ext.dueDate as string) || undefined;
+  const needsReview = (ext.needsReview as boolean) || false;
 
   return {
     // Core fields
@@ -115,8 +123,16 @@ function transformVLMResponse(
       vatPercent: line.vatPercent || 0,
     })),
 
+    // Scanner-service extensions (new — may be undefined for old responses)
+    documentType,
+    supplierName,
+    supplierCvr,
+    invoiceNumber,
+    dueDate,
+    needsReview,
+
     // Metadata
-    processor: 'vlm',
+    processor: (ext.processor as string) || 'vlm',
     source,
   };
 }

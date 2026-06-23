@@ -1,0 +1,47 @@
+# ── AlphaFlow Scanner Service — Python Dependencies ─────────────
+# Python 3.11+ required
+#
+# System packages (Ubuntu/Debian):
+#   sudo apt-get install -y python3.11 python3.11-venv \
+#     tesseract-ocr tesseract-ocr-dan tesseract-ocr-eng \
+#     libgl1-mesa-glx libglib2.0-0
+#
+# Install:
+#   python3.11 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+
+# ── Web framework ──────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20           # FormData / file upload parsing
+httpx==0.28.1                      # Async HTTP client (webhooks, host callbacks)
+
+# ── Image processing ───────────────────────────────────────────
+opencv-python-headless==4.10.0.84  # cv2 — 8-step v10 enhancement pipeline
+Pillow==11.1.0                     # Image I/O (format conversion, HEIC)
+numpy==2.2.1                       # Array ops for cv2 + image data
+pillow-heif==0.18.0                # HEIC/HEIF support (iOS photos)
+
+# ── PDF processing ─────────────────────────────────────────────
+PyMuPDF==1.25.2                    # fitz — render + text extraction (pure wheel, no cairo/pango)
+
+# ── OCR ────────────────────────────────────────────────────────
+pytesseract==0.3.13                # Wrapper for Tesseract CLI (dan+eng)
+rapidfuzz==3.11.0                  # Fuzzy vendor name matching (Levenshtein)
+
+# ── VLM / LLM ──────────────────────────────────────────────────
+anthropic==0.42.0                  # Claude Sonnet 4 direct (removes Z.ai proxy hop)
+pydantic==2.10.4                   # Pydantic v2 — JSON schema enforcement for VLM output
+
+# ── Danish validation ──────────────────────────────────────────
+python-stdnum==1.20                # CVR Mod-11, EAN-13, IBAN MOD-97
+
+# ── Database ───────────────────────────────────────────────────
+aiosqlite==0.20.0                  # Async SQLite (WAL mode, scan_jobs + ocr_results)
+
+# ── Logging ────────────────────────────────────────────────────
+structlog==24.4.0                  # Structured JSON logging
+
+# ── Dev / lint ─────────────────────────────────────────────────
+ruff==0.8.4                        # Linter + formatter

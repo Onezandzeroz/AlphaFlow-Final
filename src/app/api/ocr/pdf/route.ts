@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withGuard } from '@/lib/route-guard';
 import { Permission } from '@/lib/rbac';
-import path from 'path';
-import type { VisionMultimodalContentItem } from 'z-ai-web-dev-sdk';
 
 /**
  * POST /api/ocr/pdf
- * Uses AI vision (VLM) to extract structured data from purchase documents.
+ *
+ * Proxy route that forwards document scan requests to the Python
+ * scanner-service mini-service (port 3005).
+ *
+ * The scanner-service replaces the old inline JS implementation with:
+ *   - PyMuPDF for PDF processing (text extraction + 300 DPI rendering)
+ *   - OpenCV (cv2) for the v10 image enhancement pipeline
+ *   - Tesseract for OCR (dan+eng)
+ *   - Anthropic SDK for VLM (Claude Sonnet 4, direct — no Z.ai proxy)
+ *   - Danish parser, CVR/EAN/IBAN validation, account suggestion
+ *
+ * The response shape is backward-compatible with the old VLMApiResponse.
  */
 export const maxDuration = 60;
 
-async function getPdfjsLib(): Promise<any> {
-  return await import(/* webpackIgnore: true */ 'pdfjs-dist/build/pdf.js' as string);
-}
-
-async function getCanvas() {
-  return await import(/* webpackIgnore: true */ 'canvas' as string);
-}
+const SCANNER_PORT = process.env.SCANNER_PORT || '3005';
+const SCANNER_API_KEY = process.env.SCANNER_API_KEY || 'scanner-dev-key-2026';
 
 export const POST = withGuard({
   auth: true,
@@ -25,8 +29,9 @@ export const POST = withGuard({
   blockDemo: true,
   requireTokenPay: true,
   permissions: [Permission.DATA_CREATE],
-}, async (request) => {
+}, async (request, ctx) => {
   try {
+    // Read the incoming FormData
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
 
@@ -38,172 +43,51 @@ export const POST = withGuard({
       return NextResponse.json({ error: 'File size must be less than 10MB' }, { status: 400 });
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString('base64');
-    const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+    // Build forwarding FormData
+    const forwardForm = new FormData();
+    forwardForm.append('file', file);
 
-    console.log(`[OCR] Processing ${file.name}, type=${file.type}, ${(file.size / 1024).toFixed(1)}KB, isPdf=${isPdf}`);
+    // Forward to scanner-service
+    const scannerUrl = `/api/v1/scan?XTransformPort=${SCANNER_PORT}`;
 
-    let pageImages: string[] = [];
-
-    if (isPdf) {
-      const pdfjsLib = await getPdfjsLib();
-      const nodeCanvas = await getCanvas();
-
-      const cwd = process.cwd();
-      const workerPath = path.join(cwd, 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.min.js');
-      const fontPath = path.join(cwd, 'node_modules', 'pdfjs-dist', 'standard_fonts');
-
-      pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
-
-      const canvasFactory = {
-        create(width: number, height: number) {
-          const canvas = nodeCanvas.createCanvas(width, height);
-          return { canvas, context: canvas.getContext('2d') };
-        },
-        reset(canvasAndContext: { canvas: any }, width: number, height: number) {
-          canvasAndContext.canvas.width = width;
-          canvasAndContext.canvas.height = height;
-        },
-        destroy(canvasAndContext: { canvas: any }) {
-          canvasAndContext.canvas.width = 0;
-          canvasAndContext.canvas.height = 0;
-        },
-      };
-
-      const pdf = await pdfjsLib.getDocument({
-        data: new Uint8Array(arrayBuffer),
-        useWorkerFetch: false,
-        isEvalSupported: false,
-        useSystemFonts: true,
-        standardFontDataUrl: fontPath + '/',
-        canvasFactory,
-      }).promise;
-
-      const numPages = Math.min(pdf.numPages, 5);
-      const { createCanvas } = nodeCanvas;
-
-      for (let i = 1; i <= numPages; i++) {
-        const page = await pdf.getPage(i);
-        const scale = 2.0;
-        const viewport = page.getViewport({ scale });
-        const canvas = createCanvas(viewport.width, viewport.height);
-        const ctx = canvas.getContext('2d');
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        pageImages.push(canvas.toDataURL('image/png'));
-      }
-
-      console.log(`[OCR] Rendered ${pageImages.length} PDF pages to images`);
-    } else {
-      const mimeType = file.type || 'image/png';
-      pageImages.push(`data:${mimeType};base64,${base64}`);
-    }
-
-    if (pageImages.length === 0) {
-      return NextResponse.json({ error: 'No pages/images to analyze' }, { status: 400 });
-    }
-
-    // ── Step 2: Send to VLM ──
-    console.log(`[OCR] Sending ${pageImages.length} image(s) to VLM...`);
-
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = await ZAI.create();
-
-    const prompt = `Analyze this purchase invoice/receipt document${pageImages.length > 1 ? ` (${pageImages.length} pages)` : ''}. Extract the following information and return ONLY valid JSON (no markdown, no backticks):
-
-{
-  "amount": <total amount as number, or null>,
-  "date": <date in YYYY-MM-DD format, or null>,
-  "vatPercent": <VAT percentage as number (e.g. 25), or null>,
-  "currency": <currency code like "DKK", or "DKK" if unknown>,
-  "description": <brief description of the purchase, or null>,
-  "lines": [
-    {
-      "description": <line item description>,
-      "quantity": <quantity as number>,
-      "unitPrice": <unit price as number>,
-      "vatPercent": <VAT percentage as number>
-    }
-  ]
-}
-
-Rules:
-- amount should be the TOTAL including VAT (brutto/total)
-- date format must be YYYY-MM-DD
-- vatPercent should be 0-100 (not decimal)
-- Extract individual line items if visible
-- If no line items are visible, return empty lines array
-- Return ONLY the JSON object, nothing else`;
-
-    const content: VisionMultimodalContentItem[] = [
-      { type: 'text', text: prompt },
-      ...pageImages.map((url) => ({ type: 'image_url' as const, image_url: { url } })),
-    ];
-
-    const response = await zai.chat.completions.createVision({
-      model: 'claude-sonnet-4-20250514',
-      messages: [{ role: 'user', content }],
-      thinking: { type: 'disabled' },
+    const scannerResponse = await fetch(scannerUrl, {
+      method: 'POST',
+      body: forwardForm,
+      headers: {
+        'X-Access-Service-Key': SCANNER_API_KEY,
+        'X-Company-Id': ctx.activeCompanyId || '',
+        'X-User-Id': ctx.id || '',
+      },
     });
 
-    const resultContent = response.choices[0]?.message?.content || '';
-    console.log(`[OCR] VLM response (${resultContent.length} chars): ${resultContent.substring(0, 150)}...`);
-
-    let parsed: {
-      amount: number | null;
-      date: string | null;
-      vatPercent: number | null;
-      currency: string;
-      description: string | null;
-      lines: Array<{ description: string; quantity: number; unitPrice: number; vatPercent: number }>;
-    };
-
-    try {
-      const jsonMatch = resultContent.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No JSON found in response');
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch {
-      console.error('[OCR] Failed to parse VLM response:', resultContent.substring(0, 200));
-      return NextResponse.json({
-        text: resultContent,
-        amount: null,
-        date: null,
-        vatPercent: null,
-        confidence: 0,
-        rawLines: resultContent.split('\n').filter((l: string) => l.trim()),
-      });
+    if (!scannerResponse.ok) {
+      const errorBody = await scannerResponse.text().catch(() => '');
+      console.error(
+        `[OCR:PROXY] Scanner service error ${scannerResponse.status}:`,
+        errorBody.substring(0, 300),
+      );
+      return NextResponse.json(
+        { error: `Scanner service error (${scannerResponse.status}): ${errorBody.substring(0, 200)}` },
+        { status: scannerResponse.status },
+      );
     }
 
-    const rawLines: string[] = [];
-    if (parsed.description) rawLines.push(parsed.description);
-    if (parsed.amount) rawLines.push(`Total: ${parsed.amount} ${parsed.currency || 'DKK'}`);
-    if (parsed.date) rawLines.push(`Dato: ${parsed.date}`);
-    if (parsed.vatPercent) rawLines.push(`Moms: ${parsed.vatPercent}%`);
-    for (const line of parsed.lines || []) {
-      rawLines.push(`${line.description} - ${line.quantity}x ${line.unitPrice}`);
-    }
+    const result = await scannerResponse.json();
 
-    const ocrResult = {
-      text: resultContent,
-      amount: parsed.amount ?? null,
-      date: parsed.date ?? null,
-      vatPercent: parsed.vatPercent ?? null,
-      confidence: 85,
-      rawLines,
-      vlmLines: parsed.lines || [],
-      vlmDescription: parsed.description || null,
-    };
+    // Log the result summary (backward compat with old logging)
+    console.log(
+      `[OCR:PROXY] SUCCESS: amount=${result.amount}, date=${result.date}, ` +
+      `vat=${result.vatPercent}%, confidence=${result.confidence}, ` +
+      `processor=${result._extensions?.processor || 'unknown'}`,
+    );
 
-    console.log(`[OCR] SUCCESS: amount=${ocrResult.amount}, date=${ocrResult.date}, vat=${ocrResult.vatPercent}%, lines=${(parsed.lines || []).length}`);
-
-    return NextResponse.json(ocrResult);
+    return NextResponse.json(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error('[OCR] ERROR:', msg);
-    if (error instanceof Error) console.error('[OCR] Stack:', error.stack);
+    console.error('[OCR:PROXY] ERROR:', msg);
     return NextResponse.json(
-      { error: `OCR failed: ${msg}` },
-      { status: 500 }
+      { error: `OCR proxy failed: ${msg}` },
+      { status: 500 },
     );
   }
 });
