@@ -78,7 +78,7 @@ export enum Feature {
   Hermes = 'HERMES',
   /** Auto e-invoice via Peppol/NemHandel (Storecove). Business+. */
   AutoEinvoice = 'AUTO_EINVOICE',
-  /** Annual report iXBRL for Erhvervsstyrelsen. Business+. */
+  /** Annual report iXBRL for Erhvervsstyrelsen. Månedlig+. */
   AnnualReportIxbnl = 'ANNUAL_REPORT_IXBRL',
   /** Unlimited team seats. Lower tiers have caps (see getSeatCap). */
   UnlimitedSeats = 'UNLIMITED_SEATS',
@@ -102,12 +102,14 @@ const TIER_FEATURES: Record<PlanTier, Feature[]> = {
     Feature.RealBankIntegration,
     Feature.AdvancedReports,
     Feature.DataExport,
+    Feature.AnnualReportIxbnl,
   ],
   [PlanTier.Annual]: [
     Feature.ManualEinvoice,
     Feature.RealBankIntegration,
     Feature.AdvancedReports,
     Feature.DataExport,
+    Feature.AnnualReportIxbnl,
     Feature.Hermes,
   ],
   [PlanTier.TwoYear]: [
@@ -332,11 +334,11 @@ export function getMinimumTierForFeature(feature: Feature): PlanTier {
     case Feature.RealBankIntegration:
     case Feature.AdvancedReports:
     case Feature.DataExport:
+    case Feature.AnnualReportIxbnl:
       return PlanTier.Monthly;
     case Feature.Hermes:
       return PlanTier.Annual;
     case Feature.AutoEinvoice:
-    case Feature.AnnualReportIxbnl:
     case Feature.UnlimitedSeats:
       return PlanTier.TwoYear;
     case Feature.ProjectAccounting:
