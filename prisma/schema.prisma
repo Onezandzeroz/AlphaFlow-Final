@@ -221,6 +221,7 @@ model Company {
   phone                String   @default("")
   email                String   @default("")
   cvrNumber            String   @default("")
+  cvrVerifiedAt        DateTime? // Timestamp of last successful CVR register verification
   companyType          String?  // ApS, A/S, IVS, Enkeltmandsvirksomhed
 
   // Invoice settings
