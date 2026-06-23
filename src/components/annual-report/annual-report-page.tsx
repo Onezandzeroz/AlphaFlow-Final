@@ -1089,7 +1089,7 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
             TAB 4: Årsafslutning (Year-End Closing)
         ═══════════════════════════════════════════════════════════════ */}
         <TabsContent value="year-end" className="space-y-4 lg:space-y-6">
-          <YearEndTab selectedYear={selectedYear} yearEndClosed={yearEndClosed} onClosed={() => {
+          <YearEndTab selectedYear={Number(selectedYear)} yearEndClosed={yearEndClosed} onClosed={() => {
             // Re-check year-end status after closing
             fetch(`/api/year-end?year=${selectedYear}`)
               .then((res) => res.ok ? res.json() : null)
