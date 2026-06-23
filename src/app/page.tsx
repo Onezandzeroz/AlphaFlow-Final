@@ -27,7 +27,6 @@ import { FiscalPeriodsPage } from '@/components/fiscal-periods/fiscal-periods-pa
 import { LedgerPage } from '@/components/ledger/ledger-page';
 import { ReportsPage } from '@/components/reports/reports-page';
 import { BankReconciliationPage } from '@/components/bank-reconciliation/bank-reconciliation-page';
-import { YearEndClosingPage } from '@/components/year-end-closing/year-end-closing-page';
 import { AgingReportsPage } from '@/components/aging-reports/aging-reports-page';
 import { CashFlowPage } from '@/components/cash-flow/cash-flow-page';
 import { RecurringEntriesPage } from '@/components/recurring-entries/recurring-entries-page';
@@ -45,9 +44,9 @@ import { TermsOfServicePage } from '@/components/legal/terms-of-service';
 import { AnnualReportPage } from '@/components/annual-report/annual-report-page';
 import { ProjectsPage } from '@/components/projects/projects-page';
 
-type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
+type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
 
-const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'year-end', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report'];
+const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report'];
 
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
 function getInitialView(): View {
@@ -696,8 +695,6 @@ export default function Home() {
         return <ReportsPage user={user} />;
       case 'bank-recon':
         return <BankReconciliationPage user={user} />;
-      case 'year-end':
-        return <YearEndClosingPage user={user} />;
       case 'aging':
         return <AgingReportsPage user={user} />;
       case 'cash-flow':
