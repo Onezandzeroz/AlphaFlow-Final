@@ -100,6 +100,39 @@ interface YearReportEntry {
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
+/**
+ * Safely convert a Prisma Decimal value (which may be serialized as
+ * a string, number, or { prisma__type, prisma__value } object) to a JS number.
+ */
+function toNumber(val: unknown): number {
+  if (val == null) return 0;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') return Number(val) || 0;
+  if (typeof val === 'object' && 'prisma__value' in (val as Record<string, unknown>)) {
+    return Number((val as Record<string, unknown>).prisma__value) || 0;
+  }
+  return Number(val) || 0;
+}
+
+/**
+ * Map a Prisma VATSubmission object (from the API) to the frontend VATSubmission interface.
+ * Prisma fields: totalOutputVAT, totalInputVAT, netVATPayable, submittedAt, referenceId
+ * Frontend fields: outputVat, inputVat, netVat, submittedDate, reference
+ */
+function mapVATSubmission(raw: Record<string, unknown>): VATSubmission {
+  return {
+    id: raw.id as string,
+    year: raw.year as number,
+    period: raw.period as string,
+    outputVat: toNumber(raw.totalOutputVAT ?? raw.outputVat),
+    inputVat: toNumber(raw.totalInputVAT ?? raw.inputVat),
+    netVat: toNumber(raw.netVATPayable ?? raw.netVat),
+    status: raw.status as VATSubmissionStatus,
+    submittedDate: raw.submittedAt ? String(raw.submittedAt) : (raw.submittedDate as string | null ?? null),
+    reference: (raw.referenceId ?? raw.reference ?? null) as string | null,
+  };
+}
+
 const YEAR_OPTIONS = Array.from({ length: 11 }, (_, i) => 2020 + i);
 const PERIOD_OPTIONS = [
   { value: 'Q1', label: 'Q1 (Jan–Mar)', labelEn: 'Q1 (Jan–Mar)' },
@@ -233,7 +266,8 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
       const res = await fetch(`/api/vat-report/submissions?year=${year}`);
       if (res.ok) {
         const data = await res.json();
-        setVatSubmissions(data.submissions ?? []);
+        const rawSubs: Record<string, unknown>[] = data.submissions ?? [];
+        setVatSubmissions(rawSubs.map(mapVATSubmission));
       }
     } catch (error) {
       console.error('Failed to fetch VAT submissions:', error);
@@ -249,7 +283,8 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
       // 1. Fetch VAT submissions
       const vatRes = await fetch('/api/vat-report/submissions');
       const vatData = vatRes.ok ? await vatRes.json() : null;
-      const allSubmissions: VATSubmission[] = vatData?.submissions ?? [];
+      const rawSubs: Record<string, unknown>[] = vatData?.submissions ?? [];
+      const allSubmissions: VATSubmission[] = rawSubs.map(mapVATSubmission);
       const vatYears = new Set(allSubmissions.map((s: VATSubmission) => s.year));
 
       // 2. Scan all candidate years for financial activity (P&L non-zero)
