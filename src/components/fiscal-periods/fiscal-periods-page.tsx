@@ -301,7 +301,7 @@ export function FiscalPeriodsPage({ user }: FiscalPeriodsPageProps) {
   return (
     <div className="p-3 lg:p-6 space-y-4 lg:space-y-6">
       <PageHeader
-        title={isDanish ? 'Årsafslutning' : 'Fiscal Periods'}
+        title={isDanish ? 'Perioder' : 'Fiscal Periods'}
         description={isDanish
           ? 'Håndtering af regnskabsperioder i henhold til §7-8 i Bogføringsloven'
           : 'Manage fiscal periods compliant with §7-8 of the Danish Bookkeeping Act'}
