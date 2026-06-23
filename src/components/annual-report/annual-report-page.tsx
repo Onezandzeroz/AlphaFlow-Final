@@ -30,12 +30,12 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/shared/page-header';
+import { YearEndTab } from '@/components/annual-report/year-end-tab';
 import {
   FileDown,
   FileSpreadsheet,
   Send,
   History,
-  CheckCircle,
   AlertCircle,
   Clock,
   Loader2,
@@ -46,6 +46,8 @@ import {
   Calculator,
   ArrowUpCircle,
   ArrowDownCircle,
+  Lock,
+  CheckCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -468,17 +470,22 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
         }
       />
 
-      <Tabs defaultValue="annual-report" className="space-y-4 lg:space-y-6">
+      <Tabs defaultValue="vat-submission" className="space-y-4 lg:space-y-6">
         <TabsList className="bg-white dark:bg-[#1a1f1e] border border-gray-200 dark:border-gray-700 p-1">
-          <TabsTrigger value="annual-report" className="gap-1.5 text-sm">
-            <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">{language === 'da' ? 'Årsregnskab' : 'Annual Report'}</span>
-            <span className="sm:hidden">{language === 'da' ? 'Årsregnskab' : 'Annual'}</span>
-          </TabsTrigger>
           <TabsTrigger value="vat-submission" className="gap-1.5 text-sm">
             <ShieldCheck className="h-4 w-4" />
             <span className="hidden sm:inline">{language === 'da' ? 'Momsindberetning' : 'VAT Submission'}</span>
             <span className="sm:hidden">{language === 'da' ? 'Moms' : 'VAT'}</span>
+          </TabsTrigger>
+          <TabsTrigger value="year-end" className="gap-1.5 text-sm">
+            <Lock className="h-4 w-4" />
+            <span className="hidden sm:inline">{language === 'da' ? 'Årsafslutning' : 'Year-End'}</span>
+            <span className="sm:hidden">{language === 'da' ? 'Luk' : 'Close'}</span>
+          </TabsTrigger>
+          <TabsTrigger value="annual-report" className="gap-1.5 text-sm">
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">{language === 'da' ? 'Årsregnskab' : 'Annual Report'}</span>
+            <span className="sm:hidden">{language === 'da' ? 'Årsregnskab' : 'Annual'}</span>
           </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5 text-sm">
             <History className="h-4 w-4" />
@@ -570,33 +577,6 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Year-end status */}
-              <div className={`flex items-center gap-2 text-sm px-4 py-3 rounded-lg ${
-                yearEndClosed
-                  ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/30'
-                  : 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/30'
-              }`}>
-                {yearEndClosed ? (
-                  <>
-                    <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <span className="text-emerald-700 dark:text-emerald-300">
-                      {language === 'da'
-                        ? `Årsafslutning for ${selectedYear} er udført`
-                        : `Year-end closing for ${selectedYear} has been performed`}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span className="text-amber-700 dark:text-amber-300">
-                      {language === 'da'
-                        ? `Årsafslutning for ${selectedYear} er ikke udført endnu — data kan være ufuldstændige`
-                        : `Year-end closing for ${selectedYear} has not been performed — data may be incomplete`}
-                    </span>
-                  </>
-                )}
-              </div>
-
               {/* Export buttons */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button
@@ -1101,6 +1081,21 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            TAB 4: Årsafslutning (Year-End Closing)
+        ═══════════════════════════════════════════════════════════════ */}
+        <TabsContent value="year-end" className="space-y-4 lg:space-y-6">
+          <YearEndTab selectedYear={selectedYear} yearEndClosed={yearEndClosed} onClosed={() => {
+            // Re-check year-end status after closing
+            fetch(`/api/year-end?year=${selectedYear}`)
+              .then((res) => res.ok ? res.json() : null)
+              .then((data) => setYearEndClosed(data?.isClosed ?? false))
+              .catch(() => setYearEndClosed(false));
+            // Also refresh financial data
+            fetchFinancialData(selectedYear);
+          }} />
         </TabsContent>
       </Tabs>
     </div>
