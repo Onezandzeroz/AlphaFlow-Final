@@ -401,14 +401,6 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
     return found ? (language === 'da' ? found.label : found.labelEn) : period;
   }, [language]);
 
-  // ─── Computed totals for summary cards ───
-  const netVATForYear = useMemo(() => {
-    if (pnlData) {
-      return (pnlData.revenue * 0.25) - (pnlData.expenses * 0.25);
-    }
-    return 0;
-  }, [pnlData]);
-
   // ─── Per-rate VAT breakdown (for the 'Moms pr. sats' card) ───
   const outputVATBreakdown = currentVatData?.outputVATBreakdown ?? [];
   const inputVATBreakdown = currentVatData?.inputVATBreakdown ?? [];
@@ -417,6 +409,9 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
     inputVAT: currentVatData?.inputVat ?? 0,
     netPayable: currentVatData?.netVat ?? 0,
   };
+
+  // ─── Computed totals for summary cards ───
+  const netVATForYear = vatTotals.outputVAT - vatTotals.inputVAT;
 
   // ─── Loading skeleton ───
   if (isLoading) {
