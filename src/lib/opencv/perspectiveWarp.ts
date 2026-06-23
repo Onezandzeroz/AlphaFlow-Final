@@ -418,21 +418,24 @@ function whitenPaper(gray: Uint8Array): void {
 // ── Main enhancement pipeline ──────────────────────────────────────
 
 /**
- * v10 enhancement pipeline — clean document scan.
+ * v11 color-preserving enhancement pipeline.
  *
- * v10 key changes (clean scan, not photocopy):
- *   - REMOVED text darkening step (was crushing shadows on unevenly-lit receipts).
- *   - REPLACED photocopyContrast (steepness=8) with gentleSCurve (steepness=4):
- *     subtle contrast boost that preserves natural tonal gradations.
- *   - RELAXED contrast stretch from 2nd-98th to 1st-99th percentile:
- *     prevents darkening of darker receipt areas (shadows, colored ink).
- *   - REDUCED sharpen from 0.7 to 0.5: fewer halos on mid-tone text.
- *   - LOWERED paper whiten threshold from 235 to 225: cleaner white background.
+ * Key change from v10: preserves COLOR instead of converting to grayscale.
+ * Grayscale destroyed colored receipts (logos, stamps, highlighted text).
  *
- * Result: looks like a real flatbed scanner — clean whites, readable text,
- * natural shading preserved. No harsh photocopy contrast.
+ * Pipeline works on luminance for contrast/sharpen curves but applies
+ * adjustments to RGB channels proportionally, preserving hue and saturation.
+ * Paper whitening is gentler — only lifts near-white pixels without
+ * aggressive over-brightening.
  *
- * Order: Gray → Brightness → Denoise → Contrast → Sharpen → S-curve → Whiten
+ * Steps:
+ *   1. Extract luminance (for analysis) + keep RGB
+ *   2. Brightness boost (+8% — reduced from 15% to avoid overexposure)
+ *   3. Median denoise (per-channel)
+ *   4. Contrast stretch (luminance-guided, applied to RGB)
+ *   5. Sharpen (per-channel)
+ *   6. Mild S-curve (luminance-guided LUT, applied to RGB)
+ *   7. Paper whitening (luminance-guided, applied to RGB — threshold raised to 235)
  */
 function enhanceCanvas(canvas: HTMLCanvasElement): void {
   const ctx = canvas.getContext('2d');
@@ -442,52 +445,163 @@ function enhanceCanvas(canvas: HTMLCanvasElement): void {
   const h = canvas.height;
   const imageData = ctx.getImageData(0, 0, w, h);
 
-  console.log(`[perspectiveWarp] v10 enhancing ${w}×${h}`);
+  console.log(`[perspectiveWarp] v11 color-preserving enhancing ${w}×${h}`);
 
-  // STEP 1: Grayscale
-  const gray = extractGrayscale(imageData);
-  console.log('[perspectiveWarp] ✓ Grayscale');
+  const d = imageData.data;
+  const n = w * h;
 
-  // STEP 2: Brightness boost (+15%)
+  // STEP 1: Extract luminance for analysis
+  const lum = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const j = i * 4;
+    lum[i] = Math.round(0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]);
+  }
+
+  // STEP 2: Brightness boost (+8% — gentler than v10's +15%)
   try {
-    boostBrightness(gray, 1.15);
-    console.log('[perspectiveWarp] ✓ Brightness +15%');
+    const FACTOR = 1.08;
+    for (let i = 0; i < n * 4; i++) {
+      if (i % 4 === 3) continue; // skip alpha
+      d[i] = Math.min(255, (d[i] * FACTOR + 0.5) | 0);
+    }
+    // Update luminance
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      lum[i] = Math.round(0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]);
+    }
+    console.log('[perspectiveWarp] ✓ Brightness +8%');
   } catch (e) { console.warn('[perspectiveWarp] Brightness failed:', e); }
 
-  // STEP 3: Median denoise (clean noise before any manipulation)
+  // STEP 3: Median denoise (per-channel on R, G, B)
   try {
-    medianDenoise(gray, w, h);
+    for (let ch = 0; ch < 3; ch++) {
+      const channel = new Uint8Array(n);
+      for (let i = 0; i < n; i++) channel[i] = d[i * 4 + ch];
+      medianDenoise(channel, w, h);
+      for (let i = 0; i < n; i++) d[i * 4 + ch] = channel[i];
+    }
+    // Update luminance
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      lum[i] = Math.round(0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]);
+    }
     console.log('[perspectiveWarp] ✓ Median denoise');
   } catch (e) { console.warn('[perspectiveWarp] Denoise failed:', e); }
 
-  // STEP 4: Contrast stretch (1st–99th percentile — gentle normalization)
+  // STEP 4: Contrast stretch (luminance-guided, applied proportionally to RGB)
   try {
-    stretchContrast(gray);
+    // Find 1st-99th percentiles from luminance
+    const histogram = new Uint32Array(256);
+    for (let i = 0; i < n; i++) histogram[lum[i]]++;
+    let lo = 0, hi = 255;
+    let cum = 0;
+    for (let i = 0; i < 256; i++) { cum += histogram[i]; if (cum >= n * 0.01) { lo = i; break; } }
+    cum = 0;
+    for (let i = 255; i >= 0; i--) { cum += histogram[i]; if (cum >= n * 0.01) { hi = i; break; } }
+    const range = hi - lo;
+    if (range > 5) {
+      const scale = 255 / range;
+      for (let i = 0; i < n; i++) {
+        const j = i * 4;
+        for (let ch = 0; ch < 3; ch++) {
+          d[j + ch] = Math.max(0, Math.min(255, Math.round((d[j + ch] - lo) * scale)));
+        }
+      }
+      // Update luminance
+      for (let i = 0; i < n; i++) {
+        const j = i * 4;
+        lum[i] = Math.round(0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]);
+      }
+    }
     console.log('[perspectiveWarp] ✓ Contrast stretch');
   } catch (e) { console.warn('[perspectiveWarp] Contrast failed:', e); }
 
-  // STEP 5: Sharpen (on natural tones, BEFORE S-curve)
+  // STEP 5: Sharpen (per-channel)
   try {
-    sharpenPass(gray, w, h);
+    for (let ch = 0; ch < 3; ch++) {
+      const channel = new Uint8Array(n);
+      for (let i = 0; i < n; i++) channel[i] = d[i * 4 + ch];
+      sharpenPass(channel, w, h);
+      for (let i = 0; i < n; i++) d[i * 4 + ch] = channel[i];
+    }
     console.log('[perspectiveWarp] ✓ Sharpen');
   } catch (e) { console.warn('[perspectiveWarp] Sharpen failed:', e); }
 
-  // STEP 6: Gentle S-curve (subtle contrast boost — scanner look, not photocopy)
+  // STEP 6: Mild S-curve (luminance-guided LUT, applied to each RGB channel)
   try {
-    gentleSCurve(gray);
-    console.log('[perspectiveWarp] ✓ Gentle S-curve');
+    // Recompute luminance after previous steps
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      lum[i] = Math.round(0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]);
+    }
+    // Find median for S-curve midpoint
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < n; i++) hist[lum[i]]++;
+    let cum2 = 0;
+    let median = 128;
+    for (let i = 0; i < 256; i++) { cum2 += hist[i]; if (cum2 >= n / 2) { median = i; break; } }
+
+    // Steepness 3 = even gentler than v10's 4
+    const STEEPNESS = 3;
+    const midpointNorm = median / 255;
+    const raw = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+      const x = i / 255;
+      const centered = (x - midpointNorm) * STEEPNESS;
+      raw[i] = 1 / (1 + Math.exp(-centered));
+    }
+    const rawMin = raw[0];
+    const rawMax = raw[255];
+    const rawRange = rawMax - rawMin;
+    const lut = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) {
+      lut[i] = Math.min(255, Math.max(0, Math.round(((raw[i] - rawMin) / rawRange) * 255)));
+    }
+    // Apply LUT to each RGB channel
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      d[j]     = lut[d[j]];
+      d[j + 1] = lut[d[j + 1]];
+      d[j + 2] = lut[d[j + 2]];
+    }
+    console.log('[perspectiveWarp] ✓ Mild S-curve (steepness=3)');
   } catch (e) { console.warn('[perspectiveWarp] S-curve failed:', e); }
 
-  // STEP 7: Paper whitening (clean up near-white pixels to pure white)
+  // STEP 7: Paper whitening (luminance-guided — only whiten near-white pixels)
   try {
-    whitenPaper(gray);
-    console.log('[perspectiveWarp] ✓ Paper whitening');
+    // Higher threshold than v10 (235 vs 220) = less aggressive whitening
+    const THRESHOLD = 235;
+    const RANGE = 255 - THRESHOLD;
+    const wlut = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) {
+      if (i <= THRESHOLD) {
+        wlut[i] = i;
+      } else {
+        const t = (i - THRESHOLD) / RANGE;
+        wlut[i] = Math.min(255, Math.round(THRESHOLD + t * t * RANGE));
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      const l = Math.round(0.299 * d[j] + 0.587 * d[j + 1] + 0.114 * d[j + 2]);
+      if (l > THRESHOLD) {
+        // Apply whitening proportionally to each channel
+        const scale = wlut[l] / (l || 1);
+        d[j]     = Math.min(255, Math.round(d[j] * scale));
+        d[j + 1] = Math.min(255, Math.round(d[j + 1] * scale));
+        d[j + 2] = Math.min(255, Math.round(d[j + 2] * scale));
+      }
+    }
+    console.log('[perspectiveWarp] ✓ Paper whitening (threshold=235)');
   } catch (e) { console.warn('[perspectiveWarp] Whitening failed:', e); }
 
-  // Write back to ImageData (R=G=B=gray, A=255)
-  writeGrayscale(imageData, gray);
+  // Ensure alpha is 255
+  for (let i = 0; i < n; i++) {
+    d[i * 4 + 3] = 255;
+  }
+
   ctx.putImageData(imageData, 0, 0);
-  console.log('[perspectiveWarp] Enhancement pipeline complete');
+  console.log('[perspectiveWarp] v11 color-preserving pipeline complete');
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

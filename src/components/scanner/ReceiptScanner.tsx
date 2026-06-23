@@ -219,13 +219,16 @@ export function ReceiptScanner({
       {showResult && (
         <div className="flex flex-col h-full bg-white dark:bg-[#1a1f1e]">
           {/* Header */}
-          <div className="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-white/10">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white text-center">
+          <div className="shrink-0 px-4 py-3 border-b border-gray-200 dark:border-white/10 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
               {t('receiptScannedTitle')}
             </h3>
+            <span className="text-[11px] text-gray-400 dark:text-gray-500">
+              {scannedFile ? `${(scannedFile.size / 1024).toFixed(0)} KB` : ''}
+            </span>
           </div>
 
-          {/* Scrollable image area — min-w-0 prevents flex child overflow on small screens */}
+          {/* Scrollable image area */}
           <div className="flex-1 min-w-0 min-h-0 overflow-auto p-4">
             <div className="w-full max-w-full mx-auto">
               <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-gray-900/50 shadow-sm">
