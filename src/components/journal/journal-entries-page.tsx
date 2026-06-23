@@ -283,6 +283,20 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
   }, [fetchAccounts]);
 
   // Client-side search filter
+  // ── Set of original references that have been reversed (for visual dimming) ──
+  const reversedOriginalRefs = useMemo(() => {
+    const refs = new Set<string>();
+    for (const e of entries) {
+      // A reversal entry has reference like "REVERSAL-TX-abc12345"
+      if (e.reference?.startsWith('REVERSAL-')) {
+        // The original entry's reference is everything after "REVERSAL-"
+        const originalRef = e.reference.slice('REVERSAL-'.length);
+        refs.add(originalRef);
+      }
+    }
+    return refs;
+  }, [entries]);
+
   const filteredEntries = useMemo(() => {
     if (!searchQuery.trim()) return entries;
     const q = searchQuery.toLowerCase();
@@ -907,7 +921,8 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                 const isEntryBalanced = Math.abs(entryTotalDebit - entryTotalCredit) < 0.005;
                 const isEntryCancelled = !!entry.cancelled || entry.status === 'CANCELLED';
                 const isReversal = !!entry.reference?.startsWith('REVERSAL-') || !!entry.description?.startsWith('Annullering');
-                const isDimmed = isEntryCancelled || isReversal;
+                const isOriginalReversed = !isReversal && !!entry.reference && reversedOriginalRefs.has(entry.reference);
+                const isDimmed = isEntryCancelled || isReversal || isOriginalReversed;
 
                 return (
                   <div key={entry.id} className={isDimmed ? 'opacity-60 bg-gray-50/50 dark:bg-gray-800/30' : ''}>
@@ -947,6 +962,14 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                         <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
                           <RotateCcw className="h-3 w-3" />
                           {isDanish ? 'Modpostering' : 'Reversal'}
+                        </Badge>
+                      )}
+
+                      {/* Original Reversed Badge — shown on the parent entry that was cancelled */}
+                      {isOriginalReversed && (
+                        <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-400 border-red-500/20 gap-1">
+                          <XCircle className="h-3 w-3" />
+                          {isDanish ? 'Annulleret' : 'Cancelled'}
                         </Badge>
                       )}
 
@@ -1126,6 +1149,16 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                             <RotateCcw className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                             <span>
                               {isDanish ? 'Modpostering — denne journalpost neutraliserer en annulleret postering (bogføringsloven §10-12)' : 'Reversal entry — this journal entry neutralises a cancelled entry (Bookkeeping Act §10-12)'}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Original reversed note — shown on the parent entry that was cancelled */}
+                        {isOriginalReversed && isExpanded && (
+                          <div className="mt-2 flex items-start gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2.5">
+                            <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                            <span>
+                              {isDanish ? 'Denne postering er annulleret — en modpostering har neutraliseret den (bogføringsloven §10-12)' : 'This entry has been cancelled — a reversal entry has neutralised it (Bookkeeping Act §10-12)'}
                             </span>
                           </div>
                         )}
