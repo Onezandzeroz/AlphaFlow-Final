@@ -43,6 +43,9 @@ import {
   TrendingDown,
   BarChart3,
   ShieldCheck,
+  Calculator,
+  ArrowUpCircle,
+  ArrowDownCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -164,6 +167,8 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
     outputVat: number;
     inputVat: number;
     netVat: number;
+    outputVATBreakdown: Array<{ rate: number; netAmount: number }>;
+    inputVATBreakdown: Array<{ rate: number; netAmount: number }>;
   } | null>(null);
   const [isSubmittingVAT, setIsSubmittingVAT] = useState(false);
   const [isLoadingVAT, setIsLoadingVAT] = useState(true);
@@ -245,6 +250,16 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
           outputVat: data.totalOutputVAT ?? 0,
           inputVat: data.totalInputVAT ?? 0,
           netVat: data.netVATPayable ?? 0,
+          outputVATBreakdown: Array.isArray(data.outputVAT)
+            ? data.outputVAT.map(
+                (e: { rate: number; netAmount: number }) => ({ rate: e.rate, netAmount: e.netAmount }),
+              )
+            : [],
+          inputVATBreakdown: Array.isArray(data.inputVAT)
+            ? data.inputVAT.map(
+                (e: { rate: number; netAmount: number }) => ({ rate: e.rate, netAmount: e.netAmount }),
+              )
+            : [],
         });
       }
     } catch (error) {
@@ -393,6 +408,15 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
     }
     return 0;
   }, [pnlData]);
+
+  // ─── Per-rate VAT breakdown (for the 'Moms pr. sats' card) ───
+  const outputVATBreakdown = currentVatData?.outputVATBreakdown ?? [];
+  const inputVATBreakdown = currentVatData?.inputVATBreakdown ?? [];
+  const vatTotals = {
+    outputVAT: currentVatData?.outputVat ?? 0,
+    inputVAT: currentVatData?.inputVat ?? 0,
+    netPayable: currentVatData?.netVat ?? 0,
+  };
 
   // ─── Loading skeleton ───
   if (isLoading) {
@@ -846,6 +870,109 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
                       ? 'Ingen momsindberetninger for dette år'
                       : 'No VAT submissions for this year'}
                   </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ═══ Moms pr. sats (VAT Breakdown Tables) — flyttet fra Momsafregning ═══ */}
+          <Card className="stat-card card-hover-lift">
+            <CardHeader>
+              <CardTitle className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <Calculator className="h-5 w-5 text-[#0d9488]" />
+                {language === 'da' ? 'Moms pr. sats' : 'VAT per Rate'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {outputVATBreakdown.length > 0 || inputVATBreakdown.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Output VAT Table */}
+                  {outputVATBreakdown.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-[#0d9488] dark:text-[#2dd4bf] mb-2 flex items-center gap-1">
+                        <ArrowUpCircle className="h-4 w-4" />
+                        {language === 'da' ? 'Udgående moms (salg)' : 'Output VAT (Sales)'}
+                      </h4>
+                      <Table className="table-fixed">
+                        <TableHeader>
+                          <TableRow className="border-b border-gray-200 dark:border-gray-700">
+                            <TableHead className="py-2 w-[40%]">{t('vatRate')}</TableHead>
+                            <TableHead className="text-right py-2 w-[30%]">{t('vatAmount')}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {outputVATBreakdown.map((item) => (
+                            <TableRow key={`out-${item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
+                              <TableCell className="py-2 w-[40%]">
+                                <Badge className="status-badge status-badge-sent">
+                                  {item.rate}%
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right py-2 w-[30%] font-medium text-[#0d9488] dark:text-[#2dd4bf]">
+                                {tc(item.netAmount)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+
+                  {/* Input VAT Table */}
+                  {inputVATBreakdown.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-medium text-amber-600 dark:text-amber-400 mb-2 flex items-center gap-1">
+                        <ArrowDownCircle className="h-4 w-4" />
+                        {language === 'da' ? 'Indgående moms (køb)' : 'Input VAT (Purchases)'}
+                      </h4>
+                      <Table className="table-fixed">
+                        <TableHeader>
+                          <TableRow className="border-b border-gray-200 dark:border-gray-700">
+                            <TableHead className="py-2 w-[40%]">{t('vatRate')}</TableHead>
+                            <TableHead className="text-right py-2 w-[30%]">{t('vatAmount')}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {inputVATBreakdown.map((item) => (
+                            <TableRow key={`in-${item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
+                              <TableCell className="py-2 w-[40%]">
+                                <Badge className="status-badge status-badge-overdue">
+                                  {item.rate}%
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right py-2 w-[30%] font-medium text-amber-600 dark:text-amber-400">
+                                {tc(item.netAmount)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+
+                  {/* Totals */}
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">{t('outputVAT')}:</span>
+                      <span className="font-medium text-[#0d9488] dark:text-[#2dd4bf]">{tc(vatTotals.outputVAT)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600 dark:text-gray-400">{t('inputVAT')}:</span>
+                      <span className="font-medium text-amber-600 dark:text-amber-400">-{tc(vatTotals.inputVAT)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-gray-200 dark:border-gray-700 font-bold">
+                      <span className="text-gray-900 dark:text-white">
+                        {vatTotals.netPayable >= 0 ? t('toPay') : t('toRefund')}:
+                      </span>
+                      <span className={vatTotals.netPayable >= 0 ? 'text-green-600 dark:text-green-400' : 'text-[#0d9488] dark:text-[#2dd4bf]'}>
+                        {tc(Math.abs(vatTotals.netPayable))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-64 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                  {isLoadingVAT ? <Loader2 className="h-6 w-6 animate-spin text-gray-400" /> : t('noTransactionsPeriod')}
                 </div>
               )}
             </CardContent>

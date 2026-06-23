@@ -1256,9 +1256,9 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
       hoverGradient: 'hover:from-[#0891b2] hover:to-[#0e7490] hover:text-white hover:border-[#0891b2]/50 dark:hover:from-[#22d3ee] dark:hover:to-[#0891b2] dark:hover:border-[#22d3ee]/50',
     },
     {
-      key: 'vat-report',
-      titleDa: 'Momsafregning',
-      titleEn: 'VAT Report',
+      key: 'annual-report',
+      titleDa: 'Moms & Årsregnskab',
+      titleEn: 'VAT & Annual Report',
       descDa: 'Indberet moms til SKAT',
       descEn: 'Submit VAT to tax authority',
       icon: Calculator,

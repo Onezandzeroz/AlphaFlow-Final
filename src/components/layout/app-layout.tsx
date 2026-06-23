@@ -61,7 +61,7 @@ import {
   Briefcase,
 } from 'lucide-react';
 
-export type View = 'dashboard' | 'transactions' | 'vat-report' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
+export type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
 
 interface AppLayoutProps {
   user: User;
@@ -258,13 +258,13 @@ export function AppLayout({
           }
           case 'v': {
             e.preventDefault();
-            onViewChange('vat-report');
+            onViewChange('annual-report');
             toast.success(
-              language === 'da' ? 'Momsafregning' : 'VAT Report',
+              language === 'da' ? 'Moms & Årsregnskab' : 'VAT & Annual Report',
               {
                 description: language === 'da'
-                  ? 'Navigerer til momsafregning'
-                  : 'Navigating to VAT report',
+                  ? 'Navigerer til moms & årsregnskab'
+                  : 'Navigating to VAT & annual report',
                 duration: 2000,
               }
             );

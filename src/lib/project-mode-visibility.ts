@@ -29,8 +29,7 @@
  */
 export const PROJECT_MODE_HIDDEN_VIEWS: ReadonlySet<string> = new Set([
   // Compliance / closing — these operate on the whole tenant
-  'vat-report',       // Momsafregning (VAT is per-tenant)
-  'annual-report',    // Årsregnskab (whole company)
+  'annual-report',    // Moms & Årsregnskab (whole company)
   'periods',          // Bogføringsperioder (tenant-level)
   'exports',          // SaF-T etc. (tax authority exports)
   'year-end',         // Årsafslutning (tenant operation)

@@ -140,10 +140,10 @@ export function KeyboardShortcutsModal({ open, onOpenChange, onNavigate }: Keybo
         },
         {
           keys: ['Alt', 'V'],
-          description: 'Go to VAT report',
-          descriptionDa: 'Gå til momsafregning',
+          description: 'Go to VAT & annual report',
+          descriptionDa: 'Gå til moms & årsregnskab',
           icon: BarChart3,
-          action: () => onNavigate?.('vat-report'),
+          action: () => onNavigate?.('annual-report'),
         },
       ],
     },

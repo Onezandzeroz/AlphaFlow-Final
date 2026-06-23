@@ -250,7 +250,7 @@ export function NotificationCenter({ onNavigate }: NotificationCenterProps) {
               : t.vatDesc,
           timeAgo: formatDistanceToNow(vatDeadline, { addSuffix: true, locale }),
           timestamp: vatDeadline.getTime(),
-          actionView: 'vat-report',
+          actionView: 'annual-report',
           actionLabel: t.viewVat,
         });
       }

@@ -16,7 +16,6 @@ import { PwaInstallBanner, PostInstallCameraPrompt } from '@/components/pwa/pwa-
 import { MobileInstallPrompt } from '@/components/pwa/mobile-install-prompt';
 import { Dashboard } from '@/components/dashboard/dashboard';
 import { TransactionsPage } from '@/components/transactions/transactions-page';
-import { VATReport } from '@/components/vat-report/vat-report';
 import { ExportsPage } from '@/components/exports/exports-page';
 import { InvoicesPage } from '@/components/invoices/invoices-page';
 import { BackupPage } from '@/components/backup/backup-page';
@@ -46,9 +45,9 @@ import { TermsOfServicePage } from '@/components/legal/terms-of-service';
 import { AnnualReportPage } from '@/components/annual-report/annual-report-page';
 import { ProjectsPage } from '@/components/projects/projects-page';
 
-type View = 'dashboard' | 'transactions' | 'vat-report' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
+type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
 
-const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'vat-report', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'year-end', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report'];
+const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'year-end', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report'];
 
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
 function getInitialView(): View {
@@ -671,8 +670,6 @@ export default function Home() {
             onInitialViewConsumed={isCurrent ? () => setPendingCreateAction(null) : undefined}
           />
         );
-      case 'vat-report':
-        return <VATReport user={user} />;
       case 'exports':
         return <ExportsPage user={user} />;
       case 'backups':

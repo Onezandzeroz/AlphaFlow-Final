@@ -22,7 +22,6 @@ import {
 import {
   LayoutDashboard,
   Receipt,
-  Calculator,
   Download,
   FileText,
   DatabaseBackup,
@@ -56,7 +55,6 @@ import {
 type View =
   | 'dashboard'
   | 'transactions'
-  | 'vat-report'
   | 'exports'
   | 'invoices'
   | 'backups'
@@ -75,7 +73,8 @@ type View =
   | 'budget'
   | 'projects'
   | 'settings'
-  | 'settings-edelivery';
+  | 'settings-edelivery'
+  | 'annual-report';
 
 export interface CommandPaletteProps {
   open: boolean;
@@ -144,7 +143,7 @@ const NAV_SECTIONS: NavSectionDef[] = [
     nameEn: 'Closing & Compliance',
     icon: ShieldCheck,
     items: [
-      { id: 'vat-report', nameDa: 'Momsafregning', nameEn: 'VAT Report', icon: Calculator },
+      { id: 'annual-report', nameDa: 'Moms & Årsregnskab', nameEn: 'VAT & Annual Report', icon: FileBarChart },
       { id: 'periods', nameDa: 'Periode', nameEn: 'Periods', icon: Calendar },
       { id: 'exports', nameDa: 'Eksport', nameEn: 'Exports', icon: Download },
       { id: 'year-end', nameDa: 'Årsafslutning', nameEn: 'Year-End', icon: CalendarClock },
