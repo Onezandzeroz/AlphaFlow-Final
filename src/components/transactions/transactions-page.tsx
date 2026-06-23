@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { cn } from '@/lib/utils';
@@ -76,6 +76,7 @@ import {
   ChevronRight,
   ChevronDown,
   Briefcase,
+  XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useDataVersion } from '@/hooks/use-data-version';
@@ -92,6 +93,7 @@ interface Transaction {
   projectId?: string | null;
   project?: { id: string; name: string; color: string | null; code: string | null } | null;
   cancelled?: boolean;
+  cancelReason?: string | null;
   // Journal-entry-derived VAT (authoritative) — from double-entry journal.
   // null when no journal entry exists.
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
@@ -743,7 +745,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         // Project mode: dim transactions not belonging to the active project
                         outsideProject && "opacity-40",
                         // Cancelled: gray-out the whole card
-                        isCancelled && "opacity-50",
+                        isCancelled && "opacity-60 bg-gray-50 dark:bg-gray-800/50",
                       )}
                       title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : isCancelled ? (language === 'da' ? 'Annulleret' : 'Cancelled') : undefined}
                     >
@@ -751,13 +753,18 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <p className={cn(
-                            "text-sm font-medium text-gray-900 dark:text-white truncate",
-                            // Cancelled: strike-through
-                            isCancelled && "line-through"
+                            "text-sm font-medium truncate",
+                            isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : "text-gray-900 dark:text-white"
                           )}>
                             {transaction.description}
                           </p>
                           <div className="flex items-center gap-1 mt-1 flex-wrap">
+                            {isCancelled && (
+                              <Badge className="text-[10px] px-1.5 py-0 bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-400 border-0 gap-1">
+                                <XCircle className="h-2.5 w-2.5" />
+                                {language === 'da' ? 'Annulleret' : 'Cancelled'}
+                              </Badge>
+                            )}
                             {transaction.id.startsWith('inv-') && (
                               <Badge className="text-[10px] px-1.5 py-0 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#0d9488]/20 dark:text-[#2dd4bf] border-0 gap-1">
                                 <FileText className="h-2.5 w-2.5" />
@@ -779,17 +786,26 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                             )}
                           </div>
                         </div>
-                        <span className={`text-base font-bold whitespace-nowrap ${typeInfo.amountClass}`}>
+                        <span className={cn(
+                          "text-base font-bold whitespace-nowrap",
+                          isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : typeInfo.amountClass
+                        )}>
                           {tc(transaction.amount)}
                         </span>
                       </div>
 
                       {/* Row 2: Date + Type Badge */}
                       <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                        <span className={cn(
+                          "text-xs",
+                          isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : "text-gray-500 dark:text-gray-400"
+                        )}>
                           {td(new Date(transaction.date))}
                         </span>
-                        <span className={`inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border-0 ${typeInfo.badgeClass}`}>
+                        <span className={cn(
+                          "inline-flex items-center text-[11px] font-medium px-2 py-0.5 rounded-full border-0",
+                          isCancelled ? "bg-gray-200/50 text-gray-400 dark:bg-gray-700/50 dark:text-gray-500" : typeInfo.badgeClass
+                        )}>
                           {typeInfo.label}
                         </span>
                       </div>
@@ -862,6 +878,14 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                               </AlertDialogContent>
                             </AlertDialog>
                           </div>
+                        </div>
+                      )}
+
+                      {/* Cancel reason (mobile) */}
+                      {isCancelled && transaction.cancelReason && (
+                        <div className="mt-2 flex items-start gap-1.5 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2">
+                          <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                          <span>{transaction.cancelReason}</span>
                         </div>
                       )}
                     </div>
@@ -965,18 +989,23 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                     const outsideProject = isOutsideProject(transaction);
                     const isCancelled = !!transaction.cancelled;
                     return (
+                    <React.Fragment key={transaction.id}>
                     <TableRow
-                      key={transaction.id}
                       className={cn(
                         "border-b border-gray-50/50 table-row-teal-hover",
                         outsideProject && "opacity-40",
-                        // Cancelled: gray-out the whole row
-                        isCancelled && "opacity-50",
+                        // Cancelled: gray-out the whole row with muted background
+                        isCancelled && "opacity-60 bg-gray-50/50 dark:bg-gray-800/30",
                       )}
                       title={outsideProject ? (language === 'da' ? 'Tilhører ikke det aktive projekt' : 'Does not belong to the active project') : isCancelled ? (language === 'da' ? 'Annulleret' : 'Cancelled') : undefined}
                     >
                       <TableCell>
-                        {transaction.type === 'PURCHASE' ? (
+                        {isCancelled ? (
+                          <Badge className="bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-400 gap-1">
+                            <XCircle className="h-3 w-3" />
+                            {language === 'da' ? 'Annulleret' : 'Cancelled'}
+                          </Badge>
+                        ) : transaction.type === 'PURCHASE' ? (
                           <Badge className="bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 gap-1">
                             <ArrowDownCircle className="h-3 w-3" />
                             {language === 'da' ? 'Køb' : 'Buy'}
@@ -988,12 +1017,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="font-medium whitespace-nowrap">
+                      <TableCell className={cn("font-medium whitespace-nowrap", isCancelled && "text-gray-400 dark:text-gray-500 line-through")}>
                         {td(new Date(transaction.date))}
                       </TableCell>
                       <TableCell className="max-w-[150px] lg:max-w-[250px] truncate">
                         <div className="flex items-center gap-1.5">
-                          <span className={cn("truncate", isCancelled && "line-through")}>{transaction.description}</span>
+                          <span className={cn("truncate", isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : "")}>{transaction.description}</span>
                           {transaction.project && (
                             <Badge
                               className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1"
@@ -1009,19 +1038,18 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right whitespace-nowrap font-medium">
+                      <TableCell className={cn("text-right whitespace-nowrap font-medium", isCancelled && "text-gray-400 dark:text-gray-500 line-through")}>
                         {tc(transaction.amount)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                        <span className={cn("text-sm", isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : "text-gray-600 dark:text-gray-400")}>
                           {getDisplayVAT(transaction).rate}%
                         </span>
                       </TableCell>
-                      <TableCell className={`text-right whitespace-nowrap font-medium ${
-                        transaction.type === 'PURCHASE' 
-                          ? 'text-amber-600 dark:text-amber-400' 
-                          : 'text-[#0d9488] dark:text-[#2dd4bf]'
-                      }`}>
+                      <TableCell className={cn(
+                        "text-right whitespace-nowrap font-medium",
+                        isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : transaction.type === 'PURCHASE' ? 'text-amber-600 dark:text-amber-400' : 'text-[#0d9488] dark:text-[#2dd4bf]'
+                      )}>
                         {tc(getDisplayVAT(transaction).amount)}
                       </TableCell>
                       <TableCell className="text-center">
@@ -1130,6 +1158,18 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         )}
                       </TableCell>
                     </TableRow>
+                    {/* Cancel reason sub-row (desktop) */}
+                    {isCancelled && transaction.cancelReason && (
+                      <TableRow className="bg-red-50/50 dark:bg-red-500/5">
+                        <TableCell colSpan={7} className="py-1.5 px-4">
+                          <div className="flex items-start gap-1.5 text-xs text-red-500 dark:text-red-400">
+                            <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                            <span>{language === 'da' ? 'Annulleringsårsag: ' : 'Cancel reason: '}{transaction.cancelReason}</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    </React.Fragment>
                     );
                   })}
                   {/* Summary Footer Row */}

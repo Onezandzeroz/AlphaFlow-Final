@@ -112,9 +112,9 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     icon: BookCheck,
     items: [
       { id: 'journal', nameDa: 'Finansjournal', nameEn: 'Journal', icon: PenLine },
-      { id: 'accounts', nameDa: 'Kontoplan', nameEn: 'Accounts', icon: BookOpen },
       { id: 'ledger', nameDa: 'Hovedbog', nameEn: 'Ledger', icon: Scale },
       { id: 'budget', nameDa: 'Budgetter', nameEn: 'Budgets', icon: Target },
+      { id: 'accounts', nameDa: 'Kontoplan', nameEn: 'Accounts', icon: BookOpen },
     ],
   },
   {
@@ -135,8 +135,8 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     nameEn: 'Closing & Compliance',
     icon: ShieldCheck,
     items: [
-      { id: 'annual-report', nameDa: 'Moms & Årsregnskab', nameEn: 'VAT & Annual Report', icon: FileBarChart },
       { id: 'periods', nameDa: 'Perioder', nameEn: 'Periods', icon: Calendar },
+      { id: 'annual-report', nameDa: 'Moms & Årsregnskab', nameEn: 'VAT & Annual Report', icon: FileBarChart },
       { id: 'exports', nameDa: 'Eksport', nameEn: 'Exports', icon: Download },
     ],
   },

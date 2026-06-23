@@ -906,9 +906,11 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                 const entryTotalCredit = entry.lines.reduce((s, l) => s + Number(l.credit || 0), 0);
                 const isEntryBalanced = Math.abs(entryTotalDebit - entryTotalCredit) < 0.005;
                 const isEntryCancelled = !!entry.cancelled || entry.status === 'CANCELLED';
+                const isReversal = !!entry.reference?.startsWith('REVERSAL-') || !!entry.description?.startsWith('Annullering');
+                const isDimmed = isEntryCancelled || isReversal;
 
                 return (
-                  <div key={entry.id} className={isEntryCancelled ? 'opacity-50' : ''}>
+                  <div key={entry.id} className={isDimmed ? 'opacity-60 bg-gray-50/50 dark:bg-gray-800/30' : ''}>
                     {/* Entry Header Row */}
                     <div
                       className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer"
@@ -924,21 +926,29 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                       </button>
 
                       {/* Date */}
-                      <span className={`text-sm font-medium text-gray-900 dark:text-white shrink-0 min-w-[90px] ${isEntryCancelled ? 'line-through' : ''}`}>
+                      <span className={`text-sm font-medium shrink-0 min-w-[90px] ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
                         {formatDateStr(entry.date, language)}
                       </span>
 
                       {/* Reference */}
                       {entry.reference && (
-                        <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 text-gray-600 dark:text-gray-300 shrink-0 ${isEntryCancelled ? 'line-through' : ''}`}>
+                        <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-300'}`}>
                           {entry.reference}
                         </Badge>
                       )}
 
                       {/* Description */}
-                      <span className={`text-sm text-gray-700 dark:text-gray-300 flex-1 truncate min-w-0 ${isEntryCancelled ? 'line-through' : ''}`}>
+                      <span className={`text-sm flex-1 truncate min-w-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-300'}`}>
                         {entry.description}
                       </span>
+
+                      {/* Reversal Badge */}
+                      {isReversal && (
+                        <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
+                          <RotateCcw className="h-3 w-3" />
+                          {isDanish ? 'Modpostering' : 'Reversal'}
+                        </Badge>
+                      )}
 
                       {/* Status Badge */}
                       <Badge
@@ -1046,11 +1056,11 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           {entry.lines.map((line, idx) => (
                             <div
                               key={line.id || idx}
-                              className={`grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t border-gray-100/50 dark:border-gray-800 ${isEntryCancelled ? 'line-through' : ''}`}
+                              className={`grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t border-gray-100/50 dark:border-gray-800 ${isDimmed ? 'line-through' : ''}`}
                             >
                               {/* Account */}
                               <div className="col-span-4 sm:col-span-5">
-                                <span className="font-medium text-gray-900 dark:text-white">
+                                <span className={isDimmed ? 'font-medium text-gray-400 dark:text-gray-500' : 'font-medium text-gray-900 dark:text-white'}>
                                   {line.account?.number || '—'}
                                 </span>
                                 <span className="text-gray-500 dark:text-gray-400 ml-1.5 text-xs">
@@ -1058,11 +1068,11 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                                 </span>
                               </div>
                               {/* Debit */}
-                              <div className="col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white">
+                              <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
                                 {line.debit ? formatCurrencyValue(Number(line.debit), language) : ''}
                               </div>
                               {/* Credit */}
-                              <div className="col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white">
+                              <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
                                 {line.credit ? formatCurrencyValue(Number(line.credit), language) : ''}
                               </div>
                               {/* Description */}
@@ -1073,14 +1083,14 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           ))}
 
                           {/* Totals */}
-                          <div className={`grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/30 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 font-semibold text-sm ${isEntryCancelled ? 'line-through' : ''}`}>
+                          <div className={`grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/30 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 font-semibold text-sm ${isDimmed ? 'line-through' : ''}`}>
                             <div className="col-span-4 sm:col-span-5 text-gray-700 dark:text-gray-300">
                               {isDanish ? 'I alt' : 'Total'}
                             </div>
-                            <div className="col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white">
+                            <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
                               {entryTotalDebit > 0 ? formatCurrencyValue(entryTotalDebit, language) : ''}
                             </div>
-                            <div className="col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white">
+                            <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
                               {entryTotalCredit > 0 ? formatCurrencyValue(entryTotalCredit, language) : ''}
                             </div>
                             <div className="col-span-2 sm:col-span-3 hidden sm:flex items-center justify-end gap-1">
@@ -1106,6 +1116,16 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                             <span>
                               {isDanish ? 'Annulleringsårsag: ' : 'Cancel reason: '}
                               {entry.cancelReason}
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Reversal note — shown inside the collapsible field when expanded */}
+                        {isReversal && isExpanded && (
+                          <div className="mt-2 flex items-start gap-2 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/5 rounded-lg p-2.5">
+                            <RotateCcw className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                            <span>
+                              {isDanish ? 'Modpostering — denne journalpost neutraliserer en annulleret postering (bogføringsloven §10-12)' : 'Reversal entry — this journal entry neutralises a cancelled entry (Bookkeeping Act §10-12)'}
                             </span>
                           </div>
                         )}
