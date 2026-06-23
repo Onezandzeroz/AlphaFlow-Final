@@ -18,7 +18,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { loadOpenCV } from '@/lib/opencv/loadOpenCV';
-import { detectDocumentQuad, type Quad } from '@/lib/opencv/documentDetect';
+import { detectDocumentQuad, trackQuadCorners, validateQuadFast, type Quad } from '@/lib/opencv/documentDetect';
 import { warpAndThreshold } from '@/lib/opencv/perspectiveWarp';
 import { useLanguageStore } from '@/lib/language-store';
 
@@ -39,13 +39,19 @@ const ADAPTIVE_CHECK_INTERVAL = 5;  // Check every N frames whether to adapt
 // Stillness: allow MORE movement (relaxed from 0.025)
 const STILL_THRESHOLD = 0.06;          // 6% avg pixel shift = "still enough"
 const STILL_HARD_THRESHOLD = 0.15;      // 15% = definitely moving
-const STILL_FRAMES_NEEDED = 10;         // Reduced from 15 for faster capture
+const STILL_FRAMES_NEEDED = 8;          // Reduced from 10 for faster capture with corner tracking
 
 // Quad lock-on: keep showing overlay for N frames after last detection
 const LOCK_MAX_AGE = 60;                // 60 × 80ms = 4.8 seconds of persistence
 
 // EMA smoothing for corner positions (lower = smoother but slower to follow)
 const CORNER_SMOOTH_ALPHA = 0.35;
+
+// Corner tracking: when a quad is locked, use fast corner tracking instead
+// of full detection. This runs ~5-10× faster, making the overlay much more
+// responsive. Full detection is used for initial detection and as fallback.
+const TRACKING_MAX_AGE = 30;            // Max consecutive tracking frames before re-validating with full detection
+const TRACKING_FALLBACK_INTERVAL = 8;   // Run full detection every N tracking frames as validation
 
 // Camera constraints for STREAM (used for detection preview only).
 // 1600×900 — safe middle ground: less GPU work than 1080p, universally supported.
@@ -676,6 +682,7 @@ export function useScannerEngine() {
   const overlaySizedRef = useRef(false);
   const displayDimsRef = useRef({ dw: 0, dh: 0 });
   const torchOnRef = useRef(false);
+  const trackingAgeRef = useRef(0);                    // Consecutive frames using corner tracking
 
   // Function refs (break circular dependencies)
   const stopCameraRef = useRef<() => void>(() => {});
@@ -884,9 +891,42 @@ export function useScannerEngine() {
 
       const isCurrentlyStable = stillnessCountRef.current >= 4;
 
-      // ── OpenCV detection with quad lock-on ────────────────────
+      // ── Document detection with corner tracking ──────────────
+      // Strategy:
+      //   1. If we have a locked quad AND tracking hasn't exceeded max age:
+      //      a. Every TRACKING_FALLBACK_INTERVAL frames, run full detection for validation
+      //      b. Otherwise, use fast corner tracking (5-10× faster than full detection)
+      //   2. If no locked quad or tracking fails, run full detection
       try {
-        let freshQuad = detectDocumentQuad(frame);
+        let freshQuad: Quad | null = null;
+        const hasLockedQuad = !!lockedQuadRef.current;
+        const shouldUseTracking = hasLockedQuad
+          && trackingAgeRef.current < TRACKING_MAX_AGE
+          && trackingAgeRef.current % TRACKING_FALLBACK_INTERVAL !== 0;
+
+        if (shouldUseTracking) {
+          // ── Fast path: corner tracking (~1-3ms) ──
+          // First do a quick whiteness validation without OpenCV
+          if (validateQuadFast(frame, lockedQuadRef.current!)) {
+            const tracked = trackQuadCorners(frame, lockedQuadRef.current!);
+            if (tracked) {
+              freshQuad = tracked;
+              trackingAgeRef.current += 1;
+            }
+            // If tracking fails, fall through to full detection
+          }
+          // If fast validation fails, fall through to full detection
+        }
+
+        if (!freshQuad) {
+          // ── Full detection path (~15-30ms) ──
+          freshQuad = detectDocumentQuad(frame);
+
+          // Reset tracking age on fresh detection
+          if (freshQuad) {
+            trackingAgeRef.current = 0;
+          }
+        }
 
         // Scale quad from detection canvas coords → video resolution coords
         if (freshQuad) {
@@ -928,7 +968,11 @@ export function useScannerEngine() {
             hasTracking = true;
           } else {
             lockedQuadRef.current = null;
+            trackingAgeRef.current = 0;
           }
+        } else {
+          // No quad found and no locked quad — reset tracking
+          trackingAgeRef.current = 0;
         }
 
         setQuad(displayQuad);
@@ -951,6 +995,7 @@ export function useScannerEngine() {
           setTimeout(() => doCaptureRef.current(), 0);
         }
       } catch {
+        trackingAgeRef.current = 0;
         if (lockedQuadRef.current) {
           lockAgeRef.current += 1;
           if (lockAgeRef.current < LOCK_MAX_AGE) {
@@ -1034,6 +1079,7 @@ export function useScannerEngine() {
     frameCountRef.current = 0;
     frameBusyRef.current = false;
     stillnessCountRef.current = 0;   // Prevent stale count from triggering instant capture
+    trackingAgeRef.current = 0;       // Reset corner tracking age
     prevFrameRef.current = null;
 
     const video = videoRef.current;
@@ -1328,6 +1374,7 @@ export function useScannerEngine() {
     overlaySizedRef.current = false;
     lockedQuadRef.current = null;
     lockAgeRef.current = 0;
+    trackingAgeRef.current = 0;
     quadRef.current = null;
     setPhase('permission_pending');
   }, [discardScan]);

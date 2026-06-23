@@ -184,7 +184,6 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   }, [isProjectMode, activeProjectId, projectId]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const preloadedConsumedRef = useRef(false);
-  const lastConsumedScanIdRef = useRef<number>(0);
   const descriptionInputRef = useRef<HTMLTextAreaElement>(null);
   const receiptPreviewUrlRef = useRef<string | null>(null);
   const dateManuallySetRef = useRef(false);
@@ -317,32 +316,37 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const [showDescriptionSuggestions, setShowDescriptionSuggestions] = useState(false);
 
   // ─── Standalone scanner integration (zustand store) ───
-  // When the user taps "Scan kvittering" inside the dialog, we open the
-  // standalone scanner (rendered at the page level in page.tsx). This avoids
-  // Radix Dialog interference (scroll-lock, focus-trap, aria-hidden).
-  // We subscribe to pendingResult and consume it when it arrives.
-  const scannerPendingResult = useScannerStore((s) => s.pendingResult);
-
+  // The scanner result flows through the zustand store to PosteringerPage,
+  // which consumes it and passes the file via the `preloadedReceiptFile` prop.
+  // We do NOT subscribe to pendingResult here — PosteringerPage's subscribe()
+  // callback always consumes first (synchronous), so any subscription here
+  // would be a dead path that either gets null or causes double-consumption bugs.
+  //
+  // The ONLY way the form receives scanned files is via preloadedReceiptFile.
+  //
+  // FALLBACK: On mount, check if there's an unconsumed result in the store
+  // (e.g., PosteringerPage wasn't mounted yet when the scan completed).
+  // This handles the edge case where the form mounts AFTER the scan result
+  // was stored but before PosteringerPage's subscriber could consume it.
   useEffect(() => {
-    if (!scannerPendingResult) return;
-    // Avoid consuming the same result twice (React strict mode double-fire)
-    if (scannerPendingResult.id === lastConsumedScanIdRef.current) return;
-    lastConsumedScanIdRef.current = scannerPendingResult.id;
-
-    const file = scannerPendingResult.file;
-    // Consume from store (atomic — only one consumer gets it)
-    useScannerStore.getState().consumeResult();
-
-    // Apply to form
-    if (receiptPreviewUrlRef.current) {
-      URL.revokeObjectURL(receiptPreviewUrlRef.current);
+    const existing = useScannerStore.getState().pendingResult;
+    if (existing && !preloadedReceiptFile && !receiptPreview) {
+      console.warn('[AddTransactionForm] Found unconsumed scanner result on mount — applying directly');
+      const claimed = useScannerStore.getState().consumeResult();
+      if (claimed) {
+        if (receiptPreviewUrlRef.current) {
+          URL.revokeObjectURL(receiptPreviewUrlRef.current);
+        }
+        const previewUrl = URL.createObjectURL(claimed.file);
+        receiptPreviewUrlRef.current = previewUrl;
+        setReceiptFile(claimed.file);
+        setReceiptPreview(previewUrl);
+        setOriginalWasPdf(false);
+      }
     }
-    const previewUrl = URL.createObjectURL(file);
-    receiptPreviewUrlRef.current = previewUrl;
-    setReceiptFile(file);
-    setReceiptPreview(previewUrl);
-    setOriginalWasPdf(false);
-  }, [scannerPendingResult]);
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch expense accounts (6000-9500) on mount
   useEffect(() => {
@@ -697,6 +701,17 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       // Scanner captures are always images, never PDFs
       setOriginalWasPdf(false);
       onPreloadedFileConsumed?.();
+      console.log('[AddTransactionForm] Preloaded scan applied, preview URL created:', previewUrl.slice(0, 40) + '...');
+
+      // Auto-scroll to the receipt preview so the user can see it immediately.
+      // Use requestAnimationFrame to wait for the DOM to update with the new preview.
+      requestAnimationFrame(() => {
+        const previewEl = document.getElementById('receipt-preview-area');
+        if (previewEl) {
+          previewEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          console.log('[AddTransactionForm] Scrolled to receipt preview');
+        }
+      });
     }
     if (!preloadedReceiptFile) {
       preloadedConsumedRef.current = false;
@@ -1191,7 +1206,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     const isImagePreview = !isLoading;
 
     return (
-      <div className="space-y-3">
+      <div className="space-y-3" id="receipt-preview-area">
         {/* Preview area */}
         <div className="relative rounded-lg border border-gray-200 dark:border-white/10 overflow-hidden bg-gray-50 dark:bg-gray-900/50">
           {isLoading ? (
@@ -1206,6 +1221,22 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
                 alt="Document preview"
                 className="w-full h-auto object-contain shadow-sm rounded"
                 style={{ maxHeight: '600px' }}
+                onLoad={() => console.log('[AddTransactionForm] Preview image loaded successfully')}
+                onError={(e) => {
+                  console.error('[AddTransactionForm] Preview image FAILED to load:', receiptPreview?.slice(0, 50));
+                  // Attempt to recreate the blob URL if it failed
+                  if (receiptFile && receiptPreview) {
+                    try {
+                      const newUrl = URL.createObjectURL(receiptFile);
+                      if (receiptPreviewUrlRef.current) URL.revokeObjectURL(receiptPreviewUrlRef.current);
+                      receiptPreviewUrlRef.current = newUrl;
+                      setReceiptPreview(newUrl);
+                      console.log('[AddTransactionForm] Recreated blob URL after load failure');
+                    } catch (err) {
+                      console.error('[AddTransactionForm] Failed to recreate blob URL:', err);
+                    }
+                  }
+                }}
               />
             </div>
           ) : null}
