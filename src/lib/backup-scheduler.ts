@@ -454,7 +454,7 @@ async function runScheduledBackupCycle(
       companiesSuccess: totalSuccess,
       companiesError: totalError,
       companiesSkipped: totalSkip,
-      errorMessage: firstError,
+      errorMessage: firstError ?? undefined,
       startedAt,
       catchup: isCatchup,
     });
@@ -465,7 +465,7 @@ async function runScheduledBackupCycle(
     );
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    await logCronExecution({ jobType, status: 'error', errorMessage: msg, startedAt, catchup: isCatchup });
+    await logCronExecution({ jobType, status: 'error', errorMessage: msg ?? undefined, startedAt, catchup: isCatchup });
     logger.error(`[BACKUP-SCHEDULER] ${backupType} cycle error:`, error);
   } finally {
     runningJobs.delete(jobType);
