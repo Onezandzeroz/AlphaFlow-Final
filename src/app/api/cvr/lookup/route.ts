@@ -25,6 +25,7 @@ import { cvrClient } from '@/lib/cvr-client';
 import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { db } from '@/lib/db';
 
 // GET /api/cvr/lookup — Verify a CVR number against the CVR register
 export const GET = withGuard(
@@ -74,6 +75,19 @@ export const GET = withGuard(
 
       // In simulation mode, surface a clear flag so the UI can show a badge
       // without blocking the flow (useful for demo/dev environments).
+
+      // Persist verification timestamp on the company when the CVR exists
+      if (result.exists && ctx.activeCompanyId) {
+        try {
+          await db.company.update({
+            where: { id: ctx.activeCompanyId },
+            data: { cvrVerifiedAt: new Date() },
+          });
+        } catch (dbErr) {
+          logger.warn('[CVR_LOOKUP] Could not persist cvrVerifiedAt', dbErr);
+        }
+      }
+
       return NextResponse.json(result);
     } catch (error) {
       logger.error('[CVR_LOOKUP] Lookup failed:', error);

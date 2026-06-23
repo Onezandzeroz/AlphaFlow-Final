@@ -43,6 +43,7 @@ interface Tenant {
   name: string;
   email: string;
   cvrNumber: string;
+  cvrVerifiedAt: string | null;
   companyType: string | null;
   isDemo: boolean;
   isActive: boolean;
@@ -698,7 +699,19 @@ export function OversightSettings() {
                           )}
                         </p>
                         <p className="text-xs text-[#6b7c75] flex items-center gap-2 truncate">
-                          {tenant.cvrNumber && <span>CVR: {tenant.cvrNumber}</span>}
+                          {tenant.cvrNumber && (
+                            <span className="flex items-center gap-1">
+                              CVR: {tenant.cvrNumber}
+                              {tenant.cvrVerifiedAt && (
+                                <CheckCircle2
+                                  className="h-3 w-3 text-emerald-500 dark:text-emerald-400 shrink-0"
+                                  title={isDa
+                                    ? `CVR bekræftet ${new Date(tenant.cvrVerifiedAt).toLocaleDateString('da-DK')}`
+                                    : `CVR verified ${new Date(tenant.cvrVerifiedAt).toLocaleDateString()}`}
+                                />
+                              )}
+                            </span>
+                          )}
                           {tenant.email && <span>{tenant.email}</span>}
                         </p>
                       </div>
