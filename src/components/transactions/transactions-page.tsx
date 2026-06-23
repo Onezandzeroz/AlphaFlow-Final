@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -179,6 +180,11 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
   const [pageSize, setPageSize] = useState(25);
   const [mobileDisplayCount, setMobileDisplayCount] = useState(10);
 
+  // ── Cancel transaction state ──
+  const [cancelTarget, setCancelTarget] = useState<Transaction | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
+
   // Helper: get receipt image URL from stored path
   const getReceiptUrl = useCallback((receiptImage: string | null) => {
     if (!receiptImage) return null;
@@ -260,16 +266,21 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
   }, [fetchTransactions]);
 
   const handleDeleteTransaction = useCallback(
-    async (id: string) => {
+    async (id: string, reason?: string) => {
       try {
-        await fetch(`/api/transactions?id=${id}`, { method: 'DELETE' });
-        toast.success(t('transactionDeleted') || (language === 'da' ? 'Postering slettet' : 'Transaction deleted'), {
-          description: language === 'da' ? 'Posteringen er blevet fjernet' : 'The transaction has been removed',
+        const url = reason
+          ? `/api/transactions?id=${id}&reason=${encodeURIComponent(reason)}`
+          : `/api/transactions?id=${id}`;
+        await fetch(url, { method: 'DELETE' });
+        toast.success(t('transactionDeleted') || (language === 'da' ? 'Postering annulleret' : 'Transaction cancelled'), {
+          description: language === 'da' ? 'Posteringen er blevet annulleret og en modpostering er oprettet' : 'The transaction has been cancelled and a reversal entry has been created',
         });
+        setCancelTarget(null);
+        setCancelReason('');
         fetchTransactions();
       } catch (error) {
-        console.error('Failed to delete transaction:', error);
-        toast.error(language === 'da' ? 'Kunne ikke slette postering' : 'Failed to delete transaction');
+        console.error('Failed to cancel transaction:', error);
+        toast.error(language === 'da' ? 'Kunne ikke annullere postering' : 'Failed to cancel transaction');
       }
     },
     [fetchTransactions, t, language]
@@ -861,18 +872,43 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                               </AlertDialogTrigger>
                               <AlertDialogContent className="bg-white dark:bg-[#1a1f1e]">
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle className="dark:text-white">{t('deleteTransaction')}</AlertDialogTitle>
+                                  <AlertDialogTitle className="dark:text-white">
+                                    {language === 'da' ? 'Annuller postering' : 'Cancel transaction'}
+                                  </AlertDialogTitle>
                                   <AlertDialogDescription className="dark:text-gray-400">
-                                    {t('deleteConfirmMessage')}
+                                    {language === 'da'
+                                      ? 'I henhold til bogføringsloven slettes data ikke — posteringen markeres som annulleret og en modpostering oprettes.'
+                                      : 'Per the Bookkeeping Act, data is never deleted — the entry is marked as cancelled and a reversal entry is created.'}
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
+                                <div className="space-y-2 py-2">
+                                  <Label className="text-sm font-medium">
+                                    {language === 'da' ? 'Årsag til annullering' : 'Reason for cancellation'} <span className="text-red-500">*</span>
+                                  </Label>
+                                  <Input
+                                    value={cancelTarget?.id === transaction.id ? cancelReason : ''}
+                                    onChange={(e) => {
+                                      setCancelTarget(transaction);
+                                      setCancelReason(e.target.value);
+                                    }}
+                                    onFocus={() => { if (!cancelTarget || cancelTarget.id !== transaction.id) setCancelTarget(transaction); }}
+                                    placeholder={language === 'da' ? 'Angiv årsag til annullering...' : 'Enter reason for cancellation...'}
+                                    className="bg-gray-50 dark:bg-white/5"
+                                  />
+                                </div>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel className="dark:bg-white/5">{t('cancel')}</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDeleteTransaction(transaction.id)}
-                                    className="bg-red-500 hover:bg-red-600"
+                                  <AlertDialogCancel
+                                    className="dark:bg-white/5"
+                                    onClick={() => { setCancelTarget(null); setCancelReason(''); }}
                                   >
-                                    {t('delete')}
+                                    {t('cancel')}
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteTransaction(transaction.id, cancelReason)}
+                                    disabled={!cancelReason.trim() || (cancelTarget?.id === transaction.id && !cancelReason.trim())}
+                                    className="bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {language === 'da' ? 'Annuller postering' : 'Cancel transaction'}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -1138,18 +1174,43 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                               </AlertDialogTrigger>
                               <AlertDialogContent className="bg-white dark:bg-[#1a1f1e]">
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle className="dark:text-white">{t('deleteTransaction')}</AlertDialogTitle>
+                                  <AlertDialogTitle className="dark:text-white">
+                                    {language === 'da' ? 'Annuller postering' : 'Cancel transaction'}
+                                  </AlertDialogTitle>
                                   <AlertDialogDescription className="dark:text-gray-400">
-                                    {t('deleteConfirmMessage')}
+                                    {language === 'da'
+                                      ? 'I henhold til bogføringsloven slettes data ikke — posteringen markeres som annulleret og en modpostering oprettes.'
+                                      : 'Per the Bookkeeping Act, data is never deleted — the entry is marked as cancelled and a reversal entry is created.'}
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
+                                <div className="space-y-2 py-2">
+                                  <Label className="text-sm font-medium">
+                                    {language === 'da' ? 'Årsag til annullering' : 'Reason for cancellation'} <span className="text-red-500">*</span>
+                                  </Label>
+                                  <Input
+                                    value={cancelTarget?.id === transaction.id ? cancelReason : ''}
+                                    onChange={(e) => {
+                                      setCancelTarget(transaction);
+                                      setCancelReason(e.target.value);
+                                    }}
+                                    onFocus={() => { if (!cancelTarget || cancelTarget.id !== transaction.id) setCancelTarget(transaction); }}
+                                    placeholder={language === 'da' ? 'Angiv årsag til annullering...' : 'Enter reason for cancellation...'}
+                                    className="bg-gray-50 dark:bg-white/5"
+                                  />
+                                </div>
                                 <AlertDialogFooter>
-                                  <AlertDialogCancel className="dark:bg-white/5">{t('cancel')}</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDeleteTransaction(transaction.id)}
-                                    className="bg-red-500 hover:bg-red-600"
+                                  <AlertDialogCancel
+                                    className="dark:bg-white/5"
+                                    onClick={() => { setCancelTarget(null); setCancelReason(''); }}
                                   >
-                                    {t('delete')}
+                                    {t('cancel')}
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteTransaction(transaction.id, cancelReason)}
+                                    disabled={!cancelReason.trim() || (cancelTarget?.id === transaction.id && !cancelReason.trim())}
+                                    className="bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  >
+                                    {language === 'da' ? 'Annuller postering' : 'Cancel transaction'}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>

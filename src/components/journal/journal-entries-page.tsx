@@ -1593,8 +1593,8 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                   <Input
                     value={cancelReason}
                     onChange={(e) => setCancelReason(e.target.value)}
-                    placeholder={isDanish ? 'Angiv årsag...' : 'Enter reason...'}
-                    className="bg-gray-50 dark:bg-white/5"
+                    placeholder={isDanish ? 'Angiv årsag (obligatorisk)...' : 'Enter reason (required)...'}
+                    className={`bg-gray-50 dark:bg-white/5 ${!cancelReason.trim() && cancelTarget ? 'border-red-300 dark:border-red-700 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   />
                 </div>
               </div>
