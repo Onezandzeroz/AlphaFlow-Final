@@ -79,10 +79,7 @@ export const GET = withGuard(
       // Persist verification timestamp on the company when the CVR exists
       if (result.exists && ctx.activeCompanyId) {
         try {
-          await db.company.update({
-            where: { id: ctx.activeCompanyId },
-            data: { cvrVerifiedAt: new Date() },
-          });
+          await db.$executeRaw`UPDATE "Company" SET "cvrVerifiedAt" = NOW() WHERE id = ${ctx.activeCompanyId}`;
         } catch (dbErr) {
           logger.warn('[CVR_LOOKUP] Could not persist cvrVerifiedAt', dbErr);
         }
