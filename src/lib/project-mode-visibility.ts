@@ -32,7 +32,6 @@ export const PROJECT_MODE_HIDDEN_VIEWS: ReadonlySet<string> = new Set([
   'annual-report',    // Moms & Årsregnskab (whole company)
   'periods',          // Bogføringsperioder (tenant-level)
   'exports',          // SaF-T etc. (tax authority exports)
-  'year-end',         // Årsafslutning (tenant operation)
   // Maintenance — tenant operations
   'backups',          // Backup is a tenant operation
   // Settings that configure the tenant (not the project)

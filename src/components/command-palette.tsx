@@ -66,7 +66,6 @@ type View =
   | 'ledger'
   | 'reports'
   | 'bank-recon'
-  | 'year-end'
   | 'aging'
   | 'cash-flow'
   | 'recurring'
@@ -146,7 +145,6 @@ const NAV_SECTIONS: NavSectionDef[] = [
       { id: 'annual-report', nameDa: 'Moms & Årsregnskab', nameEn: 'VAT & Annual Report', icon: FileBarChart },
       { id: 'periods', nameDa: 'Periode', nameEn: 'Periods', icon: Calendar },
       { id: 'exports', nameDa: 'Eksport', nameEn: 'Exports', icon: Download },
-      { id: 'year-end', nameDa: 'Årsafslutning', nameEn: 'Year-End', icon: CalendarClock },
     ],
   },
   {

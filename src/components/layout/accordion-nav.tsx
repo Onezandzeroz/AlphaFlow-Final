@@ -59,7 +59,6 @@ type View =
   | 'ledger'
   | 'reports'
   | 'bank-recon'
-  | 'year-end'
   | 'aging'
   | 'cash-flow'
   | 'recurring'

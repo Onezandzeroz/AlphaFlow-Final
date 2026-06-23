@@ -10,7 +10,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 
-type View = 'dashboard' | 'transactions' | 'invoices' | 'reports' | 'settings' | 'exports' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'bank-recon' | 'year-end' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings-company' | 'settings-edelivery';
+type View = 'dashboard' | 'transactions' | 'invoices' | 'reports' | 'settings' | 'exports' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings-company' | 'settings-edelivery';
 
 interface MobileBottomNavProps {
   currentView: string;
@@ -52,7 +52,7 @@ const navItems: NavItem[] = [
     labelDa: 'Rapporter',
     labelEn: 'Reports',
     icon: BarChart3,
-    matchViews: ['reports', 'ledger', 'cash-flow', 'aging', 'exports', 'journal', 'year-end', 'annual-report'],
+    matchViews: ['reports', 'ledger', 'cash-flow', 'aging', 'exports', 'journal', 'annual-report'],
   },
 ];
 
