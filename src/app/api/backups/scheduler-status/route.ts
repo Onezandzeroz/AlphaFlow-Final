@@ -60,6 +60,32 @@ export const GET = withGuard(
         })
       );
 
+      // Recent cron execution history (last 20 entries for this company or global)
+      const recentExecutions = await db.cronExecution.findMany({
+        where: {
+          OR: [
+            { companyId },
+            { companyId: null }, // global jobs
+          ],
+        },
+        orderBy: { startedAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          jobType: true,
+          status: true,
+          companiesTotal: true,
+          companiesSuccess: true,
+          companiesError: true,
+          companiesSkipped: true,
+          errorMessage: true,
+          startedAt: true,
+          finishedAt: true,
+          durationMs: true,
+          catchup: true,
+        },
+      });
+
       return NextResponse.json({
         scheduler: {
           running: schedulerInfo.running,
@@ -67,6 +93,11 @@ export const GET = withGuard(
           cronHealth,
           schedules: schedulerInfo.schedules,
           autoBackupCounts,
+          recentExecutions: recentExecutions.map(e => ({
+            ...e,
+            startedAt: e.startedAt.toISOString(),
+            finishedAt: e.finishedAt?.toISOString() ?? null,
+          })),
           stats: {
             totalBackupCount: totalBackups,
             completedBackupCount: completedBackups,

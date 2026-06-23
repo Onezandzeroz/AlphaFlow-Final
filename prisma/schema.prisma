@@ -607,6 +607,33 @@ model Backup {
   @@index([status])
 }
 
+// ─── CRON EXECUTION LOG ────────────────────────────────────────────
+// Persistent record of every cron cycle run. Enables:
+// 1. Missed-run detection: on startup, check if a cycle should have run
+//    while the server was down and run it now (catch-up)
+// 2. DB-based health: survives server restarts (in-memory maps are lost)
+// 3. Audit trail: see exactly when each cycle ran and what happened
+
+model CronExecution {
+  id              String   @id @default(cuid())
+  jobType         String   // "backup_hourly" | "backup_daily" | "backup_weekly" | "backup_monthly" | "backup_cleanup" | "recurring_entries"
+  companyId       String?  // null for global jobs (cleanup, recurring)
+  status          String   // "success" | "error" | "skipped" | "partial"
+  companiesTotal  Int      @default(0)  // how many companies were processed
+  companiesSuccess Int     @default(0)
+  companiesError  Int      @default(0)
+  companiesSkipped Int     @default(0)
+  errorMessage    String?  // first error message (if any)
+  startedAt       DateTime @default(now())
+  finishedAt      DateTime?
+  durationMs      Int      @default(0)
+  catchup         Boolean  @default(false)  // true if this run was a catch-up from a missed window
+
+  @@index([jobType, startedAt])
+  @@index([companyId, jobType])
+  @@index([status, startedAt])
+}
+
 // ─── CHART OF ACCOUNTS ────────────────────────────────────────────
 
 model Account {

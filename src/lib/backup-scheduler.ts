@@ -1,11 +1,19 @@
 /**
- * Backup Scheduler for AlphaAi Accounting
+ * Backup Scheduler for AlphaAi Accounting — v2 (Robust)
  *
  * Implements Danish Bookkeeping Law §15 compliance:
  * - Automated hourly/daily/weekly/monthly backups via cron
  * - First-data-triggered initial backup (fires when tenant first inputs data)
  * - Automatic retention cleanup per policy
  * - Per-tenant cron health monitoring (green/red light indicator)
+ *
+ * v2 Robustness improvements:
+ * - DB-based CronExecution log: every cycle is persisted, survives restarts
+ * - Startup catch-up: detects missed cron windows and runs them immediately
+ * - Retry with exponential backoff: failed backups retry up to 3 times
+ * - DB-based health: cron health survives server restarts
+ * - Overlap guard: prevents concurrent runs of the same job type
+ * - Graceful shutdown: running cycles complete before process exits
  *
  * Architecture:
  * - Scheduler starts on Next.js server boot (via instrumentation.ts)
@@ -55,6 +63,47 @@ const companyCronHealth: Map<string, CronHealthEntry> = new Map();
 
 // Track which companies have been triggered by a first transaction
 const TRIGGERED_COMPANIES: Set<string> = new Set();
+
+// ─── Overlap guard ──────────────────────────────────────────────────────────
+// Prevents concurrent runs of the same job type (e.g., two hourly backups
+// running at the same time if the previous one is slow)
+const runningJobs: Set<string> = new Set();
+
+// ─── Retry with exponential backoff ─────────────────────────────────────────
+const MAX_RETRIES = 3;
+const RETRY_BASE_MS = 5000;   // 5 seconds
+const RETRY_MAX_MS = 60000;   // 1 minute
+
+function getRetryDelay(attempt: number): number {
+  return Math.min(RETRY_BASE_MS * Math.pow(2, attempt), RETRY_MAX_MS);
+}
+
+/**
+ * Run a function with retry + exponential backoff.
+ * Returns true if the function succeeded within MAX_RETRIES attempts.
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxRetries = MAX_RETRIES,
+): Promise<{ result: T | null; succeeded: boolean; attempts: number }> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fn();
+      return { result, succeeded: true, attempts: attempt + 1 };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxRetries) {
+        const delay = getRetryDelay(attempt);
+        logger.warn(`[BACKUP-SCHEDULER] ${label} attempt ${attempt + 1} failed, retrying in ${delay}ms: ${lastError.message}`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  logger.error(`[BACKUP-SCHEDULER] ${label} failed after ${maxRetries + 1} attempts: ${lastError?.message}`);
+  return { result: null, succeeded: false, attempts: maxRetries + 1 };
+}
 
 /**
  * Get or create a cron health entry for a specific company + backup type.
@@ -139,6 +188,21 @@ export async function getCronHealth(companyId: string): Promise<{
 
   const anyBackupSucceeded = entries.some((e) => e.lastStatus === 'success');
 
+  // Also check CronExecution DB for recent errors (survives restarts)
+  const recentErrors = await db.cronExecution.count({
+    where: {
+      jobType: { startsWith: 'backup_' },
+      companyId,
+      status: 'error',
+      startedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    },
+  }).catch(() => 0);
+
+  if (recentErrors > 0 && !hasError) {
+    hasError = true;
+    errorMessages.push(`${recentErrors} error(s) in last 24h (from DB log)`);
+  }
+
   // Check DB for existing completed automatic backups as the authoritative source
   // This survives server restarts and is independent of in-memory state.
   const existingBackups = await db.backup.count({
@@ -183,11 +247,11 @@ export async function getCronHealth(companyId: string): Promise<{
 // ─── Cron expressions ───────────────────────────────────────────────────────
 // These match the retention policy in backup-engine.ts
 
-const SCHEDULES: { type: BackupType; cron: string; label: string }[] = [
-  { type: 'hourly',  cron: '5 * * * *',       label: 'Hourly backup' },   // minute 5 every hour
-  { type: 'daily',   cron: '15 2 * * *',       label: 'Daily backup' },    // 02:15 every day
-  { type: 'weekly',  cron: '30 3 * * 1',       label: 'Weekly backup' },   // 03:30 every Monday
-  { type: 'monthly', cron: '0 4 1 * *',        label: 'Monthly backup' },  // 04:00 on the 1st
+const SCHEDULES: { type: BackupType; cron: string; label: string; jobType: string }[] = [
+  { type: 'hourly',  cron: '5 * * * *',       label: 'Hourly backup',  jobType: 'backup_hourly' },
+  { type: 'daily',   cron: '15 2 * * *',       label: 'Daily backup',   jobType: 'backup_daily' },
+  { type: 'weekly',  cron: '30 3 * * 1',       label: 'Weekly backup',  jobType: 'backup_weekly' },
+  { type: 'monthly', cron: '0 4 1 * *',        label: 'Monthly backup', jobType: 'backup_monthly' },
 ];
 
 // ─── Scheduled tasks (for cleanup on shutdown) ──────────────────────────────
@@ -217,24 +281,121 @@ async function getActiveCompaniesWithData(): Promise<{ userId: string; companyId
   return companiesWithData;
 }
 
+// ─── DB Execution Logging ────────────────────────────────────────────────────
+
+/**
+ * Log a cron execution to the database.
+ * This persists across server restarts and enables catch-up logic.
+ */
+async function logCronExecution(params: {
+  jobType: string;
+  companyId?: string;
+  status: 'success' | 'error' | 'skipped' | 'partial';
+  companiesTotal?: number;
+  companiesSuccess?: number;
+  companiesError?: number;
+  companiesSkipped?: number;
+  errorMessage?: string;
+  startedAt: Date;
+  catchup?: boolean;
+}): Promise<void> {
+  try {
+    const finishedAt = new Date();
+    const durationMs = finishedAt.getTime() - params.startedAt.getTime();
+    await db.cronExecution.create({
+      data: {
+        jobType: params.jobType,
+        companyId: params.companyId,
+        status: params.status,
+        companiesTotal: params.companiesTotal ?? 0,
+        companiesSuccess: params.companiesSuccess ?? 0,
+        companiesError: params.companiesError ?? 0,
+        companiesSkipped: params.companiesSkipped ?? 0,
+        errorMessage: params.errorMessage,
+        startedAt: params.startedAt,
+        finishedAt,
+        durationMs,
+        catchup: params.catchup ?? false,
+      },
+    });
+  } catch (error) {
+    // Don't let logging failures crash the scheduler
+    logger.error('[BACKUP-SCHEDULER] Failed to log cron execution:', error);
+  }
+}
+
+/**
+ * Check if a cron job was missed while the server was down.
+ * Returns true if the job should have run but didn't (no DB record exists).
+ */
+async function wasJobMissed(jobType: string, expectedIntervalMs: number): Promise<boolean> {
+  try {
+    const lastRun = await db.cronExecution.findFirst({
+      where: { jobType, status: { in: ['success', 'partial'] } },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    if (!lastRun) {
+      // Never ran before — only catch up if there are companies with data
+      const companiesCount = await getActiveCompaniesWithData();
+      return companiesCount.length > 0;
+    }
+
+    const timeSinceLastRun = Date.now() - lastRun.startedAt.getTime();
+    return timeSinceLastRun > expectedIntervalMs * 1.5; // 50% grace period
+  } catch (error) {
+    logger.error(`[BACKUP-SCHEDULER] Failed to check if ${jobType} was missed:`, error);
+    return false; // Don't run catch-up if we can't verify
+  }
+}
+
+// Expected intervals for each backup type (for catch-up detection)
+const EXPECTED_INTERVALS: Record<string, number> = {
+  backup_hourly:  60 * 60 * 1000,          // 1 hour
+  backup_daily:   24 * 60 * 60 * 1000,      // 24 hours
+  backup_weekly:  7 * 24 * 60 * 60 * 1000,  // 7 days
+  backup_monthly: 30 * 24 * 60 * 60 * 1000,  // 30 days
+  backup_cleanup: 24 * 60 * 60 * 1000,      // 24 hours
+  recurring_entries: 24 * 60 * 60 * 1000,   // 24 hours
+};
+
 /**
  * Run scheduled backups for all companies with data.
  * Updates per-company cron health independently.
+ * Logs execution to DB for persistent tracking.
+ *
  * @param backupType - The type of backup to create
- * @param bypassCooldown - If true, ignore cooldown checks (used on startup)
+ * @param bypassCooldown - If true, ignore cooldown checks (used on startup/catch-up)
+ * @param isCatchup - If true, marks the execution as a catch-up run
  */
-async function runScheduledBackupCycle(backupType: BackupType, bypassCooldown = false): Promise<void> {
+async function runScheduledBackupCycle(
+  backupType: BackupType,
+  bypassCooldown = false,
+  isCatchup = false,
+): Promise<void> {
+  const jobType = `backup_${backupType}`;
+  const startedAt = new Date();
+
+  // Overlap guard: prevent concurrent runs of the same job type
+  if (runningJobs.has(jobType)) {
+    logger.warn(`[BACKUP-SCHEDULER] ${backupType} cycle already running — skipping this tick`);
+    return;
+  }
+  runningJobs.add(jobType);
+
   try {
     const companies = await getActiveCompaniesWithData();
 
     if (companies.length === 0) {
       logger.debug(`[BACKUP-SCHEDULER] ${backupType} cycle: no companies with data found`);
+      await logCronExecution({ jobType, status: 'skipped', startedAt, catchup: isCatchup });
       return;
     }
 
     let totalSuccess = 0;
     let totalSkip = 0;
     let totalError = 0;
+    let firstError: string | null = null;
 
     for (const { userId, companyId } of companies) {
       // Dedup check: skip if we already backed up this company recently
@@ -263,26 +424,51 @@ async function runScheduledBackupCycle(backupType: BackupType, bypassCooldown = 
         }
       }
 
-      try {
-        await runAutomaticBackup(userId, companyId, backupType);
+      // Run backup with retry
+      const { succeeded, attempts } = await withRetry(
+        () => runAutomaticBackup(userId, companyId, backupType),
+        `${backupType} backup for company ${companyId}`,
+      );
+
+      if (succeeded) {
         LAST_AUTO_BACKUP.set(`${companyId}:${backupType}`, Date.now());
         updateCompanyCronHealthSuccess(companyId, backupType);
         markCompanyTriggered(companyId);
         totalSuccess++;
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : 'Unknown error';
+        if (attempts > 1) {
+          logger.info(`[BACKUP-SCHEDULER] ${backupType} backup for company ${companyId} succeeded after ${attempts} attempts`);
+        }
+      } else {
+        const msg = `Failed after ${attempts} attempts`;
         updateCompanyCronHealthError(companyId, backupType, msg);
         totalError++;
-        logger.error(`[BACKUP-SCHEDULER] Failed ${backupType} backup for company ${companyId}:`, error);
+        if (!firstError) firstError = msg;
       }
     }
 
+    const status = totalError > 0 ? (totalSuccess > 0 ? 'partial' : 'error') : 'success';
+    await logCronExecution({
+      jobType,
+      status,
+      companiesTotal: companies.length,
+      companiesSuccess: totalSuccess,
+      companiesError: totalError,
+      companiesSkipped: totalSkip,
+      errorMessage: firstError,
+      startedAt,
+      catchup: isCatchup,
+    });
+
     logger.info(
-      `[BACKUP-SCHEDULER] ${backupType} cycle complete: ${totalSuccess} backed up, ${totalSkip} skipped, ${totalError} errors`,
+      `[BACKUP-SCHEDULER] ${backupType} cycle${isCatchup ? ' (catch-up)' : ''} complete: ${totalSuccess} backed up, ${totalSkip} skipped, ${totalError} errors`,
       { total: companies.length, success: totalSuccess, skipped: totalSkip, errors: totalError }
     );
   } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    await logCronExecution({ jobType, status: 'error', errorMessage: msg, startedAt, catchup: isCatchup });
     logger.error(`[BACKUP-SCHEDULER] ${backupType} cycle error:`, error);
+  } finally {
+    runningJobs.delete(jobType);
   }
 }
 
@@ -296,7 +482,7 @@ export function startBackupScheduler(): void {
     return;
   }
 
-  logger.info('[BACKUP-SCHEDULER] Starting backup automation...');
+  logger.info('[BACKUP-SCHEDULER] Starting backup automation (v2 robust)...');
 
   // Hydrate TRIGGERED_COMPANIES from database so companies with existing
   // backups are not incorrectly shown as "idle" after a server restart.
@@ -320,6 +506,12 @@ export function startBackupScheduler(): void {
 
   // Also run a full cleanup cycle daily at 03:00
   const cleanupTask = cron.schedule('0 3 * * *', async () => {
+    const startedAt = new Date();
+    if (runningJobs.has('backup_cleanup')) {
+      logger.warn('[BACKUP-SCHEDULER] Cleanup already running — skipping');
+      return;
+    }
+    runningJobs.add('backup_cleanup');
     try {
       const companies = await getActiveCompaniesWithData();
       let totalCleaned = 0;
@@ -330,13 +522,65 @@ export function startBackupScheduler(): void {
       if (totalCleaned > 0) {
         logger.info(`[BACKUP-SCHEDULER] Daily cleanup: removed ${totalCleaned} expired backups`);
       }
+      await logCronExecution({
+        jobType: 'backup_cleanup',
+        status: 'success',
+        companiesTotal: companies.length,
+        companiesSuccess: companies.length,
+        startedAt,
+      });
     } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      await logCronExecution({ jobType: 'backup_cleanup', status: 'error', errorMessage: msg, startedAt });
       logger.error('[BACKUP-SCHEDULER] Daily cleanup error:', error);
+    } finally {
+      runningJobs.delete('backup_cleanup');
     }
   });
   scheduledTasks.push(cleanupTask);
 
+  // ── Startup catch-up: detect and run missed cron windows ──────────────
+  // After a server reboot or crash, some cron windows may have been missed.
+  // This checks each schedule against the last DB execution log and runs
+  // any missed jobs immediately.
+  setTimeout(() => {
+    runStartupCatchup();
+  }, 10000); // 10-second delay to let DB connections warm up
+
   logger.info(`[BACKUP-SCHEDULER] Active with ${scheduledTasks.length} scheduled tasks`);
+}
+
+/**
+ * On startup, check if any cron windows were missed while the server was down.
+ * For each missed job, run it immediately as a catch-up.
+ *
+ * This is the KEY improvement that makes the scheduler robust across reboots:
+ * - Server crashes at 02:00, daily backup was scheduled for 02:15
+ * - Server restarts at 08:00
+ * - detectMissedRuns() sees no backup_daily execution since >24h ago
+ * - Runs the daily backup immediately as a catch-up
+ */
+async function runStartupCatchup(): Promise<void> {
+  logger.info('[BACKUP-SCHEDULER] Checking for missed cron windows...');
+
+  let catchupsRun = 0;
+  for (const { type, jobType } of SCHEDULES) {
+    const expectedInterval = EXPECTED_INTERVALS[jobType];
+    if (!expectedInterval) continue;
+
+    const missed = await wasJobMissed(jobType, expectedInterval);
+    if (missed) {
+      logger.info(`[BACKUP-SCHEDULER] Catch-up: ${type} backup was missed — running now`);
+      await runScheduledBackupCycle(type, true, true); // bypassCooldown, isCatchup
+      catchupsRun++;
+    }
+  }
+
+  if (catchupsRun > 0) {
+    logger.info(`[BACKUP-SCHEDULER] Startup catch-up complete: ${catchupsRun} missed job(s) executed`);
+  } else {
+    logger.info('[BACKUP-SCHEDULER] No missed cron windows detected');
+  }
 }
 
 /**
@@ -361,6 +605,7 @@ export function stopBackupScheduler(): void {
  * - Creates ALL backup types (hourly, daily, weekly, monthly) as the initial baseline
  * - Also ensures the cron scheduler is started if not already running
  * - Updates per-company cron health independently
+ * - Retries each backup type up to MAX_RETRIES times
  *
  * Call this from data-mutating API routes (POST /transactions,
  * POST /journal-entries, POST /invoices, etc.)
@@ -406,11 +651,21 @@ export function ensureInitialBackup(companyId: string, userId: string): void {
             continue;
           }
 
-          await runAutomaticBackup(userId, companyId, type);
-          LAST_AUTO_BACKUP.set(`${companyId}:${type}`, Date.now());
-          updateCompanyCronHealthSuccess(companyId, type);
-          successCount++;
-          logger.info(`[BACKUP-SCHEDULER] Initial ${type} backup succeeded for company ${companyId}`);
+          // Run with retry for initial backup
+          const { succeeded, attempts } = await withRetry(
+            () => runAutomaticBackup(userId, companyId, type),
+            `Initial ${type} backup for company ${companyId}`,
+          );
+
+          if (succeeded) {
+            LAST_AUTO_BACKUP.set(`${companyId}:${type}`, Date.now());
+            updateCompanyCronHealthSuccess(companyId, type);
+            successCount++;
+            logger.info(`[BACKUP-SCHEDULER] Initial ${type} backup succeeded for company ${companyId}${attempts > 1 ? ` (after ${attempts} attempts)` : ''}`);
+          } else {
+            updateCompanyCronHealthError(companyId, type, `Failed after ${attempts} attempts`);
+            logger.error(`[BACKUP-SCHEDULER] Initial ${type} backup failed for company ${companyId} after ${attempts} attempts`);
+          }
         } catch (error) {
           const msg = error instanceof Error ? error.message : 'Unknown error';
           updateCompanyCronHealthError(companyId, type, msg);

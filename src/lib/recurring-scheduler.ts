@@ -1,5 +1,5 @@
 /**
- * Recurring Entry Scheduler
+ * Recurring Entry Scheduler — v2 (Robust)
  *
  * Automatically executes recurring entries on their scheduled dates.
  *
@@ -9,6 +9,12 @@
  * 3. For each due entry, creates a POSTED journal entry (same as manual execute)
  * 4. Advances nextExecution to the next scheduled date
  * 5. Marks entries as COMPLETED if they've passed their endDate
+ *
+ * v2 Robustness improvements:
+ * - DB execution logging (CronExecution model) survives restarts
+ * - Startup catch-up: detects if daily cycle was missed while server was down
+ * - Overlap guard: prevents concurrent runs
+ * - Retry with exponential backoff for individual entry execution
  *
  * Design decisions:
  * - Uses the same execution logic as the manual /api/recurring-entries/execute endpoint
@@ -20,7 +26,6 @@
 
 import cron, { type ScheduledTask } from 'node-cron';
 import { db } from '@/lib/db';
-import { RecurringFrequency } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { parseLocalDate, todayLocal, formatDateLocal } from '@/lib/date-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
@@ -50,6 +55,43 @@ interface SchedulerRunSummary {
 const scheduledTasks: ScheduledTask[] = [];
 let _schedulerStarted = false;
 const LAST_EXECUTIONS: Map<string, string> = new Map(); // entryId → dateStr (dedup)
+const JOB_TYPE = 'recurring_entries';
+
+// Overlap guard
+let isRunning = false;
+
+// ─── Retry ─────────────────────────────────────────────────────────────────
+
+const MAX_RETRIES = 2; // Fewer retries for recurring entries (they run daily anyway)
+const RETRY_BASE_MS = 3000;
+const RETRY_MAX_MS = 30000;
+
+function getRetryDelay(attempt: number): number {
+  return Math.min(RETRY_BASE_MS * Math.pow(2, attempt), RETRY_MAX_MS);
+}
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  maxRetries = MAX_RETRIES,
+): Promise<{ result: T | null; succeeded: boolean; attempts: number }> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const result = await fn();
+      return { result, succeeded: true, attempts: attempt + 1 };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxRetries) {
+        const delay = getRetryDelay(attempt);
+        logger.warn(`[RECURRING-SCHEDULER] ${label} attempt ${attempt + 1} failed, retrying in ${delay}ms: ${lastError.message}`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  logger.error(`[RECURRING-SCHEDULER] ${label} failed after ${maxRetries + 1} attempts: ${lastError?.message}`);
+  return { result: null, succeeded: false, attempts: maxRetries + 1 };
+}
 
 // ─── Core: Add frequency to a date ────────────────────────────────────────
 // Duplicated from date-utils.ts because this file runs in Node.js (server)
@@ -205,13 +247,50 @@ async function executeRecurringEntry(entry: {
   }
 }
 
+// ─── DB Execution Logging ────────────────────────────────────────────────────
+
+async function logCronExecution(params: {
+  status: 'success' | 'error' | 'skipped' | 'partial';
+  companiesTotal?: number;
+  companiesSuccess?: number;
+  companiesError?: number;
+  companiesSkipped?: number;
+  errorMessage?: string;
+  startedAt: Date;
+  catchup?: boolean;
+}): Promise<void> {
+  try {
+    const finishedAt = new Date();
+    const durationMs = finishedAt.getTime() - params.startedAt.getTime();
+    await db.cronExecution.create({
+      data: {
+        jobType: JOB_TYPE,
+        companyId: null, // global job
+        status: params.status,
+        companiesTotal: params.companiesTotal ?? 0,
+        companiesSuccess: params.companiesSuccess ?? 0,
+        companiesError: params.companiesError ?? 0,
+        companiesSkipped: params.companiesSkipped ?? 0,
+        errorMessage: params.errorMessage,
+        startedAt: params.startedAt,
+        finishedAt,
+        durationMs,
+        catchup: params.catchup ?? false,
+      },
+    });
+  } catch (error) {
+    logger.error('[RECURRING-SCHEDULER] Failed to log cron execution:', error);
+  }
+}
+
 // ─── Main: Run the daily execution cycle ──────────────────────────────────
 
-async function runDailyExecutionCycle(): Promise<SchedulerRunSummary> {
+async function runDailyExecutionCycle(isCatchup = false): Promise<SchedulerRunSummary> {
   const today = todayLocal();
   const todayStr = formatDateLocal(today);
+  const startedAt = new Date();
 
-  logger.info(`[RECURRING-SCHEDULER] Starting daily execution cycle for ${todayStr}`);
+  logger.info(`[RECURRING-SCHEDULER] Starting daily execution cycle for ${todayStr}${isCatchup ? ' (catch-up)' : ''}`);
 
   const summary: SchedulerRunSummary = {
     timestamp: new Date().toISOString(),
@@ -222,10 +301,15 @@ async function runDailyExecutionCycle(): Promise<SchedulerRunSummary> {
     results: [],
   };
 
+  // Overlap guard
+  if (isRunning) {
+    logger.warn('[RECURRING-SCHEDULER] Daily execution cycle already running — skipping');
+    return summary;
+  }
+  isRunning = true;
+
   try {
     // Find all ACTIVE recurring entries where nextExecution <= today
-    // We use the raw ISO date comparison since Prisma stores UTC midnight
-    // and our dates are now consistently created as local midnight
     const dueEntries = await db.recurringEntry.findMany({
       where: {
         status: 'ACTIVE',
@@ -238,6 +322,7 @@ async function runDailyExecutionCycle(): Promise<SchedulerRunSummary> {
 
     if (dueEntries.length === 0) {
       logger.info('[RECURRING-SCHEDULER] No entries due for execution');
+      await logCronExecution({ status: 'skipped', startedAt, catchup: isCatchup });
       return summary;
     }
 
@@ -263,25 +348,76 @@ async function runDailyExecutionCycle(): Promise<SchedulerRunSummary> {
         }
       }
 
-      const result = await executeRecurringEntry(entry);
-      summary.results.push(result);
+      // Execute with retry
+      const { succeeded, result } = await withRetry(
+        () => executeRecurringEntry(entry),
+        `Execute "${entry.name}"`,
+      );
 
-      if (result.success) {
+      if (succeeded && result) {
+        summary.results.push(result);
         summary.totalExecuted++;
         LAST_EXECUTIONS.set(lastExecKey, todayStr);
       } else {
         summary.totalErrors++;
+        if (result) summary.results.push(result);
       }
     }
 
+    const status = summary.totalErrors > 0 ? (summary.totalExecuted > 0 ? 'partial' : 'error') : 'success';
+    await logCronExecution({
+      status,
+      companiesTotal: summary.totalChecked,
+      companiesSuccess: summary.totalExecuted,
+      companiesError: summary.totalErrors,
+      companiesSkipped: summary.totalSkipped,
+      errorMessage: summary.results.find(r => r.error)?.error,
+      startedAt,
+      catchup: isCatchup,
+    });
+
     logger.info(
-      `[RECURRING-SCHEDULER] Cycle complete: ${summary.totalExecuted} executed, ${summary.totalSkipped} skipped, ${summary.totalErrors} errors`,
+      `[RECURRING-SCHEDULER] Cycle${isCatchup ? ' (catch-up)' : ''} complete: ${summary.totalExecuted} executed, ${summary.totalSkipped} skipped, ${summary.totalErrors} errors`,
     );
   } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    await logCronExecution({ status: 'error', errorMessage: msg, startedAt, catchup: isCatchup });
     logger.error('[RECURRING-SCHEDULER] Daily execution cycle error:', error);
+  } finally {
+    isRunning = false;
   }
 
   return summary;
+}
+
+// ─── Startup catch-up ─────────────────────────────────────────────────────
+
+async function wasRecurringJobMissed(): Promise<boolean> {
+  try {
+    const lastRun = await db.cronExecution.findFirst({
+      where: { jobType: JOB_TYPE, status: { in: ['success', 'partial'] } },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    if (!lastRun) {
+      // Never ran before — check if there are due entries
+      const today = todayLocal();
+      const dueCount = await db.recurringEntry.count({
+        where: {
+          status: 'ACTIVE',
+          nextExecution: { lte: new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999) },
+        },
+      });
+      return dueCount > 0;
+    }
+
+    // If last run was more than 36 hours ago, we missed a daily window
+    const timeSinceLastRun = Date.now() - lastRun.startedAt.getTime();
+    return timeSinceLastRun > 36 * 60 * 60 * 1000;
+  } catch (error) {
+    logger.error('[RECURRING-SCHEDULER] Failed to check if job was missed:', error);
+    return false;
+  }
 }
 
 // ─── Public API: Start / Stop ────────────────────────────────────────────
@@ -295,7 +431,7 @@ export function startRecurringScheduler(): void {
   if (_schedulerStarted) return;
   _schedulerStarted = true;
 
-  logger.info('[RECURRING-SCHEDULER] Starting recurring entry automation...');
+  logger.info('[RECURRING-SCHEDULER] Starting recurring entry automation (v2 robust)...');
 
   // Run daily at 06:00 server time (configurable)
   const cronExpr = process.env.RECURRING_CRON_SCHEDULE || '0 6 * * *';
@@ -313,9 +449,17 @@ export function startRecurringScheduler(): void {
   logger.info(`[RECURRING-SCHEDULER] Scheduled daily execution: ${cronExpr}`);
 
   // Also run once on startup (with a small delay to let DB warm up)
-  setTimeout(() => {
+  setTimeout(async () => {
     logger.info('[RECURRING-SCHEDULER] Running startup execution check...');
-    runDailyExecutionCycle();
+
+    // Check if we missed a daily window while the server was down
+    const missed = await wasRecurringJobMissed();
+    if (missed) {
+      logger.info('[RECURRING-SCHEDULER] Catch-up: daily recurring execution was missed — running now');
+      await runDailyExecutionCycle(true);
+    } else {
+      await runDailyExecutionCycle(false);
+    }
   }, 5000);
 }
 
