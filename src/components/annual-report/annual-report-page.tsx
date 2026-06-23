@@ -454,20 +454,6 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
             ? 'Årsregnskab, momsindberetning og historik'
             : 'Annual reports, VAT submissions and history'
         }
-        action={
-          <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-28 bg-white/20 dark:bg-white/10 border-white/30 text-white focus:ring-white/30">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-white dark:bg-[#1a1f1e]">
-              {YEAR_OPTIONS.map((year) => (
-                <SelectItem key={year} value={year.toString()}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
       />
 
       <Tabs defaultValue="vat-submission" className="space-y-4 lg:space-y-6">
@@ -497,6 +483,22 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
             TAB 1: Årsregnskab (Annual Report)
         ═══════════════════════════════════════════════════════════════ */}
         <TabsContent value="annual-report" className="space-y-4 lg:space-y-6">
+          {/* Year Selector */}
+          <div className="flex justify-end">
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="w-32 bg-gray-50 dark:bg-white/5 border-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-white dark:bg-[#1a1f1e]" align="end">
+                {YEAR_OPTIONS.map((year) => (
+                  <SelectItem key={year} value={year.toString()}>
+                    {year}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Summary Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
             {/* Net Result */}
