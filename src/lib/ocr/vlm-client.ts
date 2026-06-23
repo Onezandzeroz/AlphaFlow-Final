@@ -21,6 +21,7 @@ import type {
   OCRSource,
   VLMApiResponse,
   SupportedCurrency,
+  OCRProcessor,
 } from './types';
 import { createEmptyOCRResult } from './types';
 
@@ -132,7 +133,7 @@ function transformVLMResponse(
     needsReview,
 
     // Metadata
-    processor: (ext.processor as string) || 'vlm',
+    processor: (ext.processor as OCRProcessor) || 'vlm',
     source,
   };
 }

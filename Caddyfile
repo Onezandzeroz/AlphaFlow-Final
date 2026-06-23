@@ -41,6 +41,21 @@ alphaflow.dk, www.alphaflow.dk {
         }
     }
 
+        # ─── Scanner Service (port 3005) ─────────────────────────────
+    # Routes requests with ?XTransformPort=3005 to the Python scanner service.
+    # Handles document scanning, OCR, and VLM extraction.
+    @scanner {
+        query XTransformPort=3005
+    }
+    handle @scanner {
+        reverse_proxy localhost:3005 {
+            header_up Host {host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
     # ─── TokenPay Access Service (port 3100) ───────────────────────
     # Routes requests with ?XTransformPort=3100 to the TokenPay service
     @tokenpay {

@@ -131,5 +131,47 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       merge_logs: true,
     },
+
+    // ─── Scanner Service (Python + FastAPI + uvicorn) ──────────────
+    {
+      name: 'scanner-service',
+      script: 'main.py',
+      cwd: `${process.cwd()}/mini-services/scanner-service`,
+      interpreter: `${process.cwd()}/mini-services/scanner-service/.venv/bin/python3`,
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3005',
+        // API_SHARED_KEY must match SCANNER_API_KEY in the host app's .env
+        API_SHARED_KEY: '',
+        // Anthropic API key for VLM (Claude Sonnet 4) extraction
+        ANTHROPIC_API_KEY: '',
+        ANTHROPIC_MODEL: 'claude-sonnet-4-20250514',
+        VLM_MAX_TOKENS: '4096',
+        // SQLite database path
+        DATABASE_PATH: './data/scanner.db',
+        // Optional: webhook URL for async scan completion callbacks
+        HOST_CALLBACK_URL: '',
+        // Limits
+        MAX_FILE_SIZE_MB: '10',
+        MAX_PAGES: '10',
+        // Tesseract language
+        TESSERACT_LANG: 'dan+eng',
+        // Logging
+        LOG_LEVEL: 'info',
+      },
+      // Single worker — match other mini-services (SQLite WAL locking)
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      // Memory limit — OCR + VLM can be heavy, 512MB is a safe ceiling
+      max_memory_restart: '512M',
+      // Logging
+      error_file: './logs/scanner-service-error.log',
+      out_file: './logs/scanner-service-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      merge_logs: true,
+    },
   ],
 };
