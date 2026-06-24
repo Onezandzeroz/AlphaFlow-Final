@@ -517,7 +517,7 @@ export function AppLayout({
               <img
                 src={companyLogo!}
                 alt={user.activeCompanyName || 'Company logo'}
-                className={cn('object-contain transition-all duration-300', sidebarCollapsed ? 'h-14 w-14 rounded-lg' : 'max-h-24 max-w-[220px]')}
+                className={cn('object-contain transition-all duration-300', sidebarCollapsed ? 'h-16 w-16 rounded-lg' : 'max-h-32 max-w-[300px]')}
               />
             ) : (
               <Image
