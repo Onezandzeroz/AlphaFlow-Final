@@ -48,8 +48,15 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   const isDesktop = useSyncExternalStore(subscribeToMedia, getIsDesktopSnapshot, getServerSnapshot);
 
   // ── Standalone scanner flow (FAB → scan → form) ──
+  // PosteringerPage is the FALLBACK consumer: it only opens a new AddTransactionForm
+  // dialog with the scanned file when no AddTransactionForm is already open to
+  // claim the result itself. This is enforced atomically by `claimResult()` —
+  // if an open form already claimed the pendingResult, it's null here and we
+  // no-op. The `lastConsumedIdRef` additionally guards against double-processing
+  // the same id within this component (e.g. React StrictMode double-invoke).
   const [preloadedFile, setPreloadedFile] = useState<File | null>(null);
   const lastConsumedIdRef = useRef<number>(0);
+  const POSTERINGER_CONSUMER_ID = 'posteringer';
 
   const openFormWithScan = useCallback((result: { file: File; id: number }) => {
     if (result.id === lastConsumedIdRef.current) return;
@@ -68,12 +75,15 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   useEffect(() => {
     const existing = useScannerStore.getState().pendingResult;
     if (existing && existing.id !== lastConsumedIdRef.current) {
-      const claimed = useScannerStore.getState().consumeResult();
+      // Atomic claim — only succeeds if no AddTransactionForm already grabbed it.
+      const claimed = useScannerStore.getState().claimResult(POSTERINGER_CONSUMER_ID, existing.id);
       if (claimed) openFormWithScan(claimed);
     }
     const unsubscribe = useScannerStore.subscribe((state, prevState) => {
       if (state.pendingResult && !prevState.pendingResult) {
-        const claimed = useScannerStore.getState().consumeResult();
+        const resultId = state.pendingResult.id;
+        if (resultId === lastConsumedIdRef.current) return; // already handled
+        const claimed = useScannerStore.getState().claimResult(POSTERINGER_CONSUMER_ID, resultId);
         if (claimed) openFormWithScan(claimed);
       }
     });

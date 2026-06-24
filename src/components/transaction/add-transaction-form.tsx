@@ -686,37 +686,95 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     }
   }, [receiptFile, originalWasPdf, isDa, processOCR, ocrError]);
 
+  // ── Helper: attach a scanned/uploaded receipt file to the form ──────────
+  // Shared by both the preloadedReceiptFile prop (FAB → PosteringerPage flow)
+  // and the in-form scanner claim ("Scan kvittering" button inside the dialog).
+  // Creates a blob-URL preview, sets receiptFile/receiptPreview state, marks
+  // the file as an image (scanner captures are never PDFs), and scrolls the
+  // preview into view so the user immediately sees the captured receipt.
+  const applyReceiptFile = useCallback((file: File, source: string) => {
+    // Revoke any previous preview URL to avoid memory leaks.
+    if (receiptPreviewUrlRef.current) {
+      URL.revokeObjectURL(receiptPreviewUrlRef.current);
+    }
+    const previewUrl = URL.createObjectURL(file);
+    receiptPreviewUrlRef.current = previewUrl;
+    setReceiptFile(file);
+    setReceiptPreview(previewUrl);
+    // Scanner captures are always images, never PDFs
+    setOriginalWasPdf(false);
+    console.log(`[AddTransactionForm] Receipt applied (${source}), preview URL created:`, previewUrl.slice(0, 40) + '...');
+
+    // Auto-scroll to the receipt preview so the user can see it immediately.
+    // Use requestAnimationFrame to wait for the DOM to update with the new preview.
+    requestAnimationFrame(() => {
+      const previewEl = document.getElementById('receipt-preview-area');
+      if (previewEl) {
+        previewEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        console.log('[AddTransactionForm] Scrolled to receipt preview');
+      }
+    });
+  }, []);
+
   // When a preloaded file arrives from the standalone scanner (FAB flow),
   // auto-attach it to the form (OCR is manual now — user triggers it).
   useEffect(() => {
     if (preloadedReceiptFile && !preloadedConsumedRef.current) {
       preloadedConsumedRef.current = true;
-      if (receiptPreviewUrlRef.current) {
-        URL.revokeObjectURL(receiptPreviewUrlRef.current);
-      }
-      const previewUrl = URL.createObjectURL(preloadedReceiptFile);
-      receiptPreviewUrlRef.current = previewUrl;
-      setReceiptFile(preloadedReceiptFile);
-      setReceiptPreview(previewUrl);
-      // Scanner captures are always images, never PDFs
-      setOriginalWasPdf(false);
+      applyReceiptFile(preloadedReceiptFile, 'preloaded (FAB flow)');
       onPreloadedFileConsumed?.();
-      console.log('[AddTransactionForm] Preloaded scan applied, preview URL created:', previewUrl.slice(0, 40) + '...');
-
-      // Auto-scroll to the receipt preview so the user can see it immediately.
-      // Use requestAnimationFrame to wait for the DOM to update with the new preview.
-      requestAnimationFrame(() => {
-        const previewEl = document.getElementById('receipt-preview-area');
-        if (previewEl) {
-          previewEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          console.log('[AddTransactionForm] Scrolled to receipt preview');
-        }
-      });
     }
     if (!preloadedReceiptFile) {
       preloadedConsumedRef.current = false;
     }
-  }, [preloadedReceiptFile, onPreloadedFileConsumed]);
+  }, [preloadedReceiptFile, onPreloadedFileConsumed, applyReceiptFile]);
+
+  // ── In-form scanner claim ("Scan kvittering" button inside the dialog) ──
+  // When the user taps the "Scan kvittering" button inside the already-open
+  // AddTransactionForm, the scanner opens (fullscreen portal). On capture,
+  // `completeScan(file)` stores the result in the scanner store. THIS form
+  // subscribes and claims the result directly — attaching it to its own
+  // receipt field — WITHOUT PosteringerPage opening a duplicate dialog.
+  //
+  // Race-safety: the claim is atomic via `claimResult(consumerId, onlyIfId)`.
+  // PosteringerPage uses the same store but only claims results this form
+  // hasn't already claimed (it passes its own lastConsumedIdRef). Because
+  // `claimResult` clears `pendingResult` on success, the FIRST caller wins —
+  // so if the form is open and claims the scan, PosteringerPage sees nothing
+  // and doesn't open a new dialog. If the form is NOT open (FAB flow),
+  // PosteringerPage is the only subscriber and claims as before.
+  const formConsumerId = useMemo(() => `add-transaction-form:${Math.random().toString(36).slice(2, 10)}`, []);
+  const lastClaimedScanIdRef = useRef<number>(0);
+
+  useEffect(() => {
+    // On mount, claim any pending result that arrived while we were mounting
+    // (covers the case where the scanner was opened from this form and the
+    // capture landed before this effect ran).
+    const existing = useScannerStore.getState().pendingResult;
+    if (existing && existing.id !== lastClaimedScanIdRef.current) {
+      const claimed = useScannerStore.getState().claimResult(formConsumerId, existing.id);
+      if (claimed) {
+        lastClaimedScanIdRef.current = claimed.id;
+        applyReceiptFile(claimed.file, 'in-form scanner claim (existing)');
+      }
+    }
+
+    // Subscribe to future results. We claim only the result whose id we just
+    // observed transition from null→non-null, so we never steal a result that
+    // belongs to a different, newer scan.
+    const unsubscribe = useScannerStore.subscribe((state, prevState) => {
+      if (state.pendingResult && !prevState.pendingResult) {
+        const resultId = state.pendingResult.id;
+        if (resultId === lastClaimedScanIdRef.current) return; // already claimed
+        const claimed = useScannerStore.getState().claimResult(formConsumerId, resultId);
+        if (claimed) {
+          lastClaimedScanIdRef.current = claimed.id;
+          applyReceiptFile(claimed.file, 'in-form scanner claim (live)');
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [formConsumerId, applyReceiptFile]);
 
   const handleOpenScanner = useCallback(() => {
     useScannerStore.getState().openScanner();

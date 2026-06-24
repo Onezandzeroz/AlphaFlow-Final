@@ -119,7 +119,7 @@ export function ClearFormButton({
               )}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
+          <TooltipContent side="top" className="text-xs">
             {label}
           </TooltipContent>
         </Tooltip>
