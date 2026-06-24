@@ -517,7 +517,7 @@ export function AppLayout({
               <img
                 src={companyLogo!}
                 alt={user.activeCompanyName || 'Company logo'}
-                className={cn('object-contain transition-all duration-300', sidebarCollapsed ? 'h-9 w-9 rounded-lg' : 'max-h-16 max-w-[140px]')}
+                className={cn('object-contain transition-all duration-300', sidebarCollapsed ? 'h-14 w-14 rounded-lg' : 'max-h-24 max-w-[220px]')}
               />
             ) : (
               <Image
@@ -612,7 +612,7 @@ export function AppLayout({
               <img
                 src={companyLogo!}
                 alt={user.activeCompanyName || 'Company logo'}
-                className="object-contain max-h-10 max-w-[90px]"
+                className="object-contain max-h-16 max-w-[150px]"
               />
             ) : (
               <Image
@@ -642,7 +642,7 @@ export function AppLayout({
                   <img
                     src={companyLogo!}
                     alt={user.activeCompanyName || 'Company logo'}
-                    className="object-contain max-h-12 max-w-[120px]"
+                    className="object-contain max-h-20 max-w-[200px]"
                   />
                 ) : (
                   <Image
