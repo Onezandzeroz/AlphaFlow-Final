@@ -731,25 +731,26 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
 
   // ── In-form scanner claim ("Scan kvittering" button inside the dialog) ──
   // When the user taps the "Scan kvittering" button inside the already-open
-  // AddTransactionForm, the scanner opens (fullscreen portal). On capture,
-  // `completeScan(file)` stores the result in the scanner store. THIS form
-  // subscribes and claims the result directly — attaching it to its own
-  // receipt field — WITHOUT PosteringerPage opening a duplicate dialog.
+  // AddTransactionForm, the scanner opens with THIS form's consumerId as the
+  // owner. On capture, `completeScan(file)` stores the result. THIS form
+  // subscribes and claims the result — but ONLY if it is the recorded owner.
   //
-  // Race-safety: the claim is atomic via `claimResult(consumerId, onlyIfId)`.
-  // PosteringerPage uses the same store but only claims results this form
-  // hasn't already claimed (it passes its own lastConsumedIdRef). Because
-  // `claimResult` clears `pendingResult` on success, the FIRST caller wins —
-  // so if the form is open and claims the scan, PosteringerPage sees nothing
-  // and doesn't open a new dialog. If the form is NOT open (FAB flow),
-  // PosteringerPage is the only subscriber and claims as before.
+  // Why ownership matters: on desktop, when `currentView === 'create'`, TWO
+  // AddTransactionForm instances mount (the `layout="cards"` desktop form +
+  // the hidden mobile dialog form). Without ownership, the hidden desktop
+  // form could win the race and attach the receipt to a form the user can't
+  // see. With ownership, only the form that called openScanner(formConsumerId)
+  // can claim — so the receipt always lands in the visible form.
+  //
+  // FAB flow: page.tsx calls openScanner(null) (no owner) → PosteringerPage
+  // claims as the fallback and opens a fresh dialog with preloadedReceiptFile.
   const formConsumerId = useMemo(() => `add-transaction-form:${Math.random().toString(36).slice(2, 10)}`, []);
   const lastClaimedScanIdRef = useRef<number>(0);
 
   useEffect(() => {
-    // On mount, claim any pending result that arrived while we were mounting
-    // (covers the case where the scanner was opened from this form and the
-    // capture landed before this effect ran).
+    // On mount, claim any pending result owned by THIS form (covers the case
+    // where the scanner was opened from this form and the capture landed
+    // before this effect ran).
     const existing = useScannerStore.getState().pendingResult;
     if (existing && existing.id !== lastClaimedScanIdRef.current) {
       const claimed = useScannerStore.getState().claimResult(formConsumerId, existing.id);
@@ -759,9 +760,9 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       }
     }
 
-    // Subscribe to future results. We claim only the result whose id we just
-    // observed transition from null→non-null, so we never steal a result that
-    // belongs to a different, newer scan.
+    // Subscribe to future results. claimResult() internally checks ownership,
+    // so even though ALL form instances' subscribers fire, only the owner's
+    // claim succeeds — the others no-op.
     const unsubscribe = useScannerStore.subscribe((state, prevState) => {
       if (state.pendingResult && !prevState.pendingResult) {
         const resultId = state.pendingResult.id;
@@ -777,8 +778,10 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   }, [formConsumerId, applyReceiptFile]);
 
   const handleOpenScanner = useCallback(() => {
-    useScannerStore.getState().openScanner();
-  }, []);
+    // Pass THIS form's consumerId as the owner so only this form can claim
+    // the resulting scan (not a hidden competing form instance).
+    useScannerStore.getState().openScanner(formConsumerId);
+  }, [formConsumerId]);
 
   const handleUseDescription = useCallback((desc: string) => {
     setDescription(desc);
