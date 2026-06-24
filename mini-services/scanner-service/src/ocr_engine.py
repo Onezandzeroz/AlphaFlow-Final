@@ -165,7 +165,7 @@ async def process_document(
     start = time.monotonic()
     scan_job_id = f"scn_{uuid.uuid4().hex[:16]}"
 
-    def _progress(p: int, stage: str) -> None:
+    async def _progress(p: int, stage: str) -> None:
         if progress_callback:
             try:
                 await progress_callback(p, stage)
