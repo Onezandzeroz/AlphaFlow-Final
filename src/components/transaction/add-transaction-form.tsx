@@ -1587,7 +1587,13 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   if (layout === 'compact') {
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex justify-end -mb-2">
+        {/* Clear-form button — top-right.
+            Positive margin-bottom (instead of the old -mb-2) lifts the button
+            away from the "inkl. moms" toggle on the amount row below so they
+            don't visually collide. space-y-4 on the form already adds a gap,
+            but the amount row's label+toggle sit at the very top of its block,
+            so an explicit mb here keeps the clear button clear of the toggle. */}
+        <div className="flex justify-end mb-1">
           <ClearFormButton
             size="xs"
             label={isDa ? 'Ryd formular' : 'Clear form'}
@@ -1615,7 +1621,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
             (pt + mt) plus a subtle horizontal rule so the form doesn't feel
             like one long undifferentiated list. Matches the divider style used
             in the cards layout (border-t border-gray-100 dark:border-white/5). ── */}
-        <div className="pt-4 mt-4 border-t border-gray-100 dark:border-white/10" />
+        <div className="pt-3 mt-1 border-t border-gray-200 dark:border-white/10" />
 
         {renderExchangeRate()}
         {renderAccountSelect()}
