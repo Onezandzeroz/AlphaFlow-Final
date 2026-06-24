@@ -359,6 +359,38 @@ export const PUT = withGuard(
       const previousStatus = existing.status;
       const newStatus = body.status;
 
+      // ─── Paid date (user-selectable when marking an invoice as PAID) ─────
+      // Allows the user to record the actual date the invoice was paid when
+      // it differs from today (e.g. bank payment posted a few days ago).
+      // Validated and used for the cash receipt journal entry date + stored
+      // on the Invoice row for display in the invoice list.
+      //
+      // `paidDateForUpdate` is the value persisted to the Invoice row:
+      //  - → PAID: the user-selected date (or today by default)
+      //  - PAID → other: null (clear the paid date, the invoice is no longer paid)
+      //  - otherwise: undefined (leave the existing value untouched)
+      let paidDate: Date | undefined;
+      let paidDateForUpdate: Date | null | undefined;
+      if (newStatus === 'PAID' && previousStatus !== 'PAID') {
+        if (body.paidDate !== undefined && body.paidDate !== null && body.paidDate !== '') {
+          const parsed = new Date(body.paidDate);
+          if (isNaN(parsed.getTime())) {
+            return NextResponse.json(
+              { error: 'Ugyldig betalingsdato (paidDate)' },
+              { status: 400 }
+            );
+          }
+          paidDate = parsed;
+        } else {
+          paidDate = new Date(); // default to today if not provided
+        }
+        paidDateForUpdate = paidDate;
+      } else if (previousStatus === 'PAID' && newStatus && newStatus !== 'PAID') {
+        // Moving away from PAID — clear the stored paid date so a stale value
+        // is never shown in the invoice list after the invoice is un-paid.
+        paidDateForUpdate = null;
+      }
+
       // ─── Recalculate totals from lineItems (same logic as POST) ────
       let subtotal: number | undefined;
       let vatTotal: number | undefined;
@@ -386,9 +418,11 @@ export const PUT = withGuard(
         total: existing.total,
         issueDate: existing.issueDate,
         dueDate: existing.dueDate,
+        paidDate: existing.paidDate,
       };
       const newData: Record<string, unknown> = {};
       if (newStatus) newData.status = newStatus;
+      if (paidDateForUpdate !== undefined) newData.paidDate = paidDateForUpdate;
       if (body.notes !== undefined) newData.notes = body.notes;
       if (body.customerName !== undefined) newData.customerName = body.customerName;
       if (body.customerAddress !== undefined) newData.customerAddress = body.customerAddress;
@@ -407,6 +441,7 @@ export const PUT = withGuard(
         where: { id },
         data: {
           ...(newStatus && { status: newStatus }),
+          ...(paidDateForUpdate !== undefined && { paidDate: paidDateForUpdate }),
           ...(body.notes !== undefined && { notes: body.notes }),
           ...(body.customerName !== undefined && { customerName: body.customerName }),
           ...(body.customerAddress !== undefined && { customerAddress: body.customerAddress }),
@@ -451,7 +486,11 @@ export const PUT = withGuard(
       // Also ensure accrual entry exists (covers DRAFT → PAID edge case
       // and existing SENT invoices from before the accrual-on-SENT code change)
       if (newStatus === 'PAID' && previousStatus !== 'PAID') {
-        const paymentDate = new Date(); // Today as payment date
+        // Use the user-selected paid date (defaults to today when not provided).
+        // This date becomes the booking date of the cash receipt journal entry
+        // (Debit Bank / Credit Receivables), keeping the ledger aligned with
+        // the actual bank settlement date.
+        const paymentDate = paidDate ?? new Date();
 
         // Ensure accrual entry exists (covers DRAFT → PAID and old SENT → PAID)
         const existingAccrualJE = await db.journalEntry.findFirst({

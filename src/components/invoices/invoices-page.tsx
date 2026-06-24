@@ -107,8 +107,9 @@ import {
   MoreHorizontal,
   Inbox,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
+import { Calendar } from '@/components/ui/calendar';
 import { toast } from "sonner";
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
@@ -165,6 +166,7 @@ interface Invoice {
   customerCvr: string | null;
   issueDate: string;
   dueDate: string;
+  paidDate?: string | null;
   lineItems: any;
   subtotal: number;
   vatTotal: number;
@@ -232,6 +234,11 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [sendDialogInvoice, setSendDialogInvoice] = useState<Invoice | null>(null);
   const [isSending, setIsSending] = useState(false);
+  // "Mark as paid" dialog — lets the user pick the payment date (defaults to
+  // today) when changing an invoice status to PAID from the "Skift status" menu.
+  const [markPaidInvoice, setMarkPaidInvoice] = useState<Invoice | null>(null);
+  const [markPaidDate, setMarkPaidDate] = useState<Date | undefined>(undefined);
+  const [markPaidSubmitting, setMarkPaidSubmitting] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [sendEInvoiceInvoice, setSendEInvoiceInvoice] = useState<Invoice | null>(null);
@@ -826,6 +833,58 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       toast.error(error instanceof Error ? error.message : (language === 'da' ? 'Kunne ikke opdatere status' : 'Failed to update status'));
     }
   }, [t, language, fetchInvoices, previewInvoice]);
+
+  // ─── "Mark as paid" dialog ───────────────────────────────────────────
+  // Instead of immediately flipping an invoice to PAID (which used to hardcode
+  // today as the payment date), we open a small dialog so the user can pick the
+  // actual payment date. Defaults to today; the user can back-date it when the
+  // bank settlement happened on an earlier day.
+  const openMarkPaidDialog = useCallback((invoice: Invoice) => {
+    setMarkPaidInvoice(invoice);
+    setMarkPaidDate(new Date()); // default to today
+    setMarkPaidSubmitting(false);
+  }, []);
+
+  const closeMarkPaidDialog = useCallback(() => {
+    setMarkPaidInvoice(null);
+    setMarkPaidDate(undefined);
+    setMarkPaidSubmitting(false);
+  }, []);
+
+  const confirmMarkPaid = useCallback(async () => {
+    if (!markPaidInvoice) return;
+    const invoice = markPaidInvoice;
+    const paidDate = markPaidDate ?? new Date();
+    setMarkPaidSubmitting(true);
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'PAID', paidDate: paidDate.toISOString() }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to update status');
+      }
+
+      toast.success(t('invoiceMarkedPaid'), {
+        description: language === 'da'
+          ? `Betalt d. ${format(paidDate, 'dd/MM-yyyy', { locale: isDanish ? da : enGB })}`
+          : `Paid on ${format(paidDate, 'dd/MM/yyyy', { locale: isDanish ? da : enGB })}`,
+      });
+      fetchInvoices();
+      if (previewInvoice?.id === invoice.id) {
+        setPreviewInvoice(prev => prev ? { ...prev, status: 'PAID', paidDate: paidDate.toISOString() } : null);
+      }
+      closeMarkPaidDialog();
+    } catch (error) {
+      console.error('Failed to mark invoice as paid:', error);
+      toast.error(error instanceof Error ? error.message : (language === 'da' ? 'Kunne ikke opdatere status' : 'Failed to update status'));
+    } finally {
+      setMarkPaidSubmitting(false);
+    }
+  }, [markPaidInvoice, markPaidDate, t, language, isDanish, fetchInvoices, previewInvoice, closeMarkPaidDialog]);
 
   // Download file helper
   const downloadFile = useCallback(async (url: string, filename: string) => {
@@ -1609,7 +1668,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleUpdateStatus(previewInvoice.id, 'PAID')}
+                      onClick={() => openMarkPaidDialog(previewInvoice)}
                       className="gap-1.5 text-green-600 dark:text-green-400 h-8 px-2 sm:px-3"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
@@ -1811,6 +1870,15 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                       <span className="text-gray-500 dark:text-gray-400">{t('dueDate')}</span>
                       <span className="font-medium dark:text-gray-300">{td(new Date(previewInvoice.dueDate))}</span>
                     </div>
+                    {previewInvoice.status === 'PAID' && previewInvoice.paidDate && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          {t('paidDate')}
+                        </span>
+                        <span className="font-medium text-green-600 dark:text-green-400">{td(new Date(previewInvoice.paidDate))}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2907,7 +2975,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                           {invoice.status === 'SENT' ? (language === 'da' ? 'Send igen' : 'Send Again') : (language === 'da' ? 'Send' : 'Send')}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => handleUpdateStatus(invoice.id, 'PAID')}
+                          onClick={() => openMarkPaidDialog(invoice)}
                           disabled={invoice.status === 'PAID'}
                           className={invoice.status === 'PAID' ? 'font-semibold bg-green-50 dark:bg-green-900/20' : ''}
                         >
@@ -2944,16 +3012,25 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     <CalendarDays className="h-3 w-3" />
                     {td(new Date(invoice.issueDate))}
                   </span>
-                  <span className={countdown.isOverdue ? 'text-red-600 dark:text-red-400' : countdown.isUrgent ? 'text-amber-600 dark:text-amber-400' : ''}>
-                    {language === 'da' ? 'Frist' : 'Due'}: {td(new Date(invoice.dueDate))}
-                  </span>
-                  {countdown.text && (
-                    <span className={`flex items-center gap-0.5 ${
-                      countdown.isOverdue ? 'text-red-500 dark:text-red-400/80' : countdown.isUrgent ? 'text-amber-500 dark:text-amber-400/80' : 'text-gray-400'
-                    }`}>
-                      <Clock className="h-3 w-3" />
-                      {countdown.text}
+                  {invoice.status === 'PAID' && invoice.paidDate ? (
+                    <span className="flex items-center gap-0.5 text-green-600 dark:text-green-400">
+                      <CheckCircle2 className="h-3 w-3" />
+                      {t('paidDate')} {td(new Date(invoice.paidDate))}
                     </span>
+                  ) : (
+                    <>
+                      <span className={countdown.isOverdue ? 'text-red-600 dark:text-red-400' : countdown.isUrgent ? 'text-amber-600 dark:text-amber-400' : ''}>
+                        {language === 'da' ? 'Frist' : 'Due'}: {td(new Date(invoice.dueDate))}
+                      </span>
+                      {countdown.text && (
+                        <span className={`flex items-center gap-0.5 ${
+                          countdown.isOverdue ? 'text-red-500 dark:text-red-400/80' : countdown.isUrgent ? 'text-amber-500 dark:text-amber-400/80' : 'text-gray-400'
+                        }`}>
+                          <Clock className="h-3 w-3" />
+                          {countdown.text}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -3150,16 +3227,25 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                         <TableCell className="whitespace-nowrap dark:text-gray-400">{td(new Date(invoice.issueDate))}</TableCell>
                         <TableCell className="whitespace-nowrap">
                           <div className="flex flex-col">
-                            <span className={countdown.isOverdue ? 'text-red-600 dark:text-red-400 font-medium' : countdown.isUrgent ? 'text-amber-600 dark:text-amber-400 font-medium' : 'dark:text-gray-400'}>
-                              {td(new Date(invoice.dueDate))}
-                            </span>
-                            {countdown.text && (
-                              <span className={`text-[11px] flex items-center gap-1 ${
-                                countdown.isOverdue ? 'text-red-500 dark:text-red-400/80' : countdown.isUrgent ? 'text-amber-500 dark:text-amber-400/80' : 'text-gray-400'
-                              }`}>
-                                <Clock className="h-3 w-3" />
-                                {countdown.text}
+                            {invoice.status === 'PAID' && invoice.paidDate ? (
+                              <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-medium">
+                                <CheckCircle2 className="h-3 w-3" />
+                                {td(new Date(invoice.paidDate))}
                               </span>
+                            ) : (
+                              <>
+                                <span className={countdown.isOverdue ? 'text-red-600 dark:text-red-400 font-medium' : countdown.isUrgent ? 'text-amber-600 dark:text-amber-400 font-medium' : 'dark:text-gray-400'}>
+                                  {td(new Date(invoice.dueDate))}
+                                </span>
+                                {countdown.text && (
+                                  <span className={`text-[11px] flex items-center gap-1 ${
+                                    countdown.isOverdue ? 'text-red-500 dark:text-red-400/80' : countdown.isUrgent ? 'text-amber-500 dark:text-amber-400/80' : 'text-gray-400'
+                                  }`}>
+                                    <Clock className="h-3 w-3" />
+                                    {countdown.text}
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         </TableCell>
@@ -3198,7 +3284,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                                   {invoice.status === 'SENT' ? (language === 'da' ? 'Send igen' : 'Send Again') : (language === 'da' ? 'Send' : 'Send')}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  onClick={() => handleUpdateStatus(invoice.id, 'PAID')}
+                                  onClick={() => openMarkPaidDialog(invoice)}
                                   disabled={invoice.status === 'PAID'}
                                   className={invoice.status === 'PAID' ? 'font-semibold bg-green-50 dark:bg-green-900/20' : ''}
                                 >
@@ -3365,6 +3451,100 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
         onSend={handleSendInvoice}
         onClose={() => setSendDialogInvoice(null)}
       />
+
+      {/* "Mark as paid" dialog — lets the user pick the payment date */}
+      <Dialog open={!!markPaidInvoice} onOpenChange={(open) => { if (!open) closeMarkPaidDialog(); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              {t('markPaidTitle')}
+            </DialogTitle>
+            <DialogDescription>{t('markPaidDescription')}</DialogDescription>
+          </DialogHeader>
+
+          {markPaidInvoice && (
+            <div className="space-y-4">
+              {/* Invoice summary */}
+              <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-gray-900 dark:text-white">
+                    {markPaidInvoice.invoiceNumber}
+                  </span>
+                  <span className="font-bold text-gray-900 dark:text-white">
+                    {tc(markPaidInvoice.total)}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 truncate">
+                  {markPaidInvoice.customerName}
+                </div>
+              </div>
+
+              {/* Paid date picker */}
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">{t('paidDate')}</Label>
+                <div className="flex items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal h-10"
+                      >
+                        <CalendarDays className="h-4 w-4 mr-2 text-[#0d9488]" />
+                        {markPaidDate
+                          ? format(markPaidDate, 'dd/MM-yyyy', { locale: isDanish ? da : enGB })
+                          : (language === 'da' ? 'Vælg dato' : 'Pick a date')}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={markPaidDate}
+                        onSelect={setMarkPaidDate}
+                        initialFocus
+                        locale={isDanish ? da : enGB}
+                        disabled={(date) => date > new Date() || date < new Date('2000-01-01')}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 px-3 text-xs whitespace-nowrap"
+                    onClick={() => setMarkPaidDate(new Date())}
+                    disabled={!markPaidDate || format(markPaidDate, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')}
+                  >
+                    {t('paidDateToday')}
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  {language === 'da'
+                    ? 'Betalingsdatoen bruges som bogføringsdato på indbetalingsbilaget (Debet Bank / Kredit Tilgodehavender).'
+                    : 'The payment date is used as the booking date of the cash receipt entry (Debit Bank / Credit Receivables).'}
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={closeMarkPaidDialog} disabled={markPaidSubmitting}>
+                  {language === 'da' ? 'Annuller' : 'Cancel'}
+                </Button>
+                <Button
+                  onClick={confirmMarkPaid}
+                  disabled={markPaidSubmitting || !markPaidDate}
+                  className="bg-green-600 hover:bg-green-700 text-white gap-1.5"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {markPaidSubmitting
+                    ? (language === 'da' ? 'Gemmer…' : 'Saving…')
+                    : t('markPaidConfirm')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       {sendEInvoiceInvoice && (
         <SendEInvoiceDialog
           invoice={sendEInvoiceInvoice}

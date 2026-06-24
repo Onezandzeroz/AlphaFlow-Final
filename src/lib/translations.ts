@@ -1090,6 +1090,30 @@ export const translations = {
     da: 'Skift status',
     en: 'Change status',
   },
+  markPaidTitle: {
+    da: 'Markér som betalt',
+    en: 'Mark as paid',
+  },
+  markPaidDescription: {
+    da: 'Vælg den dato, hvor fakturaen blev betalt. Som standard bruges dags dato.',
+    en: 'Choose the date the invoice was paid. Today is used by default.',
+  },
+  paidDate: {
+    da: 'Betalt d.',
+    en: 'Paid on',
+  },
+  paidDateToday: {
+    da: 'I dag',
+    en: 'Today',
+  },
+  markPaidConfirm: {
+    da: 'Bekræft betaling',
+    en: 'Confirm payment',
+  },
+  invoiceMarkedPaid: {
+    da: 'Faktura markeret som betalt',
+    en: 'Invoice marked as paid',
+  },
   nextInvoiceNumber: {
     da: 'Næste fakturanummer',
     en: 'Next Invoice Number',

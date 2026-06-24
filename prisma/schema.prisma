@@ -506,6 +506,7 @@ model Invoice {
   customerCvr     String?
   issueDate       DateTime
   dueDate         DateTime
+  paidDate        DateTime?   // Date the invoice was paid (user-selectable; null until status → PAID)
   lineItems       Json
   subtotal        Decimal       @db.Decimal(18, 2)
   vatTotal        Decimal       @db.Decimal(18, 2)
