@@ -81,7 +81,9 @@ export function HermesPanel({
           exit={{ opacity: 0, y: -10, scaleY: 0.9, originY: 0 }}
           transition={{ type: 'spring', stiffness: 350, damping: 30 }}
           className="pointer-events-auto fixed right-1 top-[68px] lg:right-16 lg:top-[152px] z-[10000] flex flex-col overflow-hidden rounded-2xl border border-teal-200/30 bg-white/85 shadow-2xl backdrop-blur-xl dark:border-teal-800/20 dark:bg-gray-900/85
-            w-[calc(100vw-2rem)] max-w-[840px] h-[calc(100vh-76px)]
+            w-[calc(100vw-2rem)] max-w-[840px]
+            h-[calc(100vh-68px-8px)]
+            lg:h-[calc(100vh-152px-8px)]
             md:w-[760px]"
         >
           {/* ── Header ── */}
