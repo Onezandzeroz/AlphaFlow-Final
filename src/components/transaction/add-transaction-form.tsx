@@ -630,50 +630,92 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     }
 
     // ── Apply OCR results ──
-    // The date goes to the Purchase Lines card.
-    // Everything else (line items) also goes to the Purchase Lines card.
-    // The Purchase Note & Receipts card stays independent (user enters manually).
+    // In CARDS layout (desktop): OCR data → purchase lines (visible in the
+    //   "Købslinjer" card, where the user can assign accounts per line).
+    // In COMPACT layout (mobile dialog): purchase lines are NOT rendered, so
+    //   sending OCR data there creates invisible lines with empty accounts
+    //   that block submission ("Alle købslinjer med data skal have en konto").
+    //   Instead, route OCR data to the visible amount/description/VAT fields
+    //   (the "receipt card" fields) so the user can see and edit them.
 
-    // Date → date field on the Purchase Lines card
-    if (result.date && !purchaseLinesDateManuallySetRef.current) {
-      setPurchaseLinesDate(result.date);
+    // Date → date field (compact: the main date field; cards: purchase-lines date)
+    if (result.date) {
+      if (layout === 'cards' && !purchaseLinesDateManuallySetRef.current) {
+        setPurchaseLinesDate(result.date);
+      } else if (layout !== 'cards' && !dateManuallySetRef.current) {
+        setDate(result.date);
+      }
     }
 
-    // Build purchase lines from structured line items (VLM or Tesseract table extraction)
-    let newLines: PurchaseLineItem[] = [];
+    if (layout === 'cards') {
+      // Desktop: populate purchase lines as before
+      let newLines: PurchaseLineItem[] = [];
 
-    if (result.lineItems.length > 0) {
-      // Structured line items with description, quantity, unitPrice, vatPercent
-      newLines = result.lineItems.map((line) => ({
-        description: line.description || '',
-        quantity: line.quantity || 1,
-        unitPrice: line.unitPrice || 0,
-        vatPercent: line.vatPercent || 25,
-        accountId: '',
-      }));
-    }
+      if (result.lineItems.length > 0) {
+        newLines = result.lineItems.map((line) => ({
+          description: line.description || '',
+          quantity: line.quantity || 1,
+          unitPrice: line.unitPrice || 0,
+          vatPercent: line.vatPercent || 25,
+          accountId: '',
+        }));
+      }
 
-    // If no line items were extracted but we have a total, create a single line
-    if (newLines.length === 0 && result.amount !== null) {
-      newLines.push({
-        description: result.description || (isDa ? 'Køb' : 'Purchase'),
-        quantity: 1,
-        unitPrice: result.amount,
-        vatPercent: result.vatPercent ?? 25,
-        accountId: '',
-      });
-    }
+      if (newLines.length === 0 && result.amount !== null) {
+        newLines.push({
+          description: result.description || (isDa ? 'Køb' : 'Purchase'),
+          quantity: 1,
+          unitPrice: result.amount,
+          vatPercent: result.vatPercent ?? 25,
+          accountId: '',
+        });
+      }
 
-    if (newLines.length > 0) {
-      setPurchaseLines(newLines);
+      if (newLines.length > 0) {
+        setPurchaseLines(newLines);
+      }
+    } else {
+      // Mobile/compact: route OCR data to the visible amount/description/VAT
+      // fields instead of invisible purchase lines. This prevents the
+      // "Alle købslinjer med data skal have en konto valgt" error when the
+      // user can't see or edit the purchase lines.
+      if (result.amount !== null && !amount) {
+        // Set the gross amount (includes VAT) since most receipts show the
+        // total incl. VAT. The user can toggle "inkl. moms" if needed.
+        const gross = result.lineItems && result.lineItems.length > 0
+          ? result.lineItems.reduce((s, l) => s + (l.unitPrice || 0) * (l.quantity || 1) * (1 + (l.vatPercent || 0) / 100), 0)
+          : result.amount;
+        setAmount(String(Math.round(gross * 100) / 100));
+        // Default to "includes VAT = true" since receipt totals are gross
+        if (!includesVAT) setIncludesVAT(true);
+      }
+      if (result.description && !description) {
+        setDescription(result.description);
+      } else if (!description && result.lineItems && result.lineItems.length > 0) {
+        // Use the first line item's description as a fallback
+        const firstDesc = result.lineItems.find(l => l.description?.trim())?.description;
+        if (firstDesc) setDescription(firstDesc);
+      }
+      if (result.vatPercent !== null && result.vatPercent !== undefined) {
+        setVatPercent(String(result.vatPercent));
+      }
+      // Clear any stale purchase lines so they don't block submission
+      setPurchaseLines([{ ...EMPTY_LINE_ITEM }]);
     }
 
     // Show result toast
-    if (result.confidence > 0 && (result.amount || result.date || newLines.length > 0)) {
+    const lineCount = layout === 'cards'
+      ? (result.lineItems?.length || (result.amount !== null ? 1 : 0))
+      : 0;
+    if (result.confidence > 0 && (result.amount || result.date || lineCount > 0)) {
       toast.success(isDa ? 'Dokument læst' : 'Document scanned', {
         description: isDa
-          ? `Fundet ${newLines.length} købslinje${newLines.length !== 1 ? 'r' : ''}${result.amount ? `, beløb: ${result.amount} kr` : ''}${result.date ? `, dato: ${result.date}` : ''}`
-          : `Found ${newLines.length} line item${newLines.length !== 1 ? 's' : ''}${result.amount ? `, amount: ${result.amount} DKK` : ''}${result.date ? `, date: ${result.date}` : ''}`,
+          ? layout === 'cards'
+            ? `Fundet ${lineCount} købslinje${lineCount !== 1 ? 'r' : ''}${result.amount ? `, beløb: ${result.amount} kr` : ''}${result.date ? `, dato: ${result.date}` : ''}`
+            : `Beløb: ${result.amount ?? '—'} kr${result.date ? `, dato: ${result.date}` : ''}`
+          : layout === 'cards'
+            ? `Found ${lineCount} line item${lineCount !== 1 ? 's' : ''}${result.amount ? `, amount: ${result.amount} DKK` : ''}${result.date ? `, date: ${result.date}` : ''}`
+            : `Amount: ${result.amount ?? '—'} DKK${result.date ? `, date: ${result.date}` : ''}`,
         duration: 4000,
       });
     } else {
@@ -813,8 +855,13 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       return;
     }
 
-    // Validate purchase line accounts when lines have data
-    if (purchaseLinesHasData) {
+    // Validate purchase line accounts when lines have data.
+    // SAFETY NET: in compact (mobile) layout, purchase lines are NOT rendered,
+    // so the user can't assign accounts to them. Skip this check when the
+    // receipt card has data (amount filled in) — the submission will use the
+    // receipt card data, not the purchase lines. This prevents OCR populating
+    // invisible lines from blocking submission on mobile.
+    if (purchaseLinesHasData && !(layout !== 'cards' && receiptCardHasData)) {
       const lineMissingAccount = purchaseLines.find(
         line => (line.description?.trim() || line.unitPrice > 0) && !line.accountId
       );
