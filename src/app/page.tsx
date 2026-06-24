@@ -378,6 +378,7 @@ export default function Home() {
   const { guardWriteAccess } = useWriteAccessGuard(user);
 
   const handleOpenScanner = useCallback(() => {
+    console.log(`[RECEIPT-FLOW] FAB handleOpenScanner (page-level, owner=null)`);
     guardWriteAccess(t('addTransaction'), () => useScannerStore.getState().openScanner());
   }, [guardWriteAccess, t]);
 
@@ -390,6 +391,7 @@ export default function Home() {
   }, [navigateToView]);
 
   const handleStandaloneDismiss = useCallback(() => {
+    console.log(`[RECEIPT-FLOW] handleStandaloneDismiss (scanner dismissed without capture)`);
     useScannerStore.getState().closeScanner();
   }, []);
 

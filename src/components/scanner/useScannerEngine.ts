@@ -1226,6 +1226,7 @@ export function useScannerEngine() {
 
             const file = new File([blob], `receipt_${Date.now()}.jpg`, { type: 'image/jpeg' });
             const url = URL.createObjectURL(blob);
+            console.log(`[RECEIPT-FLOW] useScannerEngine: file created=${file.name} (${file.size} bytes), setting phase=result`);
             setScannedUrl(url);
             setScannedFile(file);
             setPhase('result');

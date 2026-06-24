@@ -76,13 +76,20 @@ export function ReceiptScanner({
   useEffect(() => { onDismissRef.current = onDismiss; }, [onDismiss]);
 
   const handleUse = () => {
-    if (!scannedFile) return;
+    console.log(`[RECEIPT-FLOW] ReceiptScanner.handleUse called: scannedFile=${scannedFile ? scannedFile.name : 'null'} (${scannedFile?.size ?? 0} bytes)`);
+    if (!scannedFile) {
+      console.log(`[RECEIPT-FLOW] handleUse: no scannedFile, aborting`);
+      return;
+    }
     const file = scannedFile;
-    discardScan(); // Revoke ObjectURL — file is now owned by consumer
+    console.log(`[RECEIPT-FLOW] handleUse: calling onCaptureRef.current with file=${file.name}`);
     onCaptureRef.current(file);
+    console.log(`[RECEIPT-FLOW] handleUse: onCaptureRef.current returned, now discarding scan`);
+    discardScan(); // Revoke ObjectURL — file is now owned by consumer
   };
 
   const handleDismiss = () => {
+    console.log(`[RECEIPT-FLOW] ReceiptScanner.handleDismiss called`);
     discardScan(); // Free Blob + revoke ObjectURL immediately
     onDismissRef.current?.();
   };
