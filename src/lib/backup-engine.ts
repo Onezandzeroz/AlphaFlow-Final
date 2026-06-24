@@ -1346,6 +1346,10 @@ async function importTenantDataFromZip(
       // The old invoice ID may be stored in _invoiceRef or invoiceId.
       const oldInvId = (es._invoiceRef as string) ?? (es.invoiceId as string) ?? null;
       const mappedInvId = oldInvId ? (invoiceIdMap.get(oldInvId) ?? null) : null;
+      // EInvoiceSending.invoiceId is a required (non-nullable) String FK.
+      // If we can't map the old invoice ID to a new one, skip this record
+      // rather than creating an orphaned sending with a dangling reference.
+      if (!mappedInvId) continue;
 
       await tx.eInvoiceSending.create({
         data: {
