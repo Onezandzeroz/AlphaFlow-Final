@@ -65,6 +65,47 @@ export interface VATRegisterResult {
 
 export const r2 = (n: number) => Math.round(n * 100) / 100;
 
+// ─── Helper: extract companyId(s) from a tenantFilter-merged whereClause ──────
+// The whereClause passed to computeVATRegister() is merged with tenantFilter(ctx),
+// which produces either `{ companyId: <id> }` (normal/oversight mode) or
+// `{ companyId: { in: [<ids>] } }` (multi-tenant). We need the companyId(s) to
+// scope the cancelled-transaction exclusion query to the same tenant(s).
+function extractCompanyIds(whereClause: Record<string, unknown>): string[] {
+  const v = whereClause.companyId;
+  if (typeof v === 'string') return [v];
+  if (v && typeof v === 'object' && Array.isArray((v as { in?: unknown }).in)) {
+    return (v as { in: unknown[] }).in.filter((x): x is string => typeof x === 'string');
+  }
+  return [];
+}
+
+/**
+ * Get the journal-entry reference strings that belong to cancelled transactions
+ * for the given company(ies). Returns BOTH the original (`TX-<id8>`) and the
+ * reversal (`REVERSAL-TX-<id8>`) references so callers can exclude them from
+ * VAT aggregation / drill-down queries.
+ *
+ * This is exported so that API routes which fetch raw journal entries for
+ * display (e.g. /api/vat-register's drill-down table) can apply the SAME
+ * exclusion as computeVATRegister(), keeping totals and line items consistent.
+ *
+ * Returns an empty array if there are no cancelled transactions.
+ */
+export async function getCancelledTxReferences(companyIds: string[]): Promise<string[]> {
+  if (companyIds.length === 0) return [];
+  const cancelledTxs = await db.transaction.findMany({
+    where: { cancelled: true, companyId: { in: companyIds } },
+    select: { id: true },
+  });
+  const refs: string[] = [];
+  for (const tx of cancelledTxs) {
+    const shortId = tx.id.slice(0, 8);
+    refs.push(`TX-${shortId}`);
+    refs.push(`REVERSAL-TX-${shortId}`);
+  }
+  return refs;
+}
+
 // ─── CORE: computeVATRegister — the single source of truth for VAT totals ───
 
 /**
@@ -74,14 +115,37 @@ export const r2 = (n: number) => Math.round(n * 100) / 100;
  * Both the /api/vat-register endpoint and the server-side CSV export
  * call this function to ensure consistency.
  *
+ * CANCELLED TRANSACTIONS ARE EXCLUDED:
+ * The accounting model uses reversal entries (modposteringer) rather than
+ * flagging the original journal entry as `cancelled`. This means the original
+ * JE stays POSTED + not-cancelled, and a separate reversal JE (reference
+ * `REVERSAL-TX-<id8>`) with swapped debit/credit is created to neutralise it.
+ *
+ * That design works for the ledger (both entries net to zero), BUT for VAT
+ * reporting it breaks when the cancellation crosses a VAT period boundary:
+ * the original VAT lands in period A, the reversal in period B, so neither
+ * period nets to zero. To make VAT totals correct and fail-proof regardless
+ * of when the cancellation happened, we explicitly exclude BOTH the original
+ * and reversal JEs of any cancelled transaction from the aggregation.
+ *
  * @param whereClause - Prisma JournalEntryWhereInput (must include status: 'POSTED',
  *                      cancelled: false, and date range). The caller adds tenantFilter.
  */
 export async function computeVATRegister(
   whereClause: Record<string, unknown>,
 ): Promise<VATRegisterResult> {
+  // ── Exclude journal entries belonging to cancelled transactions ──────
+  const companyIds = extractCompanyIds(whereClause);
+  const excludedReferences = await getCancelledTxReferences(companyIds);
+
+  // Merge the exclusion into the caller's whereClause without mutating it.
+  const effectiveWhere: Record<string, unknown> = { ...whereClause };
+  if (excludedReferences.length > 0) {
+    effectiveWhere.reference = { notIn: excludedReferences };
+  }
+
   const entries = await db.journalEntry.findMany({
-    where: whereClause,
+    where: effectiveWhere,
     include: {
       lines: {
         include: { account: true },

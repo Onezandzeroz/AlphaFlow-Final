@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
-import { computeVATRegister } from '@/lib/vat-utils';
+import { computeVATRegister, getCancelledTxReferences } from '@/lib/vat-utils';
 import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
 
@@ -49,13 +49,20 @@ export const GET = withGuard(
         date: { gte: fromDate, lte: toDate },
       });
 
-      // Also return raw entries for detailed inspection (tables, drill-down)
+      // Also return raw entries for detailed inspection (tables, drill-down).
+      // IMPORTANT: apply the SAME cancelled-transaction exclusion as
+      // computeVATRegister() so the drill-down line items match the totals.
+      const tenant = tenantFilter(ctx);
+      const companyId = typeof tenant.companyId === 'string' ? tenant.companyId : '';
+      const excludedRefs = await getCancelledTxReferences(companyId ? [companyId] : []);
+
       const entries = await db.journalEntry.findMany({
         where: {
-          ...tenantFilter(ctx),
+          ...tenant,
           status: 'POSTED',
           cancelled: false,
           date: { gte: fromDate, lte: toDate },
+          ...(excludedRefs.length > 0 ? { reference: { notIn: excludedRefs } } : {}),
         },
         include: { lines: { include: { account: true } } },
         orderBy: { date: 'desc' },

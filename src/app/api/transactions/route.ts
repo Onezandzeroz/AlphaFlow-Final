@@ -484,10 +484,21 @@ export const DELETE = withGuard({
     });
 
     for (const originalJE of originalJournalEntries) {
-      // Create the reversal entry with swapped debit/credit on each line
+      // Create the reversal entry with swapped debit/credit on each line.
+      //
+      // DATE: the reversal is dated at the ORIGINAL journal entry's date — NOT
+      // `new Date()` (today). This is critical for period-based reports (VAT,
+      // profit & loss): if the reversal were dated at the cancellation date and
+      // that falls in a different reporting period, the original and reversal
+      // would not net to zero within any single period's report, leaving stale
+      // VAT/amounts in the original period. Dating the reversal at the original
+      // date keeps both entries in the same period so they always net out.
+      // (computeVATRegister additionally excludes cancelled-transaction JEs as
+      // a belt-and-suspenders safeguard, but dating them in the same period is
+      // the correct accounting treatment and keeps the ledger consistent too.)
       const reversalJE = await db.journalEntry.create({
         data: {
-          date: new Date(),
+          date: originalJE.date,
           description: `Annullering – ${originalJE.description}`,
           reference: `REVERSAL-${originalJE.reference || txRefPrefix}`,
           status: 'POSTED',
@@ -509,7 +520,7 @@ export const DELETE = withGuard({
       });
 
       logger.info(
-        `[TRANSACTION CANCEL] Created reversal journal entry ${reversalJE.id} (reference: ${reversalJE.reference}) for transaction ${id}`
+        `[TRANSACTION CANCEL] Created reversal journal entry ${reversalJE.id} (reference: ${reversalJE.reference}, date: ${originalJE.date.toISOString()}) for transaction ${id}`
       );
     }
 
