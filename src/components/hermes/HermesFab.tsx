@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import { useTranslation } from '@/lib/use-translation';
 
 interface HermesFabProps {
   onClick: () => void;
@@ -9,6 +10,7 @@ interface HermesFabProps {
 }
 
 export function HermesFab({ onClick, hasNotifications, isTyping }: HermesFabProps) {
+  const { t } = useTranslation();
   return (
     <>
       {/* ── Mobile: 60×60, positioned in header ── */}
@@ -19,7 +21,7 @@ export function HermesFab({ onClick, hasNotifications, isTyping }: HermesFabProp
           onClick={onClick}
           role="button"
           tabIndex={0}
-          aria-label="Open Hermes AI assistant"
+          aria-label={t('hermesOpenAssistant')}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -81,7 +83,7 @@ export function HermesFab({ onClick, hasNotifications, isTyping }: HermesFabProp
           onClick={onClick}
           role="button"
           tabIndex={0}
-          aria-label="Open Hermes AI assistant"
+          aria-label={t('hermesOpenAssistant')}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();

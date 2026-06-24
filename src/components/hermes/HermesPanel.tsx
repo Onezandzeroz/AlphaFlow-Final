@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Wifi, WifiOff } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useTranslation } from '@/lib/use-translation';
 import type { ChatMessage } from './types';
 
 interface HermesPanelProps {
@@ -35,6 +36,7 @@ export function HermesPanel({
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { t, language } = useTranslation();
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -95,12 +97,12 @@ export function HermesPanel({
                 {isConnected ? (
                   <>
                     <Wifi className="h-3 w-3 text-teal-500" />
-                    <span className="text-[11px] text-teal-600 dark:text-teal-400">Forbundet</span>
+                    <span className="text-[11px] text-teal-600 dark:text-teal-400">{t('hermesConnected')}</span>
                   </>
                 ) : (
                   <>
                     <WifiOff className="h-3 w-3 text-gray-400" />
-                    <span className="text-[11px] text-gray-500">Ikke forbundet</span>
+                    <span className="text-[11px] text-gray-500">{t('hermesDisconnected')}</span>
                   </>
                 )}
               </div>
@@ -108,7 +110,7 @@ export function HermesPanel({
             <button
               onClick={onClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-teal-600/70 transition-colors hover:bg-teal-100/80 hover:text-teal-800 dark:text-teal-400/70 dark:hover:bg-teal-800/40 dark:hover:text-teal-200"
-              aria-label="Luk chat"
+              aria-label={t('hermesCloseChat')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -121,7 +123,7 @@ export function HermesPanel({
                 {messages.length === 0 && (
                   <div className="flex flex-1 items-center justify-center py-16">
                     <p className="text-center text-sm text-muted-foreground">
-                      {greeting || `Start en samtale med ${agentName}…`}
+                      {greeting || `${t('hermesStartConversation')} ${agentName}…`}
                     </p>
                   </div>
                 )}
@@ -138,7 +140,7 @@ export function HermesPanel({
                     className="flex items-center gap-2 px-3 py-2"
                   >
                     <span className="text-xs italic text-teal-600/70 dark:text-teal-400/70">
-                      {agentName} tænker…
+                      {agentName} {t('hermesThinking')}
                     </span>
                     <ThinkingDots />
                   </motion.div>
@@ -155,16 +157,16 @@ export function HermesPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={`Spørg ${agentName}…`}
+                placeholder={`${t('hermesAskPlaceholder')} ${agentName}…`}
                 disabled={isDisabled}
                 className="flex-1 min-w-0 rounded-xl border border-teal-200/40 bg-white/60 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-all focus:border-teal-400/60 focus:ring-2 focus:ring-teal-400/20 disabled:cursor-not-allowed disabled:opacity-50 dark:border-teal-700/30 dark:bg-gray-800/60 dark:focus:border-teal-500/60 dark:focus:ring-teal-500/20"
-                aria-label="Chat message input"
+                aria-label={t('hermesMessageInput')}
               />
               <button
                 type="submit"
                 disabled={isDisabled || !input.trim()}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0d9488] to-[#0e7490] text-white shadow-md transition-all hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label="Send message"
+                aria-label={t('hermesSendMessage')}
               >
                 <Send className="h-4 w-4" />
               </button>
@@ -179,6 +181,7 @@ export function HermesPanel({
 /* ── Message Bubble ── */
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isHermes = message.role === 'hermes';
+  const { language } = useTranslation();
 
   return (
     <motion.div
@@ -219,7 +222,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
               : 'text-gray-400 dark:text-gray-500'
           }`}
         >
-          {formatTime(message.timestamp)}
+          {formatTime(message.timestamp, language)}
         </div>
       </div>
     </motion.div>
@@ -248,8 +251,8 @@ function ThinkingDots() {
 }
 
 /* ── Helpers ── */
-function formatTime(date: Date): string {
-  return new Date(date).toLocaleTimeString('da-DK', {
+function formatTime(date: Date, language: 'da' | 'en'): string {
+  return new Date(date).toLocaleTimeString(language === 'da' ? 'da-DK' : 'en-GB', {
     hour: '2-digit',
     minute: '2-digit',
   });

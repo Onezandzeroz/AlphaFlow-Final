@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import { useTranslation } from '@/lib/use-translation';
 import {
   Info,
   Brain,
@@ -36,6 +37,7 @@ interface HermesSettingsProps {
 // ── Component ──────────────────────────────────────────────────────
 
 export function HermesSettings({ user }: HermesSettingsProps) {
+  const { t, language } = useTranslation();
   const [config, setConfig] = useState<HermesConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isToggling, setIsToggling] = useState(false);
@@ -57,11 +59,11 @@ export function HermesSettings({ user }: HermesSettingsProps) {
         const data = await response.json();
         setConfig(data.hermesConfig ?? data);
       } else {
-        toast.error('Failed to load Hermes configuration');
+        toast.error(t('hermesToastLoadFailed'));
       }
     } catch (error) {
       console.error('Failed to fetch Hermes config:', error);
-      toast.error('Failed to load Hermes configuration');
+      toast.error(t('hermesToastLoadFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -74,7 +76,7 @@ export function HermesSettings({ user }: HermesSettingsProps) {
   // ── Toggle data access ──
   const handleDataAccessToggle = useCallback(async (enabled: boolean) => {
     if (!canToggle) {
-      toast.error('Only company owners or admins can manage Hermes data access.');
+      toast.error(t('hermesToastOnlyOwner'));
       return;
     }
 
@@ -90,16 +92,16 @@ export function HermesSettings({ user }: HermesSettingsProps) {
         setConfig(prev => prev ? { ...prev, dataAccessEnabled: enabled } : prev);
         toast.success(
           enabled
-            ? 'Hermes can now access your accounting data'
-            : 'Hermes data access has been revoked'
+            ? t('hermesToastDataAccessGranted')
+            : t('hermesToastDataAccessRevoked')
         );
       } else {
         const data = await response.json();
-        toast.error(data.error || 'Failed to update data access setting');
+        toast.error(data.error || t('hermesToastDataAccessFailed'));
       }
     } catch (error) {
       console.error('Failed to toggle data access:', error);
-      toast.error('Failed to update data access setting');
+      toast.error(t('hermesToastDataAccessFailed'));
     } finally {
       setIsToggling(false);
     }
@@ -118,14 +120,14 @@ export function HermesSettings({ user }: HermesSettingsProps) {
       });
       if (response.ok) {
         setConfig(prev => prev ? { ...prev, enabled } : prev);
-        toast.success(enabled ? 'Hermes AI has been enabled for this company' : 'Hermes AI has been disabled');
+        toast.success(enabled ? t('hermesToastEnabled') : t('hermesToastDisabled'));
       } else {
         const data = await response.json();
-        toast.error(data.error || 'Failed to toggle Hermes');
+        toast.error(data.error || t('hermesToastToggleFailed'));
       }
     } catch (error) {
       console.error('Failed to toggle Hermes:', error);
-      toast.error('Failed to toggle Hermes');
+      toast.error(t('hermesToastToggleFailed'));
     } finally {
       setIsToggling(false);
     }
@@ -157,12 +159,14 @@ export function HermesSettings({ user }: HermesSettingsProps) {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-amber-700 dark:text-amber-400">
-                Hermes AI Consultant
+                {t('hermesSettingsTitle')}
               </h2>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {isSuperDev
-                  ? 'AI-powered Danish accounting assistant — Platform Administration'
-                  : 'AI-powered Danish accounting assistant — included in your plan'}
+                  ? t('hermesSettingsSubtitleAdmin')
+                  : language === 'da'
+                    ? 'AI-drevet dansk regnskabsassistent — inkluderet i din plan'
+                    : 'AI-powered Danish accounting assistant — included in your plan'}
               </p>
             </div>
           </div>
@@ -175,16 +179,16 @@ export function HermesSettings({ user }: HermesSettingsProps) {
                   </div>
                   <div>
                     <h3 className="text-base font-semibold text-gray-900 dark:text-white">
-                      Hermes AI Consultant
+                      {t('hermesSettingsTitle')}
                     </h3>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {user.activeCompanyName || 'Current company'}
+                      {user.activeCompanyName || t('hermesCurrentCompany')}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Label htmlFor="hermes-enable" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Enable Hermes
+                    {language === 'da' ? 'Aktivér Hermes' : 'Enable Hermes'}
                   </Label>
                   <ResponsiveSwitch
                     checked={false}
@@ -196,7 +200,7 @@ export function HermesSettings({ user }: HermesSettingsProps) {
               {isToggling && (
                 <div className="flex items-center gap-2 text-xs text-gray-500 mt-4">
                   <div className="h-3 w-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                  Updating...
+                  {t('hermesUpdating')}
                 </div>
               )}
             </CardContent>
@@ -214,15 +218,17 @@ export function HermesSettings({ user }: HermesSettingsProps) {
           </div>
           <div className="space-y-2 max-w-md">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Hermes AI Consultant
+              {t('hermesSettingsTitle')}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Hermes AI er inkluderet i Pro, Business og Business Extended abonnementer. Opgrader din plan for at få adgang til AI-drevet bogføringsrådgivning.
+              {language === 'da'
+                ? 'Hermes AI er inkluderet i Pro, Business og Business Extended abonnementer. Opgrader din plan for at få adgang til AI-drevet bogføringsrådgivning.'
+                : 'Hermes AI is included in Pro, Business, and Business Extended plans. Upgrade your plan to access AI-powered accounting advice.'}
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-full bg-amber-100 dark:bg-amber-900/30 px-4 py-2 text-amber-700 dark:text-amber-400">
             <Info className="h-4 w-4" />
-            <span className="text-xs font-medium">Kræver Pro eller højere</span>
+            <span className="text-xs font-medium">{t('hermesRequiresPro')}</span>
           </div>
         </CardContent>
       </Card>
@@ -231,35 +237,35 @@ export function HermesSettings({ user }: HermesSettingsProps) {
 
   // ── Hermes enabled ──
   const knowledgeItems = [
-    'Årsregnskabsloven (Danish Annual Accounts Act)',
-    'Moms / VAT reporting and compliance',
-    'Selskabsskat (corporate tax)',
-    'SKAT deadlines and filing requirements',
-    'Faktura krav (invoice requirements)',
-    'EU cross-border rules',
-    'Årsrapport requirements and formats',
+    t('hermesKnowledge1'),
+    t('hermesKnowledge2'),
+    t('hermesKnowledge3'),
+    t('hermesKnowledge4'),
+    t('hermesKnowledge5'),
+    t('hermesKnowledge6'),
+    t('hermesKnowledge7'),
   ];
 
   const capabilities = [
     {
       icon: <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
-      title: 'Track important deadlines',
-      description: 'VAT, tax, and annual report deadlines with proactive reminders.',
+      title: t('hermesCapDeadlinesTitle'),
+      description: t('hermesCapDeadlinesDesc'),
     },
     {
       icon: <BookOpen className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
-      title: 'Answer accounting how-to questions',
-      description: 'Step-by-step guidance for common Danish accounting tasks.',
+      title: t('hermesCapHowToTitle'),
+      description: t('hermesCapHowToDesc'),
     },
     {
       icon: <Brain className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
-      title: 'Help with problem-solving',
-      description: 'Troubleshoot issues with your books, reconciliations, and reports.',
+      title: t('hermesCapProblemTitle'),
+      description: t('hermesCapProblemDesc'),
     },
     {
       icon: <Shield className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
-      title: 'Advise on regulations',
-      description: 'Danish financial regulations and compliance guidance.',
+      title: t('hermesCapRegulationsTitle'),
+      description: t('hermesCapRegulationsDesc'),
     },
   ];
 
@@ -273,10 +279,10 @@ export function HermesSettings({ user }: HermesSettingsProps) {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-amber-700 dark:text-amber-400">
-              Hermes AI Consultant
+              {t('hermesSettingsTitle')}
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {isSuperDev ? 'AI-powered Danish accounting assistant — Platform Administration' : 'Your AI-powered Danish accounting assistant'}
+              {isSuperDev ? t('hermesSettingsSubtitleAdmin') : t('hermesSettingsSubtitle')}
             </p>
           </div>
         </div>
@@ -284,7 +290,7 @@ export function HermesSettings({ user }: HermesSettingsProps) {
         {canToggleHermes && (
           <div className="flex items-center gap-3 shrink-0">
             <Label htmlFor="hermes-disable" className="text-xs font-medium text-gray-500 dark:text-gray-400">
-              Enabled
+              {t('hermesEnabled')}
             </Label>
             <ResponsiveSwitch
               checked={config?.enabled ?? false}
@@ -306,16 +312,16 @@ export function HermesSettings({ user }: HermesSettingsProps) {
               </span>
               <div>
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                  Hermes is active
+                  {t('hermesActive')}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  AI consultant ready for your company
+                  {t('hermesActiveDesc')}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-1.5 rounded-full bg-green-100 dark:bg-green-900/30 px-3 py-1">
               <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                Active
+                {t('hermesActiveBadge')}
               </span>
             </div>
           </div>
@@ -331,17 +337,17 @@ export function HermesSettings({ user }: HermesSettingsProps) {
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shrink-0">
                 <Shield className="h-4 w-4 text-white" />
               </div>
-              Data Access
+              {t('hermesDataAccess')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div className="space-y-1 flex-1 min-w-0">
                 <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Allow Hermes to access your accounting data
+                  {t('hermesDataAccessLabel')}
                 </Label>
                 <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                  When enabled, Hermes can see your financial data (transactions, VAT status, balances) to provide personalized advice and deadline tracking.
+                  {t('hermesDataAccessDesc')}
                 </p>
               </div>
               <ResponsiveSwitch
@@ -354,14 +360,14 @@ export function HermesSettings({ user }: HermesSettingsProps) {
             {!canToggle && (
               <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-2.5 flex items-start gap-2">
                 <Info className="h-4 w-4 shrink-0 mt-0.5" />
-                Only company owners or admins can change this setting.
+                {t('hermesDataAccessOnlyOwner')}
               </p>
             )}
 
             {isToggling && (
               <div className="flex items-center gap-2 text-xs text-gray-500">
                 <div className="h-3 w-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                Updating...
+                {t('hermesUpdating')}
               </div>
             )}
           </CardContent>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Bell, Clock, Info } from 'lucide-react';
+import { useTranslation } from '@/lib/use-translation';
 import type { HermesNotification } from './types';
 
 interface HermesNotificationCardProps {
@@ -21,6 +22,7 @@ export function HermesNotificationCard({
   onDismiss,
 }: HermesNotificationCardProps) {
   const [isVisible, setIsVisible] = useState(true);
+  const { t } = useTranslation();
 
   // Auto-dismiss after 8 seconds
   useEffect(() => {
@@ -79,7 +81,7 @@ export function HermesNotificationCard({
             setTimeout(() => onDismiss(notification.id), 400);
           }}
           className="shrink-0 rounded-md p-1 text-teal-400 transition-colors hover:bg-teal-100 hover:text-teal-600 dark:text-teal-500 dark:hover:bg-teal-800/40 dark:hover:text-teal-300"
-          aria-label="Dismiss notification"
+          aria-label={t('hermesDismissNotification')}
         >
           <X className="h-3.5 w-3.5" />
         </button>
