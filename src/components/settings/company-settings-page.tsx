@@ -613,6 +613,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
             if (companyInfo) {
               setForm({
                 logo: companyInfo.logo || '',
+                showCompanyLogo: !!companyInfo.showCompanyLogo,
                 companyName: companyInfo.companyName || '',
                 address: companyInfo.address || '',
                 phone: companyInfo.phone || '',
