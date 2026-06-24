@@ -246,6 +246,8 @@ async function createTenantSnapshotZip(companyId: string, zipOutputPath: string)
             bankStreet: company.bankStreet,
             bankCity: company.bankCity,
             bankCountry: company.bankCountry,
+            showCompanyLogo: company.showCompanyLogo,
+            logo: company.logo,
             dashboardWidgets: company.dashboardWidgets,
           };
           archive.append(JSON.stringify(companyData, null, 2), { name: 'company.json' });
@@ -267,7 +269,8 @@ async function createTenantSnapshotZip(companyId: string, zipOutputPath: string)
           date: t.date.toISOString().split('T')[0], type: t.type, amount: t.amount,
           currency: t.currency, exchangeRate: t.exchangeRate, amountDKK: t.amountDKK,
           description: t.description, vatPercent: t.vatPercent, receiptImage: t.receiptImage,
-          invoiceId: t.invoiceId, accountId: t.accountId, cancelled: t.cancelled,
+          invoiceId: t.invoiceId, accountId: t.accountId, projectId: t.projectId,
+          cancelled: t.cancelled,
           cancelReason: t.cancelReason, originalId: t.originalId, _ref: t.id,
         })), null, 2), { name: 'transactions.json' });
 
@@ -275,6 +278,7 @@ async function createTenantSnapshotZip(companyId: string, zipOutputPath: string)
           invoiceNumber: inv.invoiceNumber,
           issueDate: inv.issueDate.toISOString().split('T')[0],
           dueDate: inv.dueDate.toISOString().split('T')[0],
+          paidDate: inv.paidDate?.toISOString().split('T')[0] ?? null,
           customerName: inv.customerName, customerAddress: inv.customerAddress,
           customerEmail: inv.customerEmail, customerPhone: inv.customerPhone,
           customerCvr: inv.customerCvr, lineItems: inv.lineItems,
@@ -876,6 +880,8 @@ async function importTenantDataFromZip(
         bankStreet: companyData.bankStreet,
         bankCity: companyData.bankCity,
         bankCountry: companyData.bankCountry,
+        showCompanyLogo: typeof companyData.showCompanyLogo === 'boolean' ? companyData.showCompanyLogo : false,
+        logo: companyData.logo ?? undefined,
         dashboardWidgets: companyData.dashboardWidgets,
       },
     });
@@ -887,7 +893,8 @@ async function importTenantDataFromZip(
   if (accountsFile) {
     const accountsData = JSON.parse(await accountsFile.async('string')) as Array<Record<string, unknown>>;
     for (const a of accountsData) {
-      const oldId = a.id as string;
+      // The export stores the original ID in `_ref` (not `id`).
+      const oldId = (a._ref as string) ?? (a.id as string);
       const created = await tx.account.create({
         data: {
           companyId, userId,
@@ -909,7 +916,7 @@ async function importTenantDataFromZip(
   if (contactsFile) {
     const contactsData = JSON.parse(await contactsFile.async('string')) as Array<Record<string, unknown>>;
     for (const c of contactsData) {
-      const oldId = c.id as string;
+      const oldId = (c._ref as string) ?? (c.id as string);
       const created = await tx.contact.create({
         data: {
           companyId, userId,
@@ -934,7 +941,7 @@ async function importTenantDataFromZip(
   if (invFile) {
     const invData = JSON.parse(await invFile.async('string')) as Array<Record<string, unknown>>;
     for (const inv of invData) {
-      const oldId = inv.id as string;
+      const oldId = (inv._ref as string) ?? (inv.id as string);
       const created = await tx.invoice.create({
         data: {
           companyId, userId,
@@ -946,6 +953,7 @@ async function importTenantDataFromZip(
           customerCvr: (inv.customerCvr as string) ?? null,
           issueDate: new Date(inv.issueDate as string),
           dueDate: new Date(inv.dueDate as string),
+          paidDate: inv.paidDate ? new Date(inv.paidDate as string) : null,
           lineItems: inv.lineItems as string,
           subtotal: inv.subtotal as number, vatTotal: inv.vatTotal as number,
           total: inv.total as number, currency: (inv.currency as string) ?? 'DKK',
@@ -1242,7 +1250,9 @@ async function importTenantDataFromZip(
       await tx.receivedInvoice.create({
         data: {
           companyId,
-          userId: (ri.userId as string) ?? null,
+          // userId/approvedBy/postedBy are userId FKs from the original tenant
+          // that won't exist after restore — null them out to avoid FK violations.
+          userId: null,
           supplierName: ri.supplierName as string,
           supplierCvr: (ri.supplierCvr as string) ?? null,
           supplierEmail: (ri.supplierEmail as string) ?? null,
@@ -1269,11 +1279,12 @@ async function importTenantDataFromZip(
           rawXml: ri.rawXml as string,
           status: (ri.status as ReceivedInvoiceStatus) ?? 'RECEIVED',
           rejectionReason: (ri.rejectionReason as string) ?? null,
-          approvedBy: (ri.approvedBy as string) ?? null,
+          approvedBy: null,
           approvedAt: ri.approvedAt ? new Date(ri.approvedAt as string) : null,
-          postedBy: (ri.postedBy as string) ?? null,
+          postedBy: null,
           postedAt: ri.postedAt ? new Date(ri.postedAt as string) : null,
-          journalEntryId: (ri.journalEntryId as string) ?? null,
+          // journalEntryId references a JE from the old tenant — won't exist.
+          journalEntryId: null,
           responseXml: (ri.responseXml as string) ?? null,
           responseType: (ri.responseType as string) ?? null,
           validationErrors: (ri.validationErrors as string) ?? null,
@@ -1290,26 +1301,38 @@ async function importTenantDataFromZip(
   if (vsFile) {
     const vsData = JSON.parse(await vsFile.async('string')) as Array<Record<string, unknown>>;
     for (const vs of vsData) {
-      await tx.vATSubmission.create({
-        data: {
-          companyId,
-          year: vs.year as number,
-          period: vs.period as VATReportingPeriod,
-          periodFrom: new Date(vs.periodFrom as string),
-          periodTo: new Date(vs.periodTo as string),
-          totalOutputVAT: (vs.totalOutputVAT as number) ?? 0,
-          totalInputVAT: (vs.totalInputVAT as number) ?? 0,
-          netVATPayable: (vs.netVATPayable as number) ?? 0,
-          vatDataJson: vs.vatDataJson ?? {},
-          status: (vs.status as VATSubmissionStatus) ?? 'DRAFT',
-          submittedAt: vs.submittedAt ? new Date(vs.submittedAt as string) : null,
-          submittedBy: (vs.submittedBy as string) ?? null,
-          referenceId: (vs.referenceId as string) ?? null,
-          responseXml: (vs.responseXml as string) ?? null,
-          errorMessage: (vs.errorMessage as string) ?? null,
-          errorCode: (vs.errorCode as string) ?? null,
-        },
-      });
+      // The `submittedBy` field is a userId FK from the original tenant.
+      // After restore, that user may not exist (or may have a different ID),
+      // so we null it out to avoid FK violations. The submission record itself
+      // (status, referenceId, amounts, vatDataJson) is preserved for audit.
+      // Also wrap in try/catch per-row in case of @@unique([companyId, year, period])
+      // conflicts with pre-existing records.
+      try {
+        await tx.vATSubmission.create({
+          data: {
+            companyId,
+            year: vs.year as number,
+            period: vs.period as VATReportingPeriod,
+            periodFrom: new Date(vs.periodFrom as string),
+            periodTo: new Date(vs.periodTo as string),
+            // Decimal fields — cast via Number to avoid Prisma Decimal type issues
+            totalOutputVAT: Number(vs.totalOutputVAT ?? 0),
+            totalInputVAT: Number(vs.totalInputVAT ?? 0),
+            netVATPayable: Number(vs.netVATPayable ?? 0),
+            vatDataJson: vs.vatDataJson ?? {},
+            status: (vs.status as VATSubmissionStatus) ?? 'DRAFT',
+            submittedAt: vs.submittedAt ? new Date(vs.submittedAt as string) : null,
+            submittedBy: null, // old userId won't exist — null out to avoid FK violation
+            referenceId: (vs.referenceId as string) ?? null,
+            responseXml: (vs.responseXml as string) ?? null,
+            errorMessage: (vs.errorMessage as string) ?? null,
+            errorCode: (vs.errorCode as string) ?? null,
+          },
+        });
+      } catch {
+        // Skip duplicate/conflicting VAT submission (unique constraint on
+        // [companyId, year, period] may fire if one already exists)
+      }
     }
     counts.vatSubmissions = vsData.length;
   }
@@ -1319,16 +1342,15 @@ async function importTenantDataFromZip(
   if (esFile) {
     const esData = JSON.parse(await esFile.async('string')) as Array<Record<string, unknown>>;
     for (const es of esData) {
-      // Look up the invoice by _ref to get the new ID
-      let invoiceId: string | null = null;
-      if (es._invoiceRef as string) {
-        const inv = await tx.invoice.findFirst({ where: { companyId, id: es._invoiceRef as string } });
-        if (inv) invoiceId = inv.id;
-      }
+      // Map old invoiceId → new invoiceId via the ID map built during invoice import.
+      // The old invoice ID may be stored in _invoiceRef or invoiceId.
+      const oldInvId = (es._invoiceRef as string) ?? (es.invoiceId as string) ?? null;
+      const mappedInvId = oldInvId ? (invoiceIdMap.get(oldInvId) ?? null) : null;
+
       await tx.eInvoiceSending.create({
         data: {
           companyId,
-          invoiceId: invoiceId ?? (es.invoiceId as string) ?? null,
+          invoiceId: mappedInvId,
           channel: (es.channel as EInvoiceSendChannel) ?? 'NEMHANDEL_OIOUBL',
           status: (es.status as EInvoiceSendStatus) ?? 'PENDING',
           format: (es.format as EInvoiceFormat) ?? 'OIOUBL',
