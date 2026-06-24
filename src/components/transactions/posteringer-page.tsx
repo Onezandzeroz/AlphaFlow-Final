@@ -214,15 +214,21 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   );
 
   // ── Create view: desktop full page, mobile dialog ──
+  // CRITICAL: only render the form instance that matches the current viewport.
+  // Previously BOTH the desktop cards form AND the mobile dialog form mounted
+  // simultaneously (desktop was hidden via CSS but still mounted). Both shared
+  // the same preloadedReceiptFile prop — the desktop form consumed it first
+  // (clearing it to null), so the mobile dialog form never received the file.
+  // Now we gate rendering on isDesktop so only ONE AddTransactionForm exists.
   if (currentView === 'create') {
+    if (isDesktop) {
+      // Desktop: full page only
+      return renderCreatePage();
+    }
+    // Mobile: dialog (list still renders behind it)
     return (
       <>
-        {/* Desktop: full page */}
-        <div className="hidden lg:block">{renderCreatePage()}</div>
-        {/* Mobile: dialog (list still renders behind it) */}
-        <div className="lg:hidden">
-          {renderListContent()}
-        </div>
+        {renderListContent()}
         {renderMobileDialog()}
       </>
     );
