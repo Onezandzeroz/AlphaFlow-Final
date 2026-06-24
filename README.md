@@ -478,8 +478,7 @@ AlphaFlow-ZIPR-D/
 │   │   ├── layout.tsx             # Root layout (fonts, PWA, theme, toaster)
 │   │   ├── error.tsx              # Error boundary page
 │   │   ├── globals.css            # Theme variables, dark mode, animations
-│   │   ├── instrumentation.ts     # Client instrumentation
-│   │   ├── instrumentation.node.ts # Server startup (backup scheduler)
+│   │   ├── instrumentation.ts     # Server startup (NEXT_RUNTIME guard → backup + recurring schedulers)
 │   │   └── api/                   # 89 API route handlers
 │   │       ├── auth/              # 11 routes: login, register, me, logout, etc.
 │   │       ├── accounts/          # 3 routes: CRUD + seed + trend

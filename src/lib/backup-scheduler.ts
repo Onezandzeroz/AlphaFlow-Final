@@ -203,6 +203,24 @@ export async function getCronHealth(companyId: string): Promise<{
     errorMessages.push(`${recentErrors} error(s) in last 24h (from DB log)`);
   }
 
+  // Authoritative failure signal from the Backup table itself: count failed
+  // backup attempts in the last 24h. This catches the case where the scheduler
+  // marked a cycle as "success" in-memory but every createBackup() actually
+  // failed (e.g. ENCRYPTION_KEY missing) and wrote `status: 'failed'` rows.
+  // Without this the UI would show "healthy" while no files exist on disk.
+  const recentFailedBackups = await db.backup.count({
+    where: {
+      companyId,
+      status: 'failed',
+      createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    },
+  }).catch(() => 0);
+
+  if (recentFailedBackups > 0 && !hasError) {
+    hasError = true;
+    errorMessages.push(`${recentFailedBackups} failed backup attempt(s) in last 24h`);
+  }
+
   // Check DB for existing completed automatic backups as the authoritative source
   // This survives server restarts and is independent of in-memory state.
   const existingBackups = await db.backup.count({
@@ -253,6 +271,12 @@ const SCHEDULES: { type: BackupType; cron: string; label: string; jobType: strin
   { type: 'weekly',  cron: '30 3 * * 1',       label: 'Weekly backup',  jobType: 'backup_weekly' },
   { type: 'monthly', cron: '0 4 1 * *',        label: 'Monthly backup', jobType: 'backup_monthly' },
 ];
+
+// Timezone for all backup cron schedules.
+// Danish Bookkeeping Law (Bogføringsloven §15) compliance schedules must fire in
+// Danish local time regardless of the VPS timezone. Override with BACKUP_TIMEZONE
+// env var if deploying to a region that should use a different timezone.
+const BACKUP_TIMEZONE = process.env.BACKUP_TIMEZONE || 'Europe/Copenhagen';
 
 // ─── Scheduled tasks (for cleanup on shutdown) ──────────────────────────────
 const scheduledTasks: ScheduledTask[] = [];
@@ -482,7 +506,31 @@ export function startBackupScheduler(): void {
     return;
   }
 
+  // ── Idempotency guard ──────────────────────────────────────────────────
+  // This function is called from TWO places: (1) the instrumentation hook at
+  // server boot, and (2) ensureInitialBackup() lazily on a tenant's first
+  // transaction. Without this guard both call sites would register duplicate
+  // cron tasks (double ticks, double startup catch-ups, double DB logs).
+  // Mirrors the pattern in recurring-scheduler.ts.
+  if (_schedulerStarted) return;
+  _schedulerStarted = true;
+
   logger.info('[BACKUP-SCHEDULER] Starting backup automation (v2 robust)...');
+
+  // ── ENCRYPTION_KEY preflight ───────────────────────────────────────────
+  // Backups are AES-256-GCM encrypted via encryptFile() which reads
+  // process.env.ENCRYPTION_KEY. If it is missing/invalid EVERY backup will
+  // throw at encryption time. Warn loudly at startup so operators fix the env
+  // before relying on the schedule. The scheduler still starts so that the
+  // per-tenant health UI correctly shows "unhealthy" once cycles fail.
+  if (!process.env.ENCRYPTION_KEY) {
+    logger.error(
+      '[BACKUP-SCHEDULER] CRITICAL: ENCRYPTION_KEY env var is not set. ' +
+      'All tenant backups will fail at encryption time. ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))" ' +
+      'and set it in .env / PM2 ecosystem before relying on backups.'
+    );
+  }
 
   // Hydrate TRIGGERED_COMPANIES from database so companies with existing
   // backups are not incorrectly shown as "idle" after a server restart.
@@ -498,10 +546,10 @@ export function startBackupScheduler(): void {
 
     const task = cron.schedule(cronExpr, () => {
       runScheduledBackupCycle(type);
-    });
+    }, { timezone: BACKUP_TIMEZONE });
 
     scheduledTasks.push(task);
-    logger.info(`[BACKUP-SCHEDULER] Scheduled "${label}" (${type}): ${cronExpr}`);
+    logger.info(`[BACKUP-SCHEDULER] Scheduled "${label}" (${type}): ${cronExpr} [${BACKUP_TIMEZONE}]`);
   }
 
   // Also run a full cleanup cycle daily at 03:00
@@ -536,7 +584,7 @@ export function startBackupScheduler(): void {
     } finally {
       runningJobs.delete('backup_cleanup');
     }
-  });
+  }, { timezone: BACKUP_TIMEZONE });
   scheduledTasks.push(cleanupTask);
 
   // ── Startup catch-up: detect and run missed cron windows ──────────────
@@ -592,6 +640,9 @@ export function stopBackupScheduler(): void {
     task.stop();
   }
   scheduledTasks.length = 0;
+  // Reset the idempotency flag so the scheduler can be cleanly restarted after
+  // a stop (e.g. in tests or a graceful-restart scenario). Mirrors recurring-scheduler.ts.
+  _schedulerStarted = false;
   logger.info('[BACKUP-SCHEDULER] Stopped all scheduled tasks');
 }
 
@@ -731,16 +782,18 @@ async function hydrateTriggeredCompanies(): Promise<void> {
 }
 
 // ─── Lazy-start singleton ─────────────────────────────────────────────────
+// Idempotency flag shared by startBackupScheduler() and ensureSchedulerStarted().
+// Declared here (module scope) so both functions see the same state. The flag is
+// set inside startBackupScheduler() and reset inside stopBackupScheduler().
 let _schedulerStarted = false;
 
 /**
  * Ensure the backup scheduler has been started.
  * Safe to call multiple times — only starts once.
- * Used by ensureInitialBackup as a fallback when instrumentation isn't available.
+ * Used by ensureInitialBackup() as a fallback when the instrumentation hook is
+ * not available (e.g. serverless/edge-only environments). All idempotency is
+ * handled inside startBackupScheduler() via the shared _schedulerStarted flag.
  */
 export function ensureSchedulerStarted(): void {
-  if (_schedulerStarted) return;
-  if (process.env.DISABLE_BACKUP_SCHEDULER === 'true') return;
-  _schedulerStarted = true;
   startBackupScheduler();
 }

@@ -1365,12 +1365,42 @@ export async function cleanupExpiredBackups(companyId: string): Promise<number> 
  * Always uses tenant snapshot scope (full-db was removed for PostgreSQL migration).
  */
 export async function runAutomaticBackup(userId: string, companyId: string, backupType: BackupType): Promise<void> {
-  await createBackup(userId, 'automatic', backupType, companyId, 'tenant', {
+  const result = await createBackup(userId, 'automatic', backupType, companyId, 'tenant', {
     scheduled: true,
     timestamp: new Date().toISOString(),
   });
 
-  // Cleanup old backups for this company
+  // createBackup() swallows errors internally (records a `failed` Backup row and
+  // returns null) so that the manual backup API can surface a clean 500 to the
+  // user. For the *automated* path we MUST NOT do that — otherwise the scheduler's
+  // retry/health logic never sees the failure, withRetry() always reports success,
+  // the CronExecution log is written as "success", and the UI shows "healthy"
+  // while ZERO backup files are actually written to Tenant-Backup/.
+  //
+  // So: if createBackup returned null, surface a real, descriptive error so the
+  // scheduler can retry, mark per-tenant health as unhealthy, and log the cycle
+  // as `error` to the CronExecution table.
+  if (!result) {
+    // Try to surface the *real* cause (e.g. "ENCRYPTION_KEY not set") from the
+    // most recent failed Backup row that createBackup just wrote.
+    let detail = 'createBackup() returned null without throwing';
+    try {
+      const latestFailed = await db.backup.findFirst({
+        where: { companyId, backupType, status: 'failed' },
+        orderBy: { createdAt: 'desc' },
+        select: { errorMessage: true, createdAt: true },
+      });
+      if (latestFailed?.errorMessage) {
+        detail = latestFailed.errorMessage;
+      }
+    } catch {
+      // ignore — fall back to generic detail
+    }
+    throw new Error(`Automatic ${backupType} backup failed for company ${companyId}: ${detail}`);
+  }
+
+  // Cleanup old backups for this company (only on success — no point cleaning
+  // up if we just failed and wrote nothing).
   await cleanupExpiredBackups(companyId);
 }
 
