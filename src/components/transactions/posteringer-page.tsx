@@ -75,16 +75,28 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   useEffect(() => {
     const existing = useScannerStore.getState().pendingResult;
     if (existing && existing.id !== lastConsumedIdRef.current) {
-      // Atomic claim — only succeeds if no AddTransactionForm already grabbed it.
+      console.log(`[RECEIPT-FLOW] PosteringerPage found existing pending result id=${existing.id}, attempting claim`);
       const claimed = useScannerStore.getState().claimResult(POSTERINGER_CONSUMER_ID, existing.id);
-      if (claimed) openFormWithScan(claimed);
+      if (claimed) {
+        console.log(`[RECEIPT-FLOW] PosteringerPage claimed id=${claimed.id} → opening form`);
+        openFormWithScan(claimed);
+      }
     }
     const unsubscribe = useScannerStore.subscribe((state, prevState) => {
       if (state.pendingResult && !prevState.pendingResult) {
+        console.log(`[RECEIPT-FLOW] PosteringerPage subscriber fired: id=${state.pendingResult.id}, owner=${state.scannerOwner}`);
         const resultId = state.pendingResult.id;
-        if (resultId === lastConsumedIdRef.current) return; // already handled
+        if (resultId === lastConsumedIdRef.current) {
+          console.log(`[RECEIPT-FLOW] PosteringerPage skipping already-handled id=${resultId}`);
+          return;
+        }
         const claimed = useScannerStore.getState().claimResult(POSTERINGER_CONSUMER_ID, resultId);
-        if (claimed) openFormWithScan(claimed);
+        if (claimed) {
+          console.log(`[RECEIPT-FLOW] PosteringerPage claimed id=${claimed.id} → opening form`);
+          openFormWithScan(claimed);
+        } else {
+          console.log(`[RECEIPT-FLOW] PosteringerPage claim DENIED (owner=${state.scannerOwner}) — form already claimed it`);
+        }
       }
     });
     return () => unsubscribe();

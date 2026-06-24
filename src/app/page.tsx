@@ -382,6 +382,7 @@ export default function Home() {
   }, [guardWriteAccess, t]);
 
   const handleStandaloneCapture = useCallback((file: File) => {
+    console.log(`[RECEIPT-FLOW] handleStandaloneCapture: file=${file.name} (${file.size} bytes), type=${file.type}`);
     useScannerStore.getState().completeScan(file);
     // Navigate to transactions so PosteringerPage can pick up the scan.
     // If already on transactions, this is a harmless no-op.

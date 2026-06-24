@@ -703,7 +703,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     setReceiptPreview(previewUrl);
     // Scanner captures are always images, never PDFs
     setOriginalWasPdf(false);
-    console.log(`[AddTransactionForm] Receipt applied (${source}), preview URL created:`, previewUrl.slice(0, 40) + '...');
+    console.log(`[RECEIPT-FLOW] applyReceiptFile: source=${source}, file=${file.name}, previewUrl=${previewUrl.slice(0, 40)}...`);
 
     // Auto-scroll to the receipt preview so the user can see it immediately.
     // Use requestAnimationFrame to wait for the DOM to update with the new preview.
@@ -748,11 +748,10 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const lastClaimedScanIdRef = useRef<number>(0);
 
   useEffect(() => {
-    // On mount, claim any pending result owned by THIS form (covers the case
-    // where the scanner was opened from this form and the capture landed
-    // before this effect ran).
+    console.log(`[RECEIPT-FLOW] AddTransactionForm mounted, consumerId=${formConsumerId}, layout=${layout}`);
     const existing = useScannerStore.getState().pendingResult;
     if (existing && existing.id !== lastClaimedScanIdRef.current) {
+      console.log(`[RECEIPT-FLOW] Form ${formConsumerId} found existing pending result id=${existing.id}, attempting claim`);
       const claimed = useScannerStore.getState().claimResult(formConsumerId, existing.id);
       if (claimed) {
         lastClaimedScanIdRef.current = claimed.id;
@@ -760,13 +759,14 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       }
     }
 
-    // Subscribe to future results. claimResult() internally checks ownership,
-    // so even though ALL form instances' subscribers fire, only the owner's
-    // claim succeeds — the others no-op.
     const unsubscribe = useScannerStore.subscribe((state, prevState) => {
+      console.log(`[RECEIPT-FLOW] Form ${formConsumerId} subscriber fired: pendingResult=${state.pendingResult?.id ?? 'null'}, prevPending=${prevState.pendingResult?.id ?? 'null'}, owner=${state.scannerOwner}`);
       if (state.pendingResult && !prevState.pendingResult) {
         const resultId = state.pendingResult.id;
-        if (resultId === lastClaimedScanIdRef.current) return; // already claimed
+        if (resultId === lastClaimedScanIdRef.current) {
+          console.log(`[RECEIPT-FLOW] Form ${formConsumerId} skipping already-claimed id=${resultId}`);
+          return;
+        }
         const claimed = useScannerStore.getState().claimResult(formConsumerId, resultId);
         if (claimed) {
           lastClaimedScanIdRef.current = claimed.id;
@@ -774,14 +774,24 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         }
       }
     });
-    return () => unsubscribe();
-  }, [formConsumerId, applyReceiptFile]);
+    return () => {
+      console.log(`[RECEIPT-FLOW] AddTransactionForm unmounting, consumerId=${formConsumerId} — unsubscribing`);
+      unsubscribe();
+      // CRITICAL: if this form is the scanner owner and it unmounts before the
+      // scan completes (e.g. dialog closed), release ownership so PosteringerPage
+      // can claim as fallback. Otherwise the result is orphaned — nobody can claim.
+      const s = useScannerStore.getState();
+      if (s.scannerOwner === formConsumerId) {
+        console.log(`[RECEIPT-FLOW] Form ${formConsumerId} releasing scanner ownership on unmount`);
+        useScannerStore.setState({ scannerOwner: null });
+      }
+    };
+  }, [formConsumerId, applyReceiptFile, layout]);
 
   const handleOpenScanner = useCallback(() => {
-    // Pass THIS form's consumerId as the owner so only this form can claim
-    // the resulting scan (not a hidden competing form instance).
+    console.log(`[RECEIPT-FLOW] handleOpenScanner called by form ${formConsumerId} (layout=${layout})`);
     useScannerStore.getState().openScanner(formConsumerId);
-  }, [formConsumerId]);
+  }, [formConsumerId, layout]);
 
   const handleUseDescription = useCallback((desc: string) => {
     setDescription(desc);
@@ -1368,7 +1378,9 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   };
 
   // Shared: Receipt upload area (only shown when no document is uploaded)
-  const renderReceiptUpload = () => (
+  const renderReceiptUpload = () => {
+    console.log(`[RECEIPT-FLOW] renderReceiptUpload: receiptPreview=${receiptPreview ? receiptPreview.slice(0, 40) : 'null'}, receiptFile=${receiptFile?.name ?? 'null'}, layout=${layout}`);
+    return (
     <div className="space-y-1.5">
       <Label className="dark:text-gray-300 text-sm font-medium">{t('receipt')} <span className="text-gray-400 text-xs font-normal">({isDa ? 'valgfrit' : 'optional'})</span></Label>
       <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleFileChange} className="hidden" disabled={isLoading} />
@@ -1407,7 +1419,8 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   // Shared: Description textarea
   const renderDescription = () => (

@@ -97,26 +97,38 @@ export const useScannerStore = create<ScannerState>((set, get) => ({
 
   completeScan: (file: File) => {
     const id = ++nextResultId;
+    const owner = get().scannerOwner;
     // Close scanner AND store result in a single batch. scannerOwner is
     // preserved so the correct form can claim on the next tick.
+    console.log(`[RECEIPT-FLOW] completeScan: file=${file.name} (${file.size} bytes), id=${id}, owner=${owner}`);
     set({ isOpen: false, pendingResult: { file, id } });
   },
 
   claimResult: (consumerId: string, onlyIfId?: number) => {
     const state = get();
     const result = state.pendingResult;
-    if (!result) return null;
+    if (!result) {
+      console.log(`[RECEIPT-FLOW] claimResult(${consumerId}): no pending result`);
+      return null;
+    }
     // If the caller asked for a specific id, make sure it matches.
-    if (onlyIfId !== undefined && result.id !== onlyIfId) return null;
+    if (onlyIfId !== undefined && result.id !== onlyIfId) {
+      console.log(`[RECEIPT-FLOW] claimResult(${consumerId}): id mismatch (want ${onlyIfId}, have ${result.id})`);
+      return null;
+    }
 
     // Ownership check: only the owner (or the fallback if no owner) may claim.
     const owner = state.scannerOwner;
     const isOwner = owner !== null && owner === consumerId;
     const isFallback = owner === null && consumerId === 'posteringer';
-    if (!isOwner && !isFallback) return null;
+    if (!isOwner && !isFallback) {
+      console.log(`[RECEIPT-FLOW] claimResult(${consumerId}): DENIED — owner=${owner}, isOwner=${isOwner}, isFallback=${isFallback}`);
+      return null;
+    }
 
     // Atomically clear the pending result + owner so no other consumer can claim.
     set({ pendingResult: null, scannerOwner: null });
+    console.log(`[RECEIPT-FLOW] claimResult(${consumerId}): SUCCESS — claimed id=${result.id}`);
     return result;
   },
 
