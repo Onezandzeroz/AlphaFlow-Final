@@ -60,6 +60,7 @@ import { Switch } from '@/components/ui/switch';
 interface CompanyInfo {
   id: string;
   logo: string | null;
+  showCompanyLogo?: boolean;
   companyName: string;
   address: string;
   phone: string;
@@ -189,6 +190,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
   // Form state
   const [form, setForm] = useState({
     logo: '' as string,
+    showCompanyLogo: false as boolean,
     companyName: '',
     address: '',
     phone: '',
@@ -330,6 +332,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
           setCompanyInfo(info);
           setForm({
             logo: info.logo || '',
+            showCompanyLogo: !!info.showCompanyLogo,
             companyName: info.companyName || '',
             address: info.address || '',
             phone: info.phone || '',
@@ -383,7 +386,8 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
         form.bankCountry !== (companyInfo.bankCountry || '') ||
         form.invoiceTerms !== (companyInfo.invoiceTerms || '') ||
         form.invoiceNotesTemplate !== (companyInfo.invoiceNotesTemplate || '') ||
-        form.logo !== (companyInfo.logo || '');
+        form.logo !== (companyInfo.logo || '') ||
+        form.showCompanyLogo !== !!companyInfo.showCompanyLogo;
       setHasChanges(changed);
     } else {
       const hasAny =
@@ -496,6 +500,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           logo: form.logo || null,
+          showCompanyLogo: form.showCompanyLogo,
           companyName: form.companyName.trim(),
           address: form.address.trim(),
           phone: form.phone.trim(),
@@ -628,6 +633,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
             } else {
               setForm({
                 logo: '',
+                showCompanyLogo: false,
                 companyName: '',
                 address: '',
                 phone: '',
@@ -866,6 +872,41 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                 />
               </div>
             </div>
+
+            {/* Show company logo in AlphaFlow sidebar — toggle */}
+            <div className={`flex items-center justify-between rounded-lg border p-3 transition-colors ${
+              form.showCompanyLogo
+                ? 'border-[#0d9488]/30 bg-[#0d9488]/5 dark:border-[#2dd4bf]/30 dark:bg-[#2dd4bf]/5'
+                : 'border-gray-200 bg-gray-50 dark:border-white/10 dark:bg-white/5'
+            }`}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Eye className={`h-4 w-4 shrink-0 ${form.showCompanyLogo ? 'text-[#0d9488] dark:text-[#2dd4bf]' : 'text-gray-400 dark:text-gray-500'}`} />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {language === 'da' ? 'Vis virksomhedslogo i AlphaFlow' : 'Show company logo in AlphaFlow'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {language === 'da'
+                      ? 'Erstatter AlphaFlow-logoet i sidemenuen med dit virksomhedslogo'
+                      : 'Replaces the AlphaFlow logo in the sidebar with your company logo'}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={form.showCompanyLogo}
+                onCheckedChange={(checked) => setForm((prev) => ({ ...prev, showCompanyLogo: checked }))}
+                disabled={!form.logo}
+                aria-label={language === 'da' ? 'Vis virksomhedslogo i AlphaFlow' : 'Show company logo in AlphaFlow'}
+              />
+            </div>
+            {!form.logo && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 -mt-2 flex items-center gap-1">
+                <span className="inline-block w-1 h-1 rounded-full bg-amber-500" />
+                {language === 'da'
+                  ? 'Upload et logo ovenfor for at aktivere denne indstilling'
+                  : 'Upload a logo above to enable this option'}
+              </p>
+            )}
 
             {/* Company Name */}
             <div className="space-y-2">

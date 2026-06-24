@@ -17,6 +17,7 @@ import { UpgradeAccessModal } from '@/components/upgrade-access-modal';
 import { useHermesEnabled } from '@/components/hermes/hermes-context';
 import { SubscriptionPlansPrompt } from '@/components/dashboard/subscription-plans-prompt';
 import { NotificationCenter } from '@/components/notification-center';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import {
@@ -144,6 +145,37 @@ export function AppLayout({
   const { language, toggleLanguage } = useLanguageStore();
   const { open: commandPaletteOpen, setOpen: setCommandPaletteOpen } = useCommandPalette();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // ─── Company logo for sidebar ──────────────────────────────────────
+  // Fetch the active company's logo + showCompanyLogo flag so the sidebar
+  // can replace the AlphaFlow logo with the tenant's company logo when the
+  // owner has enabled it in Company Settings. Re-fetches when the active
+  // company changes (tenant switch) OR when company-settings data changes
+  // (saved in the settings page → notifyDataChange → useDataVersion bumps).
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [showCompanyLogo, setShowCompanyLogo] = useState(false);
+  const companySettingsVersion = useDataVersion('company-settings');
+  useEffect(() => {
+    if (!user.activeCompanyId) {
+      setCompanyLogo(null);
+      setShowCompanyLogo(false);
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/company')
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (cancelled || !data?.companyInfo) return;
+        setCompanyLogo(data.companyInfo.logo || null);
+        setShowCompanyLogo(!!data.companyInfo.showCompanyLogo);
+      })
+      .catch(() => { /* sidebar logo is cosmetic — fail silently */ });
+    return () => { cancelled = true; };
+  }, [user.activeCompanyId, companySettingsVersion]);
+
+  // The sidebar shows the company logo when: the toggle is ON AND a logo exists.
+  // Otherwise it falls back to the AlphaFlow logo.
+  const useCompanyLogo = showCompanyLogo && !!companyLogo;
 
   // ─── Tenant isolation for form drafts ──────────────────────────────
   //
@@ -481,15 +513,23 @@ export function AppLayout({
         {/* Logo + Collapse Toggle */}
         <div className="flex items-center px-4 pt-6 pb-4 border-b border-[#e2e8e6] dark:border-[#2a3330]">
           <div className={cn('flex-1 flex items-center justify-center overflow-hidden', sidebarCollapsed && 'px-1')}>
-            <Image
-              key={darkMode ? 'logo-dark' : 'logo-light'}
-              src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
-              alt="AlphaFlow"
-              width={sidebarCollapsed ? 36 : 140}
-              height={sidebarCollapsed ? 36 : 94}
-              className={cn('object-contain transition-all duration-300', sidebarCollapsed && 'rounded-lg')}
-              priority
-            />
+            {useCompanyLogo ? (
+              <img
+                src={companyLogo!}
+                alt={user.activeCompanyName || 'Company logo'}
+                className={cn('object-contain transition-all duration-300', sidebarCollapsed ? 'h-9 w-9 rounded-lg' : 'max-h-16 max-w-[140px]')}
+              />
+            ) : (
+              <Image
+                key={darkMode ? 'logo-dark' : 'logo-light'}
+                src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
+                alt="AlphaFlow"
+                width={sidebarCollapsed ? 36 : 140}
+                height={sidebarCollapsed ? 36 : 94}
+                className={cn('object-contain transition-all duration-300', sidebarCollapsed && 'rounded-lg')}
+                priority
+              />
+            )}
           </div>
           <button
             type="button"
@@ -568,14 +608,22 @@ export function AppLayout({
 
           {/* Center: Logo */}
           <div className="flex-1 flex justify-center">
-            <Image
-              key={darkMode ? 'logo-dark-mobile' : 'logo-light-mobile'}
-              src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
-              alt="AlphaFlow"
-              width={90}
-              height={60}
-              className="object-contain"
-            />
+            {useCompanyLogo ? (
+              <img
+                src={companyLogo!}
+                alt={user.activeCompanyName || 'Company logo'}
+                className="object-contain max-h-10 max-w-[90px]"
+              />
+            ) : (
+              <Image
+                key={darkMode ? 'logo-dark-mobile' : 'logo-light-mobile'}
+                src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
+                alt="AlphaFlow"
+                width={90}
+                height={60}
+                className="object-contain"
+              />
+            )}
           </div>
 
           {/* Right: Menu button (left of owl when Hermes enabled) */}
@@ -590,15 +638,23 @@ export function AppLayout({
               <SheetTitle className="sr-only">{t('navigationMenu')}</SheetTitle>
               {/* Mobile Logo */}
               <div className="flex h-16 items-center justify-center px-6 border-b border-[#e2e8e6] dark:border-[#2a3330] shrink-0">
-                <Image
-                  key={darkMode ? 'logo-dark-sheet' : 'logo-light-sheet'}
-                  src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
-                  alt="AlphaFlow"
-                  width={120}
-                  height={81}
-                  className="object-contain"
-                  priority
-                />
+                {useCompanyLogo ? (
+                  <img
+                    src={companyLogo!}
+                    alt={user.activeCompanyName || 'Company logo'}
+                    className="object-contain max-h-12 max-w-[120px]"
+                  />
+                ) : (
+                  <Image
+                    key={darkMode ? 'logo-dark-sheet' : 'logo-light-sheet'}
+                    src={darkMode ? '/logo-notextDark.png' : '/logo-notext.png'}
+                    alt="AlphaFlow"
+                    width={120}
+                    height={81}
+                    className="object-contain"
+                    priority
+                  />
+                )}
               </div>
 
               {/* Mobile Accordion Navigation */}

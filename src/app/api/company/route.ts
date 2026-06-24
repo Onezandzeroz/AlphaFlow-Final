@@ -28,6 +28,8 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
         einvoiceDeliveryMode: true, storecoveConnected: true,
         // Project Mode gate (FASE 4) — SuperDev per-tenant visibility control
         projectModeEnabled: true,
+        // Sidebar logo toggle — show company logo instead of AlphaFlow logo
+        showCompanyLogo: true,
       },
     });
 
@@ -75,6 +77,7 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       einvoiceDeliveryMode: company.einvoiceDeliveryMode,
       storecoveConnected: company.storecoveConnected,
       projectModeEnabled: company.projectModeEnabled,
+      showCompanyLogo: company.showCompanyLogo,
     } : null;
 
     return NextResponse.json({ companyInfo });
@@ -92,6 +95,7 @@ export const POST = withGuard(guard.POST!, async (request, ctx) => {
       logo, companyName, address, phone, email, cvrNumber, invoicePrefix,
       bankName, bankAccount, bankRegistration, bankIban, bankStreet, bankCity,
       bankCountry, invoiceTerms, companyType, invoiceNotesTemplate,
+      showCompanyLogo,
     } = body;
 
     if (!companyName) {
@@ -121,6 +125,7 @@ export const POST = withGuard(guard.POST!, async (request, ctx) => {
       data: {
         name: companyName,
         logo: logo || null,
+        showCompanyLogo: typeof showCompanyLogo === 'boolean' ? showCompanyLogo : false,
         address: address || '',
         phone: phone || '',
         email: email || '',
@@ -156,6 +161,7 @@ export const POST = withGuard(guard.POST!, async (request, ctx) => {
     const companyInfo = {
       id: company.id,
       logo: company.logo,
+      showCompanyLogo: company.showCompanyLogo,
       companyName: company.name,
       address: company.address,
       phone: company.phone,
@@ -193,6 +199,7 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       logo, companyName, address, phone, email, cvrNumber, invoicePrefix,
       bankName, bankAccount, bankRegistration, bankIban, bankStreet, bankCity,
       bankCountry, invoiceTerms, companyType, invoiceNotesTemplate,
+      showCompanyLogo,
     } = body;
 
     const existing = await db.company.findUnique({
@@ -226,6 +233,7 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       where: { id: ctx.activeCompanyId! },
       data: {
         ...(logo !== undefined && { logo }),
+        ...(typeof showCompanyLogo === 'boolean' && { showCompanyLogo }),
         ...(companyName && { name: companyName }),
         ...(address && { address }),
         ...(phone && { phone }),
@@ -265,6 +273,7 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
     const companyInfo = {
       id: company.id,
       logo: company.logo,
+      showCompanyLogo: company.showCompanyLogo,
       companyName: company.name,
       address: company.address,
       phone: company.phone,
