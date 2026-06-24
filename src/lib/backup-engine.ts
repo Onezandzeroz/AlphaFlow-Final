@@ -840,6 +840,17 @@ async function importTenantDataFromZip(
 ): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
 
+  // ── ID mapping tables ────────────────────────────────────────────────
+  // When we create new accounts/contacts/invoices, they get NEW cuid IDs
+  // that differ from the backup's original IDs. We must map old → new so
+  // that foreign-key references in transactions, journal entry lines, etc.
+  // point to the correct newly-created records. Without this, restores fail
+  // with FK constraint violations (e.g. Transaction_accountId_fkey).
+  const accountIdMap = new Map<string, string>();   // old accountId → new accountId
+  const contactIdMap = new Map<string, string>();    // old contactId → new contactId
+  const invoiceIdMap = new Map<string, string>();    // old invoiceId → new invoiceId
+  const projectIdMap = new Map<string, string>();    // old projectId → new projectId
+
   // Company settings
   const companyFile = zip.file('company.json');
   if (companyFile) {
@@ -871,12 +882,13 @@ async function importTenantDataFromZip(
     counts.company = 1;
   }
 
-  // Accounts
+  // Accounts — import FIRST and build the old→new ID map
   const accountsFile = zip.file('accounts.json');
   if (accountsFile) {
     const accountsData = JSON.parse(await accountsFile.async('string')) as Array<Record<string, unknown>>;
     for (const a of accountsData) {
-      await tx.account.create({
+      const oldId = a.id as string;
+      const created = await tx.account.create({
         data: {
           companyId, userId,
           number: a.number as string, name: a.name as string,
@@ -887,16 +899,18 @@ async function importTenantDataFromZip(
           isSystem: (a.isSystem as boolean) ?? false,
         },
       });
+      if (oldId) accountIdMap.set(oldId, created.id);
     }
     counts.accounts = accountsData.length;
   }
 
-  // Contacts
+  // Contacts — build old→new ID map
   const contactsFile = zip.file('contacts.json');
   if (contactsFile) {
     const contactsData = JSON.parse(await contactsFile.async('string')) as Array<Record<string, unknown>>;
     for (const c of contactsData) {
-      await tx.contact.create({
+      const oldId = c.id as string;
+      const created = await tx.contact.create({
         data: {
           companyId, userId,
           name: c.name as string,
@@ -909,41 +923,19 @@ async function importTenantDataFromZip(
           isActive: (c.isActive as boolean) ?? true,
         },
       });
+      if (oldId) contactIdMap.set(oldId, created.id);
     }
     counts.contacts = contactsData.length;
   }
 
-  // Transactions
-  const txFile = zip.file('transactions.json');
-  if (txFile) {
-    const txData = JSON.parse(await txFile.async('string')) as Array<Record<string, unknown>>;
-    for (const t of txData) {
-      await tx.transaction.create({
-        data: {
-          companyId, userId,
-          date: new Date(t.date as string), type: t.type as TransactionType,
-          amount: t.amount as number, currency: (t.currency as string) ?? 'DKK',
-          exchangeRate: (t.exchangeRate as number) ?? null,
-          amountDKK: (t.amountDKK as number) ?? null,
-          description: t.description as string,
-          vatPercent: (t.vatPercent as number) ?? 25.0,
-          receiptImage: (t.receiptImage as string) ?? null,
-          invoiceId: (t.invoiceId as string) ?? null,
-          accountId: (t.accountId as string) ?? null,
-          cancelled: (t.cancelled as boolean) ?? false,
-          cancelReason: (t.cancelReason as string) ?? null,
-        },
-      });
-    }
-    counts.transactions = txData.length;
-  }
-
-  // Invoices
+  // Invoices — import BEFORE transactions (transactions reference invoiceId)
+  // Build old→new ID map.
   const invFile = zip.file('invoices.json');
   if (invFile) {
     const invData = JSON.parse(await invFile.async('string')) as Array<Record<string, unknown>>;
     for (const inv of invData) {
-      await tx.invoice.create({
+      const oldId = inv.id as string;
+      const created = await tx.invoice.create({
         data: {
           companyId, userId,
           invoiceNumber: inv.invoiceNumber as string,
@@ -959,16 +951,53 @@ async function importTenantDataFromZip(
           total: inv.total as number, currency: (inv.currency as string) ?? 'DKK',
           exchangeRate: (inv.exchangeRate as number) ?? null,
           status: inv.status as InvoiceStatus, notes: (inv.notes as string) ?? null,
-          contactId: (inv.contactId as string) ?? null,
+          contactId: (inv.contactId as string) ? (contactIdMap.get(inv.contactId as string) ?? null) : null,
           cancelled: (inv.cancelled as boolean) ?? false,
           cancelReason: (inv.cancelReason as string) ?? null,
         },
       });
+      if (oldId) invoiceIdMap.set(oldId, created.id);
     }
     counts.invoices = invData.length;
   }
 
-  // Journal entries
+  // Transactions — use mapped account/invoice IDs
+  const txFile = zip.file('transactions.json');
+  if (txFile) {
+    const txData = JSON.parse(await txFile.async('string')) as Array<Record<string, unknown>>;
+    for (const t of txData) {
+      // Map old account/invoice IDs to the newly-created ones. If the old ID
+      // isn't in the map (e.g. account was deleted before backup), null out
+      // the reference rather than causing an FK violation.
+      const oldAccountId = (t.accountId as string) ?? null;
+      const mappedAccountId = oldAccountId ? (accountIdMap.get(oldAccountId) ?? null) : null;
+      const oldInvoiceId = (t.invoiceId as string) ?? null;
+      const mappedInvoiceId = oldInvoiceId ? (invoiceIdMap.get(oldInvoiceId) ?? null) : null;
+      const oldProjectId = (t.projectId as string) ?? null;
+      const mappedProjectId = oldProjectId ? (projectIdMap.get(oldProjectId) ?? null) : null;
+
+      await tx.transaction.create({
+        data: {
+          companyId, userId,
+          date: new Date(t.date as string), type: t.type as TransactionType,
+          amount: t.amount as number, currency: (t.currency as string) ?? 'DKK',
+          exchangeRate: (t.exchangeRate as number) ?? null,
+          amountDKK: (t.amountDKK as number) ?? null,
+          description: t.description as string,
+          vatPercent: (t.vatPercent as number) ?? 25.0,
+          receiptImage: (t.receiptImage as string) ?? null,
+          invoiceId: mappedInvoiceId,
+          accountId: mappedAccountId,
+          projectId: mappedProjectId,
+          cancelled: (t.cancelled as boolean) ?? false,
+          cancelReason: (t.cancelReason as string) ?? null,
+        },
+      });
+    }
+    counts.transactions = txData.length;
+  }
+
+  // Journal entries — use mapped account IDs for lines
   const jeFile = zip.file('journal-entries.json');
   if (jeFile) {
     const jeData = JSON.parse(await jeFile.async('string')) as Array<Record<string, unknown>>;
@@ -984,10 +1013,16 @@ async function importTenantDataFromZip(
         },
       });
       for (const l of ((je.lines as Array<Record<string, unknown>>) ?? [])) {
+        // Map old account ID → new account ID. Skip line if account can't be
+        // resolved (prevents FK violation on JournalEntryLine_accountId_fkey).
+        const oldLineAccountId = l.accountId as string;
+        const mappedLineAccountId = oldLineAccountId ? (accountIdMap.get(oldLineAccountId) ?? null) : null;
+        if (!mappedLineAccountId) continue; // skip orphaned line
+
         await tx.journalEntryLine.create({
           data: {
             journalEntryId: entry.id, companyId,
-            accountId: l.accountId as string,
+            accountId: mappedLineAccountId,
             debit: (l.debit as number) ?? 0, credit: (l.credit as number) ?? 0,
             vatCode: (l.vatCode as VATCode) ?? null,
             description: (l.description as string) ?? null,
