@@ -82,7 +82,9 @@ const PH = 841.89;
 const ML = 50;           // margin left
 const MR = 50;           // margin right
 const CW = PW - ML - MR; // content width
-const MT = 40;           // margin top
+const MT = 72;           // margin top — generous top padding so the header
+                         // and main invoice table are vertically balanced
+                         // (previously 40, which pushed content too high)
 const MB = 50;           // margin bottom (footer space)
 const COL_GAP = 40;
 const HALF = (CW - COL_GAP) / 2;
@@ -416,6 +418,8 @@ export async function generateInvoicePDF(inv: InvoiceWithDetails): Promise<Uint8
       by -= BK_ROW_H;
 
       // Bank address values (left column)
+      // Capture the starting Y so terms (right column) can top-align with it.
+      const addrStartY = by;
       for (const line of bankAddrLines) {
         txt(pg, line, C1, by, fR, 9, C.text);
         by -= BK_ROW_H;
@@ -423,8 +427,7 @@ export async function generateInvoicePDF(inv: InvoiceWithDetails): Promise<Uint8
 
       // Invoice terms (right column, top-aligned with bank address)
       if (termsLines.length > 0) {
-        const tyStart = by + ((bankAddrLines.length - 1) * BK_ROW_H);
-        let ty = tyStart;
+        let ty = addrStartY;
         for (const l of termsLines) {
           txt(pg, l, C2, ty, fR, 9, C.text);
           ty -= 13;
