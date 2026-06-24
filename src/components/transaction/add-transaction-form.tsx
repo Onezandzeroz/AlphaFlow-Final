@@ -1615,7 +1615,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
             (pt + mt) plus a subtle horizontal rule so the form doesn't feel
             like one long undifferentiated list. Matches the divider style used
             in the cards layout (border-t border-gray-100 dark:border-white/5). ── */}
-        <div className="pt-4 mt-2 border-t border-gray-100 dark:border-white/10" />
+        <div className="pt-4 mt-4 border-t border-gray-100 dark:border-white/10" />
 
         {renderExchangeRate()}
         {renderAccountSelect()}
