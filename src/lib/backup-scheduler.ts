@@ -173,8 +173,86 @@ export async function getCronHealth(companyId: string): Promise<{
 }> {
   const schedulerRunning = scheduledTasks.length > 0;
 
-  // Get or create entries for all backup types for this company
-  const entries = SCHEDULES.map((s) => getCompanyHealthEntry(companyId, s.type));
+  // ── Build per-schedule entries from the DATABASE (authoritative) ──────
+  // The old code returned raw in-memory `getCompanyHealthEntry()` entries,
+  // which are ALL reset to `lastStatus: 'never'` after a server restart.
+  // This made every per-schedule light show "endnu ikke kørt" (never ran)
+  // even when the CronExecution + Backup tables had plenty of history.
+  //
+  // We now query, for each schedule type:
+  //   1. The most recent CronExecution row (last cycle status + timestamp)
+  //   2. The most recent successful automatic Backup (fallback if no
+  //      CronExecution exists, e.g. for initial backups created via
+  //      ensureInitialBackup which don't always log to CronExecution)
+  // and fall back to in-memory only if neither exists.
+  const entries: CronHealthEntry[] = [];
+
+  for (const { type, jobType } of SCHEDULES) {
+    const key = `${companyId}:${type}`;
+    const memEntry = companyCronHealth.get(key);
+
+    // Most recent CronExecution for this job type + company (survives restarts)
+    const lastExec = await db.cronExecution.findFirst({
+      where: { jobType, companyId },
+      orderBy: { startedAt: 'desc' },
+    }).catch(() => null);
+
+    // Most recent successful automatic backup of this type (survives restarts)
+    const lastBackup = await db.backup.findFirst({
+      where: { companyId, backupType: type, triggerType: 'automatic', status: 'completed' },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true },
+    }).catch(() => null);
+
+    let entry: CronHealthEntry;
+
+    if (lastExec) {
+      // Map CronExecution.status → CronHealthEntry.lastStatus
+      // 'partial' means some companies succeeded + some failed → treat as
+      // 'success' for this company's display (the per-company error is
+      // captured separately via the failed-Backup count below).
+      const mappedStatus: CronHealthEntry['lastStatus'] =
+        lastExec.status === 'error' ? 'error' :
+        lastExec.status === 'skipped' ? 'skipped' :
+        'success'; // 'success' | 'partial' → success
+
+      entry = {
+        type,
+        lastRunAt: lastExec.startedAt.toISOString(),
+        lastStatus: mappedStatus,
+        consecutiveErrors: mappedStatus === 'error' ? (memEntry?.consecutiveErrors || 1) : 0,
+        errorMessage: lastExec.errorMessage,
+      };
+    } else if (lastBackup) {
+      // No CronExecution record, but a completed backup exists (e.g. initial
+      // backup created by ensureInitialBackup). Show it as a success.
+      entry = {
+        type,
+        lastRunAt: lastBackup.createdAt.toISOString(),
+        lastStatus: 'success',
+        consecutiveErrors: 0,
+        errorMessage: null,
+      };
+    } else if (memEntry && memEntry.lastStatus !== 'never') {
+      // In-memory has fresher data than nothing-in-DB (e.g. a cycle just ran
+      // but the CronExecution write is still in flight). Use it.
+      entry = memEntry;
+    } else {
+      // Truly never ran — no DB record, no in-memory record
+      entry = {
+        type,
+        lastRunAt: null,
+        lastStatus: 'never',
+        consecutiveErrors: 0,
+        errorMessage: null,
+      };
+    }
+
+    // Keep in-memory map in sync so other callers (e.g. ensureInitialBackup)
+    // see the DB-hydrated state.
+    companyCronHealth.set(key, entry);
+    entries.push(entry);
+  }
 
   let hasError = false;
   let errorMessages: string[] = [];
@@ -186,7 +264,7 @@ export async function getCronHealth(companyId: string): Promise<{
     }
   }
 
-  const anyBackupSucceeded = entries.some((e) => e.lastStatus === 'success');
+  const anyEntrySucceeded = entries.some((e) => e.lastStatus === 'success');
 
   // Also check CronExecution DB for recent errors (survives restarts)
   const recentErrors = await db.cronExecution.count({
@@ -204,10 +282,7 @@ export async function getCronHealth(companyId: string): Promise<{
   }
 
   // Authoritative failure signal from the Backup table itself: count failed
-  // backup attempts in the last 24h. This catches the case where the scheduler
-  // marked a cycle as "success" in-memory but every createBackup() actually
-  // failed (e.g. ENCRYPTION_KEY missing) and wrote `status: 'failed'` rows.
-  // Without this the UI would show "healthy" while no files exist on disk.
+  // backup attempts in the last 24h.
   const recentFailedBackups = await db.backup.count({
     where: {
       companyId,
@@ -221,19 +296,25 @@ export async function getCronHealth(companyId: string): Promise<{
     errorMessages.push(`${recentFailedBackups} failed backup attempt(s) in last 24h`);
   }
 
-  // Check DB for existing completed automatic backups as the authoritative source
-  // This survives server restarts and is independent of in-memory state.
+  // Count existing completed automatic backups (authoritative, survives restarts)
   const existingBackups = await db.backup.count({
     where: { companyId, triggerType: 'automatic', status: 'completed' },
   }).catch(() => 0);
 
-  // If DB has backups but in-memory doesn't know about this company,
-  // restore the triggered state so cron health is consistent.
+  // Hydrate TRIGGERED_COMPANIES so the status logic below is consistent
   if (existingBackups > 0 && !TRIGGERED_COMPANIES.has(companyId)) {
     markCompanyTriggered(companyId);
   }
 
-  // Determine state — each tenant is evaluated independently
+  // ── Determine status — each tenant is evaluated independently ──────────
+  //
+  // IMPORTANT: "healthy" now requires `schedulerRunning === true`. Previously
+  // the `else` branch defaulted to "healthy" whenever `existingBackups > 0`
+  // (historical backups), even if the scheduler was NOT running (e.g. right
+  // after a restart before instrumentation fired, or if instrumentation failed).
+  // This produced the contradictory UI where the badge said "Inaktiv" while
+  // the card said "Kører Normalt". Now, if the scheduler is not running, the
+  // status is "pending" (not "healthy"), so the UI never contradicts itself.
   let status: 'idle' | 'pending' | 'healthy' | 'unhealthy';
   let summary: string;
 
@@ -244,11 +325,37 @@ export async function getCronHealth(companyId: string): Promise<{
   } else if (hasError) {
     status = 'unhealthy';
     summary = `${errorMessages.length} schedule(s) with errors`;
-  } else if (!anyBackupSucceeded && existingBackups === 0) {
-    // Triggered by transaction but backups still in progress
+  } else if (!schedulerRunning) {
+    // The scheduler is NOT running (no cron tasks registered). This happens:
+    //  - Right after a server restart, before instrumentation fires
+    //  - If the instrumentation hook failed to start the scheduler
+    //  - If DISABLE_BACKUP_SCHEDULER is set
+    // This is NOT "healthy" — without a running scheduler, no new backups
+    // will be created. Show "pending" so the UI doesn't contradict the
+    // "Inaktiv" badge.
+    //
+    // LAZY-START: if the scheduler isn't running AND isn't explicitly disabled,
+    // kick it off now. This is the self-healing path: the next time the UI
+    // polls /api/backups/scheduler-status, getCronHealth will see the scheduler
+    // is running and flip to "healthy". This covers the case where the
+    // instrumentation hook didn't fire (e.g. the old instrumentation.node.ts
+    // naming issue) — the scheduler still starts, just a few seconds later
+    // on the first status poll instead of at boot.
+    if (process.env.DISABLE_BACKUP_SCHEDULER !== 'true') {
+      ensureSchedulerStarted();
+    }
+    status = 'pending';
+    summary = existingBackups > 0
+      ? 'Scheduler genstarter — vent et øjeblik...'
+      : 'Scheduler starter op...';
+  } else if (!anyEntrySucceeded && existingBackups === 0) {
+    // Scheduler is running but no backup has completed yet (first-data trigger
+    // in progress).
     status = 'pending';
     summary = 'Creating initial backups...';
   } else {
+    // Scheduler running + no errors + at least one backup exists (in DB or
+    // in-memory entries). This is the ONLY path to "healthy".
     status = 'healthy';
     summary = 'All schedules running normally';
   }

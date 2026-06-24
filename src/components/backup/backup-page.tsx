@@ -747,11 +747,8 @@ export function BackupPage({ user }: BackupPageProps) {
                     ? (language === 'da'
                       ? 'Scheduleren venter på den første transaktion før sikkerhedskopiering startes'
                       : 'The scheduler is waiting for the first transaction before starting backups')
-                    : schedulerStatus.cronHealth?.status === 'pending'
-                      ? (language === 'da'
-                        ? 'Initialiserer sikkerhedskopiering — dette tager et par sekunder...'
-                        : 'Initializing backup system — this will take a few seconds...')
-                      : schedulerStatus.cronHealth?.summary || (language === 'da' ? 'Tjekker status...' : 'Checking status...')
+                    : schedulerStatus.cronHealth?.summary
+                      || (language === 'da' ? 'Tjekker status...' : 'Checking status...')
                   }
                 </p>
 
