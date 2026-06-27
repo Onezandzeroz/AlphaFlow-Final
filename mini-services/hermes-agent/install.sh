@@ -58,8 +58,7 @@ cat > "$MINI_SERVICES_DIR/package.json" << 'PKGJSON'
     "start": "bun index.ts"
   },
   "dependencies": {
-    "socket.io": "^4.8.0",
-    "z-ai-web-dev-sdk": "^0.0.18"
+    "socket.io": "^4.8.0"
   }
 }
 PKGJSON

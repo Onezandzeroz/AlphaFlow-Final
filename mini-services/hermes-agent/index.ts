@@ -7,13 +7,66 @@
 
 import { createServer } from 'http'
 import { Server } from 'socket.io'
-import ZAI from 'z-ai-web-dev-sdk'
 
 import { defaultConfig, type HermesConfig } from './config'
 import { buildSystemPrompt } from './knowledge-base'
 import { MockTenantProvider, type TenantProvider, type TenantData } from './tenant-provider'
 import { DatabaseTenantProvider } from './database-tenant-provider'
 import { splitIntoChunks, buildTenantContext } from './utils'
+
+// ============================================================
+// OpenRouter LLM Client
+// ============================================================
+// Hermes calls OpenRouter's OpenAI-compatible Chat Completions API
+// so we can swap models (including free-tier) via a single env var.
+// This replaces the sandbox-only z-ai-web-dev-sdk, which does NOT
+// work outside this development sandbox.
+//
+// Docs: https://openrouter.ai/docs
+// Free models: https://openrouter.ai/models?q=free
+// ============================================================
+
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
+const OPENROUTER_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1'
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free'
+const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || 'AlphaFlow'
+const OPENROUTER_APP_URL = process.env.APP_URL || process.env.OPENROUTER_APP_URL || 'https://alphaflow.dk'
+
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
+async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY er ikke sat — Hermes kan ikke tilkalde en LLM. Sæt den i .env / PM2 env.')
+  }
+
+  const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      // OpenRouter uses these for ranking/dashboard attribution
+      'HTTP-Referer': OPENROUTER_APP_URL,
+      'X-Title': OPENROUTER_APP_NAME,
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages,
+      temperature: 0.4,
+      max_tokens: 1024,
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => res.statusText)
+    throw new Error(`OpenRouter ${res.status}: ${errText}`)
+  }
+
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content || 'Beklager, jeg kunne ikke generere et svar.'
+}
 
 // --------------- Configuration ---------------
 
@@ -138,23 +191,27 @@ io.on('connection', (socket) => {
     try {
       // Build conversation history for context
       const history = tenantProvider.getConversationHistory(tenantId).slice(-config.maxConversationHistory)
-      const historyText = history
-        .map(msg => `${msg.role === 'user' ? 'Bruger' : config.agentName}: ${msg.content}`)
-        .join('\n')
 
-      // Build full prompt
+      // Build OpenRouter/OpenAI-compatible message array with proper roles.
+      // System prompt + tenant context go in the system message; history is
+      // replayed as real user/assistant turns so the model understands the
+      // conversation flow (this works far better than stuffing everything
+      // into a single assistant message).
       const systemPrompt = buildSystemPrompt(config.agentName, config.defaultLanguage)
       const tenantContext = buildTenantContext(tenant)
-      const fullPrompt = `${systemPrompt}\n\n${tenantContext}\n\nSAMTALESHISTORIK:\n${historyText}\n\nBruger: ${message}\n\n${config.agentName}:`
+      const systemMessage = `${systemPrompt}\n\n${tenantContext}`
 
-      // Call LLM
-      const zai = await ZAI.create()
-      const completion = await zai.chat.completions.create({
-        messages: [{ role: 'assistant', content: fullPrompt }],
-        thinking: { type: 'disabled' },
-      })
+      const messages: ChatMessage[] = [
+        { role: 'system', content: systemMessage },
+        ...history.map(msg => ({
+          role: (msg.role === 'user' ? 'user' : 'assistant') as ChatMessage['role'],
+          content: msg.content,
+        })),
+        { role: 'user', content: message },
+      ]
 
-      const fullResponse = completion.choices?.[0]?.message?.content || 'Beklager, jeg kunne ikke generere et svar.'
+      // Call OpenRouter LLM
+      const fullResponse = await callOpenRouter(messages)
 
       // Store assistant response
       tenantProvider.addMessage(tenantId, { role: 'assistant', content: fullResponse })
@@ -311,6 +368,9 @@ function createDefaultTenant(tenantId: string): TenantData {
 
 httpServer.listen(config.port, () => {
   console.log(`[Hermes] 🏛️  ${config.agentName} Agent service running on port ${config.port}`)
+  console.log(`[Hermes]    LLM provider : OpenRouter (${OPENROUTER_BASE_URL})`)
+  console.log(`[Hermes]    Model        : ${OPENROUTER_MODEL}`)
+  console.log(`[Hermes]    API key set? : ${OPENROUTER_API_KEY ? 'yes' : 'NO — chat will fail until OPENROUTER_API_KEY is set'}`)
 })
 
 // ============================================================

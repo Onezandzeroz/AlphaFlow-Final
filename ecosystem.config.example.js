@@ -56,6 +56,16 @@ module.exports = {
         // DATABASE_URL is inherited from root .env via dotenv in the service code
         // If not auto-loaded, set it here explicitly:
         //DATABASE_URL: '',
+        // ─── OpenRouter (REQUIRED for Hermes chat) ───
+        // PM2 does NOT auto-load the root .env — set these here explicitly.
+        // Get a key at https://openrouter.ai → Dashboard → Keys.
+        // Free models: https://openrouter.ai/models?q=free
+        OPENROUTER_API_KEY: '',
+        OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
+        OPENROUTER_MODEL: 'meta-llama/llama-3.3-70b-instruct:free',
+        // Used for OpenRouter dashboard attribution (HTTP-Referer / X-Title headers)
+        OPENROUTER_APP_NAME: 'AlphaFlow',
+        APP_URL: 'https://alphaflow.dk',
       },
       exec_mode: 'fork',
       instances: 1,
