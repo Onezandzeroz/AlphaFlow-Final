@@ -117,14 +117,39 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
       return NextResponse.json({ error: 'Invalid rate-limit configuration' }, { status: 400 });
     }
 
-    // Verify the company exists
+    // Verify the company exists and fetch the existing rate-limit config
+    // (needed for the audit log's `old` value).
     const company = await db.company.findUnique({
       where: { id: companyId },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        hermesAgent: {
+          select: {
+            id: true,
+            rateLimitEnabled: true,
+            rateLimitBurst: true,
+            rateLimitHour: true,
+            rateLimitDay: true,
+            rateLimitMonth: true,
+          },
+        },
+      },
     });
     if (!company) {
       return NextResponse.json({ error: 'Company not found' }, { status: 404 });
     }
+
+    // Capture the previous config (defaults if no HermesAgent record exists yet)
+    const oldConfig = company.hermesAgent
+      ? {
+          enabled: company.hermesAgent.rateLimitEnabled,
+          burst: company.hermesAgent.rateLimitBurst,
+          hour: company.hermesAgent.rateLimitHour,
+          day: company.hermesAgent.rateLimitDay,
+          month: company.hermesAgent.rateLimitMonth,
+        }
+      : { ...DEFAULTS };
 
     // Upsert the HermesAgent record with the new rate-limit config
     const updated = await db.hermesAgent.upsert({
@@ -154,7 +179,7 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
       },
     });
 
-    // Audit log the change
+    // Audit log the change (requires both `old` and `new`)
     await auditLog({
       action: 'UPDATE',
       entityType: 'System',
@@ -162,7 +187,7 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
       userId: ctx.id,
       companyId,
       performedByUserId: ctx.id,
-      changes: { rateLimits: { new: config } },
+      changes: { rateLimits: { old: oldConfig, new: config } },
       metadata: {
         ...requestMetadata(request),
         source: 'hermes_rate_limits',
