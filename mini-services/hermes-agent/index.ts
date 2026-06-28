@@ -58,11 +58,15 @@ export type LLMErrorKind =
 export class HermesLLMError extends Error {
   kind: LLMErrorKind
   status?: number
-  constructor(kind: LLMErrorKind, message: string, status?: number) {
+  // For 429s: seconds OpenRouter asked us to wait before retrying
+  // (parsed from HTTP `Retry-After` header or JSON `error.metadata.retry_after_seconds`).
+  retryAfterSeconds?: number
+  constructor(kind: LLMErrorKind, message: string, status?: number, retryAfterSeconds?: number) {
     super(message)
     this.name = 'HermesLLMError'
     this.kind = kind
     this.status = status
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 
@@ -103,7 +107,7 @@ function userMessageFor(kind: LLMErrorKind): string {
     case 'unauthorized':
       return 'AI-nøglen er afvist af OpenRouter (401). Tjek at OPENROUTER_API_KEY er gyldig og aktiv.'
     case 'rate_limited':
-      return 'OpenRouter har ratelimitet forespørgslen (429). Vent lidt og prøv igen, eller skift model.'
+      return 'AI-modellen er midlertidigt overbelastet (429). Automatisk genforsøg mislykkedes — vent et minut og prøv igen, eller skift OPENROUTER_MODEL til en anden model.'
     case 'model_not_found':
       return `AI-modellen findes ikke længere hos OpenRouter (404). Skift OPENROUTER_MODEL til en aktuel model fra openrouter.ai/models.`
     case 'server_error':
@@ -115,6 +119,47 @@ function userMessageFor(kind: LLMErrorKind): string {
   }
 }
 
+// ============================================================
+// Retry Policy
+// ============================================================
+// OpenRouter's free-tier models (e.g. meta-llama/llama-3.3-70b-instruct:free)
+// are served via upstream providers (Venice, etc.) and frequently return 429
+// "temporarily rate-limited upstream". These are TRANSIENT — the response even
+// includes `retry_after_seconds`. So we retry automatically:
+//   - 429 rate_limited : honor retry_after_seconds (fallback: exponential)
+//   - 5xx server_error : exponential backoff (1s, 2s, 4s)
+//   - network/timeout  : exponential backoff (1s, 2s, 4s)
+// Auth/key/model errors are NOT retried (they won't fix themselves).
+// ============================================================
+
+const MAX_RETRIES = 3              // Total attempts = 1 + MAX_RETRIES (so up to 4 requests)
+const REQUEST_TIMEOUT_MS = 30_000  // Abort a single fetch after 30s
+const MAX_BACKOFF_MS = 10_000      // Never wait longer than 10s between retries
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// Parse retry-after hint from either the HTTP `Retry-After` header (delta-seconds
+// form) or the OpenRouter JSON body field `error.metadata.retry_after_seconds`.
+function parseRetryAfter(res: Response, bodyText: string): number | undefined {
+  // 1. HTTP Retry-After header (delta-seconds form)
+  const headerVal = res.headers.get('retry-after')
+  if (headerVal) {
+    const secs = parseInt(headerVal, 10)
+    if (!isNaN(secs) && secs >= 0) return secs
+  }
+  // 2. OpenRouter JSON body: error.metadata.retry_after_seconds
+  try {
+    const body = JSON.parse(bodyText)
+    const secs = body?.error?.metadata?.retry_after_seconds
+    if (typeof secs === 'number' && secs >= 0) return Math.ceil(secs)
+  } catch {
+    // body wasn't JSON or had an unexpected shape — ignore
+  }
+  return undefined
+}
+
 async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
   if (!OPENROUTER_API_KEY) {
     throw new HermesLLMError(
@@ -123,37 +168,92 @@ async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
     )
   }
 
-  let res: Response
-  try {
-    res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-        'Content-Type': 'application/json',
-        // OpenRouter uses these for ranking/dashboard attribution
-        'HTTP-Referer': OPENROUTER_APP_URL,
-        'X-Title': OPENROUTER_APP_NAME,
-      },
-      body: JSON.stringify({
-        model: OPENROUTER_MODEL,
-        messages,
-        temperature: 0.4,
-        max_tokens: 1024,
-      }),
-    })
-  } catch (fetchErr: any) {
-    // fetch() throws on network/DNS/timeout — normalize into HermesLLMError
-    throw classifyLLMError(fetchErr)
+  let lastError: HermesLLMError | null = null
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const isLastAttempt = attempt === MAX_RETRIES
+
+    try {
+      // ---- Single request attempt (with timeout) ----
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+      let res: Response
+      try {
+        res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            // OpenRouter uses these for ranking/dashboard attribution
+            'HTTP-Referer': OPENROUTER_APP_URL,
+            'X-Title': OPENROUTER_APP_NAME,
+          },
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            messages,
+            temperature: 0.4,
+            max_tokens: 1024,
+          }),
+        })
+      } catch (fetchErr: any) {
+        // fetch() throws on network/DNS/timeout/abort — normalize into HermesLLMError
+        throw classifyLLMError(fetchErr)
+      } finally {
+        clearTimeout(timeout)
+      }
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => res.statusText)
+        // Build a typed error; enrich 429s with the retry-after hint so the
+        // retry loop below can honor it.
+        const typed = classifyLLMError(new Error(`OpenRouter ${res.status}: ${errText}`))
+        if (typed.kind === 'rate_limited') {
+          typed.retryAfterSeconds = parseRetryAfter(res, errText)
+        }
+        throw typed
+      }
+
+      const data = await res.json()
+      return data.choices?.[0]?.message?.content || 'Beklager, jeg kunne ikke generere et svar.'
+
+    } catch (err) {
+      const typed = err instanceof HermesLLMError ? err : classifyLLMError(err)
+      lastError = typed
+
+      // Only transient errors are retried — auth/key/model/config errors
+      // won't resolve by repeating the same request.
+      const retriable: LLMErrorKind[] = ['rate_limited', 'server_error', 'network']
+      const shouldRetry = !isLastAttempt && retriable.includes(typed.kind)
+
+      if (!shouldRetry) {
+        throw typed
+      }
+
+      // Calculate backoff:
+      //  - 429: honor OpenRouter's retry_after_seconds (fallback to exponential)
+      //  - 5xx / network: exponential backoff 1s, 2s, 4s
+      let waitMs: number
+      if (typed.kind === 'rate_limited' && typed.retryAfterSeconds != null) {
+        waitMs = typed.retryAfterSeconds * 1000
+      } else {
+        waitMs = Math.pow(2, attempt) * 1000
+      }
+      waitMs = Math.min(waitMs, MAX_BACKOFF_MS)
+
+      console.log(
+        `[Hermes] [${typed.kind}]${typed.status ? ` (HTTP ${typed.status})` : ''} on attempt ${attempt + 1}/${MAX_RETRIES + 1}` +
+        (typed.retryAfterSeconds ? ` (retry_after=${typed.retryAfterSeconds}s)` : '') +
+        ` — retrying in ${(waitMs / 1000).toFixed(1)}s...`
+      )
+
+      await sleep(waitMs)
+    }
   }
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => res.statusText)
-    // Normalize into a typed HermesLLMError based on status code
-    throw classifyLLMError(new Error(`OpenRouter ${res.status}: ${errText}`))
-  }
-
-  const data = await res.json()
-  return data.choices?.[0]?.message?.content || 'Beklager, jeg kunne ikke generere et svar.'
+  // Unreachable (loop throws on the last attempt), but keeps TS happy.
+  throw lastError ?? new HermesLLMError('unknown', 'Unknown LLM error after retries')
 }
 
 // --------------- Configuration ---------------
@@ -341,9 +441,17 @@ io.on('connection', (socket) => {
       // Classify the failure into a typed kind so the user gets a specific,
       // actionable message instead of a generic "Prøv igen senere".
       // The full technical detail is ALWAYS logged server-side (PM2 logs).
+      // (If the error came from callOpenRouter it already went through the
+      //  retry loop — up to MAX_RETRIES+1 attempts — before giving up.)
       const llmErr = classifyLLMError(error)
       const userMsg = userMessageFor(llmErr.kind)
-      console.error(`[Hermes] LLM Error [${llmErr.kind}]${llmErr.status ? ` (HTTP ${llmErr.status})` : ''}:`, error?.message || error)
+      console.error(
+        `[Hermes] LLM Error [${llmErr.kind}]` +
+        `${llmErr.status ? ` (HTTP ${llmErr.status})` : ''}` +
+        `${llmErr.retryAfterSeconds != null ? ` (retry_after=${llmErr.retryAfterSeconds}s)` : ''}` +
+        ` — gave up after retries:`,
+        error?.message || error
+      )
       socket.emit('chat-error', { error: userMsg, kind: llmErr.kind })
     }
   })
