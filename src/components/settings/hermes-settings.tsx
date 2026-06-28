@@ -21,6 +21,7 @@ import {
   PowerOff,
   Building2,
 } from 'lucide-react';
+import { HermesKnowledgeAdmin } from '@/components/hermes/hermes-knowledge-admin';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -398,6 +399,11 @@ export function HermesSettings({ user }: HermesSettingsProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Knowledge Base Admin (SuperDev only) ── */}
+      {/* RAG document management — upload/edit/delete knowledge documents
+          and tenant-specific notes. Only visible to App Owners. */}
+      {isSuperDev && <HermesKnowledgeAdmin />}
 
       {/* ── Capabilities Card ── */}
       <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">

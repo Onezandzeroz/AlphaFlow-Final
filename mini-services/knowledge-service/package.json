@@ -1,0 +1,18 @@
+{
+  "name": "@alphaflow/knowledge-service",
+  "version": "1.0.0",
+  "description": "RAG knowledge base service for Hermes — pgvector + embeddings",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts",
+    "postinstall": "prisma generate --schema=../../prisma/schema.prisma",
+    "db:generate": "prisma generate --schema=../../prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.11.1"
+  },
+  "devDependencies": {
+    "prisma": "6.19.2"
+  }
+}

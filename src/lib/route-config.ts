@@ -498,6 +498,18 @@ export const routeConfig: RouteConfigMap = {
   '/api/hermes/usage-stats': {
     GET: { auth: true, requireSuperDev: true },
   },
+  '/api/hermes/knowledge': {
+    GET: { auth: true, requireSuperDev: true },
+    POST: { auth: true, requireSuperDev: true },
+  },
+  '/api/hermes/knowledge/[id]': {
+    GET: { auth: true, requireSuperDev: true },
+    PUT: { auth: true, requireSuperDev: true },
+    DELETE: { auth: true, requireSuperDev: true },
+  },
+  '/api/hermes/knowledge/[id]/reindex': {
+    POST: { auth: true, requireSuperDev: true },
+  },
   '/api/hermes/toggle': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, permissions: [Permission.COMPANY_EDIT_SETTINGS] },
   },

@@ -1053,6 +1053,67 @@ model HermesAgent {
   messages  AgentMessage[]
 }
 
+// ─── HERMES RAG KNOWLEDGE BASE (pgvector) ──────────────────────
+// Stores documents + their chunked embeddings for semantic retrieval.
+// Requires the `vector` extension on Neon:
+//   CREATE EXTENSION IF NOT EXISTS vector;
+//
+// Documents can be:
+//   - GLOBAL (tenantId = null): shared knowledge visible to all tenants
+//     (e.g. AlphaFlow user manual, Danish tax rules, FAQ)
+//   - TENANT-SPECIFIC (tenantId set): private notes for one company
+//     (e.g. "This company uses a custom invoice template")
+//
+// Chunks are embedded via OpenAI text-embedding-3-small (1536 dims) or
+// OpenRouter's free embedding models. The embedding column uses the
+// pgvector `vector(1536)` type via Prisma's Unsupported type.
+// --------------------------------------------------------------
+
+model KnowledgeDocument {
+  id          String   @id @default(cuid())
+  title       String                       // Human-readable title (e.g. "AlphaFlow Brugsvejledning")
+  source      String   @default("manual")  // manual | upload | url — how it was added
+  category    String   @default("general") // general | manual | faq | tax-rules | tenant-note
+  tenantId    String?                      // null = global; set = tenant-private note
+  description String?                      // Optional description shown in admin UI
+  content     String   @db.Text            // Full raw text (Markdown). Chunks are derived from this.
+  chunkCount  Int      @default(0)         // Number of chunks currently embedded
+  status      String   @default("active")  // active | processing | error | archived
+  errorMessage String?                      // Populated when status='error'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chunks KnowledgeChunk[]
+
+  @@index([tenantId])
+  @@index([category])
+  @@index([status])
+}
+
+model KnowledgeChunk {
+  id         String   @id @default(cuid())
+  documentId String
+  chunkIndex Int                              // 0-based position within the document
+  content    String  @db.Text                  // The chunk text (sent to LLM as context)
+  // pgvector column — 1536 dims for OpenAI text-embedding-3-small.
+  // Prisma doesn't natively support `vector`, so we use Unsupported("vector(1536)")
+  // and read/write it via raw SQL in the knowledge-service.
+  embedding  Unsupported("vector(1536)")?
+  tokenCount Int      @default(0)              // Approximate token count of content
+  createdAt  DateTime @default(now())
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+}
+
+// Enable vector similarity search via the <=> operator (cosine distance).
+// The knowledge-service uses raw SQL for all embedding operations:
+//   SELECT id, content FROM "KnowledgeChunk"
+//   WHERE embedding <=> $1 < 0.5   -- cosine distance threshold
+//   ORDER BY embedding <=> $1
+//   LIMIT 5;
+
 model AgentReminder {
   id          String    @id @default(cuid())
   agentId     String
