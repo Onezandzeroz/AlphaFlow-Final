@@ -37,31 +37,119 @@ interface ChatMessage {
   content: string
 }
 
-async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error('OPENROUTER_API_KEY er ikke sat — Hermes kan ikke tilkalde en LLM. Sæt den i .env / PM2 env.')
+// ============================================================
+// Typed LLM Errors
+// ============================================================
+// We throw a HermesLLMError (with a stable `kind`) from callOpenRouter
+// so the chat handler can map each failure to a specific, actionable,
+// user-facing message — instead of a generic "Prøv igen senere".
+// The full technical detail is ALWAYS logged server-side for PM2 logs.
+// ============================================================
+
+export type LLMErrorKind =
+  | 'missing_key'      // OPENROUTER_API_KEY not set (most common in fresh PM2 deploys)
+  | 'unauthorized'     // 401 — key invalid/expired
+  | 'rate_limited'     // 429 — quota exceeded or too many requests
+  | 'model_not_found'  // 404 — model slug retired/renamed by OpenRouter
+  | 'server_error'     // 5xx — OpenRouter upstream issue
+  | 'network'          // fetch failed / DNS / timeout
+  | 'unknown'
+
+export class HermesLLMError extends Error {
+  kind: LLMErrorKind
+  status?: number
+  constructor(kind: LLMErrorKind, message: string, status?: number) {
+    super(message)
+    this.name = 'HermesLLMError'
+    this.kind = kind
+    this.status = status
+  }
+}
+
+// Maps a thrown error (from fetch / our own checks) to a HermesLLMError.
+function classifyLLMError(error: unknown): HermesLLMError {
+  if (error instanceof HermesLLMError) return error
+
+  const raw: any = error
+  const msg: string = (raw?.message || String(raw)).toString()
+
+  // Network / connectivity (fetch throws TypeError "fetch failed", ENOTFOUND, ECONNRESET, timeout)
+  if (
+    raw?.code === 'ENOTFOUND' || raw?.code === 'ECONNRESET' || raw?.code === 'ECONNREFUSED' ||
+    raw?.name === 'TypeError' || /fetch failed|network|econn|etimedout|aborted/i.test(msg)
+  ) {
+    return new HermesLLMError('network', msg)
   }
 
-  const res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      // OpenRouter uses these for ranking/dashboard attribution
-      'HTTP-Referer': OPENROUTER_APP_URL,
-      'X-Title': OPENROUTER_APP_NAME,
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      messages,
-      temperature: 0.4,
-      max_tokens: 1024,
-    }),
-  })
+  // HTTP status-coded errors we threw as "OpenRouter <status>: <body>"
+  const m = msg.match(/OpenRouter\s+(\d{3}):/i)
+  if (m) {
+    const status = Number(m[1])
+    if (status === 401 || status === 403) return new HermesLLMError('unauthorized', msg, status)
+    if (status === 429) return new HermesLLMError('rate_limited', msg, status)
+    if (status === 404) return new HermesLLMError('model_not_found', msg, status)
+    if (status >= 500) return new HermesLLMError('server_error', msg, status)
+    return new HermesLLMError('unknown', msg, status)
+  }
+
+  return new HermesLLMError('unknown', msg)
+}
+
+// User-facing (Danish) message per error kind. Kept actionable & non-technical.
+function userMessageFor(kind: LLMErrorKind): string {
+  switch (kind) {
+    case 'missing_key':
+      return 'AI-tjenesten er ikke konfigureret på serveren (manglende API-nøgle). Kontakt administratoren.'
+    case 'unauthorized':
+      return 'AI-nøglen er afvist af OpenRouter (401). Tjek at OPENROUTER_API_KEY er gyldig og aktiv.'
+    case 'rate_limited':
+      return 'OpenRouter har ratelimitet forespørgslen (429). Vent lidt og prøv igen, eller skift model.'
+    case 'model_not_found':
+      return `AI-modellen findes ikke længere hos OpenRouter (404). Skift OPENROUTER_MODEL til en aktuel model fra openrouter.ai/models.`
+    case 'server_error':
+      return 'OpenRouter har midlertidige problemer (5xx). Prøv igen om et øjeblik.'
+    case 'network':
+      return 'Kan ikke kontakte OpenRouter. Tjek serverens internetforbindelse og firewall.'
+    default:
+      return 'Kunne ikke få svar fra Hermes. Prøv igen senere.'
+  }
+}
+
+async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
+  if (!OPENROUTER_API_KEY) {
+    throw new HermesLLMError(
+      'missing_key',
+      'OPENROUTER_API_KEY er ikke sat — Hermes kan ikke tilkalde en LLM. Sæt den i .env / PM2 env (ecosystem.config.js -> hermes-agent -> env).'
+    )
+  }
+
+  let res: Response
+  try {
+    res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        // OpenRouter uses these for ranking/dashboard attribution
+        'HTTP-Referer': OPENROUTER_APP_URL,
+        'X-Title': OPENROUTER_APP_NAME,
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages,
+        temperature: 0.4,
+        max_tokens: 1024,
+      }),
+    })
+  } catch (fetchErr: any) {
+    // fetch() throws on network/DNS/timeout — normalize into HermesLLMError
+    throw classifyLLMError(fetchErr)
+  }
 
   if (!res.ok) {
     const errText = await res.text().catch(() => res.statusText)
-    throw new Error(`OpenRouter ${res.status}: ${errText}`)
+    // Normalize into a typed HermesLLMError based on status code
+    throw classifyLLMError(new Error(`OpenRouter ${res.status}: ${errText}`))
   }
 
   const data = await res.json()
@@ -250,8 +338,13 @@ io.on('connection', (socket) => {
       socket.emit('chat-complete', { fullResponse, done: true })
       console.log(`[Hermes] Response sent to "${meta.userName}" (${fullResponse.length} chars)`)
     } catch (error: any) {
-      console.error(`[Hermes] LLM Error:`, error.message || error)
-      socket.emit('chat-error', { error: 'Kunne ikke få svar fra Hermes. Prøv igen senere.' })
+      // Classify the failure into a typed kind so the user gets a specific,
+      // actionable message instead of a generic "Prøv igen senere".
+      // The full technical detail is ALWAYS logged server-side (PM2 logs).
+      const llmErr = classifyLLMError(error)
+      const userMsg = userMessageFor(llmErr.kind)
+      console.error(`[Hermes] LLM Error [${llmErr.kind}]${llmErr.status ? ` (HTTP ${llmErr.status})` : ''}:`, error?.message || error)
+      socket.emit('chat-error', { error: userMsg, kind: llmErr.kind })
     }
   })
 
@@ -395,7 +488,14 @@ httpServer.listen(config.port, () => {
   console.log(`[Hermes] 🏛️  ${config.agentName} Agent service running on port ${config.port}`)
   console.log(`[Hermes]    LLM provider : OpenRouter (${OPENROUTER_BASE_URL})`)
   console.log(`[Hermes]    Model        : ${OPENROUTER_MODEL}`)
-  console.log(`[Hermes]    API key set? : ${OPENROUTER_API_KEY ? 'yes' : 'NO — chat will fail until OPENROUTER_API_KEY is set'}`)
+  if (OPENROUTER_API_KEY) {
+    console.log(`[Hermes]    API key set? : yes`)
+  } else {
+    console.log(`[Hermes]    API key set? : NO — chat will fail with "missing_key" until OPENROUTER_API_KEY is set.`)
+    console.log(`[Hermes]                   PM2 does NOT auto-load root .env — set it explicitly in`)
+    console.log(`[Hermes]                   ecosystem.config.js -> apps[hermes-agent] -> env.OPENROUTER_API_KEY`)
+    console.log(`[Hermes]                   Get a key at https://openrouter.ai/keys  (then: pm2 delete hermes-agent && pm2 start ecosystem.config.js --only hermes-agent)`)
+  }
 })
 
 // ============================================================

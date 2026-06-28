@@ -150,8 +150,11 @@ export function useHermesSocket(options: {
     });
 
     // ─── chat-error: Error from server ───
-    socket.on('chat-error', (data: { error: string }) => {
-      console.error('[Hermes UI] Chat error:', data.error);
+    // `kind` (optional) lets us log/telemetry the specific failure class
+    // (missing_key | unauthorized | rate_limited | model_not_found |
+    //  server_error | network | unknown) for easier debugging.
+    socket.on('chat-error', (data: { error: string; kind?: string }) => {
+      console.error('[Hermes UI] Chat error' + (data.kind ? ` [${data.kind}]` : '') + ':', data.error);
       setIsTyping(false);
       streamingIdRef.current = null;
       const errMsg: ChatMessage = {
