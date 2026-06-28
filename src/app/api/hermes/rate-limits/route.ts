@@ -220,7 +220,7 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
     notifyDataChange({
       scope: 'hermes-config',
       companyId,
-      action: 'rate-limit-update',
+      action: 'update',
     }).catch(() => { /* non-critical */ });
 
     return NextResponse.json({ success: true, rateLimits: updated });
