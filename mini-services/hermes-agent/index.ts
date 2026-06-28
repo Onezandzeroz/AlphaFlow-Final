@@ -82,6 +82,30 @@ const tenantProvider: TenantProvider = USE_DATABASE
   : new MockTenantProvider()
 console.log(`[Hermes] Using ${USE_DATABASE ? 'Database' : 'Mock'} tenant provider`)
 
+// --------------- Fallback Tenant Cache ---------------
+// When getTenant() returns null (unknown CUID, DB miss, or Mock mode with
+// a real tenant ID), we create a friendly default tenant and CACHE it so
+// that the join and chat handlers stay consistent within a session.
+//
+// Previously the join handler created a local default that was never
+// persisted back to the provider, so the chat handler's getTenant()
+// returned null again and emitted "Unknown tenant: <CUID>" — a confusing,
+// non-human-readable error that blocked all chat.
+const defaultTenantCache = new Map<string, TenantData>()
+
+async function getOrCreateTenant(tenantId: string): Promise<{ tenant: TenantData; isFallback: boolean }> {
+  const real = await tenantProvider.getTenant(tenantId)
+  if (real) return { tenant: real, isFallback: false }
+
+  let fallback = defaultTenantCache.get(tenantId)
+  if (!fallback) {
+    fallback = createDefaultTenant(tenantId)
+    defaultTenantCache.set(tenantId, fallback)
+    console.log(`[Hermes] Tenant ikke fundet i provider — bruger venlige standardværdier (CUID: ${tenantId})`)
+  }
+  return { tenant: fallback, isFallback: true }
+}
+
 // --------------- In-Memory Socket State ---------------
 
 interface SocketMeta {
@@ -129,12 +153,8 @@ io.on('connection', (socket) => {
     if (!tenantSockets.has(tenantId)) tenantSockets.set(tenantId, [])
     tenantSockets.get(tenantId)!.push(socket.id)
 
-    // Get or create tenant
-    let tenant = await tenantProvider.getTenant(tenantId)
-    if (!tenant) {
-      console.log(`[Hermes] Unknown tenant "${tenantId}", using defaults`)
-      tenant = createDefaultTenant(tenantId)
-    }
+    // Get or create tenant (cached fallback keeps join + chat consistent)
+    const { tenant, isFallback } = await getOrCreateTenant(tenantId)
 
     // Acknowledge join
     socket.emit('join-ack', {
@@ -145,8 +165,15 @@ io.on('connection', (socket) => {
 
     // If agent is enabled, send welcome
     if (tenantProvider.isAgentEnabled(tenantId)) {
+      // Friendly welcome — only mention the company name when we actually
+      // know it (a real DB-backed tenant). For fallback tenants we use a
+      // generic greeting so the user never sees a raw CUID like
+      // "cmqwqfxld0006jxua9q4sqf1r".
+      const welcomeMessage = isFallback
+        ? `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent. Hvad kan jeg hjælpe dig med i dag?`
+        : `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent for ${tenant.name}. Hvad kan jeg hjælpe dig med i dag?`
       socket.emit('agent-welcome', {
-        message: `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent for ${tenant.name}. Hvordan kan jeg hjælpe dig i dag?`,
+        message: welcomeMessage,
         tenantName: tenant.name,
       })
     }
@@ -170,15 +197,12 @@ io.on('connection', (socket) => {
     const meta = connectedSockets.get(socket.id)
 
     if (!meta || meta.tenantId !== tenantId) {
-      socket.emit('chat-error', { error: 'Socket not associated with this tenant' })
+      socket.emit('chat-error', { error: 'Din session er udløbet. Genindlæs venligst siden for at bruge Hermes igen.' })
       return
     }
 
-    const tenant = await tenantProvider.getTenant(tenantId)
-    if (!tenant) {
-      socket.emit('chat-error', { error: `Unknown tenant: ${tenantId}` })
-      return
-    }
+    // Reuse the same cached fallback as join — never error on unknown tenant
+    const { tenant } = await getOrCreateTenant(tenantId)
 
     console.log(`[Hermes] Chat from "${meta.userName}" in "${tenant.name}": ${message.slice(0, 80)}...`)
 
@@ -237,7 +261,7 @@ io.on('connection', (socket) => {
     const meta = connectedSockets.get(socket.id)
 
     if (!meta || meta.tenantId !== tenantId) {
-      socket.emit('chat-error', { error: 'Socket not associated with this tenant' })
+      socket.emit('chat-error', { error: 'Din session er udløbet. Genindlæs venligst siden for at bruge Hermes igen.' })
       return
     }
 
@@ -274,6 +298,7 @@ io.on('connection', (socket) => {
         tenantSockets.set(meta.tenantId, updated)
       } else {
         tenantSockets.delete(meta.tenantId)
+        defaultTenantCache.delete(meta.tenantId) // clean up fallback cache
       }
       connectedSockets.delete(socket.id)
     } else {
@@ -339,7 +364,7 @@ const reminderTimer = startReminderSystem()
 function createDefaultTenant(tenantId: string): TenantData {
   return {
     tenantId,
-    name: tenantId,
+    name: 'din virksomhed',
     cvr: '00000000',
     industry: 'Ukendt',
     members: [],
