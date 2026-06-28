@@ -38,8 +38,11 @@ let prisma: PrismaClient | null = null
  * Returns a singleton PrismaClient instance.
  * Uses DATABASE_URL from the environment if available,
  * otherwise falls back to the datasource URL in schema.prisma.
+ *
+ * Exported so other modules (e.g. rate-limiter.ts) can reuse the
+ * same connection pool instead of creating duplicate clients.
  */
-function getPrismaClient(): PrismaClient {
+export function getPrismaClient(): PrismaClient {
   if (!prisma) {
     const databaseUrl = process.env.DATABASE_URL
     prisma = new PrismaClient({

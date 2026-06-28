@@ -43,10 +43,11 @@ import { ReceiptScanner } from '@/components/scanner/ReceiptScanner';
 import { TermsOfServicePage } from '@/components/legal/terms-of-service';
 import { AnnualReportPage } from '@/components/annual-report/annual-report-page';
 import { ProjectsPage } from '@/components/projects/projects-page';
+import { HermesOversightPage } from '@/components/hermes/hermes-oversight-page';
 
-type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report';
+type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight';
 
-const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report'];
+const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report', 'hermes-oversight'];
 
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
 function getInitialView(): View {
@@ -716,6 +717,8 @@ export default function Home() {
         return <ProjectsPage user={user} />;
       case 'annual-report':
         return <AnnualReportPage user={user} />;
+      case 'hermes-oversight':
+        return <HermesOversightPage user={user} />;
       default:
         return <Dashboard user={user} onNavigate={(navView) => navigateToView(navView as View)} onboardingStepJustDone={onboardingStepJustDone} onOnboardingStepDoneConsumed={() => setOnboardingStepJustDone(0)} />;
     }

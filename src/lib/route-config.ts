@@ -491,6 +491,13 @@ export const routeConfig: RouteConfigMap = {
   '/api/hermes/tenants': {
     GET: { auth: true, requireSuperDev: true },
   },
+  '/api/hermes/rate-limits': {
+    GET: { auth: true, requireSuperDev: true },
+    PUT: { auth: true, requireSuperDev: true },
+  },
+  '/api/hermes/usage-stats': {
+    GET: { auth: true, requireSuperDev: true },
+  },
   '/api/hermes/toggle': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, permissions: [Permission.COMPANY_EDIT_SETTINGS] },
   },

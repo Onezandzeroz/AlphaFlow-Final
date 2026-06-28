@@ -13,6 +13,7 @@ import { buildSystemPrompt } from './knowledge-base'
 import { MockTenantProvider, type TenantProvider, type TenantData } from './tenant-provider'
 import { DatabaseTenantProvider } from './database-tenant-provider'
 import { splitIntoChunks, buildTenantContext } from './utils'
+import { getRateLimiter } from './rate-limiter'
 
 // ============================================================
 // OpenRouter LLM Client
@@ -306,6 +307,14 @@ interface SocketMeta {
 const connectedSockets = new Map<string, SocketMeta>()   // socketId -> meta
 const tenantSockets = new Map<string, string[]>()         // tenantId -> [socketId, ...]
 
+// --------------- Rate Limiter (per-tenant) ---------------
+
+const rateLimiter = getRateLimiter()
+
+// Shared secret for the HTTP /admin/stats endpoint (used by the Next.js
+// oversight API). Falls back to OPENROUTER_API_KEY if not set.
+const HERMES_ADMIN_KEY = process.env.HERMES_ADMIN_KEY || process.env.OPENROUTER_API_KEY || ''
+
 // --------------- Socket.IO Server ---------------
 
 const httpServer = createServer()
@@ -394,6 +403,29 @@ io.on('connection', (socket) => {
 
     console.log(`[Hermes] Chat from "${meta.userName}" in "${tenant.name}": ${message.slice(0, 80)}...`)
 
+    // ─── Per-tenant rate limit check ───
+    // Enforced BEFORE storing the message or calling the LLM, so denied
+    // requests don't consume the tenant's quota or OpenRouter budget.
+    const rl = await rateLimiter.check(tenantId)
+    if (!rl.allowed) {
+      const windowLabel =
+        rl.window === 'minute' ? 'per minut' :
+        rl.window === 'hour' ? 'i timen' :
+        rl.window === 'day' ? 'i dag' : 'denne måned'
+      const retryMin = rl.retryAfterSeconds != null
+        ? Math.max(1, Math.ceil(rl.retryAfterSeconds / 60))
+        : 1
+      console.log(
+        `[Hermes] Rate limit DENIED for "${meta.userName}" (${tenant.name}) — ` +
+        `window=${rl.window} used=${rl.used}/${rl.limit} retry_after=${rl.retryAfterSeconds}s`
+      )
+      socket.emit('chat-error', {
+        error: `Du har nået grænsen for Hermes (${rl.used}/${rl.limit} ${windowLabel}). Prøv igen om ca. ${retryMin} min.`,
+        kind: 'rate_limited_tenant',
+      })
+      return
+    }
+
     // Store user message
     tenantProvider.addMessage(tenantId, { role: 'user', content: message })
 
@@ -436,6 +468,11 @@ io.on('connection', (socket) => {
       }
 
       socket.emit('chat-complete', { fullResponse, done: true })
+
+      // Count this successful request against the tenant's rate-limit windows.
+      // Only successful responses consume quota — failed/429'd requests don't.
+      rateLimiter.record(tenantId)
+
       console.log(`[Hermes] Response sent to "${meta.userName}" (${fullResponse.length} chars)`)
     } catch (error: any) {
       // Classify the failure into a typed kind so the user gets a specific,
@@ -587,6 +624,88 @@ function createDefaultTenant(tenantId: string): TenantData {
     conversationHistory: [],
   }
 }
+
+// ============================================================
+// HTTP Admin Endpoints (for the App Owner oversight page)
+// ============================================================
+// Socket.IO only handles /socket.io/ requests. We add a plain HTTP
+// request handler for /admin/stats so the Next.js oversight API
+// (requireSuperDev) can read live per-tenant usage counters.
+//
+// Auth: shared secret via Authorization: Bearer <HERMES_ADMIN_KEY>.
+// HERMES_ADMIN_KEY falls back to OPENROUTER_API_KEY if unset.
+// ============================================================
+
+httpServer.on('request', async (req, res) => {
+  // Only handle /admin/* paths; ignore everything else (incl. /socket.io/)
+  const url = req.url || ''
+  if (!url.startsWith('/admin/')) return
+
+  // ─── Auth ───
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
+  if (!HERMES_ADMIN_KEY || token !== HERMES_ADMIN_KEY) {
+    res.writeHead(401, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'Unauthorized — invalid or missing admin key' }))
+    return
+  }
+
+  // ─── GET /admin/stats — all tenants' usage + config ───
+  if (url.startsWith('/admin/stats') && req.method === 'GET') {
+    try {
+      const usage = await rateLimiter.getAllUsage()
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ tenants: usage }))
+    } catch (err: any) {
+      console.error('[Hermes] /admin/stats error:', err.message || err)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Internal server error' }))
+    }
+    return
+  }
+
+  // ─── GET /admin/stats/:tenantId — single tenant usage ───
+  const singleMatch = url.match(/^\/admin\/stats\/([^/?]+)/)
+  if (singleMatch && req.method === 'GET') {
+    try {
+      const usage = await rateLimiter.getUsage(decodeURIComponent(singleMatch[1]))
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(usage))
+    } catch (err: any) {
+      console.error('[Hermes] /admin/stats/:tenantId error:', err.message || err)
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Internal server error' }))
+    }
+    return
+  }
+
+  // ─── POST /admin/invalidate — clear config cache for a tenant ───
+  // Called by the Next.js API after updating a tenant's limits, so the
+  // new config is picked up within seconds instead of waiting 60s.
+  if (url.startsWith('/admin/invalidate') && req.method === 'POST') {
+    try {
+      let body = ''
+      for await (const chunk of req) body += chunk
+      const { tenantId } = JSON.parse(body || '{}')
+      if (typeof tenantId === 'string') {
+        rateLimiter.invalidateConfig(tenantId)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: true }))
+      } else {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Missing tenantId' }))
+      }
+    } catch (err: any) {
+      res.writeHead(400, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'Invalid JSON body' }))
+    }
+    return
+  }
+
+  // Unknown /admin/* path
+  res.writeHead(404, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify({ error: 'Not found' }))
+})
 
 // ============================================================
 // Start Server

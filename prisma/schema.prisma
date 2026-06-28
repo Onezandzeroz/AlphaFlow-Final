@@ -1038,6 +1038,16 @@ model HermesAgent {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // ─── Per-tenant rate limits (configurable from App Owner oversight page) ───
+  // Defaults: 10/min burst, 40/hour, 120/day, 2000/month.
+  // See Hermes AI Modelanbefalinger PDF §8.4 for rationale.
+  // When rateLimitEnabled=false, all requests are allowed (no enforcement).
+  rateLimitEnabled Boolean  @default(true)
+  rateLimitBurst    Int      @default(10)    // max requests per minute (flood/script protection)
+  rateLimitHour     Int      @default(40)    // max requests per hour
+  rateLimitDay      Int      @default(120)   // max requests per day (fair-use quota)
+  rateLimitMonth    Int      @default(2000)  // max requests per month (cost predictability)
+
   company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   reminders AgentReminder[]
   messages  AgentMessage[]

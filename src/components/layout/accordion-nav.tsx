@@ -40,6 +40,7 @@ import {
   FileBarChart,
   ShieldCheck,
   Settings,
+  Bot,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -67,13 +68,16 @@ type View =
   | 'settings'
   | 'settings-company'
   | 'settings-edelivery'
-  | 'annual-report';
+  | 'annual-report'
+  | 'hermes-oversight';
 
 interface NavItemDef {
   id: View;
   nameDa: string;
   nameEn: string;
   icon: LucideIcon;
+  /** When true, this item is only visible to SuperDev (App Owner). */
+  requireSuperDev?: boolean;
 }
 
 interface NavSectionDef {
@@ -149,6 +153,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
       { id: 'settings', nameDa: 'Kontoprofil', nameEn: 'Account Profile', icon: Settings },
       { id: 'backups', nameDa: 'Backup', nameEn: 'Backups', icon: DatabaseBackup },
       { id: 'audit-log', nameDa: 'Revisionslog', nameEn: 'Audit Log', icon: ScrollText },
+      { id: 'hermes-oversight', nameDa: 'Hermes Oversight', nameEn: 'Hermes Oversight', icon: Bot, requireSuperDev: true },
     ],
   },
 ];
@@ -243,6 +248,9 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
     return NAV_SECTIONS.map((section) => ({
       ...section,
       items: section.items.filter((item) => {
+        // SuperDev-only gate: hide items flagged requireSuperDev from
+        // non-SuperDev users (e.g. Hermes Oversight is App Owner only).
+        if (item.requireSuperDev && !isSuperDev) return false;
         // Feature gate (FASE 5): hide nav items whose required feature
         // is not in the tenant's availableFeatures. SuperDev sees all.
         const requiredFeature = NAV_FEATURE_GATE[item.id];
