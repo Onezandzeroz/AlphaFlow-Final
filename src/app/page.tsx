@@ -49,6 +49,59 @@ type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 
 
 const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report', 'hermes-oversight'];
 
+// ─── SEO: Dynamic document.title per view ─────────────────────────
+const VIEW_TITLES_DA: Record<View, string> = {
+  'dashboard': 'Dashboard — Kontrolpanel',
+  'transactions': 'Posteringer — Bogføring',
+  'exports': 'Eksport — SAF-T, CSV & OIOUBL',
+  'invoices': 'Fakturaer — E-faktura & Peppol',
+  'backups': 'Sikkerhedskopier — Backup & Gendannelse',
+  'audit-log': 'Revisionslog — Uforanderlig Audit Trail',
+  'accounts': 'Kontoplan — FSR Standard Konti',
+  'journal': 'Finansjournal — Hovedbogsposter',
+  'contacts': 'Kontakter — Kunder & Leverandører',
+  'periods': 'Regnskabsperioder — År & Periode',
+  'ledger': 'Hovedbog — Finansrapport',
+  'reports': 'Rapporter — Årsafslutning & Finans',
+  'bank-recon': 'Bankafstemning — Open Banking',
+  'aging': 'Aldersopdelt Rapport — Debitor/Creditor',
+  'cash-flow': 'Pengestrømsanalyse — Likviditet',
+  'recurring': 'Tilbagevendende Posteringer',
+  'budget': 'Budget — Budgetstyring & Afvigelse',
+  'projects': 'Projekter — Projektregnskab',
+  'settings': 'Indstillinger — Bruger & Sikkerhed',
+  'settings-company': 'Virksomhedsindstillinger',
+  'settings-edelivery': 'E-faktura Indstillinger — Peppol & Nemhandel',
+  'annual-report': 'Årsafslutning — Resultatopgørelse & Balance',
+  'hermes-oversight': 'Hermes AI — Oversigt & Konfiguration',
+};
+
+const VIEW_TITLES_EN: Record<View, string> = {
+  'dashboard': 'Dashboard — Control Panel',
+  'transactions': 'Transactions — Bookkeeping',
+  'exports': 'Export — SAF-T, CSV & OIOUBL',
+  'invoices': 'Invoices — E-invoicing & Peppol',
+  'backups': 'Backups — Backup & Restore',
+  'audit-log': 'Audit Log — Immutable Audit Trail',
+  'accounts': 'Chart of Accounts — FSR Standard',
+  'journal': 'Journal Entries — General Ledger',
+  'contacts': 'Contacts — Customers & Vendors',
+  'periods': 'Fiscal Periods — Year & Period',
+  'ledger': 'General Ledger — Financial Report',
+  'reports': 'Reports — Year-End & Financial',
+  'bank-recon': 'Bank Reconciliation — Open Banking',
+  'aging': 'Aging Report — Accounts Receivable/Payable',
+  'cash-flow': 'Cash Flow Analysis — Liquidity',
+  'recurring': 'Recurring Entries',
+  'budget': 'Budget — Budget Management & Variance',
+  'projects': 'Projects — Project Accounting',
+  'settings': 'Settings — User & Security',
+  'settings-company': 'Company Settings',
+  'settings-edelivery': 'E-invoicing Settings — Peppol & Nemhandel',
+  'annual-report': 'Annual Report — Income Statement & Balance Sheet',
+  'hermes-oversight': 'Hermes AI — Oversight & Configuration',
+};
+
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
 function getInitialView(): View {
   if (typeof window === 'undefined') return 'dashboard';
@@ -312,6 +365,48 @@ export default function Home() {
       window.removeEventListener('popstate', handlePopState);
     };
   }, [currentView, hydrated]);
+
+  // ─── SEO: Update document.title + meta description when view changes ──
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const titles = language === 'da' ? VIEW_TITLES_DA : VIEW_TITLES_EN;
+    const viewTitle = titles[currentView] ?? titles['dashboard'];
+    document.title = `${viewTitle} · AlphaFlow Regnskabsprogram`;
+    // Update meta description dynamically for JS-aware crawlers
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (!metaDesc) {
+      metaDesc = document.createElement('meta');
+      metaDesc.setAttribute('name', 'description');
+      document.head.appendChild(metaDesc);
+    }
+    const descMap: Record<string, Record<string, string>> = {
+      da: {
+        dashboard: 'AlphaFlow Dashboard — overblik over økonomi, posteringer, moms, fakturaer og likviditet i ét kontrolpanel.',
+        transactions: 'Posteringer i AlphaFlow — dobbelt bogføring med automatisk moms, kategorisering og finansjournal.',
+        invoices: 'Fakturering i AlphaFlow — opret, send og modtag e-fakturaer via Peppol OIOUBL BIS Billing 3.0.',
+        accounts: 'Kontoplan i AlphaFlow — FSR standard kontoplan med 38 konti, momsmapping og automatisk bogføringsforslag.',
+        reports: 'Regnskabsrapporter i AlphaFlow — resultatopgørelse, balance, pengestrøm, SAF-T eksport og årsafslutning.',
+        'bank-recon': 'Bankafstemning i AlphaFlow — Open Banking integration med automatisk match af posteringer.',
+        budget: 'Budgetstyring i AlphaFlow — opret budgetter med afvigelsesanalyse og sammenligning mod faktiske tal.',
+        projects: 'Projektregnskab i AlphaFlow — under-budgets, projekt-rapporter og løbende avance/tab.',
+        settings: 'Indstillinger i AlphaFlow — brugerprofil, sikkerhed, 2FA, team-adgang og virksomhedsopsætning.',
+      },
+      en: {
+        dashboard: 'AlphaFlow Dashboard — overview of finances, transactions, VAT, invoices and liquidity.',
+        transactions: 'Transactions in AlphaFlow — double-entry bookkeeping with automatic VAT and journal.',
+        invoices: 'Invoicing in AlphaFlow — create, send and receive e-invoices via Peppol OIOUBL.',
+        accounts: 'Chart of Accounts in AlphaFlow — FSR standard with 38 accounts and VAT mapping.',
+        reports: 'Financial Reports in AlphaFlow — income statement, balance sheet, cash flow, SAF-T export.',
+        'bank-recon': 'Bank Reconciliation in AlphaFlow — Open Banking with automatic transaction matching.',
+        budget: 'Budget Management in AlphaFlow — budgets with variance analysis vs. actuals.',
+        projects: 'Project Accounting in AlphaFlow — sub-budgets, project reports and profit/loss tracking.',
+        settings: 'Settings in AlphaFlow — user profile, security, 2FA, team access and company setup.',
+      },
+    };
+    const langKey = language === 'da' ? 'da' : 'en';
+    const desc = descMap[langKey]?.[currentView];
+    if (desc) metaDesc.setAttribute('content', desc);
+  }, [currentView, language]);
 
   // ─── Listen for direct app:navigate events (used by modals/widgets) ───
   useEffect(() => {
