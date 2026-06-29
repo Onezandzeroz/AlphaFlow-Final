@@ -21,6 +21,11 @@
 //   GET    /stats                     — index statistics
 // ============================================================
 
+// MUST be the very first import — loads root .env before other
+// modules cache env vars at evaluation time (e.g., OPENROUTER_API_KEY
+// in embedder.ts). Bun only auto-loads .env from cwd, not the parent.
+import './load-env'
+
 import { createServer } from 'http'
 import { defaultConfig } from './config'
 import { getDb, ensurePgvectorExtension, indexDocument, searchChunks } from './db'

@@ -5,6 +5,10 @@
 // tenant provider, and utility modules into a running server.
 // ============================================================
 
+// MUST be the first import — loads root .env before other modules
+// cache env vars at evaluation time. PM2 does NOT auto-load .env.
+import './load-env'
+
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 
@@ -14,6 +18,13 @@ import { MockTenantProvider, type TenantProvider, type TenantData } from './tena
 import { DatabaseTenantProvider } from './database-tenant-provider'
 import { splitIntoChunks, buildTenantContext } from './utils'
 import { getRateLimiter } from './rate-limiter'
+
+// ─── Load parent .env if DATABASE_URL or OPENROUTER_API_KEY is not set ──
+// (Now handled by load-env.ts above — kept as documentation.)
+// PM2 does NOT auto-load the root .env file. When running
+// under PM2 with cwd=mini-services/hermes-agent/, Bun
+// only loads .env from that directory — not the project root.
+// The load-env.ts module reads the parent .env and sets missing vars.
 
 // ============================================================
 // OpenRouter LLM Client

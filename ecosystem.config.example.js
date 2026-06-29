@@ -13,7 +13,8 @@
 //   1. alphaflow          — Next.js app on port 3000
 //   2. notification-ws    — Notification WebSocket Service on port 3001
 //   3. hermes-agent       — Hermes AI Agent Socket.IO service on port 3004
-//   4. tokenpay-access    — TokenPay Access Service on port 3100
+//   4. knowledge-service  — Knowledge RAG Service on port 3006
+//   5. tokenpay-access    — TokenPay Access Service on port 3100
 
 module.exports = {
   apps: [
@@ -138,6 +139,42 @@ module.exports = {
       max_memory_restart: '128M',
       error_file: './logs/notification-ws-error.log',
       out_file: './logs/notification-ws-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      merge_logs: true,
+    },
+
+    // ─── Knowledge Service (Bun + HTTP + pgvector) ──────────────────
+    {
+      name: 'knowledge-service',
+      script: 'index.ts',
+      cwd: `${process.cwd()}/mini-services/knowledge-service`,
+      interpreter: 'bun',
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3006',
+        // DATABASE_URL — REQUIRED. Must point to the same Neon PostgreSQL as the host app.
+        // PM2 does NOT auto-load the root .env — set it here explicitly.
+        DATABASE_URL: '',
+        // Embedding API key — REQUIRED for semantic search (RAG).
+        // Use either OpenAI or OpenRouter (same key as Hermes agent works).
+        OPENROUTER_API_KEY: '',
+        OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
+        // Optional: use OpenAI embeddings instead of OpenRouter
+        // OPENAI_API_KEY: '',
+        // OPENAI_BASE_URL: 'https://api.openai.com/v1',
+        // Auth key for the knowledge service API (shared with Hermes agent)
+        // Defaults to OPENROUTER_API_KEY if not set.
+        // HERMES_ADMIN_KEY: '',
+      },
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      max_memory_restart: '256M',
+      // Logging
+      error_file: './logs/knowledge-service-error.log',
+      out_file: './logs/knowledge-service-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       merge_logs: true,
     },
