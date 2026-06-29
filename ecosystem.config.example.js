@@ -30,6 +30,12 @@ module.exports = {
         NODE_ENV: 'production',
         // DATABASE_URL is loaded from .env.local — make sure it's set!
         // Example: postgresql://neondb_owner:xxx@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require
+        // ─── Hermes Oversight (per-tenant rate limits) ───
+        // Shared secret to read live usage stats from hermes-agent's
+        // /admin/stats endpoint. MUST match HERMES_ADMIN_KEY in the
+        // hermes-agent env block below. Falls back to OPENROUTER_API_KEY.
+        HERMES_ADMIN_KEY: '',
+        HERMES_SERVICE_PORT: '3004',
       },
       // CRITICAL: Must use fork mode — cluster mode breaks Bun interpreter
       exec_mode: 'fork',
@@ -46,7 +52,7 @@ module.exports = {
       merge_logs: true,
     },
 
-// ─── Hermes Agent Service (Bun + Socket.IO) ─────────────────────
+    // ─── Hermes Agent Service (Bun + Socket.IO) ─────────────────────
     {
       name: 'hermes-agent',
       script: 'index.ts',
@@ -63,10 +69,18 @@ module.exports = {
         // Free models: https://openrouter.ai/models?q=free
         OPENROUTER_API_KEY: '',
         OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
-        OPENROUTER_MODEL: 'meta-llama/llama-3.3-70b-instruct:free',
+        OPENROUTER_MODEL: 'anthropic/claude-sonnet-4.5',
         // Used for OpenRouter dashboard attribution (HTTP-Referer / X-Title headers)
         OPENROUTER_APP_NAME: 'AlphaFlow',
         APP_URL: 'https://alphaflow.dk',
+        // ─── Rate Limiting (oversight page) ───
+        // Shared secret for the HTTP /admin/stats endpoint. MUST match
+        // HERMES_ADMIN_KEY in the alphaflow app block above. If unset,
+        // falls back to OPENROUTER_API_KEY (less secure — set explicitly).
+        HERMES_ADMIN_KEY: '',
+        // ─── RAG Knowledge Base ───
+        // Port of the knowledge-service mini-service (for retrieval before LLM call).
+        KNOWLEDGE_SERVICE_PORT: '3006',
       },
       exec_mode: 'fork',
       instances: 1,
@@ -78,6 +92,42 @@ module.exports = {
       // Logging
       error_file: './logs/hermes-agent-error.log',
       out_file: './logs/hermes-agent-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      merge_logs: true,
+    },
+
+    // ─── Knowledge Service (Bun + HTTP + pgvector) ──────────────────
+    {
+      name: 'knowledge-service',
+      script: 'index.ts',
+      cwd: `${process.cwd()}/mini-services/knowledge-service`,
+      interpreter: 'bun',
+      env: {
+        NODE_ENV: 'production',
+        PORT: '3006',
+        // DATABASE_URL — REQUIRED. Must point to the same Neon PostgreSQL as the host app.
+        // PM2 does NOT auto-load the root .env — set it here explicitly.
+        DATABASE_URL: '',
+        // Embedding API key — REQUIRED for semantic search (RAG).
+        // Use either OpenAI or OpenRouter (same key as Hermes agent works).
+        OPENROUTER_API_KEY: '',
+        OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
+        // Optional: use OpenAI embeddings instead of OpenRouter
+        // OPENAI_API_KEY: '',
+        // OPENAI_BASE_URL: 'https://api.openai.com/v1',
+        // Auth key for the knowledge service API (shared with Hermes agent)
+        // Defaults to OPENROUTER_API_KEY if not set.
+        HERMES_ADMIN_KEY: '',
+      },
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 5000,
+      max_memory_restart: '256M',
+      // Logging
+      error_file: './logs/knowledge-service-error.log',
+      out_file: './logs/knowledge-service-out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       merge_logs: true,
     },
@@ -142,43 +192,7 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
       merge_logs: true,
     },
-
-    // ─── Knowledge Service (Bun + HTTP + pgvector) ──────────────────
-    {
-      name: 'knowledge-service',
-      script: 'index.ts',
-      cwd: `${process.cwd()}/mini-services/knowledge-service`,
-      interpreter: 'bun',
-      env: {
-        NODE_ENV: 'production',
-        PORT: '3006',
-        // DATABASE_URL — REQUIRED. Must point to the same Neon PostgreSQL as the host app.
-        // PM2 does NOT auto-load the root .env — set it here explicitly.
-        DATABASE_URL: '',
-        // Embedding API key — REQUIRED for semantic search (RAG).
-        // Use either OpenAI or OpenRouter (same key as Hermes agent works).
-        OPENROUTER_API_KEY: '',
-        OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
-        // Optional: use OpenAI embeddings instead of OpenRouter
-        // OPENAI_API_KEY: '',
-        // OPENAI_BASE_URL: 'https://api.openai.com/v1',
-        // Auth key for the knowledge service API (shared with Hermes agent)
-        // Defaults to OPENROUTER_API_KEY if not set.
-        // HERMES_ADMIN_KEY: '',
-      },
-      exec_mode: 'fork',
-      instances: 1,
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 5000,
-      max_memory_restart: '256M',
-      // Logging
-      error_file: './logs/knowledge-service-error.log',
-      out_file: './logs/knowledge-service-out.log',
-      log_date_format: 'YYYY-MM-DD HH:mm:ss',
-      merge_logs: true,
-    },
-
+  
     // ─── Scanner Service (Python + FastAPI + uvicorn) ──────────────
     {
       name: 'scanner-service',
@@ -186,7 +200,7 @@ module.exports = {
       cwd: `${process.cwd()}/mini-services/scanner-service`,
       interpreter: `${process.cwd()}/mini-services/scanner-service/.venv/bin/python3`,
       env: {
-        NODE_ENV: 'production',
+        NODE_ENV: 'development',
         PORT: '3005',
         // API_SHARED_KEY must match SCANNER_API_KEY in the host app's .env
         API_SHARED_KEY: '',
