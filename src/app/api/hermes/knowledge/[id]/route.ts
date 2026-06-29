@@ -30,7 +30,9 @@ export const GET = withGuard(
   routeConfig['/api/hermes/knowledge/[id]'].GET!,
   async (request, ctx, context: RouteSegmentContext) => {
     try {
-      const { id } = await context.params;
+      const { id: rawId } = await context.params;
+      // Next.js params can be string | string[] — normalize to a single string
+      const id = Array.isArray(rawId) ? rawId[0] : rawId;
       if (!HERMES_ADMIN_KEY) {
         return NextResponse.json({ error: 'HERMES_ADMIN_KEY not configured' }, { status: 503 });
       }
@@ -65,7 +67,9 @@ export const PUT = withGuard(
   routeConfig['/api/hermes/knowledge/[id]'].PUT!,
   async (request, ctx, context: RouteSegmentContext) => {
     try {
-      const { id } = await context.params;
+      const { id: rawId } = await context.params;
+      // Next.js params can be string | string[] — normalize to a single string
+      const id = Array.isArray(rawId) ? rawId[0] : rawId;
       if (!HERMES_ADMIN_KEY) {
         return NextResponse.json({ error: 'HERMES_ADMIN_KEY not configured' }, { status: 503 });
       }
@@ -120,7 +124,9 @@ export const DELETE = withGuard(
   routeConfig['/api/hermes/knowledge/[id]'].DELETE!,
   async (request, ctx, context: RouteSegmentContext) => {
     try {
-      const { id } = await context.params;
+      const { id: rawId } = await context.params;
+      // Next.js params can be string | string[] — normalize to a single string
+      const id = Array.isArray(rawId) ? rawId[0] : rawId;
       if (!HERMES_ADMIN_KEY) {
         return NextResponse.json({ error: 'HERMES_ADMIN_KEY not configured' }, { status: 503 });
       }
