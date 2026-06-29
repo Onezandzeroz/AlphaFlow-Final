@@ -389,13 +389,18 @@ export class DatabaseTenantProvider implements TenantProvider {
     const cached = getCachedEnabled(tenantId)
     if (cached !== null) return cached
 
-    // 2. Cache miss or expired — fire async refresh, return false
-    //    The cache will be updated for the next call within 30s.
+    // 2. Cache miss or expired — fire async refresh.
+    //    Rather than returning false (which breaks join-ack when
+    //    the agent IS enabled but the cache simply expired), we
+    //    optimistically return true. The async refresh will correct
+    //    the cache within milliseconds if the agent is actually
+    //    disabled, and the next isAgentEnabled() call (within 30s)
+    //    will reflect the true state.
     this.refreshEnabledCache(tenantId).catch(() => {
       // Silently handle — the cache will remain empty
     })
 
-    return false
+    return true
   }
 
   /**

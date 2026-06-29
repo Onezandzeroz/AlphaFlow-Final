@@ -364,15 +364,21 @@ io.on('connection', (socket) => {
     // Get or create tenant (cached fallback keeps join + chat consistent)
     const { tenant, isFallback } = await getOrCreateTenant(tenantId)
 
-    // Acknowledge join
+    // Sync the enabled cache so subsequent isAgentEnabled() calls
+    // (e.g. from checkReminders) return the correct value.
+    tenantProvider.setAgentEnabled(tenantId, tenant.agentEnabled)
+
+    // Acknowledge join — use tenant.agentEnabled directly instead of
+    // isAgentEnabled() which can return false on cache miss even when
+    // the tenant data was just fetched successfully.
     socket.emit('join-ack', {
       status: 'joined',
-      agentEnabled: tenantProvider.isAgentEnabled(tenantId),
+      agentEnabled: tenant.agentEnabled,
       tenantName: tenant.name,
     })
 
     // If agent is enabled, send welcome
-    if (tenantProvider.isAgentEnabled(tenantId)) {
+    if (tenant.agentEnabled) {
       // Friendly welcome — only mention the company name when we actually
       // know it (a real DB-backed tenant). For fallback tenants we use a
       // generic greeting so the user never sees a raw CUID like
