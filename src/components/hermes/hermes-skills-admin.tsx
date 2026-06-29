@@ -14,6 +14,7 @@ import {
   Lock,
   Trash2,
   Shield,
+  Globe,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -32,11 +33,6 @@ interface Skill {
   enabled: boolean;
 }
 
-interface HermesSkillsAdminProps {
-  companyId: string;
-  isSuperDev: boolean;
-}
-
 // ── Category helpers ──────────────────────────────────────────────
 
 const CATEGORY_META: Record<string, { label: string; labelDa: string; color: string }> = {
@@ -48,7 +44,7 @@ const CATEGORY_META: Record<string, { label: string; labelDa: string; color: str
 
 // ── Component ──────────────────────────────────────────────────────
 
-export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminProps) {
+export function HermesSkillsAdmin() {
   const { t, language } = useTranslation();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,7 +74,7 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
     fetchSkills();
   }, [fetchSkills]);
 
-  // ── Toggle skill ──
+  // ── Toggle skill globally ──
   const handleToggle = useCallback(async (skillId: string, enabled: boolean) => {
     setTogglingId(skillId);
     try {
@@ -89,11 +85,11 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
       });
 
       if (response.ok) {
-        setSkills(prev => prev.map(s => s.id === skillId ? { ...s, enabled } : s));
+        setSkills(prev => prev.map(s => s.id === skillId ? { ...s, enabled, enabledByDefault: enabled } : s));
         toast.success(
           enabled
-            ? (isDa ? 'Færdighed aktiveret' : 'Skill enabled')
-            : (isDa ? 'Færdighed deaktiveret' : 'Skill disabled')
+            ? (isDa ? 'Færdighed aktiveret for alle tenantvirksomheder' : 'Skill enabled for all tenant companies')
+            : (isDa ? 'Færdighed deaktiveret for alle tenantvirksomheder' : 'Skill disabled for all tenant companies')
         );
       } else {
         toast.error(isDa ? 'Kunne ikke ændre færdighed' : 'Failed to toggle skill');
@@ -105,9 +101,8 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
     }
   }, [isDa]);
 
-  // ── Delete skill (SuperDev only) ──
+  // ── Delete skill (non-built-in only) ──
   const handleDelete = useCallback(async (skillId: string, skillName: string) => {
-    if (!isSuperDev) return;
     if (!confirm(isDa
       ? `Er du sikker på at du vil fjerne "${skillName}" fra kataloget?`
       : `Are you sure you want to remove "${skillName}" from the catalog?`
@@ -133,7 +128,7 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
     } finally {
       setDeletingId(null);
     }
-  }, [isSuperDev, isDa]);
+  }, [isDa]);
 
   // ── Loading ──
   if (isLoading) {
@@ -171,8 +166,8 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
         <CardContent>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {isDa
-              ? 'Ingen færdigheder installeret endnu. Som App Owner kan du installere færdigheder fra kataloget.'
-              : 'No skills installed yet. As App Owner, you can install skills from the catalog.'}
+              ? 'Ingen færdigheder installeret endnu. Brug "seed-hermes-skills" scriptet til at tilføje færdigheder til kataloget.'
+              : 'No skills installed yet. Use the "seed-hermes-skills" script to add skills to the catalog.'}
           </p>
         </CardContent>
       </Card>
@@ -191,8 +186,8 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
         </CardTitle>
         <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
           {isDa
-            ? 'Aktivér eller deaktivér færdigheder for at ændre hvordan Hermes svarer'
-            : 'Enable or disable skills to change how Hermes responds'}
+            ? 'Aktivér eller deaktivér færdigheder globalt. Ændringer gælder for alle tenantvirksomheder.'
+            : 'Enable or disable skills globally. Changes apply to all tenant companies.'}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -228,6 +223,10 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
                           {isDa ? 'Indbygget' : 'Built-in'}
                         </Badge>
                       )}
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-teal-50 text-teal-600 dark:bg-teal-900/20 dark:text-teal-400">
+                        <Globe className="h-2.5 w-2.5 mr-0.5" />
+                        {isDa ? 'Global' : 'Global'}
+                      </Badge>
                       <span className="text-[10px] text-gray-400">v{skill.version}</span>
                     </div>
 
@@ -257,7 +256,7 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
 
                   {/* Toggle + delete */}
                   <div className="flex items-center gap-2 shrink-0">
-                    {isSuperDev && !skill.isBuiltIn && (
+                    {!skill.isBuiltIn && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -289,16 +288,14 @@ export function HermesSkillsAdmin({ companyId, isSuperDev }: HermesSkillsAdminPr
         </div>
 
         {/* SuperDev info */}
-        {isSuperDev && (
-          <div className="mt-4 flex items-start gap-2 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200/50 dark:border-violet-800/30 p-3">
-            <Shield className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
-            <p className="text-xs text-violet-700 dark:text-violet-300 leading-relaxed">
-              {isDa
-                ? 'Som App Owner kan du aktivere/deaktivere færdigheder for alle tenantvirksomheder. Indbyggede færdigheder kan ikke fjernes. Brug "seed-hermes-skills" scriptet til at tilføje nye færdigheder til kataloget.'
-                : 'As App Owner you can enable/disable skills for all tenant companies. Built-in skills cannot be removed. Use the "seed-hermes-skills" script to add new skills to the catalog.'}
-            </p>
-          </div>
-        )}
+        <div className="mt-4 flex items-start gap-2 rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200/50 dark:border-violet-800/30 p-3">
+          <Shield className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-violet-700 dark:text-violet-300 leading-relaxed">
+            {isDa
+              ? 'Som App Owner styrer du færdigheder globalt for alle tenantvirksomheder. Når du aktiverer/deaktiverer en færdighed, gælder det for alle. Indbyggede færdigheder kan ikke fjernes. Tenants har ingen UI til færdigheder — hvis de vil vide hvilke færdigheder du har aktiveret, kan de bare spørge Hermes.'
+              : 'As App Owner you control skills globally for all tenant companies. When you enable/disable a skill, it applies to everyone. Built-in skills cannot be removed. Tenants have no skills UI — if they want to know which skills you have enabled, they can simply ask Hermes.'}
+          </p>
+        </div>
       </CardContent>
     </Card>
   );

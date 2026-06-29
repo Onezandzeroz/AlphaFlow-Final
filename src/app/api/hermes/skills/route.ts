@@ -7,33 +7,19 @@ import { logger } from '@/lib/logger';
 /**
  * GET /api/hermes/skills
  * Returns all available skills + the tenant's enabled/disabled state for each.
+ * SuperDev only — tenants cannot see or manage skills directly.
+ * If tenants want to know which skills Hermes has, they can ask Hermes.
  */
-export const GET = withGuard(routeConfig['/api/hermes/config'].GET!, async (request, ctx) => {
+export const GET = withGuard(routeConfig['/api/hermes/skills'].GET!, async (request, ctx) => {
   try {
     // Get all skills from the catalog
     const allSkills = await db.hermesSkill.findMany({
       orderBy: [{ isBuiltIn: 'desc' }, { name: 'asc' }],
     });
 
-    // Get tenant's agent to find enabled skills
-    const agent = await db.hermesAgent.findUnique({
-      where: { companyId: ctx.activeCompanyId! },
-      include: {
-        skills: {
-          include: { skill: true },
-        },
-      },
-    });
-
-    // Build a map of skillId → enabled for the tenant
-    const tenantSkillMap = new Map<string, boolean>()
-    if (agent) {
-      for (const as of agent.skills) {
-        tenantSkillMap.set(as.skillId, as.enabled)
-      }
-    }
-
-    // Merge catalog with tenant state
+    // For SuperDev, we show global skills state (enabledByDefault).
+    // The SuperDev toggles are global — when they toggle a skill, it affects
+    // ALL tenants (enabledByDefault flag on the skill itself).
     const skills = allSkills.map(skill => ({
       id: skill.id,
       name: skill.name,
@@ -45,10 +31,8 @@ export const GET = withGuard(routeConfig['/api/hermes/config'].GET!, async (requ
       enabledByDefault: skill.enabledByDefault,
       isBuiltIn: skill.isBuiltIn,
       category: skill.category,
-      // If tenant has an explicit record, use it; otherwise use enabledByDefault
-      enabled: tenantSkillMap.has(skill.id)
-        ? tenantSkillMap.get(skill.id)!
-        : skill.enabledByDefault,
+      // For the admin UI, "enabled" means enabledByDefault (global toggle)
+      enabled: skill.enabledByDefault,
     }))
 
     return NextResponse.json({ skills })
@@ -60,10 +44,11 @@ export const GET = withGuard(routeConfig['/api/hermes/config'].GET!, async (requ
 
 /**
  * POST /api/hermes/skills
- * Toggle a skill on/off for the current tenant.
+ * Toggle a skill globally on/off (SuperDev only).
+ * When SuperDev disables a skill, it stops being injected for ALL tenants.
  * Body: { skillId: string, enabled: boolean }
  */
-export const POST = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (request, ctx) => {
+export const POST = withGuard(routeConfig['/api/hermes/skills'].POST!, async (request, ctx) => {
   try {
     const body = await request.json()
     const { skillId, enabled } = body
@@ -78,27 +63,11 @@ export const POST = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (re
       return NextResponse.json({ error: 'Skill not found' }, { status: 404 })
     }
 
-    // Get or create the agent for this tenant
-    let agent = await db.hermesAgent.findUnique({
-      where: { companyId: ctx.activeCompanyId! },
-    })
-    if (!agent) {
-      agent = await db.hermesAgent.create({
-        data: { companyId: ctx.activeCompanyId! },
-      })
-    }
-
-    // Upsert the agent-skill link
-    await db.hermesAgentSkill.upsert({
-      where: {
-        agentId_skillId: { agentId: agent.id, skillId },
-      },
-      create: {
-        agentId: agent.id,
-        skillId,
-        enabled,
-      },
-      update: { enabled },
+    // Update the global enabledByDefault flag — this controls whether the skill
+    // is active for ALL tenants (the skills/prompts API reads this flag)
+    await db.hermesSkill.update({
+      where: { id: skillId },
+      data: { enabledByDefault: enabled },
     })
 
     return NextResponse.json({
@@ -117,13 +86,8 @@ export const POST = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (re
  * Install a new skill to the catalog (SuperDev only).
  * Body: { name, descriptionEn, descriptionDa?, promptEn, promptDa?, ... }
  */
-export const PUT = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (request, ctx) => {
+export const PUT = withGuard(routeConfig['/api/hermes/skills'].PUT!, async (request, ctx) => {
   try {
-    // Only SuperDev can install skills
-    if (!ctx.isSuperDev) {
-      return NextResponse.json({ error: 'Only App Owner can install skills' }, { status: 403 })
-    }
-
     const body = await request.json()
     const { name, version, descriptionEn, descriptionDa, author, sourceUrl, promptEn, promptDa, enabledByDefault, isBuiltIn, category } = body
 
@@ -172,12 +136,8 @@ export const PUT = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (req
  * Remove a skill from the catalog (SuperDev only, built-in skills cannot be deleted).
  * Body: { skillId: string }
  */
-export const DELETE = withGuard(routeConfig['/api/hermes/toggle'].POST!, async (request, ctx) => {
+export const DELETE = withGuard(routeConfig['/api/hermes/skills'].DELETE!, async (request, ctx) => {
   try {
-    if (!ctx.isSuperDev) {
-      return NextResponse.json({ error: 'Only App Owner can remove skills' }, { status: 403 })
-    }
-
     const body = await request.json()
     const { skillId } = body
 

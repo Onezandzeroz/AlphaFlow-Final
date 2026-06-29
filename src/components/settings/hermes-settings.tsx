@@ -406,14 +406,11 @@ export function HermesSettings({ user }: HermesSettingsProps) {
           and tenant-specific notes. Only visible to App Owners. */}
       {isSuperDev && <HermesKnowledgeAdmin />}
 
-      {/* ── Skills Admin ── */}
-      {/* Skill management — enable/disable skills that modify Hermes behavior.
-          Visible to all users with Hermes enabled (they can toggle their own skills).
-          SuperDev gets delete and info. */}
-      <HermesSkillsAdmin
-        companyId={user.activeCompanyId || ''}
-        isSuperDev={isSuperDev}
-      />
+      {/* ── Skills Admin (SuperDev only) ── */}
+      {/* Skill management — install/enable/disable skills that modify Hermes behavior.
+          Only the App Owner (SuperDev) can manage skills. Tenants have no UI for skills;
+          if they want to know which skills Hermes has, they can simply ask Hermes. */}
+      {isSuperDev && <HermesSkillsAdmin />}
 
       {/* ── Capabilities Card ── */}
       <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">

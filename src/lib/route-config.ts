@@ -513,6 +513,12 @@ export const routeConfig: RouteConfigMap = {
   '/api/hermes/toggle': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, permissions: [Permission.COMPANY_EDIT_SETTINGS] },
   },
+  '/api/hermes/skills': {
+    GET: { auth: true, requireSuperDev: true },
+    POST: { auth: true, requireSuperDev: true },
+    PUT: { auth: true, requireSuperDev: true },
+    DELETE: { auth: true, requireSuperDev: true },
+  },
 
   // ═══════════════════════════════════════════════════════════
   // USER & NOTIFICATION ROUTES

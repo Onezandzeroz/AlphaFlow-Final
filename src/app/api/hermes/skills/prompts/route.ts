@@ -2,13 +2,16 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
 /**
- * GET /api/hermes/skills/prompts?companyId=...
- * Returns the concatenated system prompt fragments for all ENABLED skills
- * for a given tenant. Used by hermes-agent to inject skill instructions
- * into the system prompt.
+ * GET /api/hermes/skills/prompts?companyId=...&lang=...
+ * Returns the system prompt fragments for all globally enabled skills.
+ * Used by hermes-agent to inject skill instructions into the system prompt.
+ *
+ * Skills are managed globally by the App Owner (SuperDev).
+ * The enabledByDefault flag on HermesSkill determines whether the skill
+ * is active for ALL tenants. There is no per-tenant skill toggle.
  *
  * Query params:
- *   companyId (required) — the tenant's company ID
+ *   companyId (required) — the tenant's company ID (for context, not filtering)
  *   lang     (optional)  — "da" or "en", default "en"
  *   key      (required)  — HERMES_ADMIN_KEY for auth
  */
@@ -29,45 +32,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
     }
 
-    // Find the agent for this tenant
-    const agent = await db.hermesAgent.findUnique({
-      where: { companyId },
-      include: {
-        skills: {
-          where: { enabled: true },
-          include: { skill: true },
-        },
-      },
+    // Fetch all globally enabled skills (enabledByDefault = true)
+    const enabledSkills = await db.hermesSkill.findMany({
+      where: { enabledByDefault: true },
+      orderBy: [{ isBuiltIn: 'desc' }, { name: 'asc' }],
     })
 
-    if (!agent) {
-      return NextResponse.json({ prompts: [] })
-    }
-
     // Build prompt fragments — use language-specific version if available
-    const prompts = agent.skills.map(as => {
-      const skill = as.skill
+    const prompts = enabledSkills.map(skill => {
       const prompt = (lang === 'da' && skill.promptDa) ? skill.promptDa : skill.promptEn
       return {
         name: skill.name,
         prompt,
+        descriptionEn: skill.descriptionEn,
+        descriptionDa: skill.descriptionDa,
       }
     })
-
-    // Also include skills that are enabledByDefault but don't have an explicit
-    // agent-skill record yet (new skills added to catalog after agent was created)
-    const explicitSkillIds = new Set(agent.skills.map(as => as.skillId))
-    const defaultSkills = await db.hermesSkill.findMany({
-      where: {
-        enabledByDefault: true,
-        id: { notIn: [...explicitSkillIds] },
-      },
-    })
-
-    for (const skill of defaultSkills) {
-      const prompt = (lang === 'da' && skill.promptDa) ? skill.promptDa : skill.promptEn
-      prompts.push({ name: skill.name, prompt })
-    }
 
     return NextResponse.json({ prompts })
   } catch (error) {

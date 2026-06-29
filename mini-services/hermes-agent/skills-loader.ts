@@ -8,11 +8,15 @@
 //
 // Skills are injected into the system prompt as additional
 // instructions, appended after the core knowledge base.
+// A "skills awareness" section is also added so that tenants
+// can ask Hermes which skills it has and get an accurate answer.
 // ============================================================
 
 interface SkillPrompt {
   name: string
   prompt: string
+  descriptionEn: string
+  descriptionDa: string | null
 }
 
 // In-memory cache with TTL — avoids hitting the API on every chat message
@@ -28,7 +32,7 @@ const CACHE_TTL_MS = 60_000 // 1 minute
  *
  * @param companyId — The tenant's company ID
  * @param lang      — "da" or "en"
- * @returns Array of { name, prompt } for each enabled skill
+ * @returns Array of { name, prompt, descriptionEn, descriptionDa } for each enabled skill
  */
 export async function fetchSkillPrompts(companyId: string, lang: string): Promise<SkillPrompt[]> {
   const now = Date.now()
@@ -65,6 +69,34 @@ export async function fetchSkillPrompts(companyId: string, lang: string): Promis
     console.warn(`[SkillsLoader] Error fetching skill prompts: ${err.message}`)
     return cachedPrompts // Return stale cache on error
   }
+}
+
+/**
+ * Builds a "skills awareness" section for the system prompt.
+ * This allows Hermes to answer tenant questions about which skills it has.
+ *
+ * @param skills — The active skill prompts
+ * @param lang   — "da" or "en"
+ */
+export function buildSkillsAwareness(skills: SkillPrompt[], lang: string): string {
+  if (skills.length === 0) {
+    return lang === 'da'
+      ? '\n\n# Færdigheder\n\nDu har i øjeblikket ingen aktive færdigheder udover din kerneviden om dansk regnskab.'
+      : '\n\n# Skills\n\nYou currently have no active skills beyond your core Danish accounting knowledge.'
+  }
+
+  const isDa = lang === 'da'
+
+  const skillList = skills.map(s => {
+    const desc = (isDa && s.descriptionDa) ? s.descriptionDa : s.descriptionEn
+    return `- **${s.name}**: ${desc}`
+  }).join('\n')
+
+  if (isDa) {
+    return `\n\n# Færdigheder\n\nDu har følgende aktive færdigheder udover din kerneviden om dansk regnskab:\n\n${skillList}\n\nHvis en bruger spørger hvilke færdigheder du har, skal du nævne disse færdigheder og kort beskrive hvad de gør. Færdigheder styres af App Owner'en og er de samme for alle tenantvirksomheder.`
+  }
+
+  return `\n\n# Skills\n\nYou have the following active skills beyond your core Danish accounting knowledge:\n\n${skillList}\n\nIf a user asks which skills you have, mention these skills and briefly describe what they do. Skills are managed by the App Owner and are the same for all tenant companies.`
 }
 
 /**
