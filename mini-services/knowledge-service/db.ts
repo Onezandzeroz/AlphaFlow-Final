@@ -138,8 +138,41 @@ export async function ensurePgvectorExtension(): Promise<void> {
     await db.$executeRaw`CREATE EXTENSION IF NOT EXISTS vector`
     console.log('[KnowledgeService] pgvector extension OK')
   } catch (err: any) {
-    console.error('[KnowledgeService] Failed to enable pgvector extension:', err.message || err)
-    console.error('                  Run manually: CREATE EXTENSION IF NOT EXISTS vector;')
+    const msg = err.message || String(err)
+    console.error('[KnowledgeService] Failed to enable pgvector extension:', msg)
+
+    // Provide actionable guidance based on common error patterns
+    if (msg.includes('permission denied') || msg.includes('must be owner')) {
+      console.error(`
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  pgvector requires CREATE EXTENSION privileges.                │
+  │                                                                 │
+  │  On Neon (recommended):                                         │
+  │    1. Open your Neon dashboard → SQL Editor                    │
+  │    2. Run: CREATE EXTENSION IF NOT EXISTS vector;              │
+  │    3. Use the database OWNER role (not a read-only role)       │
+  │                                                                 │
+  │  On self-hosted PostgreSQL:                                     │
+  │    sudo -u postgres psql -d your_db -c "CREATE EXTENSION vector;"│
+  │                                                                 │
+  │  The extension only needs to be created once. After that,      │
+  │  this service will start normally.                              │
+  └─────────────────────────────────────────────────────────────────┘`)
+    } else if (msg.includes('could not open extension control file')) {
+      console.error(`
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  pgvector is not installed on this PostgreSQL instance.        │
+  │                                                                 │
+  │  On Neon: pgvector is pre-installed — use the SQL Editor to    │
+  │    run: CREATE EXTENSION IF NOT EXISTS vector;                 │
+  │                                                                 │
+  │  On self-hosted PostgreSQL:                                     │
+  │    Ubuntu/Debian: sudo apt install postgresql-16-pgvector      │
+  │    Then: CREATE EXTENSION IF NOT EXISTS vector;                │
+  └─────────────────────────────────────────────────────────────────┘`)
+    } else {
+      console.error('                  Run manually: CREATE EXTENSION IF NOT EXISTS vector;')
+    }
     throw err
   }
 }

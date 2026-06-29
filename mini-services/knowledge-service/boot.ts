@@ -1,0 +1,42 @@
+// ============================================================
+// boot.ts — Prisma auto-generate + service start
+// ============================================================
+// PM2 runs: `bun boot.ts` (instead of `bun index.ts`)
+//
+// This wrapper ensures the Prisma client is generated before
+// the service imports @prisma/client. Bun does NOT run
+// postinstall scripts by default, so `prisma generate` from
+// package.json often never executes on the server.
+//
+// The check is fast (~1ms) when the client already exists,
+// so there's no startup penalty on subsequent restarts.
+// ============================================================
+
+import { existsSync } from 'fs'
+import { execSync } from 'child_process'
+import { resolve, dirname } from 'path'
+
+const __dirname = dirname(new URL(import.meta.url).pathname)
+const clientPath = resolve(__dirname, 'node_modules/.prisma/client')
+const schemaPath = resolve(__dirname, '../../prisma/schema.prisma')
+
+if (!existsSync(resolve(clientPath, 'index.js'))) {
+  console.log('[Knowledge Boot] Prisma client not found — running prisma generate...')
+  try {
+    execSync(`npx prisma generate --schema="${schemaPath}"`, {
+      stdio: 'inherit',
+      cwd: __dirname,
+      timeout: 60_000,
+    })
+    console.log('[Knowledge Boot] Prisma client generated successfully')
+  } catch (err) {
+    console.error('[Knowledge Boot] prisma generate failed! The service will not be able to use the database.')
+    console.error('[Knowledge Boot] Try running manually: cd mini-services/knowledge-service && npx prisma generate --schema=../../prisma/schema.prisma')
+    // Continue anyway — the user might fix it and restart
+  }
+} else {
+  console.log('[Knowledge Boot] Prisma client found — skipping generate')
+}
+
+// Import and start the real service
+await import('./index')
