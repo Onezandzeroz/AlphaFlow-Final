@@ -35,7 +35,7 @@ export const GET = withGuard(routeConfig['/api/hermes/knowledge'].GET!, async (r
       );
     }
 
-    const res = await fetch(`/api/documents?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`, {
+    const res = await fetch(`http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents`, {
       headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },
       signal: AbortSignal.timeout(5000),
     });
@@ -87,7 +87,7 @@ export const POST = withGuard(routeConfig['/api/hermes/knowledge'].POST!, async 
       );
     }
 
-    const res = await fetch(`/api/documents?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`, {
+    const res = await fetch(`http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${HERMES_ADMIN_KEY}`,

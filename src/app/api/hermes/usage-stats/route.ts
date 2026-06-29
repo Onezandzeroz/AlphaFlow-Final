@@ -67,7 +67,7 @@ export const GET = withGuard(routeConfig['/api/hermes/usage-stats'].GET!, async 
     if (HERMES_ADMIN_KEY) {
       try {
         const res = await fetch(
-          `/api/admin/stats?XTransformPort=${HERMES_SERVICE_PORT}`,
+          `http://localhost:${HERMES_SERVICE_PORT}/admin/stats`,
           {
             headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },
             // Short timeout — the oversight page should not hang if

@@ -25,7 +25,7 @@ export const POST = withGuard(
       }
 
       const res = await fetch(
-        `/api/documents/${encodeURIComponent(id)}/reindex?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
+        `http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents/${encodeURIComponent(id)}/reindex`,
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },

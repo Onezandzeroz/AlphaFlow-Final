@@ -206,7 +206,7 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
     // take effect immediately (instead of waiting up to 60s).
     // Non-blocking — cache TTL is the fallback.
     if (HERMES_ADMIN_KEY) {
-      fetch(`/api/admin/invalidate?XTransformPort=${HERMES_SERVICE_PORT}`, {
+      fetch(`http://localhost:${HERMES_SERVICE_PORT}/admin/invalidate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

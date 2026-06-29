@@ -39,7 +39,7 @@ export const GET = withGuard(
       }
 
       const res = await fetch(
-        `/api/documents/${encodeURIComponent(docId)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
+        `http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents/${encodeURIComponent(docId)}`,
         {
           headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },
           signal: AbortSignal.timeout(5000),
@@ -90,7 +90,7 @@ export const PUT = withGuard(
       }
 
       const res = await fetch(
-        `/api/documents/${encodeURIComponent(docId)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
+        `http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents/${encodeURIComponent(docId)}`,
         {
           method: 'PUT',
           headers: {
@@ -135,7 +135,7 @@ export const DELETE = withGuard(
       }
 
       const res = await fetch(
-        `/api/documents/${encodeURIComponent(docId)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
+        `http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents/${encodeURIComponent(docId)}`,
         {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },

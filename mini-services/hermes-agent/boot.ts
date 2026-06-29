@@ -13,7 +13,7 @@
 // and require() cannot handle async ESM modules.
 // ============================================================
 
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { execSync } from 'child_process'
 import { resolve, dirname } from 'path'
 
@@ -21,22 +21,65 @@ const __dirname = dirname(new URL(import.meta.url).pathname)
 const clientPath = resolve(__dirname, 'node_modules/.prisma/client')
 const schemaPath = resolve(__dirname, '../../prisma/schema.prisma')
 
-// Try to verify the existing Prisma client is functional.
-// A stale or version-mismatched client can exist but still throw
-// "@prisma/client did not initialize yet" at runtime.
+// ── Validate existing Prisma client ──────────────────────────
+// The "Prisma client found" message in previous versions was
+// unreliable — require() can succeed even when the generated
+// client is incompatible with the @prisma/client runtime.
+// This happens when @prisma/client and prisma CLI versions
+// don't match (e.g., @prisma/client@6.11.x vs prisma@6.19.2).
+//
+// We now check version alignment between the runtime and the
+// generated client. If they don't match, we force regeneration.
 let clientReady = false
 try {
-  // Quick sanity check: if the generated client's query engine exists
-  // and the runtime version matches, we can skip regenerate.
   const clientIndex = resolve(clientPath, 'index.js')
   if (existsSync(clientIndex)) {
-    // Try loading it — if this throws, the client is stale/corrupt
-    require(resolve(clientPath))
-    clientReady = true
-    console.log('[Hermes Boot] Prisma client found and valid — skipping generate')
+    // Check version alignment: read @prisma/client runtime version
+    // and compare with the generated client's embedded version.
+    const runtimePkgPath = resolve(__dirname, 'node_modules/@prisma/client/package.json')
+    const generatedPkgPath = resolve(clientPath, 'package.json')
+
+    let runtimeVersion = 'unknown'
+    let generatedVersion = 'unknown'
+
+    if (existsSync(runtimePkgPath)) {
+      try {
+        runtimeVersion = JSON.parse(readFileSync(runtimePkgPath, 'utf-8')).version || 'unknown'
+      } catch { /* ignore */ }
+    }
+
+    // The generated client embeds its prisma version in the default.js file.
+    // We can also check the engine hash for mismatch detection.
+    // For simplicity, compare the major.minor.patch of the runtime
+    // with what prisma CLI generated. The generated client's package.json
+    // sometimes has a version — check it.
+    if (existsSync(generatedPkgPath)) {
+      try {
+        generatedVersion = JSON.parse(readFileSync(generatedPkgPath, 'utf-8')).version || 'unknown'
+      } catch { /* ignore */ }
+    }
+
+    // If versions are both readable and match, the client is likely OK.
+    // If we can't determine versions, fall through to try require().
+    if (runtimeVersion !== 'unknown' && generatedVersion !== 'unknown' && runtimeVersion === generatedVersion) {
+      clientReady = true
+      console.log(`[Hermes Boot] Prisma client OK (v${runtimeVersion}) — skipping generate`)
+    } else if (runtimeVersion !== 'unknown' && generatedVersion !== 'unknown' && runtimeVersion !== generatedVersion) {
+      console.log(`[Hermes Boot] Prisma version mismatch: runtime=@prisma/client@${runtimeVersion}, generated=v${generatedVersion} — regenerating...`)
+    } else {
+      // Can't determine versions — try require() as a fallback.
+      // If this throws, the client is corrupt.
+      try {
+        require(resolve(clientPath))
+        clientReady = true
+        console.log('[Hermes Boot] Prisma client found — skipping generate')
+      } catch {
+        console.log('[Hermes Boot] Existing Prisma client failed to load — regenerating...')
+      }
+    }
   }
-} catch {
-  console.log('[Hermes Boot] Existing Prisma client is stale or incompatible — regenerating...')
+} catch (err: any) {
+  console.log(`[Hermes Boot] Prisma client validation error: ${err.message} — regenerating...`)
 }
 
 if (!clientReady) {

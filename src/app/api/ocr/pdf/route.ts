@@ -48,7 +48,7 @@ export const POST = withGuard({
     forwardForm.append('file', file);
 
     // Forward to scanner-service
-    const scannerUrl = `/api/v1/scan?XTransformPort=${SCANNER_PORT}`;
+    const scannerUrl = `http://localhost:${SCANNER_PORT}/api/v1/scan`;
 
     const scannerResponse = await fetch(scannerUrl, {
       method: 'POST',

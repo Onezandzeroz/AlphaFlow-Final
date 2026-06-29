@@ -13,7 +13,7 @@
 // and require() cannot handle async ESM modules.
 // ============================================================
 
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { execSync } from 'child_process'
 import { resolve, dirname } from 'path'
 
@@ -21,27 +21,54 @@ const __dirname = dirname(new URL(import.meta.url).pathname)
 const clientPath = resolve(__dirname, 'node_modules/.prisma/client')
 const schemaPath = resolve(__dirname, '../../prisma/schema.prisma')
 
-// Try to verify the existing Prisma client is functional.
-// A stale or version-mismatched client can exist but still throw
-// "@prisma/client did not initialize yet" at runtime.
+// ── Validate existing Prisma client ──────────────────────────
+// Check version alignment between the @prisma/client runtime
+// and the generated client. If they don't match, force regeneration.
 let clientReady = false
 try {
   const clientIndex = resolve(clientPath, 'index.js')
   if (existsSync(clientIndex)) {
-    // Try loading it — if this throws, the client is stale/corrupt
-    require(resolve(clientPath))
-    clientReady = true
-    console.log('[Knowledge Boot] Prisma client found and valid — skipping generate')
+    const runtimePkgPath = resolve(__dirname, 'node_modules/@prisma/client/package.json')
+    const generatedPkgPath = resolve(clientPath, 'package.json')
+
+    let runtimeVersion = 'unknown'
+    let generatedVersion = 'unknown'
+
+    if (existsSync(runtimePkgPath)) {
+      try {
+        runtimeVersion = JSON.parse(readFileSync(runtimePkgPath, 'utf-8')).version || 'unknown'
+      } catch { /* ignore */ }
+    }
+
+    if (existsSync(generatedPkgPath)) {
+      try {
+        generatedVersion = JSON.parse(readFileSync(generatedPkgPath, 'utf-8')).version || 'unknown'
+      } catch { /* ignore */ }
+    }
+
+    if (runtimeVersion !== 'unknown' && generatedVersion !== 'unknown' && runtimeVersion === generatedVersion) {
+      clientReady = true
+      console.log(`[Knowledge Boot] Prisma client OK (v${runtimeVersion}) — skipping generate`)
+    } else if (runtimeVersion !== 'unknown' && generatedVersion !== 'unknown' && runtimeVersion !== generatedVersion) {
+      console.log(`[Knowledge Boot] Prisma version mismatch: runtime=@prisma/client@${runtimeVersion}, generated=v${generatedVersion} — regenerating...`)
+    } else {
+      // Can't determine versions — try require() as a fallback.
+      try {
+        require(resolve(clientPath))
+        clientReady = true
+        console.log('[Knowledge Boot] Prisma client found — skipping generate')
+      } catch {
+        console.log('[Knowledge Boot] Existing Prisma client failed to load — regenerating...')
+      }
+    }
   }
-} catch {
-  console.log('[Knowledge Boot] Existing Prisma client is stale or incompatible — regenerating...')
+} catch (err: any) {
+  console.log(`[Knowledge Boot] Prisma client validation error: ${err.message} — regenerating...`)
 }
 
 if (!clientReady) {
   console.log('[Knowledge Boot] Running prisma generate...')
   try {
-    // Use bunx (not npx) since we're running under Bun.
-    // bunx prefers locally-installed packages.
     execSync(`bunx prisma generate --schema="${schemaPath}"`, {
       stdio: 'inherit',
       cwd: __dirname,
@@ -51,7 +78,6 @@ if (!clientReady) {
   } catch (err) {
     console.error('[Knowledge Boot] prisma generate failed! The service will not be able to use the database.')
     console.error('[Knowledge Boot] Try running manually: cd mini-services/knowledge-service && bunx prisma generate --schema=../../prisma/schema.prisma')
-    // Continue anyway — the user might fix it and restart
   }
 }
 

@@ -44,7 +44,7 @@ async function seedDoc(doc: SeedDoc): Promise<void> {
   console.log(`[Seed] "${doc.title}" — ${content.length} chars, reading...`)
 
   // Check if a doc with this title already exists
-  const listRes = await fetch(`/api/documents?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`, {
+  const listRes = await fetch(`http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents`, {
     headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },
   })
   let existingId: string | null = null
@@ -59,8 +59,8 @@ async function seedDoc(doc: SeedDoc): Promise<void> {
 
   // Create or update
   const url = existingId
-    ? `/api/documents/${existingId}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`
-    : `/api/documents?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`
+    ? `http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents/${existingId}`
+    : `http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents`
   const method = existingId ? 'PUT' : 'POST'
 
   const res = await fetch(url, {
