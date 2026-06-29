@@ -193,16 +193,90 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       className={`flex ${isHermes ? 'justify-start' : 'justify-end'}`}
     >
       <div
-        className={`relative max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
+        className={`relative rounded-2xl shadow-sm ${
           isHermes
-            ? 'rounded-tl-md bg-gradient-to-br from-teal-50/95 to-cyan-50/80 text-teal-950 dark:from-teal-900/30 dark:to-cyan-900/20 dark:text-teal-50'
-            : 'rounded-tr-md bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
+            ? 'max-w-[92%] rounded-tl-md bg-gradient-to-br from-teal-50/95 to-cyan-50/80 text-teal-950 dark:from-teal-900/30 dark:to-cyan-900/20 dark:text-teal-50'
+            : 'max-w-[80%] rounded-tr-md bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100'
         }`}
       >
         {/* Hermes markdown rendering */}
         {isHermes ? (
-          <div className="prose prose-sm prose-teal max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-pre:my-2 prose-code:rounded prose-code:bg-teal-100/60 prose-code:px-1 dark:prose-code:bg-teal-900/40">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+          <div className="hermes-markdown px-4 py-3 text-sm leading-relaxed">
+            <ReactMarkdown
+              components={{
+                // Headings — clear hierarchy with spacing
+                h1: ({ children }) => (
+                  <h1 className="text-base font-bold text-teal-900 dark:text-teal-100 mt-4 mb-2 first:mt-0">{children}</h1>
+                ),
+                h2: ({ children }) => (
+                  <h2 className="text-[15px] font-semibold text-teal-800 dark:text-teal-200 mt-4 mb-2 first:mt-0">{children}</h2>
+                ),
+                h3: ({ children }) => (
+                  <h3 className="text-sm font-semibold text-teal-700 dark:text-teal-300 mt-3 mb-1.5 first:mt-0">{children}</h3>
+                ),
+                // Paragraphs — clear spacing between them
+                p: ({ children }) => (
+                  <p className="my-2 first:mt-0 last:mb-0 leading-relaxed">{children}</p>
+                ),
+                // Unordered lists — teal bullets, proper indentation
+                ul: ({ children }) => (
+                  <ul className="my-2 space-y-1 first:mt-0 last:mb-0">{children}</ul>
+                ),
+                // Ordered lists — custom counter, proper indentation
+                ol: ({ children }) => (
+                  <ol className="my-2 space-y-1 first:mt-0 last:mb-0">{children}</ol>
+                ),
+                // List items — visual markers, proper padding
+                li: ({ children, ordered, index }) => (
+                  <li className="pl-4 relative leading-relaxed">
+                    <span className="absolute left-0 top-[7px] text-teal-500 dark:text-teal-400 font-medium">
+                      {ordered ? `${(index ?? 0) + 1}.` : '•'}
+                    </span>
+                    {children}
+                  </li>
+                ),
+                // Horizontal rule — subtle divider with margin
+                hr: () => (
+                  <hr className="my-4 border-teal-200/50 dark:border-teal-700/40" />
+                ),
+                // Code blocks
+                pre: ({ children }) => (
+                  <pre className="my-3 rounded-lg bg-teal-900/5 p-3 text-xs overflow-x-auto dark:bg-teal-900/20">{children}</pre>
+                ),
+                // Inline code
+                code: ({ children, className }) => {
+                  const isBlock = className?.includes('language-')
+                  if (isBlock) return <code>{children}</code>
+                  return (
+                    <code className="rounded bg-teal-100/70 px-1.5 py-0.5 text-[13px] font-mono text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
+                      {children}
+                    </code>
+                  )
+                },
+                // Blockquote — styled callout
+                blockquote: ({ children }) => (
+                  <blockquote className="my-3 border-l-3 border-teal-400/50 pl-3 italic text-teal-700/80 dark:text-teal-300/80">
+                    {children}
+                  </blockquote>
+                ),
+                // Strong/bold
+                strong: ({ children }) => (
+                  <strong className="font-semibold text-teal-900 dark:text-teal-100">{children}</strong>
+                ),
+                // Emphasis/italic
+                em: ({ children }) => (
+                  <em className="italic text-teal-700 dark:text-teal-300">{children}</em>
+                ),
+                // Links
+                a: ({ children, href }) => (
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-teal-600 underline decoration-teal-400/40 underline-offset-2 hover:decoration-teal-500 dark:text-teal-300">
+                    {children}
+                  </a>
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
             {/* Blinking cursor for streaming */}
             {message.isStreaming && (
               <motion.span
@@ -213,12 +287,12 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             )}
           </div>
         ) : (
-          <span>{message.content}</span>
+          <span className="px-4 py-2.5 block">{message.content}</span>
         )}
 
         {/* Timestamp */}
         <div
-          className={`mt-1 text-[10px] ${
+          className={`px-4 pb-2 text-[10px] ${
             isHermes
               ? 'text-teal-500/60 dark:text-teal-400/50'
               : 'text-gray-400 dark:text-gray-500'

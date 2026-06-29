@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -6139,3 +6140,82 @@ select:focus-visible {
      • Light overlay with slight blur
    ======================================== */
 
+/* ──────────────────────────────────────────────────────────────
+   HERMES CHAT MARKDOWN — Rich formatting for AI responses
+   ========================================
+   Handles nested lists, emoji bullets, tight spacing,
+   and visual hierarchy that the ReactMarkdown component
+   overrides can't fully express with Tailwind alone.
+   ======================================== */
+
+.hermes-markdown {
+  /* Reset browser defaults for clean slate */
+  & ul,
+  & ol {
+    list-style: none;
+    padding-left: 0;
+    margin-left: 0;
+  }
+
+  /* Nested lists — indented with reduced size markers */
+  & ul ul,
+  & ol ol,
+  & ul ol,
+  & ol ul {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+    padding-left: 0.25rem;
+  }
+
+  & ul ul li > span:first-child,
+  & ol ol li > span:first-child {
+    font-size: 0.7rem;
+    opacity: 0.7;
+  }
+
+  /* Paragraphs inside list items — no extra gap */
+  & li p {
+    margin: 0;
+  }
+
+  /* Last list item — no trailing space */
+  & li:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Headings after paragraphs — consistent rhythm */
+  & p + h1,
+  & p + h2,
+  & p + h3 {
+    margin-top: 1rem;
+  }
+
+  /* Lists after paragraphs — slightly less gap */
+  & p + ul,
+  & p + ol {
+    margin-top: 0.5rem;
+  }
+
+  /* Horizontal rule after heading — less gap */
+  & h1 + hr,
+  & h2 + hr,
+  & h3 + hr {
+    margin-top: 0.5rem;
+  }
+
+  /* Code block inside list — compact */
+  & li pre {
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+  }
+
+  /* First child spacing reset */
+  & > *:first-child {
+    margin-top: 0 !important;
+  }
+
+  /* Last child spacing reset */
+  & > *:last-child {
+    margin-bottom: 0 !important;
+  }
+}
