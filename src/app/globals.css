@@ -6154,22 +6154,59 @@ select:focus-visible {
     list-style: none;
     padding-left: 0;
     margin-left: 0;
+    counter-reset: hermes-ol;
   }
 
-  /* Nested lists — indented with reduced size markers */
+  /* ── Unordered list bullets (•) via ::before ── */
+  & .hermes-ul > li::before {
+    content: '•';
+    position: absolute;
+    left: 0.25rem;
+    top: 0;
+    color: theme(--color-teal-500);
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.625;
+  }
+
+  .dark & .hermes-ul > li::before {
+    color: theme(--color-teal-400);
+  }
+
+  /* ── Ordered list numbers via CSS counter ── */
+  & .hermes-ol {
+    counter-reset: hermes-ol;
+  }
+
+  & .hermes-ol > li {
+    counter-increment: hermes-ol;
+  }
+
+  & .hermes-ol > li::before {
+    content: counter(hermes-ol) '.';
+    position: absolute;
+    left: 0;
+    top: 0;
+    color: theme(--color-teal-500);
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.625;
+    min-width: 1.5ch;
+    text-align: left;
+  }
+
+  .dark & .hermes-ol > li::before {
+    color: theme(--color-teal-400);
+  }
+
+  /* Nested lists — indented with smaller markers */
   & ul ul,
   & ol ol,
   & ul ol,
   & ol ul {
     margin-top: 0.25rem;
     margin-bottom: 0.25rem;
-    padding-left: 0.25rem;
-  }
-
-  & ul ul li > span:first-child,
-  & ol ol li > span:first-child {
-    font-size: 0.7rem;
-    opacity: 0.7;
+    padding-left: 0.5rem;
   }
 
   /* Paragraphs inside list items — no extra gap */

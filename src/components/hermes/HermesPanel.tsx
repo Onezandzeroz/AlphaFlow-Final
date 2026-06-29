@@ -220,18 +220,15 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                 ),
                 // Unordered lists — teal bullets, proper indentation
                 ul: ({ children }) => (
-                  <ul className="my-2 space-y-1 first:mt-0 last:mb-0">{children}</ul>
+                  <ul className="hermes-ul my-2 space-y-1 first:mt-0 last:mb-0">{children}</ul>
                 ),
                 // Ordered lists — custom counter, proper indentation
                 ol: ({ children }) => (
-                  <ol className="my-2 space-y-1 first:mt-0 last:mb-0">{children}</ol>
+                  <ol className="hermes-ol my-2 space-y-1 first:mt-0 last:mb-0">{children}</ol>
                 ),
-                // List items — visual markers, proper padding
-                li: ({ children, ordered, index }) => (
-                  <li className="pl-4 relative leading-relaxed">
-                    <span className="absolute left-0 top-[7px] text-teal-500 dark:text-teal-400 font-medium">
-                      {ordered ? `${(index ?? 0) + 1}.` : '•'}
-                    </span>
+                // List items — proper padding (markers handled via CSS ::before)
+                li: ({ children }) => (
+                  <li className="pl-5 relative leading-relaxed">
                     {children}
                   </li>
                 ),
