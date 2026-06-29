@@ -23,7 +23,12 @@ export function useHermesSocket(options: {
   const { tenantId, userId, userName, servicePort } = options;
   const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [agentEnabled, setAgentEnabled] = useState(false);
+  // Optimistic initial state: HermesProvider already verified the agent is
+  // enabled before rendering this overlay. Starting with `true` eliminates the
+  // timing gap where the input is greyed out between socket connect and
+  // join-ack receipt. If join-ack reports agentEnabled: false, it will
+  // correctly disable the input.
+  const [agentEnabled, setAgentEnabled] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [notifications, setNotifications] = useState<HermesNotification[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -33,7 +38,10 @@ export function useHermesSocket(options: {
   useEffect(() => {
     const socket = io({
       query: { XTransformPort: String(servicePort) },
-      transports: ['websocket', 'polling'],
+      // Polling first — matches other Socket.IO connections in the codebase
+      // and is more resilient through proxies/CDNs. Falls back to WebSocket
+      // after the initial handshake succeeds.
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
@@ -56,6 +64,10 @@ export function useHermesSocket(options: {
     socket.on('disconnect', () => {
       console.log('[Hermes UI] Disconnected from Hermes Agent');
       setIsConnected(false);
+    });
+
+    socket.on('connect_error', (err: Error) => {
+      console.warn('[Hermes UI] Connection error:', err.message);
     });
 
     // ─── join-ack: Server confirms join + sends initial agent state ───
@@ -97,7 +109,7 @@ export function useHermesSocket(options: {
 
     // ─── chat-typing: Server tells us Hermes is thinking ───
     socket.on('chat-typing', (data: { typing: boolean }) => {
-      setIsTyping(true);
+      setIsTyping(data.typing);
     });
 
     // ─── chat-response: Streaming chunk ───

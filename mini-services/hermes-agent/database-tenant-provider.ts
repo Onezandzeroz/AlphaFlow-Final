@@ -267,9 +267,8 @@ export class DatabaseTenantProvider implements TenantProvider {
   // ----------------------------------------------------------------
 
   async getTenant(tenantId: string): Promise<TenantData | null> {
-    const db = getPrismaClient()
-
     try {
+      const db = getPrismaClient()
       // Compute the date range for transactions (last N months)
       const now = new Date()
       const transactionCutoff = new Date(now.getFullYear(), now.getMonth() - (ACCOUNTING_MONTHS - 1), 1)

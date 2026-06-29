@@ -361,47 +361,64 @@ io.on('connection', (socket) => {
     if (!tenantSockets.has(tenantId)) tenantSockets.set(tenantId, [])
     tenantSockets.get(tenantId)!.push(socket.id)
 
-    // Get or create tenant (cached fallback keeps join + chat consistent)
-    const { tenant, isFallback } = await getOrCreateTenant(tenantId)
+    try {
+      // Get or create tenant (cached fallback keeps join + chat consistent)
+      const { tenant, isFallback } = await getOrCreateTenant(tenantId)
 
-    // Sync the enabled cache so subsequent isAgentEnabled() calls
-    // (e.g. from checkReminders) return the correct value.
-    tenantProvider.setAgentEnabled(tenantId, tenant.agentEnabled)
+      // Sync the enabled cache so subsequent isAgentEnabled() calls
+      // (e.g. from checkReminders) return the correct value.
+      tenantProvider.setAgentEnabled(tenantId, tenant.agentEnabled)
 
-    // Acknowledge join — use tenant.agentEnabled directly instead of
-    // isAgentEnabled() which can return false on cache miss even when
-    // the tenant data was just fetched successfully.
-    socket.emit('join-ack', {
-      status: 'joined',
-      agentEnabled: tenant.agentEnabled,
-      tenantName: tenant.name,
-    })
-
-    // If agent is enabled, send welcome
-    if (tenant.agentEnabled) {
-      // Friendly welcome — only mention the company name when we actually
-      // know it (a real DB-backed tenant). For fallback tenants we use a
-      // generic greeting so the user never sees a raw CUID like
-      // "cmqwqfxld0006jxua9q4sqf1r".
-      const welcomeMessage = isFallback
-        ? `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent. Hvad kan jeg hjælpe dig med i dag?`
-        : `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent for ${tenant.name}. Hvad kan jeg hjælpe dig med i dag?`
-      socket.emit('agent-welcome', {
-        message: welcomeMessage,
+      // Acknowledge join — use tenant.agentEnabled directly instead of
+      // isAgentEnabled() which can return false on cache miss even when
+      // the tenant data was just fetched successfully.
+      socket.emit('join-ack', {
+        status: 'joined',
+        agentEnabled: tenant.agentEnabled,
         tenantName: tenant.name,
       })
-    }
 
-    // Send pending notifications
-    const pendingNotifs = tenantProvider.getReminders(tenantId).filter(n => !n.dismissed)
-    if (pendingNotifs.length > 0) {
-      socket.emit('notifications', pendingNotifs.map(n => ({
-        id: n.id,
-        type: n.type,
-        title: n.title,
-        description: n.description,
-        dueDate: n.dueDate,
-      })))
+      // If agent is enabled, send welcome
+      if (tenant.agentEnabled) {
+        // Friendly welcome — only mention the company name when we actually
+        // know it (a real DB-backed tenant). For fallback tenants we use a
+        // generic greeting so the user never sees a raw CUID like
+        // "cmqwqfxld0006jxua9q4sqf1r".
+        const welcomeMessage = isFallback
+          ? `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent. Hvad kan jeg hjælpe dig med i dag?`
+          : `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent for ${tenant.name}. Hvad kan jeg hjælpe dig med i dag?`
+        socket.emit('agent-welcome', {
+          message: welcomeMessage,
+          tenantName: tenant.name,
+        })
+      }
+
+      // Send pending notifications
+      const pendingNotifs = tenantProvider.getReminders(tenantId).filter(n => !n.dismissed)
+      if (pendingNotifs.length > 0) {
+        socket.emit('notifications', pendingNotifs.map(n => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          description: n.description,
+          dueDate: n.dueDate,
+        })))
+      }
+    } catch (error) {
+      // CRITICAL: The join handler MUST always emit join-ack, even on error.
+      // Without it, the client stays with agentEnabled=false (initial state)
+      // which greys out the input and prevents any interaction.
+      console.error(`[Hermes] Join handler error for tenant "${tenantId}":`, error)
+      socket.emit('join-ack', {
+        status: 'error',
+        agentEnabled: true,   // Optimistically enable so user can still chat
+        tenantName: 'din virksomhed',
+      })
+      // Still send a welcome so the user sees something
+      socket.emit('agent-welcome', {
+        message: `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent. Hvad kan jeg hjælpe dig med i dag?`,
+        tenantName: 'din virksomhed',
+      })
     }
   })
 

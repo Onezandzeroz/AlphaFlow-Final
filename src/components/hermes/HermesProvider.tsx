@@ -9,6 +9,7 @@ import { HermesEnabledProvider } from './hermes-context';
 export function HermesProvider({ children }: { children?: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const [hermesEnabled, setHermesEnabled] = useState(false);
+  const [hermesGreeting, setHermesGreeting] = useState<string | undefined>();
   const [isLoading, setIsLoading] = useState(true);
 
   // Subscribe to the 'hermes-config' data-sync scope. When Hermes is toggled
@@ -23,10 +24,12 @@ export function HermesProvider({ children }: { children?: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setHermesEnabled(data.hermesConfig?.enabled ?? false);
+        setHermesGreeting(data.hermesConfig?.greeting ?? undefined);
       }
     } catch {
       // Silently fail — Hermes won't show
       setHermesEnabled(false);
+      setHermesGreeting(undefined);
     } finally {
       setIsLoading(false);
     }
@@ -35,6 +38,7 @@ export function HermesProvider({ children }: { children?: React.ReactNode }) {
   useEffect(() => {
     if (!user?.activeCompanyId) {
       setHermesEnabled(false);
+      setHermesGreeting(undefined);
       setIsLoading(false);
       return;
     }
@@ -54,6 +58,7 @@ export function HermesProvider({ children }: { children?: React.ReactNode }) {
           userId={user.id}
           userName={user.businessName || user.email || 'Bruger'}
           servicePort={3004}
+          greeting={hermesGreeting}
         />
       )}
     </HermesEnabledProvider>
