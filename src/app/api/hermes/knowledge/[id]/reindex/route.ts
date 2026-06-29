@@ -20,12 +20,14 @@ export const POST = withGuard(
   async (request, ctx, context: RouteSegmentContext) => {
     try {
       const { id } = await context.params;
+      // Next.js params can be string | string[] — coerce for single-segment [id] route
+      const docId = String(id);
       if (!HERMES_ADMIN_KEY) {
         return NextResponse.json({ error: 'HERMES_ADMIN_KEY not configured' }, { status: 503 });
       }
 
       const res = await fetch(
-        `http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents/${encodeURIComponent(id)}/reindex`,
+        `http://localhost:${KNOWLEDGE_SERVICE_PORT}/documents/${encodeURIComponent(docId)}/reindex`,
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },
@@ -42,7 +44,7 @@ export const POST = withGuard(
       }
 
       const data = await res.json();
-      logger.info('[HERMES KNOWLEDGE] Document re-indexed', { id, performedBy: ctx.id });
+      logger.info('[HERMES KNOWLEDGE] Document re-indexed', { id: docId, performedBy: ctx.id });
       return NextResponse.json(data);
     } catch (error) {
       logger.error('[HERMES KNOWLEDGE] Failed to reindex document:', error);
