@@ -30,15 +30,16 @@ export const GET = withGuard(
   routeConfig['/api/hermes/knowledge/[id]'].GET!,
   async (request, ctx, context: RouteSegmentContext) => {
     try {
-      const { id: rawId } = await context.params;
-      // Next.js params can be string | string[] — normalize to a single string
-      const id = Array.isArray(rawId) ? rawId[0] : rawId;
+      const { id } = await context.params;
+      // Next.js params are typed as string | string[]. For a single-segment
+      // [id] route, Next.js always returns a string. Coerce to satisfy TS.
+      const docId = String(id);
       if (!HERMES_ADMIN_KEY) {
         return NextResponse.json({ error: 'HERMES_ADMIN_KEY not configured' }, { status: 503 });
       }
 
       const res = await fetch(
-        `/api/documents/${encodeURIComponent(id)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
+        `/api/documents/${encodeURIComponent(docId)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
         {
           headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },
           signal: AbortSignal.timeout(5000),
@@ -67,9 +68,10 @@ export const PUT = withGuard(
   routeConfig['/api/hermes/knowledge/[id]'].PUT!,
   async (request, ctx, context: RouteSegmentContext) => {
     try {
-      const { id: rawId } = await context.params;
-      // Next.js params can be string | string[] — normalize to a single string
-      const id = Array.isArray(rawId) ? rawId[0] : rawId;
+      const { id } = await context.params;
+      // Next.js params are typed as string | string[]. For a single-segment
+      // [id] route, Next.js always returns a string. Coerce to satisfy TS.
+      const docId = String(id);
       if (!HERMES_ADMIN_KEY) {
         return NextResponse.json({ error: 'HERMES_ADMIN_KEY not configured' }, { status: 503 });
       }
@@ -88,7 +90,7 @@ export const PUT = withGuard(
       }
 
       const res = await fetch(
-        `/api/documents/${encodeURIComponent(id)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
+        `/api/documents/${encodeURIComponent(docId)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
         {
           method: 'PUT',
           headers: {
@@ -109,7 +111,7 @@ export const PUT = withGuard(
       }
 
       const data = await res.json();
-      logger.info('[HERMES KNOWLEDGE] Document updated', { id, performedBy: ctx.id });
+      logger.info('[HERMES KNOWLEDGE] Document updated', { id: docId, performedBy: ctx.id });
       return NextResponse.json(data);
     } catch (error) {
       logger.error('[HERMES KNOWLEDGE] Failed to update document:', error);
@@ -124,15 +126,16 @@ export const DELETE = withGuard(
   routeConfig['/api/hermes/knowledge/[id]'].DELETE!,
   async (request, ctx, context: RouteSegmentContext) => {
     try {
-      const { id: rawId } = await context.params;
-      // Next.js params can be string | string[] — normalize to a single string
-      const id = Array.isArray(rawId) ? rawId[0] : rawId;
+      const { id } = await context.params;
+      // Next.js params are typed as string | string[]. For a single-segment
+      // [id] route, Next.js always returns a string. Coerce to satisfy TS.
+      const docId = String(id);
       if (!HERMES_ADMIN_KEY) {
         return NextResponse.json({ error: 'HERMES_ADMIN_KEY not configured' }, { status: 503 });
       }
 
       const res = await fetch(
-        `/api/documents/${encodeURIComponent(id)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
+        `/api/documents/${encodeURIComponent(docId)}?XTransformPort=${KNOWLEDGE_SERVICE_PORT}`,
         {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },
@@ -148,7 +151,7 @@ export const DELETE = withGuard(
       }
 
       const data = await res.json();
-      logger.info('[HERMES KNOWLEDGE] Document deleted', { id, performedBy: ctx.id });
+      logger.info('[HERMES KNOWLEDGE] Document deleted', { id: docId, performedBy: ctx.id });
       return NextResponse.json(data);
     } catch (error) {
       logger.error('[HERMES KNOWLEDGE] Failed to delete document:', error);
