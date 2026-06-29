@@ -22,6 +22,7 @@ import {
   Building2,
 } from 'lucide-react';
 import { HermesKnowledgeAdmin } from '@/components/hermes/hermes-knowledge-admin';
+import { HermesSkillsAdmin } from '@/components/hermes/hermes-skills-admin';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -404,6 +405,15 @@ export function HermesSettings({ user }: HermesSettingsProps) {
       {/* RAG document management — upload/edit/delete knowledge documents
           and tenant-specific notes. Only visible to App Owners. */}
       {isSuperDev && <HermesKnowledgeAdmin />}
+
+      {/* ── Skills Admin ── */}
+      {/* Skill management — enable/disable skills that modify Hermes behavior.
+          Visible to all users with Hermes enabled (they can toggle their own skills).
+          SuperDev gets delete and info. */}
+      <HermesSkillsAdmin
+        companyId={user.activeCompanyId || ''}
+        isSuperDev={isSuperDev}
+      />
 
       {/* ── Capabilities Card ── */}
       <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">

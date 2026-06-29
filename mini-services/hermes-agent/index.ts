@@ -14,6 +14,7 @@ import { Server } from 'socket.io'
 
 import { defaultConfig, type HermesConfig } from './config'
 import { buildSystemPrompt } from './knowledge-base'
+import { fetchSkillPrompts } from './skills-loader'
 import { MockTenantProvider, type TenantProvider, type TenantData } from './tenant-provider'
 import { DatabaseTenantProvider } from './database-tenant-provider'
 import { splitIntoChunks, buildTenantContext } from './utils'
@@ -477,7 +478,19 @@ io.on('connection', (socket) => {
       // into a single assistant message).
       const systemPrompt = buildSystemPrompt(config.agentName, config.defaultLanguage)
       const tenantContext = buildTenantContext(tenant)
-      const systemMessage = `${systemPrompt}\n\n${tenantContext}`
+
+      // Fetch enabled skill prompts and inject into system prompt
+      let skillFragment = ''
+      try {
+        const skillPrompts = await fetchSkillPrompts(tenant.companyId, config.defaultLanguage)
+        if (skillPrompts.length > 0) {
+          skillFragment = '\n\n---\n\n# Active Skills\n\n' + skillPrompts.map(s => `## Skill: ${s.name}\n\n${s.prompt}`).join('\n\n---\n\n')
+        }
+      } catch {
+        // Skills are optional — continue without them
+      }
+
+      const systemMessage = `${systemPrompt}\n\n${tenantContext}${skillFragment}`
 
       const messages: ChatMessage[] = [
         { role: 'system', content: systemMessage },

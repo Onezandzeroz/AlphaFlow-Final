@@ -1051,6 +1051,7 @@ model HermesAgent {
   company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   reminders AgentReminder[]
   messages  AgentMessage[]
+  skills    HermesAgentSkill[]
 }
 
 // ─── HERMES RAG KNOWLEDGE BASE (pgvector) ──────────────────────
@@ -1136,6 +1137,45 @@ model AgentMessage {
   agent HermesAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([agentId, createdAt])
+}
+
+// ─── HERMES SKILLS (App Owner installs, tenants enable) ────────
+// Skills inject instructions into the Hermes system prompt.
+// SuperDev manages the skill catalog; each tenant can enable/disable.
+
+model HermesSkill {
+  id              String   @id @default(cuid())
+  name            String   @unique        // e.g. "stop-slop"
+  version         String   @default("1.0.0")
+  descriptionEn   String                  // English description
+  descriptionDa   String?                 // Danish description (falls back to en)
+  author          String?
+  sourceUrl       String?                 // e.g. GitHub URL
+  // System prompt fragments — injected when the skill is active
+  promptEn        String                  // English prompt fragment
+  promptDa        String?                 // Danish prompt fragment (falls back to en)
+  // Metadata
+  enabledByDefault Boolean @default(false) // Auto-enabled for new tenants
+  isBuiltIn       Boolean @default(false)  // Cannot be deleted (shipped with app)
+  category        String   @default("writing") // writing | compliance | analysis | productivity
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  agentSkills HermesAgentSkill[]
+}
+
+model HermesAgentSkill {
+  id        String   @id @default(cuid())
+  agentId   String
+  skillId   String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agent HermesAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill HermesSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, skillId])
 }
 
 // ─── NOTIFICATION READ STATE ──────────────────────────────────
