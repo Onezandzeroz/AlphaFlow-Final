@@ -100,46 +100,92 @@ export async function searchChunks(
   const vec = formatVector(queryEmbedding)
 
   // Build the tenant filter: global docs + (optionally) one tenant's private docs
-  const tenantFilter = options.tenantId
-    ? `(d."tenantId" IS NULL OR d."tenantId" = ${options.tenantId})`
-    : `d."tenantId" IS NULL`
+  // Use Prisma.sql for safe parameterized queries
+  const tenantId = options.tenantId || null
 
   // Raw SQL: join KnowledgeChunk + KnowledgeDocument, filter by tenant,
   // compute cosine distance, filter by threshold, order by similarity, limit K.
-  const results = await db.$queryRaw<Array<{
-    id: string
-    content: string
-    documentId: string
-    title: string
-    distance: number
-  }>>`
-    SELECT c.id, c.content, c."documentId", d.title,
-           (c.embedding <=> ${vec}::vector) AS distance
-    FROM "KnowledgeChunk" c
-    JOIN "KnowledgeDocument" d ON d.id = c."documentId"
-    WHERE d.status = 'active'
-      AND ${tenantFilter}
-      AND c.embedding IS NOT NULL
-      AND (c.embedding <=> ${vec}::vector) < ${maxDistance}
-    ORDER BY c.embedding <=> ${vec}::vector
-    LIMIT ${topK}
-  `
+  const results = tenantId
+    ? await db.$queryRaw<Array<{
+        id: string
+        content: string
+        documentId: string
+        title: string
+        distance: number
+      }>>`
+        SELECT c.id, c.content, c."documentId", d.title,
+               (c.embedding <=> ${vec}::vector) AS distance
+        FROM "KnowledgeChunk" c
+        JOIN "KnowledgeDocument" d ON d.id = c."documentId"
+        WHERE d.status = 'active'
+          AND (d."tenantId" IS NULL OR d."tenantId" = ${tenantId})
+          AND c.embedding IS NOT NULL
+          AND (c.embedding <=> ${vec}::vector) < ${maxDistance}
+        ORDER BY c.embedding <=> ${vec}::vector
+        LIMIT ${topK}
+      `
+    : await db.$queryRaw<Array<{
+        id: string
+        content: string
+        documentId: string
+        title: string
+        distance: number
+      }>>`
+        SELECT c.id, c.content, c."documentId", d.title,
+               (c.embedding <=> ${vec}::vector) AS distance
+        FROM "KnowledgeChunk" c
+        JOIN "KnowledgeDocument" d ON d.id = c."documentId"
+        WHERE d.status = 'active'
+          AND d."tenantId" IS NULL
+          AND c.embedding IS NOT NULL
+          AND (c.embedding <=> ${vec}::vector) < ${maxDistance}
+        ORDER BY c.embedding <=> ${vec}::vector
+        LIMIT ${topK}
+      `
 
   return results
 }
 
 /**
+ * Checks if the pgvector extension is already installed.
+ * Returns true if the extension exists, false otherwise.
+ */
+async function isPgvectorInstalled(): Promise<boolean> {
+  const db = getDb()
+  try {
+    const result = await db.$queryRaw<Array<{ extname: string }>>`
+      SELECT extname FROM pg_extension WHERE extname = 'vector'
+    `
+    return result.length > 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Ensures the pgvector extension exists. Called on service startup.
  * Idempotent — safe to call multiple times.
+ *
+ * On Neon, the application role may not have CREATE EXTENSION privileges.
+ * If the extension is already installed (by the owner role), this succeeds
+ * instantly. If not, we provide clear instructions for manual setup.
  */
 export async function ensurePgvectorExtension(): Promise<void> {
+  // First check if the extension is already installed — this always works
+  // regardless of the role's privileges.
+  if (await isPgvectorInstalled()) {
+    console.log('[KnowledgeService] pgvector extension OK (already installed)')
+    return
+  }
+
+  // Extension not found — try to create it (may fail if role lacks privileges)
   const db = getDb()
   try {
     await db.$executeRaw`CREATE EXTENSION IF NOT EXISTS vector`
-    console.log('[KnowledgeService] pgvector extension OK')
+    console.log('[KnowledgeService] pgvector extension created successfully')
   } catch (err: any) {
     const msg = err.message || String(err)
-    console.error('[KnowledgeService] Failed to enable pgvector extension:', msg)
+    console.error('[KnowledgeService] Failed to create pgvector extension:', msg)
 
     // Provide actionable guidance based on common error patterns
     if (msg.includes('permission denied') || msg.includes('must be owner')) {

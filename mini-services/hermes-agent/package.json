@@ -10,7 +10,7 @@
     "db:generate": "prisma generate --schema=../../prisma/schema.prisma"
   },
   "dependencies": {
-    "@prisma/client": "^6.11.1",
+    "@prisma/client": "6.19.2",
     "socket.io": "^4.8.0"
   },
   "devDependencies": {
