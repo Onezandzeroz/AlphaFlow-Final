@@ -11,94 +11,42 @@
 // IMPORTANT: This file must NOT use top-level await, because
 // PM2's ProcessContainerForkBun.js uses require() to load it,
 // and require() cannot handle async ESM modules.
+//
+// NOTE: We run `prisma generate` from the PROJECT ROOT (not
+// the mini-service directory). The generated client is output
+// to ROOT/node_modules/.prisma/client/, which is where
+// @prisma/client looks for it via Node module resolution.
 // ============================================================
 
-import { existsSync, readFileSync } from 'fs'
 import { execSync } from 'child_process'
 import { resolve, dirname } from 'path'
 
 const __dirname = dirname(new URL(import.meta.url).pathname)
-const clientPath = resolve(__dirname, 'node_modules/.prisma/client')
-const schemaPath = resolve(__dirname, '../../prisma/schema.prisma')
+const projectRoot = resolve(__dirname, '../..')
+const schemaPath = resolve(projectRoot, 'prisma/schema.prisma')
 
-// ── Validate existing Prisma client ──────────────────────────
-// The "Prisma client found" message in previous versions was
-// unreliable — require() can succeed even when the generated
-// client is incompatible with the @prisma/client runtime.
-// This happens when @prisma/client and prisma CLI versions
-// don't match (e.g., @prisma/client@6.11.x vs prisma@6.19.2).
+// ── Run prisma generate from the PROJECT ROOT ────────────────
+// This ensures the generated client lands in the ROOT
+// node_modules/.prisma/client/ where @prisma/client expects it,
+// regardless of which node_modules/@prisma/client copy is
+// resolved first (root or mini-service).
 //
-// We now check version alignment between the runtime and the
-// generated client. If they don't match, we force regeneration.
-let clientReady = false
+// We always run generate — it's fast (~100ms) when the client
+// already exists and up-to-date, and it avoids all the complex
+// version-checking logic that was causing ENOENT errors.
+console.log('[Hermes Boot] Ensuring Prisma client is generated...')
 try {
-  const clientIndex = resolve(clientPath, 'index.js')
-  if (existsSync(clientIndex)) {
-    // Check version alignment: read @prisma/client runtime version
-    // and compare with the generated client's embedded version.
-    const runtimePkgPath = resolve(__dirname, 'node_modules/@prisma/client/package.json')
-    const generatedPkgPath = resolve(clientPath, 'package.json')
-
-    let runtimeVersion = 'unknown'
-    let generatedVersion = 'unknown'
-
-    if (existsSync(runtimePkgPath)) {
-      try {
-        runtimeVersion = JSON.parse(readFileSync(runtimePkgPath, 'utf-8')).version || 'unknown'
-      } catch { /* ignore */ }
-    }
-
-    // The generated client embeds its prisma version in the default.js file.
-    // We can also check the engine hash for mismatch detection.
-    // For simplicity, compare the major.minor.patch of the runtime
-    // with what prisma CLI generated. The generated client's package.json
-    // sometimes has a version — check it.
-    if (existsSync(generatedPkgPath)) {
-      try {
-        generatedVersion = JSON.parse(readFileSync(generatedPkgPath, 'utf-8')).version || 'unknown'
-      } catch { /* ignore */ }
-    }
-
-    // If versions are both readable and match, the client is likely OK.
-    // If we can't determine versions, fall through to try require().
-    if (runtimeVersion !== 'unknown' && generatedVersion !== 'unknown' && runtimeVersion === generatedVersion) {
-      clientReady = true
-      console.log(`[Hermes Boot] Prisma client OK (v${runtimeVersion}) — skipping generate`)
-    } else if (runtimeVersion !== 'unknown' && generatedVersion !== 'unknown' && runtimeVersion !== generatedVersion) {
-      console.log(`[Hermes Boot] Prisma version mismatch: runtime=@prisma/client@${runtimeVersion}, generated=v${generatedVersion} — regenerating...`)
-    } else {
-      // Can't determine versions — try require() as a fallback.
-      // If this throws, the client is corrupt.
-      try {
-        require(resolve(clientPath))
-        clientReady = true
-        console.log('[Hermes Boot] Prisma client found — skipping generate')
-      } catch {
-        console.log('[Hermes Boot] Existing Prisma client failed to load — regenerating...')
-      }
-    }
-  }
-} catch (err: any) {
-  console.log(`[Hermes Boot] Prisma client validation error: ${err.message} — regenerating...`)
-}
-
-if (!clientReady) {
-  console.log('[Hermes Boot] Running prisma generate...')
-  try {
-    // Use bunx (not npx) since we're running under Bun.
-    // bunx prefers locally-installed packages.
-    execSync(`bunx prisma generate --schema="${schemaPath}"`, {
-      stdio: 'inherit',
-      cwd: __dirname,
-      timeout: 60_000,
-    })
-    console.log('[Hermes Boot] Prisma client generated successfully')
-  } catch (err) {
-    console.error('[Hermes Boot] prisma generate failed! The service may not work correctly.')
-    console.error('[Hermes Boot] Try running manually: cd mini-services/hermes-agent && bunx prisma generate --schema=../../prisma/schema.prisma')
-    // Don't exit — the service might still work with MockTenantProvider
-    // or the client may have been generated by a previous run
-  }
+  execSync(`bunx prisma generate --schema="${schemaPath}"`, {
+    stdio: 'pipe',  // suppress output when client already exists
+    cwd: projectRoot,
+    timeout: 60_000,
+  })
+  console.log('[Hermes Boot] Prisma client ready')
+} catch (err) {
+  console.error('[Hermes Boot] prisma generate failed — service may not work correctly.')
+  console.error('[Hermes Boot] Try running manually: cd ~/var/www/AlphaFlow-Final && bunx prisma generate')
+  // Don't exit — the service might still work with MockTenantProvider
+  // or the client may have been generated by a previous run
 }
 
 // Import and start the real service.

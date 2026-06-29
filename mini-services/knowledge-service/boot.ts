@@ -11,74 +11,37 @@
 // IMPORTANT: This file must NOT use top-level await, because
 // PM2's ProcessContainerForkBun.js uses require() to load it,
 // and require() cannot handle async ESM modules.
+//
+// NOTE: We run `prisma generate` from the PROJECT ROOT (not
+// the mini-service directory). The generated client is output
+// to ROOT/node_modules/.prisma/client/, which is where
+// @prisma/client looks for it via Node module resolution.
 // ============================================================
 
-import { existsSync, readFileSync } from 'fs'
 import { execSync } from 'child_process'
 import { resolve, dirname } from 'path'
 
 const __dirname = dirname(new URL(import.meta.url).pathname)
-const clientPath = resolve(__dirname, 'node_modules/.prisma/client')
-const schemaPath = resolve(__dirname, '../../prisma/schema.prisma')
+const projectRoot = resolve(__dirname, '../..')
+const schemaPath = resolve(projectRoot, 'prisma/schema.prisma')
 
-// ── Validate existing Prisma client ──────────────────────────
-// Check version alignment between the @prisma/client runtime
-// and the generated client. If they don't match, force regeneration.
-let clientReady = false
+// ── Run prisma generate from the PROJECT ROOT ────────────────
+// This ensures the generated client lands in the ROOT
+// node_modules/.prisma/client/ where @prisma/client expects it.
+// Always run generate — it's fast (~100ms) when the client
+// already exists, and avoids complex version-checking that
+// was causing ENOENT errors.
+console.log('[Knowledge Boot] Ensuring Prisma client is generated...')
 try {
-  const clientIndex = resolve(clientPath, 'index.js')
-  if (existsSync(clientIndex)) {
-    const runtimePkgPath = resolve(__dirname, 'node_modules/@prisma/client/package.json')
-    const generatedPkgPath = resolve(clientPath, 'package.json')
-
-    let runtimeVersion = 'unknown'
-    let generatedVersion = 'unknown'
-
-    if (existsSync(runtimePkgPath)) {
-      try {
-        runtimeVersion = JSON.parse(readFileSync(runtimePkgPath, 'utf-8')).version || 'unknown'
-      } catch { /* ignore */ }
-    }
-
-    if (existsSync(generatedPkgPath)) {
-      try {
-        generatedVersion = JSON.parse(readFileSync(generatedPkgPath, 'utf-8')).version || 'unknown'
-      } catch { /* ignore */ }
-    }
-
-    if (runtimeVersion !== 'unknown' && generatedVersion !== 'unknown' && runtimeVersion === generatedVersion) {
-      clientReady = true
-      console.log(`[Knowledge Boot] Prisma client OK (v${runtimeVersion}) — skipping generate`)
-    } else if (runtimeVersion !== 'unknown' && generatedVersion !== 'unknown' && runtimeVersion !== generatedVersion) {
-      console.log(`[Knowledge Boot] Prisma version mismatch: runtime=@prisma/client@${runtimeVersion}, generated=v${generatedVersion} — regenerating...`)
-    } else {
-      // Can't determine versions — try require() as a fallback.
-      try {
-        require(resolve(clientPath))
-        clientReady = true
-        console.log('[Knowledge Boot] Prisma client found — skipping generate')
-      } catch {
-        console.log('[Knowledge Boot] Existing Prisma client failed to load — regenerating...')
-      }
-    }
-  }
-} catch (err: any) {
-  console.log(`[Knowledge Boot] Prisma client validation error: ${err.message} — regenerating...`)
-}
-
-if (!clientReady) {
-  console.log('[Knowledge Boot] Running prisma generate...')
-  try {
-    execSync(`bunx prisma generate --schema="${schemaPath}"`, {
-      stdio: 'inherit',
-      cwd: __dirname,
-      timeout: 60_000,
-    })
-    console.log('[Knowledge Boot] Prisma client generated successfully')
-  } catch (err) {
-    console.error('[Knowledge Boot] prisma generate failed! The service will not be able to use the database.')
-    console.error('[Knowledge Boot] Try running manually: cd mini-services/knowledge-service && bunx prisma generate --schema=../../prisma/schema.prisma')
-  }
+  execSync(`bunx prisma generate --schema="${schemaPath}"`, {
+    stdio: 'pipe',  // suppress output when client already exists
+    cwd: projectRoot,
+    timeout: 60_000,
+  })
+  console.log('[Knowledge Boot] Prisma client ready')
+} catch (err) {
+  console.error('[Knowledge Boot] prisma generate failed — service may not work correctly.')
+  console.error('[Knowledge Boot] Try running manually: cd ~/var/www/AlphaFlow-Final && bunx prisma generate')
 }
 
 // Import and start the real service.
