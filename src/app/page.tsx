@@ -121,13 +121,11 @@ export default function LandingPage() {
               const Icon = stat.icon;
               return (
               <div key={stat.label} className="text-center">
-                {Icon && (
-                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-white/15 border border-white/20 mx-auto mb-3">
-                    <Icon className="h-5 w-5 text-teal-300" />
-                  </div>
-                )}
-                <div className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
-                  {stat.value}
+                <div className="flex items-center justify-center gap-2">
+                  {Icon && <Icon className="h-7 w-7 sm:h-8 sm:w-8 text-teal-300" />}
+                  <span className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
+                    {stat.value}
+                  </span>
                 </div>
                 <div className="mt-2 text-[12px] sm:text-[13px] text-teal-100/80 leading-snug">
                   {stat.label}
