@@ -1,20 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  ArrowRight,
-  HelpCircle,
-  MessageCircle,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowRight, HelpCircle, MessageCircle, ShieldCheck } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@/components/ui/button";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { CTAButton } from "@/components/marketing/cta-button";
 import { FAQ_DA, SITE } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -184,25 +179,12 @@ export default function FaqPage() {
             os, så hjælper vi dig i gang.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-            >
-              <Link href="/contact">
-                Skriv til os
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
-            >
-              <Link href="/login">Prøv gratis</Link>
-            </Button>
+            <CTAButton href="/contact" variant="primary-light" showArrow>
+              Skriv til os
+            </CTAButton>
+            <CTAButton href="/login" variant="outline-light">
+              Prøv gratis
+            </CTAButton>
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] text-teal-100/80">
             <span className="inline-flex items-center gap-1.5">

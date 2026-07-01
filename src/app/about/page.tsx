@@ -1,20 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Image from "next/image";
-import {
-  ArrowRight,
-  Building2,
-  MapPin,
-  Mail,
-  Phone,
-  TrendingUp,
-  Users,
-  RefreshCw,
-  Target,
-  ShieldCheck,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Building2, MapPin, Mail, Phone, Target } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { CTAButton } from "@/components/marketing/cta-button";
 import {
   COMPANY_FACTS,
   COMPANY_TIMELINE,
@@ -340,25 +328,12 @@ export default function AboutPage() {
             fuld adgang — ingen kreditkort.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-            >
-              <Link href="/login">
-                Start gratis
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
-            >
-              <Link href="/contact">Skriv til os</Link>
-            </Button>
+            <CTAButton href="/login" variant="primary-light" showArrow>
+              Start gratis
+            </CTAButton>
+            <CTAButton href="/contact" variant="outline-light">
+              Skriv til os
+            </CTAButton>
           </div>
         </div>
       </section>

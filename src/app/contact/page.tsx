@@ -1,15 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  ArrowRight,
-  Clock,
-  MessageCircle,
-  HelpCircle,
-  FileText,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowRight, Clock, MessageCircle, HelpCircle, FileText } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { CTAButton } from "@/components/marketing/cta-button";
 import { ContactForm } from "@/components/marketing/contact-form";
 import { CONTACT_CHANNELS, COMPANY_FACTS } from "@/lib/marketing-data";
 import { SITE } from "@/lib/seo";
@@ -258,17 +252,9 @@ export default function ContactPage() {
             Start din 60-dages gratis prøveperiode. Ingen kreditkort, ingen
             binding — fuld adgang til alle funktioner.
           </p>
-          <Button
-            asChild
-            variant="ghost"
-            size="lg"
-            className="mt-9 h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-          >
-            <Link href="/login">
-              Opret gratis konto
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          <CTAButton href="/login" variant="primary-light" showArrow className="mt-9">
+            Opret gratis konto
+          </CTAButton>
         </div>
       </section>
     </MarketingShell>

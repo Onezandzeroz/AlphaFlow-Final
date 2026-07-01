@@ -1,16 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  ArrowRight,
-  Check,
-  Star,
-  ShieldCheck,
-  Clock,
-  FileText,
-} from "lucide-react";
+import { Check, Star, ShieldCheck, Clock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { CTAButton } from "@/components/marketing/cta-button";
 import { PRICING_PLANS, TRUST_BADGES } from "@/lib/marketing-data";
 import { SITE } from "@/lib/seo";
 
@@ -194,20 +188,23 @@ export default function PricingPage() {
                 ))}
               </ul>
 
-              <Button
-                asChild
-                className={`w-full h-10 text-[14px] rounded-md ${
-                  plan.highlighted
-                    ? "bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-lg"
-                    : ""
-                }`}
-                variant={plan.highlighted ? "ghost" : "outline"}
-              >
-                <Link href="/login">
+              {plan.highlighted ? (
+                <CTAButton
+                  href="/login"
+                  variant="primary-light"
+                  className="w-full h-10 px-4 text-[14px] shadow-lg"
+                >
                   {plan.cta}
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
+                </CTAButton>
+              ) : (
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full h-10 text-[14px] rounded-md"
+                >
+                  <Link href="/login">{plan.cta}</Link>
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -300,22 +297,12 @@ export default function PricingPage() {
             skriv til os — vi svarer inden for én hverdag.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-            >
-              <Link href="/faq">Læs FAQ</Link>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
-            >
-              <Link href="/contact">Kontakt os</Link>
-            </Button>
+            <CTAButton href="/faq" variant="primary-light">
+              Læs FAQ
+            </CTAButton>
+            <CTAButton href="/contact" variant="outline-light">
+              Kontakt os
+            </CTAButton>
           </div>
         </div>
       </section>

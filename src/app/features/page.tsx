@@ -1,14 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import Image from "next/image";
-import {
-  ArrowRight,
-  Check,
-  Sparkles,
-  ShieldCheck,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check, Sparkles, ShieldCheck } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { CTAButton } from "@/components/marketing/cta-button";
 import {
   FEATURE_CATEGORIES,
   MARKETING_STATS,
@@ -71,25 +65,12 @@ export default function FeaturesPage() {
               {SITE.tagline}
             </p>
             <div className="mt-9 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <Button
-                asChild
-                variant="ghost"
-                size="lg"
-                className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-              >
-                <Link href="/login">
-                  Prøv gratis i 60 dage
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button
-                asChild
-                variant="ghost"
-                size="lg"
-                className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
-              >
-                <Link href="/pricing">Se priser</Link>
-              </Button>
+              <CTAButton href="/login" variant="primary-light" showArrow>
+                Prøv gratis i 60 dage
+              </CTAButton>
+              <CTAButton href="/pricing" variant="outline-light">
+                Se priser
+              </CTAButton>
             </div>
             <p className="mt-5 text-[13px] text-teal-100/70">
               Ingen kreditkort · Ingen binding · Opsætning på 5 minutter
@@ -242,25 +223,12 @@ export default function FeaturesPage() {
             ingen binding — fuld adgang til alle funktioner.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-            >
-              <Link href="/login">
-                Opret gratis konto
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
-            >
-              <Link href="/contact">Kontakt os</Link>
-            </Button>
+            <CTAButton href="/login" variant="primary-light" showArrow>
+              Opret gratis konto
+            </CTAButton>
+            <CTAButton href="/contact" variant="outline-light">
+              Kontakt os
+            </CTAButton>
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] text-teal-100/80">
             <span className="inline-flex items-center gap-1.5">

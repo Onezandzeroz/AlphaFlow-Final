@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { CTAButton } from "@/components/marketing/cta-button";
 import {
   FEATURE_CATEGORIES,
   MARKETING_STATS,
@@ -81,25 +82,12 @@ export default function LandingPage() {
               {SITE.tagline}
             </p>
             <div className="mt-9 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <Button
-                asChild
-                variant="ghost"
-                size="lg"
-                className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-              >
-                <Link href="/login">
-                  Kom gratis i gang
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button
-                asChild
-                variant="ghost"
-                size="lg"
-                className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
-              >
-                <Link href="/features">Se alle funktioner</Link>
-              </Button>
+              <CTAButton href="/login" variant="primary-light" showArrow>
+                Kom gratis i gang
+              </CTAButton>
+              <CTAButton href="/features" variant="outline-light">
+                Se alle funktioner
+              </CTAButton>
             </div>
             <p className="mt-5 text-[13px] text-teal-100/70">
               Ingen kreditkort · Ingen binding · Opsætning på 5 minutter
@@ -262,17 +250,9 @@ export default function LandingPage() {
                   e-fakturaer direkte i systemet med automatisk
                   afsendelsesstatus via Storecove adgangspunkt.
                 </p>
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="lg"
-                  className="mt-7 h-12 px-7 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-                >
-                  <Link href="/features">
-                    Læs mere
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
+                <CTAButton href="/features" variant="primary-light" showArrow className="mt-7 px-7">
+                  Læs mere
+                </CTAButton>
               </div>
             </div>
           </div>
@@ -361,17 +341,23 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <Button
-                asChild
-                className={`w-full h-11 text-[14px] rounded-md ${
-                  plan.highlighted
-                    ? "bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-lg"
-                    : ""
-                }`}
-                variant={plan.highlighted ? "ghost" : "outline"}
-              >
-                <Link href="/login">{plan.cta}</Link>
-              </Button>
+              {plan.highlighted ? (
+                <CTAButton
+                  href="/login"
+                  variant="primary-light"
+                  className="w-full h-11 px-4 text-[14px] shadow-lg"
+                >
+                  {plan.cta}
+                </CTAButton>
+              ) : (
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full h-11 text-[14px] rounded-md"
+                >
+                  <Link href="/login">{plan.cta}</Link>
+                </Button>
+              )}
             </div>
           ))}
         </div>
@@ -472,25 +458,12 @@ export default function LandingPage() {
             ingen binding — fuld adgang til alle funktioner.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
-            >
-              <Link href="/login">
-                Opret gratis konto
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="ghost"
-              size="lg"
-              className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
-            >
-              <Link href="/contact">Kontakt os</Link>
-            </Button>
+            <CTAButton href="/login" variant="primary-light" showArrow>
+              Opret gratis konto
+            </CTAButton>
+            <CTAButton href="/contact" variant="outline-light">
+              Kontakt os
+            </CTAButton>
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] text-teal-100/80">
             <span className="inline-flex items-center gap-1.5">
