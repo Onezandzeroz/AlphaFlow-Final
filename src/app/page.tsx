@@ -5,18 +5,11 @@ import {
   ArrowRight,
   Check,
   ShieldCheck,
-  Sparkles,
-  BookOpen,
-  Scale,
-  ScanLine,
-  Bot,
-  BarChart3,
   Clock,
   Star,
   Zap,
   FileText,
   TrendingUp,
-  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
@@ -38,15 +31,6 @@ export const metadata: Metadata = {
     url: "/",
   },
 };
-
-const HERO_FEATURES = [
-  { icon: BookOpen, label: "Dobbelt bogføring" },
-  { icon: Scale, label: "Automatisk moms (10 koder)" },
-  { icon: ScanLine, label: "OCR bilagsscanning" },
-  { icon: BarChart3, label: "Finansielle rapporter" },
-  { icon: Bot, label: "Hermes AI-assistent" },
-  { icon: ShieldCheck, label: "Bogføringslov compliant" },
-];
 
 export default function LandingPage() {
   const teaserPlans = PRICING_PLANS.filter((p) =>
@@ -86,10 +70,6 @@ export default function LandingPage() {
         {/* Content */}
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 sm:pt-28 lg:pt-36 pb-20 sm:pb-28 lg:pb-36">
           <div className="max-w-3xl">
-            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[12px] font-medium text-teal-100 mb-6">
-              <Sparkles className="h-3.5 w-3.5 text-teal-300" />
-              Dansk regnskabsprogram · 60 dages gratis prøveperiode
-            </span>
             <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold text-white tracking-tight leading-[1.05]">
               Intelligent bogføring{" "}
               <span className="bg-gradient-to-r from-teal-300 via-teal-200 to-sky-300 bg-clip-text text-transparent">
@@ -102,8 +82,9 @@ export default function LandingPage() {
             <div className="mt-9 flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <Button
                 asChild
+                variant="ghost"
                 size="lg"
-                className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e] shadow-xl"
+                className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
               >
                 <Link href="/login">
                   Kom gratis i gang
@@ -112,9 +93,9 @@ export default function LandingPage() {
               </Button>
               <Button
                 asChild
-                variant="outline"
+                variant="ghost"
                 size="lg"
-                className="h-12 px-8 text-[15px] bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white hover:border-white/50"
+                className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
               >
                 <Link href="/features">Se alle funktioner</Link>
               </Button>
@@ -122,22 +103,6 @@ export default function LandingPage() {
             <p className="mt-5 text-[13px] text-teal-100/70">
               Ingen kreditkort · Ingen binding · Opsætning på 5 minutter
             </p>
-          </div>
-
-          {/* Hero feature pills */}
-          <div className="mt-14 flex flex-wrap items-center gap-2.5">
-            {HERO_FEATURES.map((feature) => {
-              const Icon = feature.icon;
-              return (
-                <span
-                  key={feature.label}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[13px] font-medium text-white"
-                >
-                  <Icon className="h-4 w-4 text-teal-300" />
-                  {feature.label}
-                </span>
-              );
-            })}
           </div>
         </div>
 
@@ -298,8 +263,9 @@ export default function LandingPage() {
                 </p>
                 <Button
                   asChild
+                  variant="ghost"
                   size="lg"
-                  className="mt-7 h-12 px-7 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e]"
+                  className="mt-7 h-12 px-7 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
                 >
                   <Link href="/features">
                     Læs mere
@@ -396,12 +362,12 @@ export default function LandingPage() {
               </ul>
               <Button
                 asChild
-                className={`w-full h-11 text-[14px] ${
+                className={`w-full h-11 text-[14px] rounded-md ${
                   plan.highlighted
-                    ? "bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e]"
+                    ? "bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-lg"
                     : ""
                 }`}
-                variant={plan.highlighted ? "default" : "outline"}
+                variant={plan.highlighted ? "ghost" : "outline"}
               >
                 <Link href="/login">{plan.cta}</Link>
               </Button>
@@ -507,8 +473,9 @@ export default function LandingPage() {
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button
               asChild
+              variant="ghost"
               size="lg"
-              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e] shadow-xl"
+              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
             >
               <Link href="/login">
                 Opret gratis konto
@@ -517,9 +484,9 @@ export default function LandingPage() {
             </Button>
             <Button
               asChild
-              variant="outline"
+              variant="ghost"
               size="lg"
-              className="h-12 px-8 text-[15px] bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white hover:border-white/50"
+              className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
             >
               <Link href="/contact">Kontakt os</Link>
             </Button>

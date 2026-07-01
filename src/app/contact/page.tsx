@@ -260,8 +260,9 @@ export default function ContactPage() {
           </p>
           <Button
             asChild
+            variant="ghost"
             size="lg"
-            className="mt-9 h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e] shadow-xl"
+            className="mt-9 h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
           >
             <Link href="/login">
               Opret gratis konto

@@ -186,8 +186,9 @@ export default function FaqPage() {
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button
               asChild
+              variant="ghost"
               size="lg"
-              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e] shadow-xl"
+              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#0f766e] shadow-xl rounded-md"
             >
               <Link href="/contact">
                 Skriv til os
@@ -196,9 +197,9 @@ export default function FaqPage() {
             </Button>
             <Button
               asChild
-              variant="outline"
+              variant="ghost"
               size="lg"
-              className="h-12 px-8 text-[15px] bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white hover:border-white/50"
+              className="h-12 px-8 text-[15px] bg-white/10 backdrop-blur-md border border-white/30 text-white hover:bg-white/20 hover:text-white hover:border-white/50 rounded-md"
             >
               <Link href="/login">Prøv gratis</Link>
             </Button>
