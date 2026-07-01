@@ -230,21 +230,18 @@ export const CATEGORIES = [
 ] as const;
 
 // ─── Breadcrumbs ──────────────────────────────────────────────────
+// Public marketing breadcrumbs (crawlable). In-app breadcrumbs are handled
+// client-side and are not included here.
 export const BREADCRUMBS: readonly {
   name: string;
   path: string;
 }[] = [
   { name: "Forside", path: "/" },
-  { name: "Dashboard", path: "/" },
-  { name: "Posteringer", path: "/transactions" },
-  { name: "Fakturaer", path: "/invoices" },
-  { name: "Momsafregning", path: "/vat-report" },
-  { name: "Regnskabsrapporter", path: "/reports" },
-  { name: "Bankafstemning", path: "/bank-recon" },
-  { name: "Kontoplan", path: "/accounts" },
-  { name: "Eksport", path: "/exports" },
-  { name: "Projekter", path: "/projects" },
-  { name: "Indstillinger", path: "/settings" },
+  { name: "Funktioner", path: "/features" },
+  { name: "Priser", path: "/pricing" },
+  { name: "Om os", path: "/about" },
+  { name: "FAQ", path: "/faq" },
+  { name: "Kontakt", path: "/contact" },
 ] as const;
 
 // ─── Public Routes (for sitemap) ─────────────────────────────────
@@ -261,6 +258,11 @@ export const PUBLIC_ROUTES: readonly {
   priority: number;
 }[] = [
   { path: "/", changeFrequency: "weekly", priority: 1.0 },
+  { path: "/features", changeFrequency: "monthly", priority: 0.9 },
+  { path: "/pricing", changeFrequency: "monthly", priority: 0.9 },
+  { path: "/faq", changeFrequency: "monthly", priority: 0.7 },
+  { path: "/about", changeFrequency: "yearly", priority: 0.6 },
+  { path: "/contact", changeFrequency: "yearly", priority: 0.5 },
   { path: "/terms", changeFrequency: "monthly", priority: 0.3 },
 ] as const;
 
@@ -275,7 +277,7 @@ export const GEO = {
 
 // ─── Business Info (for LocalBusiness schema) ─────────────────────
 export const BUSINESS = {
-  priceRange: "0 DKK – 499 DKK/måned",
+  priceRange: "0 DKK – 199 DKK/måned",
   currenciesAccepted: "DKK",
   paymentAccepted: "Kreditkort, MobilePay, Bankoverførsel",
   openingHours: "Mo-Fr 09:00-17:00",

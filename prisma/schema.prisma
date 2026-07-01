@@ -1500,3 +1500,26 @@ model Payment {
   @@index([status])
   @@index([flatpayPaymentId])
 }
+
+// ─── Contact Form Submissions ───────────────────────────────────────
+// Stores messages submitted via the public /contact marketing page.
+// No auth required — this is a public endpoint.
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  company   String?
+  subject   String
+  message   String
+  ipAddress String?
+  userAgent String?
+  // new | read | replied | archived
+  status    String   @default("new")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
+}

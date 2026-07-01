@@ -20,8 +20,12 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
-        // Exclude API routes, static assets, and special files from the catch-all
-        source: "/((?!api|_next|favicon\\.ico|manifest\\.json|robots\\.txt|sitemap\\.xml|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|eot)).*)",
+        // Exclude API routes, static assets, special files, AND the public
+        // marketing/legal filesystem routes from the catch-all. Filesystem
+        // routes already take precedence over rewrites, but listing them
+        // explicitly prevents silent fallthrough to "/" if a route file is
+        // ever deleted or misnamed.
+        source: "/((?!api|_next|favicon\\.ico|manifest\\.json|robots\\.txt|sitemap\\.xml|sw\\.js|features|pricing|about|faq|contact|terms|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|eot)).*)",
         destination: "/",
       },
     ];
