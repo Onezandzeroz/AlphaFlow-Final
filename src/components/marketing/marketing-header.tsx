@@ -54,8 +54,8 @@ export function MarketingHeader() {
               size="sm"
               className="hidden sm:inline-flex h-9 text-sm"
             >
-              <Link href="/">
-                Prøv gratis
+              <Link href="/login">
+                Log ind
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>

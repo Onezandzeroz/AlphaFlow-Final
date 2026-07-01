@@ -89,8 +89,8 @@ export function MobileNav() {
           {/* CTA */}
           <div className="px-5 py-5 border-t border-[#e2e8e6]/60">
             <Button asChild className="w-full h-11 text-[15px]">
-              <Link href="/" onClick={() => setOpen(false)}>
-                Prøv gratis i 60 dage
+              <Link href="/login" onClick={() => setOpen(false)}>
+                Log ind
               </Link>
             </Button>
             <p className="text-center text-[11px] text-gray-400 mt-3">

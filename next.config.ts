@@ -10,23 +10,26 @@ const nextConfig: NextConfig = {
   ],
   serverExternalPackages: ["@prisma/client", "prisma", "node-cron", "archiver", "nodemailer"],
 
-  // ─── SPA rewrites: catch all non-API, non-static paths and serve the root page ───
-  // The app is a single-page app (SPA) with client-side routing.
-  // Next.js only has one filesystem route (/). All other paths like
-  // /reset-password, /terms, /transactions, /invoices etc. are handled
-  // client-side via window.history + React state. Without these rewrites,
-  // Next.js would return a 404 for any path that doesn't match a file
-  // in src/app/, preventing the client JS from ever loading.
+  // ─── SPA rewrite: catch all non-API, non-static, non-marketing paths and
+  // serve the SPA at /login. The app is a single-page app (SPA) with client-
+  // side routing. The SPA filesystem route lives at /login (src/app/login/
+  // page.tsx). All in-app paths like /transactions, /invoices, /reset-password,
+  // /terms etc. are handled client-side via window.history + React state and
+  // must fall through to /login so the SPA can load and pick the right view.
+  // The marketing landing page lives at / (src/app/page.tsx) and the public
+  // marketing routes at /features, /pricing, /about, /faq, /contact — these
+  // are real filesystem routes and take precedence over the rewrite.
   async rewrites() {
     return [
       {
         // Exclude API routes, static assets, special files, AND the public
-        // marketing/legal filesystem routes from the catch-all. Filesystem
-        // routes already take precedence over rewrites, but listing them
-        // explicitly prevents silent fallthrough to "/" if a route file is
-        // ever deleted or misnamed.
-        source: "/((?!api|_next|favicon\\.ico|manifest\\.json|robots\\.txt|sitemap\\.xml|sw\\.js|features|pricing|about|faq|contact|terms|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|eot)).*)",
-        destination: "/",
+        // filesystem routes from the catch-all. Everything else (in-app SPA
+        // views) falls through to /login.
+        // NOTE: /terms is intentionally NOT excluded — it is an SPA route
+        // (rendered client-side by the terms component) and must fall through
+        // to the catch-all so the SPA can handle it.
+        source: "/((?!api|_next|favicon\\.ico|manifest\\.json|robots\\.txt|sitemap\\.xml|sw\\.js|login|features|pricing|about|faq|contact|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|woff2?|ttf|eot)).*)",
+        destination: "/login",
       },
     ];
   },

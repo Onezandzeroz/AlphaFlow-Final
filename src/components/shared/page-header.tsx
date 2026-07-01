@@ -85,7 +85,7 @@ export function PageHeader({
                   {/* Home / root crumb */}
                   <li className="flex items-center gap-1">
                     <Link
-                      href="/"
+                      href="/login"
                       className="inline-flex items-center gap-1 text-white/70 hover:text-white transition-colors duration-150"
                     >
                       <Home className="h-3.5 w-3.5" />

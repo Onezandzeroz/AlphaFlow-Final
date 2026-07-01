@@ -131,7 +131,7 @@ export default function PricingPage() {
                 }`}
                 variant={plan.highlighted ? "default" : "outline"}
               >
-                <Link href="/">
+                <Link href="/login">
                   {plan.cta}
                   <ArrowRight className="h-4 w-4" />
                 </Link>

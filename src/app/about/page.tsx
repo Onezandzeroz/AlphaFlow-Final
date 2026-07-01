@@ -283,7 +283,7 @@ export default function AboutPage() {
               size="lg"
               className="h-11 px-7 text-[15px] bg-white text-[#0d9488] hover:bg-white/90 hover:text-[#0f766e]"
             >
-              <Link href="/">
+              <Link href="/login">
                 Start gratis
                 <ArrowRight className="h-4 w-4" />
               </Link>

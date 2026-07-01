@@ -44,7 +44,7 @@ export default function FeaturesPage() {
           </p>
           <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button asChild size="lg" className="h-11 px-6 text-[15px]">
-              <Link href="/">
+              <Link href="/login">
                 Prøv gratis i 60 dage
                 <ArrowRight className="h-4 w-4" />
               </Link>
@@ -195,7 +195,7 @@ export default function FeaturesPage() {
               size="lg"
               className="h-11 px-7 text-[15px] bg-white text-[#0d9488] hover:bg-white/90 hover:text-[#0f766e]"
             >
-              <Link href="/">
+              <Link href="/login">
                 Opret gratis konto
                 <ArrowRight className="h-4 w-4" />
               </Link>

@@ -141,7 +141,7 @@ export default function FaqPage() {
               size="lg"
               className="h-11 px-6 text-[15px] border-[#0d9488]/30 text-[#0d9488] hover:bg-[#f0fdf9] hover:text-[#0f766e]"
             >
-              <Link href="/">Prøv gratis</Link>
+              <Link href="/login">Prøv gratis</Link>
             </Button>
           </div>
         </div>

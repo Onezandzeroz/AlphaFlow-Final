@@ -698,7 +698,8 @@ export function TermsOfServicePage({ onBack }: TermsOfServicePageProps) {
     if (onBack) {
       onBack();
     } else {
-      window.history.pushState({ view: 'dashboard' }, '', '/');
+      // SPA lives at /login now — fall back to the login/dashboard route.
+      window.history.pushState({ view: 'dashboard' }, '', '/login');
     }
   }, [onBack]);
 

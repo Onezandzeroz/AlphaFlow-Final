@@ -216,7 +216,7 @@ export default function ContactPage() {
             size="lg"
             className="mt-6 h-11 px-7 text-[15px] bg-white text-[#0d9488] hover:bg-white/90 hover:text-[#0f766e]"
           >
-            <Link href="/">
+            <Link href="/login">
               Opret gratis konto
               <ArrowRight className="h-4 w-4" />
             </Link>
