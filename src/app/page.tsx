@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowRight,
   Check,
@@ -12,6 +13,10 @@ import {
   BarChart3,
   Clock,
   Star,
+  Zap,
+  FileText,
+  TrendingUp,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
@@ -34,8 +39,6 @@ export const metadata: Metadata = {
   },
 };
 
-// Curated highlights for the landing page hero section (top 6 features,
-// one icon each — pulled from FEATURE_CATEGORIES).
 const HERO_FEATURES = [
   { icon: BookOpen, label: "Dobbelt bogføring" },
   { icon: Scale, label: "Automatisk moms (10 koder)" },
@@ -46,187 +49,358 @@ const HERO_FEATURES = [
 ];
 
 export default function LandingPage() {
-  // Pick the 3 most relevant plans for the pricing teaser
   const teaserPlans = PRICING_PLANS.filter((p) =>
     ["free", "annual", "2year"].includes(p.id)
   );
-  // Top 3 FAQ items for the landing page
   const teaserFaqs = FAQ_DA.slice(0, 3);
 
   return (
     <MarketingShell>
-      {/* ─── Hero ─── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 sm:pt-16 lg:pt-24 pb-10">
-        <div className="text-center max-w-3xl mx-auto">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f0fdf9] border border-[#ccfbef] text-[12px] font-medium text-[#0d9488] mb-6">
-            <Sparkles className="h-3.5 w-3.5" />
-            Dansk regnskabsprogram · 60 dages gratis prøveperiode
-          </span>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 tracking-tight leading-[1.08]">
-            Intelligent bogføring{" "}
-            <span className="bg-gradient-to-r from-[#0d9488] to-[#2dd4bf] bg-clip-text text-transparent">
-              for danske virksomheder
+      {/* ═══════════════════════════════════════════════════════════════
+          HERO — full-width dark gradient with banner image overlay
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="relative w-full overflow-hidden bg-gradient-to-br from-[#042f2e] via-[#0c4a6e] to-[#115e59]">
+        {/* Banner image as background */}
+        <div className="absolute inset-0">
+          <Image
+            src="/banner-1.png"
+            alt=""
+            fill
+            priority
+            className="object-cover opacity-30"
+            sizes="100vw"
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#042f2e]/80 via-[#0c4a6e]/70 to-[#115e59]/80" />
+        </div>
+
+        {/* Decorative grid pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
+            backgroundSize: "48px 48px",
+          }}
+        />
+
+        {/* Content */}
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 sm:pt-28 lg:pt-36 pb-20 sm:pb-28 lg:pb-36">
+          <div className="max-w-3xl">
+            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[12px] font-medium text-teal-100 mb-6">
+              <Sparkles className="h-3.5 w-3.5 text-teal-300" />
+              Dansk regnskabsprogram · 60 dages gratis prøveperiode
             </span>
-          </h1>
-          <p className="mt-6 text-base sm:text-lg text-gray-600 leading-relaxed max-w-2xl mx-auto">
-            {SITE.tagline}
-          </p>
-          <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <Button asChild size="lg" className="h-12 px-7 text-[15px]">
-              <Link href="/login">
-                Kom gratis i gang
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              asChild
-              variant="outline"
-              size="lg"
-              className="h-12 px-7 text-[15px] border-[#0d9488]/30 text-[#0d9488] hover:bg-[#f0fdf9] hover:text-[#0f766e]"
-            >
-              <Link href="/features">Se alle funktioner</Link>
-            </Button>
-          </div>
-          <p className="mt-4 text-[12px] text-gray-400">
-            Ingen kreditkort · Ingen binding · Opsætning på 5 minutter
-          </p>
-        </div>
-
-        {/* Hero feature pills */}
-        <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5 max-w-3xl mx-auto">
-          {HERO_FEATURES.map((feature) => {
-            const Icon = feature.icon;
-            return (
-              <span
-                key={feature.label}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-white/80 backdrop-blur-sm border border-[#e2e8e6]/80 shadow-sm text-[13px] font-medium text-gray-700"
-              >
-                <Icon className="h-4 w-4 text-[#0d9488]" />
-                {feature.label}
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold text-white tracking-tight leading-[1.05]">
+              Intelligent bogføring{" "}
+              <span className="bg-gradient-to-r from-teal-300 via-teal-200 to-sky-300 bg-clip-text text-transparent">
+                for danske virksomheder
               </span>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* ─── Stats bar ─── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {MARKETING_STATS.map((stat) => (
-            <div
-              key={stat.label}
-              className="rounded-2xl bg-white/80 backdrop-blur-sm border border-[#e2e8e6]/80 shadow-sm p-5 sm:p-6 text-center"
-            >
-              <div className="text-2xl sm:text-3xl font-bold text-[#0d9488]">
-                {stat.value}
-              </div>
-              <div className="mt-1 text-[12px] sm:text-[13px] text-gray-500 leading-snug">
-                {stat.label}
-              </div>
+            </h1>
+            <p className="mt-6 text-lg sm:text-xl text-teal-50/90 leading-relaxed max-w-2xl">
+              {SITE.tagline}
+            </p>
+            <div className="mt-9 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <Button
+                asChild
+                size="lg"
+                className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e] shadow-xl"
+              >
+                <Link href="/login">
+                  Kom gratis i gang
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="h-12 px-8 text-[15px] bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white hover:border-white/50"
+              >
+                <Link href="/features">Se alle funktioner</Link>
+              </Button>
             </div>
-          ))}
+            <p className="mt-5 text-[13px] text-teal-100/70">
+              Ingen kreditkort · Ingen binding · Opsætning på 5 minutter
+            </p>
+          </div>
+
+          {/* Hero feature pills */}
+          <div className="mt-14 flex flex-wrap items-center gap-2.5">
+            {HERO_FEATURES.map((feature) => {
+              const Icon = feature.icon;
+              return (
+                <span
+                  key={feature.label}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[13px] font-medium text-white"
+                >
+                  <Icon className="h-4 w-4 text-teal-300" />
+                  {feature.label}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Wave divider transitioning to light section */}
+        <div className="relative">
+          <svg
+            className="block w-full h-[60px] sm:h-[80px]"
+            viewBox="0 0 1440 80"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M0,40 C360,80 1080,0 1440,40 L1440,80 L0,80 Z"
+              fill="#f8faf9"
+            />
+          </svg>
         </div>
       </section>
 
-      {/* ─── Feature highlights (top 3 categories) ─── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-        <div className="text-center mb-8 sm:mb-10">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+      {/* ═══════════════════════════════════════════════════════════════
+          STATS BAR — full-width with dark teal/blue gradient
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 sm:-mt-6 relative z-10">
+        <div className="rounded-3xl bg-gradient-to-br from-[#134e4a] via-[#0d9488] to-[#0c4a6e] shadow-2xl p-6 sm:p-8 lg:p-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+            {MARKETING_STATS.map((stat) => (
+              <div key={stat.label} className="text-center">
+                <div className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
+                  {stat.value}
+                </div>
+                <div className="mt-2 text-[12px] sm:text-[13px] text-teal-100/80 leading-snug">
+                  {stat.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          UI PREVIEW — full-width screenshot with floating effect
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 sm:pt-24 pb-8">
+        <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f0fdf9] border border-[#ccfbef] text-[12px] font-medium text-[#0d9488] mb-4">
+            <Zap className="h-3.5 w-3.5" />
+            Se platformen
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">
+            Hermes AI — din danske regnskabsassistent
+          </h2>
+          <p className="mt-4 text-[15px] sm:text-[16px] text-gray-600 leading-relaxed">
+            Spørg Hermes om din likviditet, momsbalance eller bogføringsregler.
+            Få svar på dansk baseret på dine egne data.
+          </p>
+        </div>
+
+        {/* Screenshot with gradient glow behind */}
+        <div className="relative">
+          <div className="absolute -inset-4 bg-gradient-to-r from-[#0d9488]/20 via-[#2dd4bf]/20 to-[#0c4a6e]/20 rounded-3xl blur-2xl opacity-60" />
+          <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-[#e2e8e6]/60 bg-white">
+            <Image
+              src="/ui-screenshot.jpg"
+              alt="Screenshot af AlphaFlow med Hermes AI-assistenten — regnskabsplatformen der viser dashboard og chat"
+              width={1870}
+              height={958}
+              className="w-full h-auto"
+              sizes="(max-width: 1280px) 100vw, 1280px"
+              priority
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          FEATURE HIGHLIGHTS — 3 cards with icon
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
+        <div className="text-center mb-10 sm:mb-14">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">
             Alt samlet i ét system
           </h2>
-          <p className="mt-3 text-[14px] text-gray-500 max-w-xl mx-auto">
+          <p className="mt-4 text-[15px] text-gray-500 max-w-xl mx-auto">
             Fra daglig bogføring til årsafslutning — bygget til dansk
             bogføringslov og danske momskoder
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {FEATURE_CATEGORIES.slice(0, 3).map((category) => {
             const Icon = category.icon;
             return (
               <Link
                 key={category.id}
                 href="/features"
-                className="group rounded-2xl bg-white/80 backdrop-blur-sm border border-[#e2e8e6]/80 shadow-sm p-6 hover:shadow-md hover:border-[#0d9488]/20 transition-all duration-200"
+                className="group relative rounded-3xl bg-white border border-[#e2e8e6]/80 shadow-sm p-7 sm:p-8 hover:shadow-xl hover:border-[#0d9488]/30 transition-all duration-300 overflow-hidden"
               >
-                <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-gradient-to-br from-[#0d9488]/10 to-[#2dd4bf]/5 border border-[#0d9488]/10 mb-4">
-                  <Icon className="h-6 w-6 text-[#0d9488]" />
+                {/* Subtle gradient corner */}
+                <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-gradient-to-br from-[#0d9488]/5 to-[#0c4a6e]/5 blur-2xl group-hover:from-[#0d9488]/10 group-hover:to-[#0c4a6e]/10 transition-all duration-300" />
+                <div className="relative">
+                  <div className="flex items-center justify-center h-14 w-14 rounded-2xl bg-gradient-to-br from-[#134e4a] to-[#0d9488] mb-5 shadow-lg">
+                    <Icon className="h-7 w-7 text-white" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">
+                    {category.title}
+                  </h3>
+                  <p className="text-[14px] text-gray-500 leading-relaxed mb-5">
+                    {category.subtitle}
+                  </p>
+                  <ul className="space-y-2.5 mb-6">
+                    {category.features.slice(0, 3).map((f) => (
+                      <li
+                        key={f.title}
+                        className="flex items-start gap-2.5 text-[14px] text-gray-700"
+                      >
+                        <Check className="h-4 w-4 text-[#0d9488] flex-shrink-0 mt-0.5" />
+                        <span className="leading-snug">{f.title}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <span className="inline-flex items-center gap-1 text-[14px] font-semibold text-[#0d9488] group-hover:gap-2 transition-all">
+                    Se alle funktioner
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
                 </div>
-                <h3 className="text-[17px] font-bold text-gray-900 mb-1.5">
-                  {category.title}
-                </h3>
-                <p className="text-[13px] text-gray-500 leading-relaxed mb-4">
-                  {category.subtitle}
-                </p>
-                <ul className="space-y-2 mb-4">
-                  {category.features.slice(0, 3).map((f) => (
-                    <li
-                      key={f.title}
-                      className="flex items-start gap-2 text-[13px] text-gray-600"
-                    >
-                      <Check className="h-4 w-4 text-[#0d9488] flex-shrink-0 mt-0.5" />
-                      <span className="leading-snug">{f.title}</span>
-                    </li>
-                  ))}
-                </ul>
-                <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#0d9488] group-hover:gap-1.5 transition-all">
-                  Se alle
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </span>
               </Link>
             );
           })}
         </div>
       </section>
 
-      {/* ─── Pricing teaser ─── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-        <div className="text-center mb-8 sm:mb-10">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+      {/* ═══════════════════════════════════════════════════════════════
+          BANNER IMAGE SECTION — full-width with overlay text
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="relative w-full overflow-hidden">
+        <div className="relative h-[400px] sm:h-[500px] lg:h-[560px]">
+          <Image
+            src="/banner-2.png"
+            alt="AlphaFlow regnskabsplatform — visuel banner"
+            fill
+            className="object-cover"
+            sizes="100vw"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#042f2e]/85 via-[#0c4a6e]/70 to-transparent" />
+          <div className="absolute inset-0 flex items-center">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
+              <div className="max-w-xl">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[12px] font-medium text-teal-100 mb-5">
+                  <Globe className="h-3.5 w-3.5 text-teal-300" />
+                  Peppol e-fakturering
+                </span>
+                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight leading-tight">
+                  Send e-fakturaer via Peppol-netværket
+                </h2>
+                <p className="mt-5 text-[15px] sm:text-[17px] text-teal-50/90 leading-relaxed">
+                  OIOUBL BIS Billing 3.0 understøttelse. Send og modtag
+                  e-fakturaer direkte i systemet med automatisk
+                  afsendelsesstatus via Storecove adgangspunkt.
+                </p>
+                <Button
+                  asChild
+                  size="lg"
+                  className="mt-7 h-12 px-7 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e]"
+                >
+                  <Link href="/features">
+                    Læs mere
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          PRICING TEASER — 3 plans
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
+        <div className="text-center mb-10 sm:mb-14">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f0fdf9] border border-[#ccfbef] text-[12px] font-medium text-[#0d9488] mb-4">
+            <FileText className="h-3.5 w-3.5" />
+            Gennemsigtige priser
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">
             Simple, fair priser
           </h2>
-          <p className="mt-3 text-[14px] text-gray-500 max-w-xl mx-auto">
+          <p className="mt-4 text-[15px] text-gray-500 max-w-xl mx-auto">
             Start gratis, opgrader når du er klar. Ingen skjulte gebyrer.
           </p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 max-w-4xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
           {teaserPlans.map((plan) => (
             <div
               key={plan.id}
-              className={`relative rounded-2xl border p-6 flex flex-col ${
+              className={`relative rounded-3xl border p-7 sm:p-8 flex flex-col ${
                 plan.highlighted
-                  ? "bg-white border-[#0d9488] shadow-lg md:scale-[1.03]"
-                  : "bg-white/80 backdrop-blur-sm border-[#e2e8e6]/80 shadow-sm"
+                  ? "bg-gradient-to-br from-[#134e4a] to-[#0c4a6e] border-transparent shadow-2xl md:scale-[1.05]"
+                  : "bg-white border-[#e2e8e6]/80 shadow-sm"
               }`}
             >
               {plan.highlighted && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gradient-to-r from-[#0d9488] to-[#14b8a6] text-white text-[11px] font-semibold shadow-sm">
-                  <Star className="h-3 w-3 fill-white" />
+                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-teal-400 to-sky-400 text-[#042f2e] text-[11px] font-bold shadow-lg">
+                  <Star className="h-3 w-3 fill-[#042f2e]" />
                   Mest populær
                 </span>
               )}
-              <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-              <div className="mt-2 mb-4">
-                <span className="text-3xl font-bold text-gray-900">
+              <h3
+                className={`text-xl font-bold mb-1 ${
+                  plan.highlighted ? "text-white" : "text-gray-900"
+                }`}
+              >
+                {plan.name}
+              </h3>
+              <p
+                className={`text-[13px] mb-5 min-h-[2.5em] ${
+                  plan.highlighted ? "text-teal-100/80" : "text-gray-500"
+                }`}
+              >
+                {plan.description}
+              </p>
+              <div className="mb-5">
+                <span
+                  className={`text-4xl font-bold ${
+                    plan.highlighted ? "text-white" : "text-gray-900"
+                  }`}
+                >
                   {plan.priceMonthly}
                 </span>
                 {!plan.isFree && (
-                  <span className="text-[13px] text-gray-500">/md.</span>
+                  <span
+                    className={`text-[14px] ${
+                      plan.highlighted ? "text-teal-100/70" : "text-gray-500"
+                    }`}
+                  >
+                    /md.
+                  </span>
                 )}
               </div>
-              <p className="text-[12px] text-gray-500 mb-4 min-h-[2.5em]">
-                {plan.description}
-              </p>
-              <ul className="space-y-2 mb-5 flex-1">
+              <ul className="space-y-2.5 mb-6 flex-1">
                 {plan.features.slice(0, 4).map((f) => (
-                  <li key={f} className="flex items-start gap-2">
-                    <Check className="h-4 w-4 text-[#0d9488] flex-shrink-0 mt-0.5" />
-                    <span className="text-[12px] text-gray-600">{f}</span>
+                  <li key={f} className="flex items-start gap-2.5">
+                    <Check
+                      className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
+                        plan.highlighted ? "text-teal-300" : "text-[#0d9488]"
+                      }`}
+                    />
+                    <span
+                      className={`text-[13px] ${
+                        plan.highlighted ? "text-teal-50/90" : "text-gray-600"
+                      }`}
+                    >
+                      {f}
+                    </span>
                   </li>
                 ))}
               </ul>
               <Button
                 asChild
-                className="w-full h-10 text-[14px]"
+                className={`w-full h-11 text-[14px] ${
+                  plan.highlighted
+                    ? "bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e]"
+                    : ""
+                }`}
                 variant={plan.highlighted ? "default" : "outline"}
               >
                 <Link href="/login">{plan.cta}</Link>
@@ -234,10 +408,10 @@ export default function LandingPage() {
             </div>
           ))}
         </div>
-        <div className="text-center mt-6">
+        <div className="text-center mt-8">
           <Link
             href="/pricing"
-            className="inline-flex items-center gap-1 text-[14px] font-medium text-[#0d9488] hover:text-[#0f766e] transition-colors"
+            className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-[#0d9488] hover:text-[#0f766e] transition-colors"
           >
             Se alle 5 planer
             <ArrowRight className="h-4 w-4" />
@@ -245,31 +419,35 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ─── Trust badges ─── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-        <div className="rounded-3xl bg-gradient-to-br from-[#0d9488]/[0.06] to-[#2dd4bf]/[0.03] border border-[#0d9488]/10 p-6 sm:p-10">
-          <h2 className="text-center text-lg sm:text-xl font-bold text-gray-900 mb-1">
-            Bygget til dansk compliance
-          </h2>
-          <p className="text-center text-[13px] text-gray-500 mb-8">
-            AlphaFlow opfylder bogføringsloven og understøtter alle danske
-            standarder
-          </p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ═══════════════════════════════════════════════════════════════
+          TRUST BADGES — full-width dark section
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="w-full bg-gradient-to-br from-[#042f2e] via-[#0c4a6e] to-[#115e59] py-16 sm:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+              Bygget til dansk compliance
+            </h2>
+            <p className="mt-3 text-[14px] text-teal-100/70 max-w-xl mx-auto">
+              AlphaFlow opfylder bogføringsloven og understøtter alle danske
+              standarder
+            </p>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
             {TRUST_BADGES.map((badge) => {
               const Icon = badge.icon;
               return (
                 <div
                   key={badge.title}
-                  className="rounded-2xl bg-white/70 backdrop-blur-sm border border-[#e2e8e6]/80 p-5 text-center"
+                  className="rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 p-6 text-center"
                 >
-                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-[#f0fdf9] border border-[#ccfbef] mx-auto mb-3">
-                    <Icon className="h-5 w-5 text-[#0d9488]" />
+                  <div className="flex items-center justify-center h-12 w-12 rounded-xl bg-white/10 border border-white/20 mx-auto mb-4">
+                    <Icon className="h-6 w-6 text-teal-300" />
                   </div>
-                  <h3 className="text-[14px] font-semibold text-gray-900 mb-1">
+                  <h3 className="text-[15px] font-semibold text-white mb-1.5">
                     {badge.title}
                   </h3>
-                  <p className="text-[12px] text-gray-500 leading-snug">
+                  <p className="text-[12px] text-teal-100/70 leading-snug">
                     {badge.description}
                   </p>
                 </div>
@@ -279,32 +457,34 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ─── FAQ teaser ─── */}
-      <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-        <div className="text-center mb-8">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+      {/* ═══════════════════════════════════════════════════════════════
+          FAQ TEASER — 3 questions
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
+        <div className="text-center mb-10">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">
             Ofte stillede spørgsmål
           </h2>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-4">
           {teaserFaqs.map((faq, i) => (
             <div
               key={i}
-              className="rounded-2xl bg-white/80 backdrop-blur-sm border border-[#e2e8e6]/80 shadow-sm p-5"
+              className="rounded-2xl bg-white border border-[#e2e8e6]/80 shadow-sm p-6 hover:shadow-md transition-shadow"
             >
-              <h3 className="text-[15px] font-semibold text-gray-900 mb-2">
+              <h3 className="text-[16px] font-semibold text-gray-900 mb-2.5">
                 {faq.question}
               </h3>
-              <p className="text-[13px] text-gray-600 leading-relaxed">
+              <p className="text-[14px] text-gray-600 leading-relaxed">
                 {faq.answer}
               </p>
             </div>
           ))}
         </div>
-        <div className="text-center mt-6">
+        <div className="text-center mt-8">
           <Link
             href="/faq"
-            className="inline-flex items-center gap-1 text-[14px] font-medium text-[#0d9488] hover:text-[#0f766e] transition-colors"
+            className="inline-flex items-center gap-1.5 text-[15px] font-semibold text-[#0d9488] hover:text-[#0f766e] transition-colors"
           >
             Se alle 12 spørgsmål
             <ArrowRight className="h-4 w-4" />
@@ -312,21 +492,23 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ─── Final CTA ─── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 pb-16 sm:pb-20">
-        <div className="rounded-3xl bg-gradient-to-br from-[#0d9488] to-[#14b8a6] p-8 sm:p-12 lg:p-16 text-center shadow-lg">
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
+      {/* ═══════════════════════════════════════════════════════════════
+          FINAL CTA — full-width dark gradient
+          ═══════════════════════════════════════════════════════════════ */}
+      <section className="w-full bg-gradient-to-br from-[#042f2e] via-[#0d9488] to-[#0c4a6e] py-16 sm:py-24 lg:py-28">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
             Klar til at komme i gang?
           </h2>
-          <p className="mt-4 text-[15px] sm:text-[16px] text-[#ccfbef] max-w-xl mx-auto">
+          <p className="mt-5 text-[16px] sm:text-[17px] text-teal-50/90 max-w-xl mx-auto leading-relaxed">
             Start din 60-dages gratis prøveperiode i dag. Ingen kreditkort,
             ingen binding — fuld adgang til alle funktioner.
           </p>
-          <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button
               asChild
               size="lg"
-              className="h-12 px-8 text-[15px] bg-white text-[#0d9488] hover:bg-white/90 hover:text-[#0f766e]"
+              className="h-12 px-8 text-[15px] bg-white text-[#042f2e] hover:bg-teal-50 hover:text-[#042f2e] shadow-xl"
             >
               <Link href="/login">
                 Opret gratis konto
@@ -337,23 +519,27 @@ export default function LandingPage() {
               asChild
               variant="outline"
               size="lg"
-              className="h-12 px-8 text-[15px] border-white/40 text-white hover:bg-white/10 hover:text-white hover:border-white/60"
+              className="h-12 px-8 text-[15px] bg-transparent border-white/30 text-white hover:bg-white/10 hover:text-white hover:border-white/50"
             >
               <Link href="/contact">Kontakt os</Link>
             </Button>
           </div>
-          <div className="mt-6 flex items-center justify-center gap-5 text-[12px] text-[#ccfbef]/80">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[13px] text-teal-100/80">
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5" />
+              <Check className="h-4 w-4 text-teal-300" />
               Ingen kreditkort
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5" />
+              <Clock className="h-4 w-4 text-teal-300" />
               Opsætning på 5 min
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5" />
+              <ShieldCheck className="h-4 w-4 text-teal-300" />
               Dansk support
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <TrendingUp className="h-4 w-4 text-teal-300" />
+              Ingen binding
             </span>
           </div>
         </div>
