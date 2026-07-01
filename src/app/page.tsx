@@ -10,6 +10,7 @@ import {
   Zap,
   FileText,
   TrendingUp,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
