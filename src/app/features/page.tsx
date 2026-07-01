@@ -65,7 +65,7 @@ export default function FeaturesPage() {
               {SITE.tagline}
             </p>
             <div className="mt-9 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-              <CTAButton href="/login" variant="primary-light" showArrow>
+              <CTAButton href="/login" variant="primary-light" showArrow register>
                 Prøv gratis
               </CTAButton>
               <CTAButton href="/pricing" variant="outline-light">
@@ -98,8 +98,15 @@ export default function FeaturesPage() {
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 sm:-mt-6 relative z-10">
         <div className="rounded-3xl bg-gradient-to-br from-[#134e4a] via-[#0d9488] to-[#0c4a6e] shadow-2xl p-6 sm:p-8 lg:p-10">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
-            {MARKETING_STATS.map((stat) => (
+            {MARKETING_STATS.map((stat) => {
+              const Icon = stat.icon;
+              return (
               <div key={stat.label} className="text-center">
+                {Icon && (
+                  <div className="flex items-center justify-center h-10 w-10 rounded-xl bg-white/15 border border-white/20 mx-auto mb-3">
+                    <Icon className="h-5 w-5 text-teal-300" />
+                  </div>
+                )}
                 <div className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
                   {stat.value}
                 </div>
@@ -107,7 +114,8 @@ export default function FeaturesPage() {
                   {stat.label}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -223,7 +231,7 @@ export default function FeaturesPage() {
             under 50.000 kr. Ingen kreditkort, ingen binding.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
-            <CTAButton href="/login" variant="primary-light" showArrow>
+            <CTAButton href="/login" variant="primary-light" showArrow register>
               Opret gratis konto
             </CTAButton>
             <CTAButton href="/contact" variant="outline-light">

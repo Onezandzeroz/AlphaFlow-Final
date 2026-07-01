@@ -182,7 +182,7 @@ export default function FaqPage() {
             <CTAButton href="/contact" variant="primary-light" showArrow>
               Skriv til os
             </CTAButton>
-            <CTAButton href="/login" variant="outline-light">
+            <CTAButton href="/login" variant="outline-light" register>
               Prøv gratis
             </CTAButton>
           </div>

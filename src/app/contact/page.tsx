@@ -252,7 +252,7 @@ export default function ContactPage() {
             Start gratis i dag — fuld adgang så længe din omsætning er
             under 50.000 kr. Ingen kreditkort, ingen binding.
           </p>
-          <CTAButton href="/login" variant="primary-light" showArrow className="mt-9">
+          <CTAButton href="/login" variant="primary-light" showArrow register className="mt-9">
             Opret gratis konto
           </CTAButton>
         </div>

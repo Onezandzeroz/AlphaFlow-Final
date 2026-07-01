@@ -426,12 +426,14 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
 export interface StatItem {
   value: string;
   label: string;
+  /** Optional lucide icon component to render above the value */
+  icon?: LucideIcon;
 }
 
 export const MARKETING_STATS: readonly StatItem[] = [
   { value: "10", label: "Danske momskoder understøttet" },
   { value: "38", label: "FSR standardkonti" },
-  { value: "60", label: "Måneders backup retention" },
+  { value: "5 ÅR", label: "Backup retention", icon: ShieldCheck },
   { value: "50k", label: "Gratis omsætning under 50.000 kr." },
 ] as const;
 

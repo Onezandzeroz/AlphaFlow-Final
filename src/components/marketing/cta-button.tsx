@@ -17,6 +17,13 @@ import { ArrowRight } from "lucide-react";
  * This component uses a plain `<Link>` with Tailwind classes only — no cva,
  * no twMerge conflicts, no invisible buttons. Used for all the white CTA
  * buttons on dark-background sections across the marketing pages.
+ *
+ * REGISTRATION vs LOGIN:
+ * Set `register={true}` for buttons that recruit NEW users (package
+ * selection, "Kom gratis i gang", "Start gratis", "Opret gratis konto").
+ * These link to `/login?mode=register` which auto-shows the RegisterForm.
+ * Omit it (or `register={false}`) for the "Log ind" button which sends
+ * existing users to the login form.
  */
 
 type Variant = "primary-light" | "outline-light" | "primary-dark";
@@ -40,6 +47,12 @@ interface CTAButtonProps {
   className?: string;
   /** Show an arrow icon after the label */
   showArrow?: boolean;
+  /**
+   * When true, appends ?mode=register to the href so the login page
+   * auto-shows the registration form (for new-user CTAs like "Kom gratis
+   * i gang", "Start gratis", package selection buttons).
+   */
+  register?: boolean;
 }
 
 export function CTAButton({
@@ -48,13 +61,22 @@ export function CTAButton({
   variant = "primary-light",
   className = "",
   showArrow = false,
+  register = false,
 }: CTAButtonProps) {
   const sizeClasses =
     "inline-flex items-center justify-center gap-2 h-12 px-8 text-[15px] font-medium rounded-md transition-all duration-200 whitespace-nowrap shrink-0";
 
+  // Append ?mode=register for new-user CTAs. Preserve any existing query
+  // params (though currently none of the marketing CTAs use them).
+  const finalHref = register
+    ? href.includes("?")
+      ? `${href}&mode=register`
+      : `${href}?mode=register`
+    : href;
+
   return (
     <Link
-      href={href}
+      href={finalHref}
       className={`${sizeClasses} ${variantClasses[variant]} ${className}`}
     >
       {children}

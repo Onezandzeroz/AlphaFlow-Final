@@ -121,7 +121,13 @@ function viewToPath(view: View, search?: string): string {
 
 export default function Home() {
   const { user, setUser, isLoading, checkAuth } = useAuthStore();
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  // Detect ?mode=register from URL — marketing CTA buttons use /login?mode=register
+  // to send new users directly to the registration form (instead of login).
+  const [authMode, setAuthMode] = useState<'login' | 'register'>(() => {
+    if (typeof window === 'undefined') return 'login';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('mode') === 'register' ? 'register' : 'login';
+  });
   const [currentView, setCurrentView] = useState<View>(getInitialView);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [onboardingStepJustDone, setOnboardingStepJustDone] = useState(0);
