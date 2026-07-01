@@ -249,8 +249,8 @@ export default function ContactPage() {
             Klar til at prøve AlphaFlow?
           </h2>
           <p className="mt-5 text-[16px] sm:text-[17px] text-teal-50/90 max-w-xl mx-auto leading-relaxed">
-            Start din 60-dages gratis prøveperiode. Ingen kreditkort, ingen
-            binding — fuld adgang til alle funktioner.
+            Start gratis i dag — fuld adgang så længe din omsætning er
+            under 50.000 kr. Ingen kreditkort, ingen binding.
           </p>
           <CTAButton href="/login" variant="primary-light" showArrow className="mt-9">
             Opret gratis konto

@@ -324,8 +324,8 @@ export default function AboutPage() {
             Prøv AlphaFlow gratis
           </h2>
           <p className="mt-5 text-[16px] sm:text-[17px] text-teal-50/90 max-w-xl mx-auto leading-relaxed">
-            Opret en gratis konto og kom i gang på 5 minutter. 60 dages
-            fuld adgang — ingen kreditkort.
+            Opret en gratis konto og kom i gang på 5 minutter. Gratis så
+            længe din omsætning er under 50.000 kr. — ingen kreditkort.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
             <CTAButton href="/login" variant="primary-light" showArrow>

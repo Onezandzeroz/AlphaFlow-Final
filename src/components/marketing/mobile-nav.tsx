@@ -52,9 +52,9 @@ export function MobileNav() {
               <Image
                 src="/logo-clean.png"
                 alt="AlphaFlow"
-                width={200}
-                height={134}
-                className="object-contain h-11 w-auto"
+                width={260}
+                height={174}
+                className="object-contain h-14 w-auto"
                 priority
               />
             </Link>

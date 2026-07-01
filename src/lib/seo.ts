@@ -86,7 +86,7 @@ export const KEYWORDS_EN: readonly string[] = [
 export const META = {
   /** Primary Danish description (~280 chars, optimized for SERP display) */
   description:
-    "AlphaFlow er et intelligent dansk regnskabsprogram med automatisk momsafregning, Peppol e-fakturering (OIOUBL), OCR bilagsscanning, SAF-T eksport og fuld compliance med dansk bogføringslov. 60 dages gratis prøveperiode — intet kreditkort påkrævet. Prøv gratis i dag.",
+    "AlphaFlow er et intelligent dansk regnskabsprogram med automatisk momsafregning, Peppol e-fakturering (OIOUBL), OCR bilagsscanning, SAF-T eksport og fuld compliance med dansk bogføringslov. Gratis så længe din omsætning er under 50.000 kr. — intet kreditkort påkrævet. Prøv gratis i dag.",
 
   /** Shorter Danish description for Open Graph social cards */
   ogDescription:
@@ -94,11 +94,11 @@ export const META = {
 
   /** Danish description for Twitter/X cards */
   twitterDescription:
-    "AlphaFlow: Intelligent bogføring for danske SMV'er. Momsafregning, Peppol e-faktura, OCR scanning. 60 dages gratis prøveperiode.",
+    "AlphaFlow: Intelligent bogføring for danske SMV'er. Momsafregning, Peppol e-faktura, OCR scanning. Gratis så længe omsætningen er under 50.000 kr.",
 
   /** English alternate description */
   descriptionEN:
-    "AlphaFlow is an intelligent Danish accounting platform with automatic VAT reporting, Peppol e-invoicing (OIOUBL), OCR receipt scanning, SAF-T export, and full Danish Bookkeeping Act compliance. 60-day free trial — no credit card required.",
+    "AlphaFlow is an intelligent Danish accounting platform with automatic VAT reporting, Peppol e-invoicing (OIOUBL), OCR receipt scanning, SAF-T export, and full Danish Bookkeeping Act compliance. Free as long as your revenue is below 50,000 DKK — no credit card required.",
 } as const;
 
 // ─── Open Graph Defaults ─────────────────────────────────────────
@@ -137,7 +137,7 @@ export const FAQ_DA: readonly {
   {
     question: "Er AlphaFlow gratis?",
     answer:
-      "Ja, AlphaFlow tilbyder 60 dages gratis prøveperiode med fuld adgang til alle funktioner. Der kræves intet kreditkort for at starte. Efter prøveperioden tilbydes fleksible abonnementer.",
+      "Ja, AlphaFlow er gratis så længe din virksomheds omsætning er under 50.000 kr. om året. Du får fuld adgang til alle grundlæggende funktioner uden kreditkort. Når omsætningen overstiger 50.000 kr., tilbydes fleksible abonnementer.",
   },
   {
     question: "Hvordan fungerer momsafregning i AlphaFlow?",

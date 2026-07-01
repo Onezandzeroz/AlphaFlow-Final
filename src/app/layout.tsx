@@ -275,7 +275,7 @@ export default function RootLayout({
               <li>PWA med offline-support og kamera-scanning</li>
               <li>Open Banking integration (Danske Bank, Nordea, Jyske Bank)</li>
               <li>Hermes AI-assistent til regnskabsspørgsmål</li>
-              <li>60 dages gratis prøveperiode — intet kreditkort påkrævet</li>
+              <li>Gratis så længe omsætningen er under 50.000 kr. — intet kreditkort påkrævet</li>
             </ul>
             <h2 style={{ fontSize: "1.25rem", fontWeight: 600, margin: "1.5rem 0 0.75rem" }}>
                 Compliance & Sikkerhed

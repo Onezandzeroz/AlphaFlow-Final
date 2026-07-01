@@ -11,12 +11,12 @@ import { SITE } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "Priser — Transparente abonnementer fra 0 kr./md.",
   description:
-    "AlphaFlow priser: Gratis plan (0 kr.), Månedlig (199 kr./md.), Pro (169 kr./md.), Business (149 kr./md.) og Business Extended (145 kr./md.). 60 dages gratis prøveperiode, ingen kreditkort, fuld bogføringslov compliance.",
+    "AlphaFlow priser: Gratis plan (0 kr. så længe omsætning < 50.000 kr.), Månedlig (199 kr./md.), Pro (169 kr./md.), Business (149 kr./md.) og Business Extended (145 kr./md.). Ingen kreditkort, fuld bogføringslov compliance.",
   alternates: { canonical: "/pricing" },
   openGraph: {
     title: "Priser — AlphaFlow Regnskabsprogram",
     description:
-      "Priser fra 0 kr./md. Gratis plan, Månedlig 199 kr., Pro 169 kr., Business 149 kr., Business Extended 145 kr. 60 dages gratis prøveperiode.",
+      "Priser fra 0 kr./md. Gratis under 50.000 kr. omsætning, Månedlig 199 kr., Pro 169 kr., Business 149 kr., Business Extended 145 kr.",
     url: "/pricing",
   },
 };
@@ -64,7 +64,7 @@ export default function PricingPage() {
           </p>
           <div className="mt-7 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[13px] text-teal-50">
             <Clock className="h-4 w-4 text-teal-300" />
-            60 dages gratis prøveperiode — ingen kreditkort påkrævet
+            Gratis så længe omsætningen er under 50.000 kr. — ingen kreditkort påkrævet
           </div>
         </div>
         <div className="relative">

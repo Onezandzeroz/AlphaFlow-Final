@@ -432,7 +432,7 @@ export const MARKETING_STATS: readonly StatItem[] = [
   { value: "10", label: "Danske momskoder understøttet" },
   { value: "38", label: "FSR standardkonti" },
   { value: "60", label: "Måneders backup retention" },
-  { value: "60", label: "Dages gratis prøveperiode" },
+  { value: "50k", label: "Gratis omsætning under 50.000 kr." },
 ] as const;
 
 // ─── Trust badges (for /pricing and /about) ──────────────────────────

@@ -90,7 +90,7 @@ export default function LandingPage() {
               </CTAButton>
             </div>
             <p className="mt-5 text-[13px] text-teal-100/70">
-              Ingen kreditkort · Ingen binding · Opsætning på 5 minutter
+              Ingen kreditkort · Ingen binding · Opsætning på 5 minutter · Gratis under 50.000 kr. omsætning
             </p>
           </div>
         </div>
@@ -454,8 +454,8 @@ export default function LandingPage() {
             Klar til at komme i gang?
           </h2>
           <p className="mt-5 text-[16px] sm:text-[17px] text-teal-50/90 max-w-xl mx-auto leading-relaxed">
-            Start din 60-dages gratis prøveperiode i dag. Ingen kreditkort,
-            ingen binding — fuld adgang til alle funktioner.
+            Start gratis i dag — fuld adgang så længe din omsætning er
+            under 50.000 kr. Ingen kreditkort, ingen binding.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
             <CTAButton href="/login" variant="primary-light" showArrow>

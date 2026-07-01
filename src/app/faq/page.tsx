@@ -15,7 +15,7 @@ import { FAQ_DA, SITE } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "FAQ — Ofte stillede spørgsmål om AlphaFlow",
   description:
-    "Svar på de mest almindelige spørgsmål om AlphaFlow: gratis prøveperiode, momsafregning, Peppol e-fakturering, bogføringslov compliance, OCR scanning, sikkerhed og mere.",
+    "Svar på de mest almindelige spørgsmål om AlphaFlow: gratis under 50.000 kr. omsætning, momsafregning, Peppol e-fakturering, bogføringslov compliance, OCR scanning, sikkerhed og mere.",
   alternates: { canonical: "/faq" },
   openGraph: {
     title: "FAQ — AlphaFlow Regnskabsprogram",
@@ -63,7 +63,7 @@ export default function FaqPage() {
             </span>
           </h1>
           <p className="mt-6 text-lg sm:text-xl text-teal-50/90 leading-relaxed max-w-2xl mx-auto">
-            Alt du vil vide om AlphaFlow — fra priser og prøveperiode til
+            Alt du vil vide om AlphaFlow — fra priser og gratis oprettelse til
             moms, e-fakturering og sikkerhed. Kan du ikke finde svar, er du
             altid velkommen til at skrive til os.
           </p>

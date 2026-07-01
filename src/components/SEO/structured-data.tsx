@@ -105,14 +105,14 @@ function SoftwareApplicationSchema() {
           price: "0",
           priceCurrency: "DKK",
           description:
-            "60 dages gratis prøveperiode med fuld adgang. Intet kreditkort påkrævet.",
+            "Gratis så længe din virksomheds omsætning er under 50.000 kr. om året. Intet kreditkort påkrævet.",
           availability: "https://schema.org/OnlineOnly",
           billingIncrement: {
             "@type": "UnitPriceSpecification",
             billingDuration: {
               "@type": "QuantitativeValue",
-              value: 60,
-              unitCode: "DAY",
+              value: 1,
+              unitCode: "YEAR",
             },
           },
         },
