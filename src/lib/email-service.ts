@@ -221,7 +221,9 @@ export async function sendVerificationEmail(
   language: Language = 'da',
   companyId?: string
 ): Promise<{ success: boolean; logId: string }> {
-  const verifyUrl = `${getAppUrl()}/?verify=${token}`;
+  // IMPORTANT: The SPA lives at /login (not /). The verify token is read
+  // from the URL query string by the SPA's client-side hydration.
+  const verifyUrl = `${getAppUrl()}/login?verify=${token}`;
   const subject =
     language === 'da'
       ? 'Bekræft din e-mailadresse — AlphaFlow Regnskab & Bogføring'
@@ -245,7 +247,9 @@ export async function sendPasswordResetEmail(
   language: Language = 'da',
   companyId?: string
 ): Promise<{ success: boolean; logId: string }> {
-  const resetUrl = `${getAppUrl()}/reset-password?token=${token}`;
+  // IMPORTANT: The SPA lives at /login. The reset token is read from ?token=
+  // (or ?reset=) by the SPA's client-side hydration. We use ?token= here.
+  const resetUrl = `${getAppUrl()}/login?token=${token}`;
   const subject =
     language === 'da'
       ? 'Nulstil din adgangskode — AlphaFlow Regnskab & Bogføring'
@@ -272,7 +276,9 @@ export async function sendInvitationEmail(
   companyId?: string,
   password?: string
 ): Promise<{ success: boolean; logId: string }> {
-  const acceptUrl = `${getAppUrl()}/?invite=${token}`;
+  // IMPORTANT: The SPA lives at /login (not /). The invite token is read
+  // from the URL query string by the SPA's client-side hydration.
+  const acceptUrl = `${getAppUrl()}/login?invite=${token}`;
   const subject =
     language === 'da'
       ? `Invitation til ${companyName} — AlphaFlow Regnskab & Bogføring`

@@ -1,25 +1,12 @@
-# AlphaFlow — Tredjeparts IT-sikkerhedsdokumentation
+# AlphaFlow — IT-sikkerhedsdokumentation for Neon & IONOS
 
-## Neon PostgreSQL som datalager
-
-**Dokumenttype:** Tredjeparts IT-sikkerhedsdokumentation
-**Version:** 2.0
-**Dato:** 2025
-**Ansvarlig:** AlphaAi Consult ApS
-**Gældende krav:** Bogføringsloven §15, BEK nr. 98 af 23. januar 2025 — krav D5, D6 og N23
-
----
-
-## Indholdsfortegnelse
-
-1. [Indledning](#1-indledning)
-2. [Om Neon PostgreSQL](#2-om-neon-postgresql)
-3. [Sikkerhedsforanstaltninger hos Neon](#3-sikkerhedsforanstaltninger-hos-neon)
-4. [Data Processing Agreement (DPA)](#4-data-processing-agreement-dpa)
-5. [Begrundelse for valg af Neon](#5-begrundelse-for-valg-af-neon)
-6. [Database Connection Sikkerhed](#6-database-connection-sikkerhed)
-7. [Data Integrity og Backup hos AlphaFlow](#7-data-integrity-og-backup-hos-alphaflow)
-8. [Konklusion](#8-konklusion)
+> **Tredjeparts IT-sikkerhedsdokumentation for AlphaFlows to primære infrastruktur-udbydere**
+>
+> **Lovgrundlag:** Bogføringsloven §15; BEK nr. 98 af 13. februar 2024 — krav D5 (tredjeparts IT-sikkerhed), D6 (aftale med 3. part opbevaring), N23 (formel aftalegrundlag); GDPR Art. 28 og 32.
+>
+> **Dokument-version:** 2.0 — revideret 2026
+>
+> **Ansvarlig:** AlphaAi ApS
 
 ---
 
@@ -27,409 +14,552 @@
 
 ### 1.1 Formål
 
-Dette dokument dokumenterer AlphaFlows brug af **Neon PostgreSQL** som primær datalager (managed database-as-a-service). Dokumentet adresserer følgende krav fra Erhvervsstyrelsens bekendtgørelse om elektronisk bogføring (BEK nr. 98 af 23. januar 2025):
+Dette dokument beskriver **IT-sikkerheden for AlphaFlows infrastruktur-komponenter** hos de to primære infrastruktur-udbydere:
 
-| Krav | Beskrivelse |
-|------|-------------|
-| **D5** | Tredjeparts IT-sikkerhed — dokumentation af tredjeparts IT-systemers sikkerhed |
-| **D6** | Aftale med 3. part opbevaring — dokumentation for datalagring hos tredjepart |
-| **N23** | Aftale med 3. part opbevaring — formel dokumentation og aftalegrundlag |
+1. **Neon, Inc.** — leverandør af serverless PostgreSQL (primært datalager for alle tenant-data).
+2. **IONOS SE** — leverandør af VPS-hosting (applikationsserver + lokal backup-lagring).
 
-### 1.2 Anvendelsesområde
+Dokumentet adresserer Erhvervsstyrelsens krav om dokumentation af tredjeparts IT-sikkerhed (D5), aftale med 3. part opbevaring (D6) og formel aftalegrundlag (N23) jf. BEK 98, samt GDPR Art. 28 (databehandleraftale) og Art. 32 (sikkerhedsforanstaltninger).
 
-Dokumentet omfatter AlphaFlows produktionsdatabase, som hostes på Neons serverless PostgreSQL-platform. Databasen indeholder alle bogføringsdata for AlphaFlows kunder, herunder:
+### 1.2 Ansvarlig
 
-- Finansielle posteringer og journalposter
-- Kontoplan og momsregistrering
-- Fakturaer og kontakter
-- Bankafstemninger
-- Bruger- og virksomhedsoplysninger
-- Bankforbindelser med krypterede adgangstokens
+AlphaAi ApS er dataansvarlig (App Owner) for AlphaFlow-platformen. AlphaAi ApS bærer det overordnede ansvar for, at databehandlere og underbehandlere opretholder et tilstrækkeligt sikkerhedsniveau.
 
-### 1.3 Definitioner
+### 1.3 Anvendelsesområde
 
-| Term | Definition |
-|------|------------|
-| **AlphaFlow** | Dansk cloudbaseret bogføringssystem |
-| **Neon** | Neon, Inc. — leverandør af serverless PostgreSQL (SaaS) |
-| **Databehandleraftale (DPA)** | Data Processing Agreement — juridisk aftale mellem dataansvarlig og databehandler |
-| **SOC 2 Type II** | Service Organization Control 2, Type II — uafhængig sikkerhedsrevision |
-| **EEA** | Det Europæiske Økonomiske Samarbejdsområde |
+Dokumentet omfatter:
+
+- **Neon PostgreSQL** — primært datalager for alle bogføringsdata, brugere, fakturaer, audit-log, bank-tokens (AES-256-GCM-krypteret), TOTP-secrets (AES-256-GCM-krypteret), Hermes-konversationer, knowledge-base.
+- **IONOS VPS** — applikationsserver (Next.js + 5 mini-services + Caddy + PM2) + lokal backup-lagring (`Tenant-Backup/`) + fil-uploads (`uploads/`).
+
+> Dokumentet dækker **ikke** de AI-underbehandlere (OpenAI, OpenRouter, Anthropic) — disse er dokumenteret i `docs/DATABEHANDLERAFTALE.md` og `docs/LEVERANDØERSTYRING.md`. Se afsnit 7 for en kort note om fysisk sikkerhed, der gælder på tværs.
 
 ---
 
-## 2. Om Neon PostgreSQL
+## 2. Infrastruktur-overblik
 
-### 2.1 Virksomhedsoversigt
+| Komponent | Udbyder | Lokation | Rolle |
+|---|---|---|---|
+| **Neon PostgreSQL** (serverless) | Neon, Inc. (US-virksomhed, EU-hosting) | EU/EEA — Frankfurt (Tyskland) + Amsterdam (Holland) per Neon-dokumentation | Primært datalager — alle tenant-data, audit-log, bank-tokens, TOTP-secrets, Hermes-konversationer, knowledge-base. |
+| **IONOS VPS** (applikationsserver) | IONOS SE | EU (Tyskland) | Hosting af Next.js + 5 mini-services + Caddy (reverse proxy/TLS) + PM2 (proces-manager). |
+| **IONOS VPS** (backup-lagring) | IONOS SE | EU (Tyskland) — samme VPS-instans | Lokal lagring af `Tenant-Backup/{companyName}/*.zip.enc` (AES-256-GCM-krypterede tenant-backups). |
+| **IONOS VPS** (uploads) | IONOS SE | EU (Tyskland) — samme VPS-instans | Lokal lagring af `uploads/receipts/{companyId}/` + `uploads/documents/{userId}/`. Ukrypteret på disk (afhænger af disk-encryption + adgangskontrol — se afsnit 4 og 9). |
+| **Caddy** (reverse proxy / TLS) | Self-hosted på IONOS VPS | EU (Tyskland) | Eneste eksterne entry-point (port 443/80). TLS 1.2/1.3, Let's Encrypt, security headers, routing til mini-services. |
+| **PM2** (proces-manager) | Open-source — self-hosted | EU (Tyskland) | Proces-manager med autorestart (max 10, 5s delay), separate log-filer. |
 
-Neon, Inc. er en amerikansk virksomhed, der leverer serverless PostgreSQL som en managed cloud-tjeneste. Neon er bygget på open-source PostgreSQL og tilbyder fuld SQL-kompatibilitet med auto-skalering, branching og connection pooling.
-
-| Egenskab | Detalje |
-|----------|---------|
-| **Produkt** | Neon Serverless PostgreSQL |
-| **Database-engine** | PostgreSQL (open source) |
-| **Driftsmodel** | Managed Database-as-a-Service (DBaaS) |
-| **Skalering** | Automatisk serverless auto-scaling |
-| **Branching** | Understøtter database branching til udvikling og test |
-| **Connection pooling** | Indbygget connection pooling (PgBouncer) |
-| **Hjemmeside** | https://neon.tech |
-
-### 2.2 SOC 2 Type II-certificering
-
-Neon har opnået **SOC 2 Type II**-certificering, hvilket dokumenterer, at virksomhedens systemer, processer og kontroller opfylder strenge krav til:
-
-- **Sikkerhed (Security):** Beskyttelse mod uautoriseret adgang
-- **Tilgængelighed (Availability):** Systemets oppetid og driftssikkerhed
-- **Fortrolighed (Confidentiality):** Beskyttelse af fortrolige data
-- **Integritet (Integrity):** Datakorrekthed og fuldstændighed
-
-SOC 2 Type II-rapporten omfatter en periode på minimum 6 måneder med løbende revision af kontrollerne, hvilket overstiger det generelle sikkerhedsniveau for comparable cloud-databaser.
-
-### 2.3 EU/EEA-datacenterlokationer
-
-Neon drifter primære datacentre i Europa, hvilket sikrer, at AlphaFlows produktionsdata forbliver inden for EU/EEA:
-
-| Datacenter | Lokation | Region |
-|------------|----------|--------|
-| **Primary** | Frankfurt am Main, Tyskland | EU (eu-west-1) |
-| **Secondary** | Amsterdam, Nederlandene | EU (eu-central-1) |
-
-> **Bemærkning:** Alle AlphaFlow-databaseinstanser er konfigureret til udelukkende at anvende EU/EEA-regioner. Data overføres aldrig til lokaliteter uden for EU/EEA.
-
-### 2.4 Automatisk skalering og høj tilgængelighed
-
-Neons serverless-arkitektur tilbyder:
-
-| Egenskab | Beskrivelse |
-|----------|-------------|
-| **Auto-scaling** | Compute skaleres automatisk fra 0.25 til flere vCPU'er baseret på belastning |
-| **Scale-to-zero** | Compute kan skaleres ned til 0 ved inaktivitet for omkostningsoptimering |
-| **Storage autoscaling** | Lagerplads vokser automatisk efter behov |
-| **Read replicas** | Understøttelse af read replicas for forbedret læseydelse |
-| **Point-in-time recovery** | Gendannelse til ethvert tidspunkt inden for retention-perioden |
+> **Data lokation:** Alle data, der behandles i ovenstående komponenter, forbliver inden for EU/EEA. De eneste dataflow ud af EU/EEA er til AI-underbehandlere (OpenAI, OpenRouter, Anthropic) — dokumenteret i `DATABEHANDLERAFTALE.md`.
 
 ---
 
-## 3. Sikkerhedsforanstaltninger hos Neon
+## 3. Neon PostgreSQL — IT-sikkerhed
 
-### 3.1 Kryptering af data på disk (Encryption at Rest)
+### 3.1 Rolle
 
-Neon krypterer al lagrede data ved hjælp af **AES-256**-kryptering (Advanced Encryption Standard med 256-bit nøgler). Dette gælder for:
+Neon PostgreSQL er AlphaFlows **primære datalager** for alle tenant-data: bogføring (posteringer, journalposter, kontoplan, momsangivelser), brugere, virksomheder, fakturaer, audit-log, bank-forbindelser (med AES-256-GCM-krypterede tokens), TOTP-secrets (AES-256-GCM-krypteret), Hermes-konversationer, knowledge-base (med pgvector-embeddings).
 
-- Alle database-tabeller og indekser
-- Write-Ahead Logs (WAL)
-- Backups og snapshots
-- Temporary files under query-execution
+### 3.2 Lokation
 
-Krypteringsnøglerne administreres af Neons infrastruktur og roteres i overensstemmelse med best practices.
+Neon drifter primære datacentre i **EU/EEA** — Frankfurt am Main (Tyskland) + Amsterdam (Holland) — per Neons officielle dokumentation. AlphaFlows produktions-databaseinstans er konfigureret til udelukkende at anvende EU/EEA-regionen.
 
-### 3.2 Kryptering af data i transit (Encryption in Transit)
+### 3.3 Selskab
 
-Al kommunikation mellem AlphaFlow-applikationen og Neons databaser er krypteret med **TLS (Transport Layer Security)**.
+**Neon, Inc.** er en amerikansk virksomhed (US-selskab), men leverer EU-hosting for AlphaFlows produktionsdata via ovenstående EU-datacentre. Neon er **SOC 2 Type II-certificeret** (per Neons offentlige compliance-dokumentation).
 
-| Parameter | Konfiguration |
-|-----------|---------------|
-| **Protokol** | TLS 1.2+ |
-| **Connection string** | `sslmode=require` |
-| **Certificatvalidering** | Servercertifikat valideres af klienten |
+### 3.4 Forbindelsessikkerhed
 
-Den faktiske connection string-konfiguration for AlphaFlow:
+| Parameter | Konfiguration | Kilde |
+|---|---|---|
+| **Protokol** | PostgreSQL over TLS | — |
+| **TLS-mode** | `sslmode=require` i connection-string | `DATABASE_URL` miljøvariabel — `.env.example` |
+| **Forbindelses-string-format** | `postgresql://[user]:[pass]@ep-xxx-pooler.region.aws.neon.tech/[db]?sslmode=require` | `.env.example` |
+| **Credentials i kode** | Nej — connection-string opbevares udelukkende i `DATABASE_URL`-miljøvariabel, injiceres via PM2 ecosystem-config | `ecosystem.config.example.js` |
+| **Connection pooling** | Via Neons pooler-endpoint (`-pooler.region.aws.neon.tech`) | `.env.example` |
+| **App-level retry** | `neonConnectionRetry`-extension i PrismaClient — 3 retry ved transiente fejl P1001/P1002/P1008/P1017 (Neon serverless idle-suspend) | `src/lib/db.ts` |
 
-```
-postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/dbname?sslmode=require
-```
+> `sslmode=require` sikrer, at forbindelsen afvises, hvis TLS ikke kan etableres — al data i transit er krypteret.
 
-> `sslmode=require` sikrer, at forbindelsen afvises, hvis TLS ikke kan etableres. Forbindelsen krypteres dermed altid under transit.
+### 3.5 Adgangskontrol
 
-### 3.3 Adgangskontrol (Access Control)
+| Lag | Implementering | Status |
+|---|---|---|
+| **Databaseniveau** | Username + password (i connection-string) | Aktiv |
+| **App-niveau** | Ingen direkte admin-adgang fra applikationen — al DB-adgang går via Prisma ORM med RBAC-begrænsede queries | Aktiv |
+| **Neon-konsol** | AlphaAi-admin-konto med MFA (påkrævet per Neon-konto-konfiguration) | _[skabelon: verificer at MFA er aktiveret på AlphaAi's Neon-konto]_ |
+| **IP-whitelist** | Neon tillader IP-whitelist på projektniveau — anbefalet konfigureret i produktion | _[skabelon: verificer at IP-whitelist er konfigureret i produktions-Neon-projekt]_ |
 
-Neon implementerer et flerlaget adgangskontrolsystem:
+### 3.6 Kryptering in-transit
 
-| Lag | Beskrivelse |
-|-----|-------------|
-| **Netværk** | Databasen er kun tilgængelig via TLS-krypterede forbindelser |
-| **Autentificering** | Brugernavn og adgangskode påkrævet ved hvert connection |
-| **Connection pooling** | PgBouncer-baseret pooling med separat autentificering |
-| **IAM-integration** | Understøttelse af IAM-baseret adgangskontrol |
-| **IP-restriction** | Mulighed for IP-begrænsning på projektniveau |
+TLS via `sslmode=require` (se afsnit 3.4). Al kommunikation mellem Next.js-applikationen og Neon-databasen er krypteret.
 
-AlphaFlow anvender **connection pooling** via Neons pooler-endpoint (`-pooler` i hostnavnet), hvilket:
+### 3.7 Kryptering at-rest
 
--Reducerer antallet af direkte databaseforbindelser
--Forbedrer ydeevnen ved høj samtidig belastning
--Opholder adgangskontrollen på pooler-niveau
+Neon leverer managed disk-encryption per Neons officielle dokumentation. AlphaAi ApS har ikke uafhængigt verificeret krypteringsstatus for den specifikke produktionsinstans.
 
-### 3.4 Automatiske backups
+> _[skabelon: verificér at disk-encryption er aktiveret for produktions-Neon-projektet — dokumentér verifikationsmetode og dato]_
 
-Neon udfører automatiske backups af alle databaseinstanser:
+### 3.8 Backup / Point-in-Time Recovery (PITR)
 
-| Backup-type | Frekvens | Retention |
-|-------------|----------|-----------|
-| **Point-in-time recovery** | Kontinuerlig | Op til 7 dage |
-| **Full backup** | Daglig | 7 dage |
-| **On-demand backup** | Manuelt | Brugerstyret |
+Neon leverer managed **Point-in-Time Recovery** med op til **7 dages retention** (per Neons dokumentation).
 
-Neons backup-system er uafhængigt af AlphaFlows eget backup-system, hvilket giver **defense in depth** — to uafhængige backup-systemer beskytter mod datatab.
+| Backup-lag | Ansvarlig | Formål | Retention |
+|---|---|---|---|
+| **Lag 1** — Neon PITR (managed) | Neon, Inc. | Defense-in-depth — gendannelse af databasen til ethvert tidspunkt inden for PITR-vinduet | 7 dage |
+| **Lag 2** — AlphaFlow tenant-backups | AlphaAi ApS | Per-tenant ZIP-backups (AES-256-GCM + SHA-256), lagret på IONOS VPS i `Tenant-Backup/` | 25 timer (hourly) / 31 dage (daily) / 53 dage (weekly) / **5 år** (monthly) |
 
-### 3.5 Point-in-Time Recovery (PITR)
+> AlphaFlow kalder ikke Neons backup-API — lag 1 er udelukkende en managed service fra Neon, der fungerer som supplement til AlphaFlows egne tenant-backups. Den fulde backup-strategi er dokumenteret i `docs/BEREDSKABSPLAN.md` og `docs/COMPLIANCE_RAPPORT.md`.
 
-Neon understøtter **Point-in-Time Recovery**, som gør det muligt at gendanne databasen til et hvilket som helst tidspunkt inden for retention-perioden. Dette er baseret på continuous Write-Ahead Log (WAL) archiving.
+### 3.9 High availability
 
----
+Neons serverless-arkitektur tilbyder auto-suspend ved inaktivitet (scale-to-zero). For at håndtere transiente forbindelsesfejl, der kan opstå ved genoptagelse af en suspenderet compute-node, implementerer AlphaFlow:
 
-## 4. Data Processing Agreement (DPA)
+- **`neonConnectionRetry`-extension** i PrismaClient (`src/lib/db.ts`) — automatisk retry (3 forsøg) ved Neon-specifikke fejlkoder P1001, P1002, P1008 og P1017.
 
-### 4.1 Reference til Neons DPA
+> Neon tilbyder desuden auto-scaling og storage-autoscaling per Neons dokumentation — disse er managed features, der ikke konfigureres af AlphaAi ApS.
 
-Neon tilbyder en offentligt tilgængelig **Data Processing Agreement (DPA)** for alle kunder. DPA'en er tilgængelig på:
+### 3.10 Network isolation
 
-> **https://neon.com/DPA** *(opdateret 2025)*
+Neon tillader **IP-whitelist** på projektniveau (kun specificerede IP-adresser kan etablere forbindelse til databasen). Dette er en anbefalet konfiguration i produktion — se afsnit 3.5 for verifikationsstatus.
 
-Neons DPA opfylder kravene i **EU's forordning om databeskyttelse (GDPR)**, art. 28, og dækker:
+### 3.11 Compliance
 
-- Behandlingens art og formål
-- Kategorier af personoplysninger
-- Typer af databehandling
-- Tekniske og organisatoriske sikkerhedsforanstaltninger
-- Underdatabehandlere
-- Data subjects' rettigheder
-- Sletning og tilbagelevering af data
+| Certificering / standard | Status | Kilde |
+|---|---|---|
+| **SOC 2 Type II** | Opnået per Neons dokumentation | Neon, Inc. — offentlig compliance-side |
+| **DPA (Data Processing Agreement)** | Tilgængelig — opfylder GDPR Art. 28 | Neon, Inc. — https://neon.com/DPA (sidst tjekket: 2026) |
+| **EU/EEA-hosting** | Bekræftet — Frankfurt + Amsterdam datacentre | Neon, Inc. — officiel dokumentation |
 
-### 4.2 Nøgletermer i DPA
+### 3.12 Sub-processors
 
-| Clausul | Indhold |
-|---------|---------|
-| **Behandlingslokalitet** | EU/EEA — data behandles udelukkende inden for EU/EEA |
-| **Underdatabehandlere** | Neon oplyser om alle underdatabehandlere på deres hjemmeside |
-| **Sikkerhedsforanstaltninger** | SOC 2 Type II, AES-256-kryptering, TLS, access control |
-| **Incident management** | Neon underretter dataansvarlig inden for 48 timer ved brud |
-| **Revision** | Neon faciliterer revision og compliance-undersøgelser |
-| **Data sletning** | Data slettes ved kontraktens ophør eller på anmodning |
-| **Audit rights** | Dataansvarlig har ret til at revidere Neons compliance |
+Neon offentliggør en liste over underbehandlere på https://neon.com/subprocessors. AlphaAi ApS overvåger listen ved årlig review (se afsnit 10).
 
-### 4.3 Underdatabehandlere (Sub-processors)
+### 3.13 Ansvarsfordeling — Neon
 
-Neon offentliggør en liste over underdatabehandlere, som opdateres løbende. Listen er tilgængelig på:
-
-> **https://neon.com/subprocessors**
-
-AlphaFlow overvåger denne liste og sikrer, at alle underdatabehandlere opretholder et tilstrækkeligt beskyttelsesniveau i overensstemmelse med GDPR art. 28(3)(4).
-
-### 4.4 Overholdelse af krav D6 og N23
-
-| Krav | Opfyldelse |
-|------|------------|
-| **D6** — Aftale med 3. part opbevaring | Neons DPA er underskrevet/accepteret som en del af AlphaFlows Neon-abonnement. DPA'en dækker datalagring og databehandling. |
-| **N23** — Aftale med 3. part opbevaring (formel) | Neons DPA er et formelt juridisk dokument, der opfylder GDPR art. 28-kravene. Dokumentet er tilgængeligt og opdateres løbende. |
+| Ansvar | Part |
+|---|---|
+| DB-infrastruktur (compute, storage, network) | Neon |
+| Disk-encryption (managed) | Neon |
+| PITR-backup-infrastruktur | Neon |
+| Netværksisolering af datacenter | Neon |
+| DPA + sub-processor-liste | Neon |
+| Applikationskode (queries, RBAC) | AlphaAi ApS |
+| Kryptering af specifikke felter (bank-tokens, TOTP-secrets) | AlphaAi ApS (AES-256-GCM via `src/lib/crypto.ts`) |
+| Tenant-backups (lag 2) | AlphaAi ApS (`src/lib/backup-engine.ts`) |
+| Audit-log immutability (PostgreSQL-triggere) | AlphaAi ApS (`prisma/audit-immutability.sql`) |
 
 ---
 
-## 5. Begrundelse for valg af Neon
+## 4. IONOS VPS — IT-sikkerhed
 
-Valget af Neon som databaseløsning er truffet på baggrund af en vurdering af følgende kriterier:
+### 4.1 Rolle
 
-| Kriterium | Vurdering | Relevans |
-|-----------|-----------|----------|
-| **SOC 2 Type II-certificering** | Opfyldt — uafhængig tredjepartsrevision | Sikrer dokumenteret sikkerhedsniveau |
-| **EU/EEA-hosting** | Opfyldt — primære datacentre i Frankfurt og Amsterdam | GDPR-compliant, ingen dataoverførsel til tredjelande |
-| **PostgreSQL (open source)** | Opfyldt — fuld PostgreSQL-kompatibilitet | Branchestandard for relationelle databaser, ingen vendor lock-in på query-niveau |
-| **Serverless auto-scaling** | Opfyldt — automatisk skalering fra 0 til flere vCPU'er | Omkostningseffektiv drift med variabel belastning |
-| **Forbindelsessikkerhed** | Opfyldt — TLS med `sslmode=require` | Krypterer al data i transit |
-| **Backup og gendannelse** | Opfyldt — PITR, daglige backups | Opfylder Bogføringslovens krav til datalagring |
-| **Connection pooling** | Opfyldt — indbygget PgBouncer | Effektiv forbindelseshåndtering |
-| **Branching** | Opfyldt — database branching til test og udvikling | Sikker isolering af udviklingsmiljøer |
+IONOS VPS fungerer som AlphaFlows **applikationsserver** og **lokal backup-lagring**:
 
-### Samlet vurdering
+- **Applikationsserver:** Next.js (port 3000) + 5 mini-services (hermes-agent 3004, knowledge-service 3006, notification-ws 3001, scanner-service 3005, tokenpay-access 3100) + Caddy (reverse proxy/TLS) + PM2 (proces-manager).
+- **Lokal backup-lagring:** `Tenant-Backup/{companyName}/` — AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant.
+- **Fil-uploads:** `uploads/receipts/{companyId}/` + `uploads/documents/{userId}/` — ukrypteret på disk (afhænger af disk-encryption + adgangskontrol — se afsnit 9).
 
-Neon opfylder alle krav til en godkendt tredjepartsdatalager for elektronisk bogføring jf. BEK nr. 98 § 15. Valget er baseret på Neons:
+### 4.2 Lokation
 
-1. **Dokumenterede sikkerhedskontroller** (SOC 2 Type II)
-2. **EU/EEA-lokalitet** (GDPR-compliance)
-3. **Open-source database-engine** (PostgreSQL)
-4. **Robust backup-infrastruktur** (PITR + automatiske backups)
-5. **Serverless arkitektur** (skalérbarhed og omkostningseffektivitet)
+IONOS VPS-instansen er provisioneret i **EU (Tyskland)** — IONOS SE. Alle IONOS-datacentre er beliggende i Europa, hvilket sikrer GDPR-compliance uden dataoverførsel til tredjelande.
+
+### 4.3 Certificeringer
+
+IONOS SE har opnået følgende certificeringer (verificerbare på IONOS' hjemmeside):
+
+| Certificering | Udsteder | Dækning |
+|---|---|---|
+| **C5 (Cloud Computing Compliance Criteria Catalog)** | BSI (Bundesamt für Sicherheit in der Informationstechnik, Tyskland) | Cloud-sikkerhed |
+| **ISO/IEC 27001** | International standard | Information Security Management System (ISMS) |
+| **IT-Grundschutz** | BSI (Tyskland) | IT-baseline-beskyttelse |
+
+> _[skabelon: verificér at den specifikke VPS-instans er leveret under et IONOS-certificeret produkt — referér til IONOS' compliance-attest og opbevar kopi i AlphaAi's dokumentation]_
+
+### 4.4 Adgangskontrol
+
+| Lag | Implementering | Status |
+|---|---|---|
+| **SSH-login** | Nøgle-baseret (anbefalet) — password-login deaktiveret | _[skabelon: verificer at kun SSH-nøgle-login er aktiveret på produktions-VPS]_ |
+| **Root-login** | Deaktiveret (anbefalet) — login via `sudo` fra almindelig brugerkonto | _[skabelon: verificer at `PermitRootLogin no` er sat i `/etc/ssh/sshd_config`]_ |
+| **Firewall** | Anbefalet konfigureret — kun port 22 (SSH, begrænset til admin-IP), 80 (HTTP) og 443 (HTTPS) åbne | _[skabelon: verificer UFW/iptables-regler på produktions-VPS]_ |
+| **PM2-env** | Alle credentials (DATABASE_URL, ENCRYPTION_KEY, PROOF_ENCRYPTION_KEY, API-nøgler) opbevares i PM2 ecosystem.config.js, ikke i `.env`-filer læst af applikationen | Aktiv — `ecosystem.config.example.js` |
+
+### 4.5 OS-sikkerhed
+
+- **OS:** Ubuntu LTS (Long Term Support).
+- **Security-updates:** Regelmæssige via `apt` / `unattended-upgrades` (anbefalet aktiveret).
+- **Patch-cadence:** _[skabelon: verificer at `unattended-upgrades` er aktiveret og at security-updates installeres automatisk]_
+
+### 4.6 Disk-encryption
+
+IONOS tilbyder disk-encryption på VPS-niveau. AlphaAi ApS har ikke uafhængigt verificeret, om disk-encryption er aktiveret på den specifikke produktions-VPS-instans.
+
+> _[skabelon: verificér om disk-encryption er aktiveret på produktions-VPS — hvis ikke, vurder om det skal aktiveres før lancering. Vigtigt i relation til ukrypterede `uploads/`-filer — se afsnit 9.]_
+
+### 4.7 Network
+
+Caddy er **den eneste eksterne entry-point** på VPS:
+
+| Port | Tjeneste | Tilgængelig eksternt? |
+|---|---|---|
+| 443 (HTTPS) | Caddy → Next.js (3000) eller mini-services (via `?XTransformPort`) | Ja — eneste offentlig port |
+| 80 (HTTP) | Caddy (redirect til 443) | Ja — redirect-only |
+| 22 (SSH) | SSH | Ja, men begrænset til admin-IP (anbefalet) |
+| 3000 | Next.js | Nej — kun localhost |
+| 3001 (notification-ws) | Caddy → mini-service via `?XTransformPort=3001` | Ja (gennem Caddy) |
+| 3004 (hermes-agent) | Caddy → mini-service via `?XTransformPort=3004` | Ja (gennem Caddy) |
+| 3005 (scanner-service) | Caddy → mini-service via `?XTransformPort=3005` | Ja (gennem Caddy) |
+| 3006 (knowledge-service) | Intern — kun kaldt fra hermes-agent på localhost | Nej — kun localhost |
+| 3100 (tokenpay-access) | Caddy → mini-service via `?XTransformPort=3100` | Ja (gennem Caddy) |
+
+**Routing-princip:** Caddy matcher query-param `?XTransformPort=<port>` og vælger mini-service-backend (matcher `@<service>`-matchere i Caddyfile); default `handle`-blok ruter til Next.js på port 3000. Alle `reverse_proxy`-blokke sætter `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Real-IP` headers.
+
+### 4.8 Backup-lagring på VPS
+
+| Type | Lokation | Kryptering | Beskyttelse |
+|---|---|---|---|
+| **Tenant-backups** (`.zip.enc`) | `Tenant-Backup/{companyName}/` | AES-256-GCM (12-byte IV + 16-byte auth tag + ciphertext) via `src/lib/crypto.ts` | Adgangskontrol + disk-encryption (hvis aktiveret) |
+| **Receipt-uploads** | `uploads/receipts/{companyId}/` | Ukrypteret | Adgangskontrol + disk-encryption (hvis aktiveret) |
+| **Document-uploads** | `uploads/documents/{userId}/` | Ukrypteret | Adgangskontrol + disk-encryption (hvis aktiveret) |
+| **SQLite (scanner)** | `mini-services/scanner-service/data/scanner.db` | Ukrypteret | Adgangskontrol + disk-encryption (hvis aktiveret) |
+| **SQLite (tokenpay)** | `mini-services/tokenpay-access-service/data/access.db` | Ukrypteret | Adgangskontrol + disk-encryption (hvis aktiveret) |
+| **Proof-filer (.tbkey)** | `mini-services/tokenpay-access-service/data/proofs/` | AES-256-GCM (`PROOF_ENCRYPTION_KEY`) | Adgangskontrol + disk-encryption (hvis aktiveret) |
+
+> **Bemærkning om ukrypterede uploads:** Bilag, dokumenter og SQLite-filer er ukrypteret på VPS-disken. Sikkerheden afhænger af (a) adgangskontrol (SSH-nøgle + firewall + RBAC i applikationen) og (b) disk-encryption på VPS-niveau (se afsnit 4.6 — skal verificeres). Backup-filer er derimod altid AES-256-GCM-krypterede.
+
+### 4.9 PM2 — proces-manager
+
+PM2 (fork-mode) administrerer 6 processer (1 Next.js + 5 mini-services) med følgende konfiguration:
+
+| Parameter | Værdi | Kilde |
+|---|---|---|
+| `exec_mode` | `fork` (ikke cluster — Bun + Socket.IO + SQLite state) | `ecosystem.config.example.js` |
+| `instances` | 1 pr. app | — |
+| `autorestart` | `true` | — |
+| `max_restarts` | 10 | — |
+| `restart_delay` | 5000 ms (5 sekunder) | — |
+| `merge_logs` | `true` | — |
+| `log_date_format` | `YYYY-MM-DD HH:mm:ss` | — |
+| **Log-filer** | Separate pr. app i `./logs/` | — |
+
+**Applikationer (6 processer):**
+
+| # | name | script | port | max_memory |
+|---|---|---|---|---|
+| 1 | `alphaflow` | `next start -p 3000` | 3000 | 1500M |
+| 2 | `hermes-agent` | `index.ts` (interpreter: bun) | 3004 | 512M |
+| 3 | `knowledge-service` | `index.ts` (bun) | 3006 | 256M |
+| 4 | `tokenpay-access` | `index.ts` (bun) | 3100 | 256M |
+| 5 | `notification-ws` | `index.ts` (bun) | 3001 | 128M |
+| 6 | `scanner-service` | `main.py` (interpreter: .venv/bin/python3) | 3005 | 512M |
+
+> **Bemærkning:** PM2 læser IKKE automatisk `.env`/`.env.local`-filer — alle env-værdier skal udfyldes eksplicit i `ecosystem.config.js`. Dette er en sikkerhedsfordel (credentials ikke i filsystemet), men kræver manuel vedligeholdelse ved rotation af secrets.
+
+### 4.10 Monitoring
+
+| Metode | Implementering | Status |
+|---|---|---|
+| **PM2 monit** | `pm2 monit` — interaktiv visning af CPU/hukommelse/log per proces | Aktiv |
+| **PM2 logs** | `pm2 logs` — aggregeret log-visning fra `./logs/` | Aktiv |
+| **CronExecution DB-log** | Backup-scheduler-log skrives til `CronExecution`-tabel i Neon DB; vises i UI via `/api/backups/scheduler-status` | Aktiv |
+| **Ekstern monitoring** | Anbefalet (f.eks. UptimeRobot, Pingdom, eller Better Stack) — konfigureres separat | _[skabelon: verificer at ekstern uptime-monitoring er konfigureret for alphaflow.dk]_ |
+| **Log-aggregering** | Anbefalet (f.eks. Loki + Grafana, eller ELK) — konfigureres separat | _[skabelon: vurder om centraliseret log-aggregering skal opsættes]_ |
 
 ---
 
-## 6. Database Connection Sikkerhed
+## 5. Caddy (reverse proxy / TLS)
 
-### 6.1 Forbindelseskonfiguration
+Caddy er **self-hosted** på IONOS VPS og er AlphaFlows eneste eksterne entry-point.
 
-AlphaFlow anvender følgende sikkerhedsforanstaltninger ved databaseforbindelser:
+### 5.1 Konfiguration
 
-| Parameter | Konfiguration | Beskrivelse |
-|-----------|---------------|-------------|
-| **SSL/TLS** | `sslmode=require` | Alle forbindelser krypteres med TLS |
-| **Connection pooling** | Neon Pooler endpoint (`-pooler.region.aws.neon.tech`) | Forbindelser routes via PgBouncer for effektiv pool-håndtering |
-| **Autentificering** | Username + password | Hver forbindelse autentificeres med databasen brugeroplysninger |
-| **Credentials** | Miljøvariabel (`DATABASE_URL`) | Ingen hårdkodede credentials — connection string opbevares i `DATABASE_URL` miljøvariablen |
+| Parameter | Værdi | Kilde |
+|---|---|---|
+| **Site-blok** | `alphaflow.dk, www.alphaflow.dk` | `Caddyfile` |
+| **TLS-protokoller** | `tls1.2 tls1.3` (min TLS 1.2, preferred TLS 1.3) | `Caddyfile` linje 103–105 |
+| **Certifikater** | Let's Encrypt (automatisk via Caddy ACME) | — |
+| **HTTP→HTTPS redirect** | Automatisk af Caddy | — |
 
-### 6.2 Connection String-struktur
+### 5.2 Security headers
 
-AlphaFlows produktions-connection string følger dette format:
+Caddy sætter følgende HTTP-security headers på alle responses:
 
-```
-postgresql://[bruger]:[adgangskode]@ep-xxx-pooler.region.aws.neon.tech/[database]?sslmode=require
-```
+| Header | Værdi |
+|---|---|
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains; preload` (HSTS, 1 år, preload) |
+| `X-Frame-Options` | `SAMEORIGIN` (clickjacking-beskyttelse) |
+| `X-Content-Type-Options` | `nosniff` (MIME-sniffing-beskyttelse) |
+| `X-XSS-Protection` | `1; mode=block` |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
 
-| Komponent | Beskrivelse |
-|-----------|-------------|
-| `postgresql://` | PostgreSQL-protokol |
-| `ep-xxx-pooler` | Pooler-endpoint (PgBouncer) for forbindelsespooling |
-| `.region.aws.neon.tech` | Neons EU-region (Frankfurt/Amsterdam) |
-| `?sslmode=require` | Tvinger TLS-kryptering — forbindelse afvises uden TLS |
+> **Mangler:** Ingen `Content-Security-Policy` (CSP) header er konfigureret — hverken i Caddy eller `next.config.ts`. Se afsnit 9.
 
-### 6.3 Sikkerhedsmetadata
+### 5.3 Routing
 
-| Foranstaltning | Implementering |
-|----------------|----------------|
-| **Ingen plaintext credentials i kode** | Connection string læses fra miljøvariablen `DATABASE_URL` |
-| **TLS påkrævet** | `sslmode=require` i connection string |
-| **Pooler-endpoint** | Forbindelser via Neons PgBouncer for effektiv håndtering |
-| **Prisma ORM** | Databaseklient via Prisma Client — type-sikker queries |
+| Query-param | Backend | Beskrivelse |
+|---|---|---|
+| `?XTransformPort=3001` | `localhost:3001` | notification-ws (Socket.IO) |
+| `?XTransformPort=3004` | `localhost:3004` | hermes-agent (Socket.IO) |
+| `?XTransformPort=3005` | `localhost:3005` | scanner-service (FastAPI) |
+| `?XTransformPort=3100` | `localhost:3100` | tokenpay-access (Hono) |
+| Default `handle` | `localhost:3000` | Next.js (App Router) |
 
-### 6.4 Application-level kryptering
+Alle `reverse_proxy`-blokke sætter `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Real-IP` headers.
 
-Udover Neons infrastrukturkryptering krypterer AlphaFlow følsomme data på applikationsniveau før lagring i databasen:
+### 5.4 Kompression
 
-| Datatype | Krypteringsmetode | Detaljer |
-|----------|-------------------|----------|
-| **Bank access tokens** | AES-256-GCM | Krypteret via `crypto.ts` — IV + auth tag + ciphertext |
-| **Bank refresh tokens** | AES-256-GCM | Samme mekanisme som access tokens |
-| **TOTP secrets (2FA)** | AES-256-GCM | Krypteret via `crypto.ts` + `two-factor.ts` |
-| **2FA backup codes** | AES-256-GCM + SHA-256 | Codes hashes med SHA-256, derefter krypteret samlet |
-| **Brugeradgangskoder** | bcrypt (12 rounds) | Hashed via `password.ts` — ingen lagring af plaintext passwords |
+`encode gzip zstd` — både gzip og zstd understøttes.
 
-**AES-256-GCM implementeringsdetaljer:**
+### 5.5 Logging
 
 | Parameter | Værdi |
-|-----------|-------|
-| Algoritme | AES-256-GCM |
-| Nøglelængde | 256 bit (32 byte) |
-| IV-længde | 96 bit (12 byte) — NIST SP 800-38D |
-| Auth tag | 128 bit (16 byte) |
-| Lagringsformat | `iv_base64:authTag_base64:ciphertext_base64` |
-| Nøglekilde | Miljøvariabel `ENCRYPTION_KEY` (ikke gemt i database) |
+|---|---|
+| Log-fil | `/var/log/caddy/alphaflow-access.log` |
+| Roll-størrelse | 50 MB (`roll_size 50mb`) |
+| Roll-keep | 5 filer (`roll_keep 5`) |
 
-> **Vigtigt:** Krypteringsnøglen (`ENCRYPTION_KEY`) opbevares udelukkende i servermiljøets miljøvariabler og er aldrig gemt i databasen. Tab af nøglen gør krypterede data uigenkaldeligt utilgængelige.
+### 5.6 Rate-limiting — UDKOMMENTERET
 
----
+**Caddy's `rate_limit`-plugin er IKKE installeret.** Konfigurationen i `Caddyfile` (linje 86–97) er udkommenteret med følgende note:
 
-## 7. Data Integrity og Backup hos AlphaFlow
+> "Rate limiting — handled at application level (`src/lib/rate-limit.ts`). Caddy's `rate_limit` plugin is not installed; if needed, install caddy-rate-limit and uncomment the block below."
 
-### 7.1 AlphaFlows eget backup-system
+To zoner er defineret og klar til aktivering:
 
-AlphaFlow implementerer et **uafhængigt backup-system**, som supplerer Neons indbyggede backup-funktioner. Dette giver **defense in depth** — to uafhængige backup-lag.
+- `static_zone`: 100 req/min pr. IP
+- `api_zone`: 30 req/min pr. IP
 
-Backup-systemet er implementeret i følgende moduler:
+**Aktiv rate-limiting:** Udelukkende in-memory app-level (`src/lib/rate-limit.ts`) — sliding window pr. key (typisk `endpoint:userId:IP` eller `endpoint:IP`). Konfigurationer: login 5/min, register 3/min, 2FA 5–10/min, forgot-password 1/5min. Nulstilles ved server-restart.
 
-| Modul | Fil | Funktion |
-|-------|-----|----------|
-| **Backup Engine** | `src/lib/backup-engine.ts` | Oprettelse og gendannelse af tenant-snapshots |
-| **Backup Scheduler** | `src/lib/backup-scheduler.ts` | Automatiske cron-baserede backup-cykler |
-
-### 7.2 Backup-format og integritet
-
-| Egenskab | Detalje |
-|----------|---------|
-| **Format** | ZIP-arkiv med strukturerede JSON-filer pr. tenant |
-| **Indhold** | manifest.json, company.json, accounts.json, transactions.json, invoices.json, journal-entries.json, m.fl. |
-| **Filkryptering** | AES-256-GCM kryptering af backup-ZIP før lagring på IONOS VPS |
-| **Integritetskontrol** | SHA-256-checksum af hele ZIP-filen (streaming-beregnet) |
-| **Versionsnummer** | Manifest version 2 (aktuel) |
-| **Tenant-isolering** | Hver backup indeholder kun data tilhørende én specifik virksomhed |
-
-### 7.3 Retention-politik
-
-Retention-politikken er designet til at opfylde **Bogføringslovens §15**-krav om 5 års datalagring:
-
-| Backup-type | Frekvens | Antal bevaret | Retention-periode |
-|-------------|----------|---------------|-------------------|
-| **Hourly** | Hver time (minut 5) | 24 | 25 timer |
-| **Daily** | Daglig kl. 02:15 | 30 | 31 dage |
-| **Weekly** | Mandag kl. 03:30 | 52 | 53 dage |
-| **Monthly** | 1. i måneden kl. 04:00 | **60** | **5 år (60 måneder)** |
-| **Manual** | På brugerinitiativ | 999 | 90 dage |
-
-> **5-års retention:** De 60 månedlige backups sikrer, at bogføringsdata kan gendannes for op til 5 år tilbage, hvilket opfylder Bogføringslovens krav.
-
-### 7.4 Automatiske backup-cykler
-
-Backup-scheduleren (`backup-scheduler.ts`) kører følgende automatiske cyklusser via cron:
-
-| Cron-udtryk | Type | Beskrivelse |
-|-------------|------|-------------|
-| `5 * * * *` | Hourly | Hver time, minut 5 |
-| `15 2 * * *` | Daily | Daglig kl. 02:15 |
-| `30 3 * * 1` | Weekly | Mandag kl. 03:30 |
-| `0 4 1 * *` | Monthly | 1. i måneden kl. 04:00 |
-| `0 3 * * *` | Cleanup | Daglig kl. 03:00 — sletter udløbne backups |
-
-Scheduleren implementerer:
-
-- **Per-tenant health monitoring:** Hver virksomhed har uafhængig overvågning af backup-status
-- **Deduplication:** Forhindrer duplikerede backups inden for cooldown-perioder
-- **First-data trigger:** Opretter initiale backups automatisk ved virksomhedens første dataindtastning
-- **Graceful error handling:** Mislykkede backups logges uden at påvirke andre tenants
-
-### 7.5 Gendannelse (Restore)
-
-Backup-systemet understøtter to gendannelsesmetoder:
-
-| Metode | Beskrivelse |
-|--------|-------------|
-| **Gendannelse fra eksisterende backup** | Brugeren vælger en specifik backup fra listen; checksum verificeres før gendannelse |
-| **Upload og gendannelse** | Brugeren uploader en ZIP-fil; systemet parser og gendanner data |
-
-Før hver gendannelse oprettes automatisk en **pre-restore safety backup** for at beskytte eksisterende data. Gendannelsen foregår atomisk via database-transaktion — hvis gendannelsen fejler, rulles ændringer tilbage.
-
-### 7.6 Defense in Depth
-
-| Lag | Ansvarlig | Beskrivelse |
-|-----|-----------|-------------|
-| **Lag 1: Neons infrastruktur** | Neon | AES-256-kryptering på disk, PITR, daglige backups |
-| **Lag 2: AlphaFlows tenant-backups** | AlphaFlow | SHA-256-verificerede tenant-snapshots med 5-års retention |
-| **Lag 3: Applikationskryptering** | AlphaFlow | AES-256-GCM for følsomme felter (tokens, 2FA-secrets) |
-| **Lag 4: Backup-filkryptering** | AlphaFlow | AES-256-GCM kryptering af backup-filer før lagring på IONOS VPS |
-| **Lag 5: Lokal backup-lagring (IONOS VPS)** | IONOS | Backup-arkiver lagret på IONOS VPS i EU med C5 + IT-Grundschutz certificering |
-
-Disse fem lag er teknologisk uafhængige — en fejl i ét lag kompromitterer ikke de øvrige.
-
-> **Bemærkning vedr. lokal backup-lagring:** AlphaFlows backup-filer lagres på en IONOS VPS (Virtual Private Server), der fungerer som applikationsserver og lokal backup-lagring. IONOS er den første europæiske cloud-udbyder med både **C5 (BSI Cloud Computing Compliance)** og **IT-Grundschutz**-certificeringer. Alle IONOS-datacentre er beliggende i Europa, hvilket sikrer fuld GDPR-compliance og at ingen data overføres til tredjelande. Backup-filer er desuden krypteret med AES-256-GCM før lagring i Tenant-Backup/ folderen på IONOS VPS.
+> Se afsnit 9 for åbenhed om denne begrænsning og `UDBEDRINGSPLAN.md` for afhjælpning.
 
 ---
 
-## 8. Konklusion
+## 6. Netværksarkitektur-diagram (tekst-beskrivelse)
 
-### 8.1 Samlet vurdering
+Nedenstående tekst-diagram beskriver trafik-flowet i AlphaFlows produktionsmiljø:
 
-Neon PostgreSQL opfylder som databaseløsning alle krav, der stilles til en tredjepartsdatalager for elektronisk bogføring jf. BEK nr. 98 af 23. januar 2025.
+```
+                         ┌─────────────────────────────────────┐
+                         │            INTERNET                 │
+                         └────────────┬────────────────────────┘
+                                      │
+                                      │  HTTPS (port 443)
+                                      │  TLS 1.2/1.3 (Let's Encrypt)
+                                      ▼
+        ┌─────────────────────────────────────────────────────────────┐
+        │                  IONOS VPS (EU/Tyskland)                    │
+        │                                                             │
+        │   ┌─────────────────────────────────────────────────────┐   │
+        │   │  Caddy (reverse proxy / TLS)                        │   │
+        │   │  • Security headers (HSTS, X-Frame-Options, ...)    │   │
+        │   │  • encode gzip zstd                                  │   │
+        │   │  • Log: /var/log/caddy/alphaflow-access.log         │   │
+        │   │  • rate_limit: UDKOMMENTERET (app-level i stedet)   │   │
+        │   └───────────────────┬─────────────────────────────────┘   │
+        │                       │                                     │
+        │   ┌───────────────────┴───────────────────────────────┐    │
+        │   │  Routing via ?XTransformPort=<port>                │    │
+        │   └─┬─────────────┬─────────────┬──────────┬──────────┬─┘   │
+        │     │             │             │          │          │     │
+        │     │ default     │ =3001       │ =3004    │ =3005    │ =3100
+        │     ▼             ▼             ▼          ▼          ▼     │
+        │   ┌─────┐      ┌─────────┐  ┌─────────┐ ┌─────────┐ ┌────┐ │
+        │   │Next │      │notif-ws │  │hermes   │ │scanner  │ │tokenpay│
+        │   │js   │      │:3001    │  │agent    │ │service  │ │access │
+        │   │:3000│      │(Bun+SIO)│  │:3004    │ │:3005    │ │:3100  │
+        │   └──┬──┘      └─────────┘  │(Bun+SIO)│ │(Py+Fast)│ │(Bun+Hono)│
+        │      │                      └────┬────┘ └────┬────┘ └───┬──┘ │
+        │      │                           │           │          │    │
+        │      │ ┌─────────────────────────┘           │          │    │
+        │      │ │ localhost:3006 (kun intern)         │          │    │
+        │      │ ▼                                     │          │    │
+        │      │ ┌──────────────┐                      │          │    │
+        │      │ │knowledge-svc │ ◄── hermes-agent     │          │    │
+        │      │ │:3006         │     (localhost)      │          │    │
+        │      │ └──────────────┘                      │          │    │
+        │      │                                       │          │    │
+        │      │ PM2 (fork-mode, 6 processer, autorestart)        │    │
+        │      │ logs/ (separate log-filer pr. app)               │    │
+        │      │                                                │    │
+        │      │ uploads/receipts/  uploads/documents/           │    │
+        │      │ Tenant-Backup/{companyName}/*.zip.enc           │    │
+        │      │ (AES-256-GCM)                                   │    │
+        │      └────────────────────────────────────────────────┘    │
+        └──────────────────────────┬──────────────────────────────────┘
+                                   │
+                                   │  PostgreSQL over TLS (sslmode=require)
+                                   │  neonConnectionRetry-extension (3 retry)
+                                   ▼
+        ┌──────────────────────────────────────────────────────────┐
+        │         Neon PostgreSQL (EU: Frankfurt + Amsterdam)      │
+        │         • SOC 2 Type II                                  │
+        │         • Managed disk-encryption (per Neon docs)        │
+        │         • PITR (7 dage, defense-in-depth lag 1)          │
+        │         • IP-whitelist (anbefalet konfigureret)          │
+        └──────────────────────────────────────────────────────────┘
+
+  Eksterne AI-kald (HTTPS) fra IONOS VPS:
+    • Next.js → OpenAI (embeddings, USA) — knowledge-RAG
+    • hermes-agent → OpenRouter (chat-LLM, USA)
+    • scanner-service → Anthropic (VLM, USA)
+
+  Indgående webhooks (HTTPS) → Caddy → Next.js API:
+    • Storecove (Peppol/NemHandel e-faktura status) — HMAC-SHA256
+    • Frisbii/Flatpay (abonnementsbetaling status) — HMAC-SHA256
+    • TokenPay (adgangs-status) — HMAC-SHA256
+```
+
+### Trafik-typer
+
+| Trafik-type | Source → Destination | Kryptering | Beskrivelse |
+|---|---|---|---|
+| Browser → Caddy | Internet → IONOS VPS:443 | TLS 1.2/1.3 | Bruger-requests |
+| Caddy → Next.js | localhost:3000 | ingen (intern) | Default backend |
+| Caddy → mini-service | localhost:{3001,3004,3005,3100} | ingen (intern) | Via `?XTransformPort` |
+| Next.js → Neon DB | IONOS VPS → Neon EU | TLS (`sslmode=require`) | Database-queries |
+| hermes-agent → Neon DB | IONOS VPS → Neon EU | TLS | Knowledge-base queries |
+| knowledge-service → Neon DB | IONOS VPS → Neon EU | TLS | pgvector queries |
+| hermes-agent → knowledge-service | localhost:3006 | ingen (intern) | RAG-søgning |
+| Next.js → hermes-agent | localhost:3004 | ingen (intern) | Socket.IO |
+| Next.js → notification-ws | localhost:3001 | ingen (intern) | Socket.IO broadcast |
+| Next.js → scanner-service | localhost:3005 | ingen (intern) | OCR/VLM-scanning |
+| Next.js → tokenpay-access | localhost:3100 | ingen (intern) | Adgangsstjek |
+| hermes-agent → OpenRouter | IONOS VPS → openrouter.ai | HTTPS | Chat-LLM (USA) |
+| knowledge-service → OpenAI | IONOS VPS → api.openai.com | HTTPS | Embeddings (USA) |
+| scanner-service → Anthropic | IONOS VPS → api.anthropic.com | HTTPS | VLM (USA) |
+| Storecove → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
+| Frisbii → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
+| TokenPay → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
+
+---
+
+## 7. Fysisk sikkerhed
+
+Fysisk sikkerhed af datacentre håndteres af udbyderne (Neon og IONOS) og er dækket af deres respektive compliance-certificeringer:
+
+| Udbyder | Certificering | Fysisk sikkerhed dækket? |
+|---|---|---|
+| **Neon, Inc.** | SOC 2 Type II | Ja — SOC 2 omfatter fysisk adgangskontrol til datacentre |
+| **IONOS SE** | C5 (BSI) + ISO 27001 + IT-Grundschutz | Ja — alle tre certificeringer omfatter fysisk sikkerhed |
+
+> AlphaAi ApS verificerer ved årlig review (se afsnit 10), at udbydernes compliance-attester er gyldige og dækker de datacentre, der reelt anvendes til AlphaFlow-produktion.
+
+---
+
+## 8. Ansvarsfordeling (shared responsibility)
+
+| Ansvarsområde | Neon | IONOS | AlphaAi ApS |
+|---|---|---|---|
+| **DB-infrastruktur** (compute, storage, network) | ✅ | — | — |
+| **Disk-encryption på DB-niveau** (managed) | ✅ | — | — |
+| **PITR-backup-infrastruktur** | ✅ | — | — |
+| **DB-netværksisolering (IP-whitelist)** | ✅ (feature) | — | Konfiguration |
+| **VPS-hardware** | — | ✅ | — |
+| **Hypervisor** | — | ✅ | — |
+| **Datacenter-fysisk sikkerhed** | ✅ | ✅ | — |
+| **OS (Ubuntu LTS)** | — | Image | Patch-cadence (skal verificeres) |
+| **Disk-encryption på VPS** | — | Feature | Aktivering (skal verificeres) |
+| **Caddy (reverse proxy/TLS)** | — | — | ✅ Konfiguration + vedligeholdelse |
+| **PM2 (proces-manager)** | — | — | ✅ Konfiguration + drift |
+| **Applikationskode (Next.js + mini-services)** | — | — | ✅ |
+| **Adgangskontrol i applikation** (RBAC, 2FA, session) | — | — | ✅ |
+| **Kryptering af specifikke felter** (bank-tokens, TOTP, backup-filer, .tbkey proofs) | — | — | ✅ AES-256-GCM |
+| **Backup-scheduler** (node-cron, lag 2) | — | — | ✅ |
+| **Audit-log** (immute via DB-triggere) | PostgreSQL host | — | ✅ Trigger-installation (`scripts/apply-audit-immutability.ts`) |
+| **Security headers** (HSTS, X-Frame-Options, m.fl.) | — | — | ✅ (Caddyfile + next.config.ts) |
+| **TLS-konfiguration** (cipher-suites, protokol-version) | — | — | ✅ (Caddyfile) |
+| **DPA + sub-processor-overvågning** | Tilbyder DPA | Tilbyder DPA | ✅ Overvåger + ajourfører |
+| **Compliance-attester** (SOC 2 / C5 / ISO 27001) | ✅ Leverer | ✅ Leverer | Verificerer ved årlig review |
+
+---
+
+## 9. Åbenhed om mangler
+
+AlphaAi ApS har identificeret følgende kendte mangler i IT-sikkerheden for Neon- og IONOS-infrastrukturen. Manglerne er uddybet i `docs/RISIKOVURDERING.md` med restrisici, og afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`.
+
+| # | Mangel | Konsekvens | Afhjælpning |
+|---|---|---|---|
+| 1 | **Caddy `rate_limit` plugin ikke installeret** — rate-limiting er udelukkende in-memory app-level og nulstilles ved server-restart | Højere sårbarhed over for voluminøse angreb (DDoS, brute-force på API) | Installer `caddy-rate-limit` og aktiver udkommenteret blok i Caddyfile (klar til aktivering) — se `UDBEDRINGSPLAN.md` |
+| 2 | **Uploads ukrypteret på VPS-disk** — `uploads/receipts/`, `uploads/documents/`, scanner-SQLite, tokenpay-SQLite er ukrypteret | Kompromitteret disk-adgang → eksponering af bilag/dokumenter | Aktiver IONOS disk-encryption (afsnit 4.6) ELLER implementér applikationsniveau-filkryptering — se `UDBEDRINGSPLAN.md` |
+| 3 | **Disk-encryption-verifikation mangler** — hverken for Neon (managed) eller IONOS VPS | Kan ikke dokumentere at disk-encryption reelt er aktiveret | Verificér via udbyderes konsol og dokumentér i dette felt — skabelon i afsnit 3.7 og 4.6 |
+| 4 | **Ingen CSP-header** (Content-Security-Policy) — hverken i Caddy eller next.config.ts | Øget XSS-konsekvens | Tilføj CSP-header i Caddy (anbefalet) — se `UDBEDRINGSPLAN.md` |
+| 5 | **IP-whitelist-verifikation mangler** for Neon-produktionsprojekt | Større angrebsflade mod databasen | Konfigurér IP-whitelist i Neon-konsol til kun at tillade produktions-VPS IP — se afsnit 3.5 |
+| 6 | **MFA-verifikation mangler** for AlphaAi's Neon-admin-konto | Kompromitteret admin-konto → fuld DB-adgang | Verificér at MFA er aktiveret — se afsnit 3.5 |
+| 7 | **Ingen ekstern uptime-monitoring** (skabelon-felt i afsnit 4.10) | Længere nedetid før opdagelse | Konfigurér ekstern monitoring (UptimeRobot/Pingdom/Better Stack) — se `UDBEDRINGSPLAN.md` |
+| 8 | **Ingen centraliseret log-aggregering** | Hændelses-undersøgelse kræver manuel `pm2 logs` adgang | Vurdér om centraliseret log-aggregering (Loki+Grafana, ELK) skal opsættes — se `UDBEDRINGSPLAN.md` |
+
+> Punkterne 1–4 er sikkerheds-mangler, der kan afhjælpes uden at ændre applikationskode. Punkterne 5–7 er verifikations-eller-opsætningsopgaver, der skal udføres før eller kort efter lanceringsdato.
+
+---
+
+## 10. Vedligeholdelse
+
+### 10.1 Årlig review
+
+AlphaAi ApS udfører en årlig review af IT-sikkerhedsdokumentationen for Neon og IONOS med følgende checkliste:
+
+| Review-punkt | Frekvens | Ansvarlig |
+|---|---|---|
+| Verificer at Neons SOC 2 Type II-attest er gyldig og opdateret | Årlig | AlphaAi ApS — DPO |
+| Verificer at IONOS' C5 + ISO 27001 + IT-Grundschutz-attester er gyldige | Årlig | AlphaAi ApS — DPO |
+| Verificer at Neons DPA + sub-processor-liste er ajourførte | Årlig | AlphaAi ApS — DPO |
+| Verificer at IONOS' DPA er ajourført | Årlig | AlphaAi ApS — DPO |
+| Gennemgå Neons sub-processor-liste for nye underbehandlere | Årlig + ved underretning | AlphaAi ApS — DPO |
+| Verificer MFA-status på Neon-admin-konto | Årlig | AlphaAi ApS — teknisk ansvarlig |
+| Verificer IP-whitelist-konfiguration i Neon-produktionsprojekt | Årlig | AlphaAi ApS — teknisk ansvarlig |
+| Verificer disk-encryption-status på IONOS VPS | Årlig | AlphaAi ApS — teknisk ansvarlig |
+| Verificer SSH-nøgle-login + root-login deaktiveret på VPS | Årlig | AlphaAi ApS — teknisk ansvarlig |
+| Gennemgå Caddy-log for usædvanlige adgangsmønstre | Årlig (eller hyppigere) | AlphaAi ApS — teknisk ansvarlig |
+
+### 10.2 Patch-cadence
+
+| Komponent | Patch-kilde | Cadence |
+|---|---|---|
+| **IONOS VPS OS** (Ubuntu LTS) | `apt` / `unattended-upgrades` | Automatisk for security-updates (hvis aktiveret — se afsnit 4.5) |
+| **Caddy** | Caddy-officielt APT-repo | Ved behov (CVE-afhængig) |
+| **PM2** | npm | Ved behov |
+| **Next.js + afhængigheder** | npm / `bun install` | Ved hver deploy |
+| **Mini-services** (Bun + Python) | `bun install` / `pip` | Ved hver deploy |
+| **Neon PostgreSQL** | Neon-managed | Automatisk (Neon håndterer DB-engine patching) |
+
+### 10.3 Backup-test
+
+Backup-integritet testes jf. `docs/BEREDSKABSPLAN.md`:
+
+- **Månedlig** — restore-test af én tenant fra AES-256-GCM-krypteret `.zip.enc`-backup.
+- **Kvartalsvis** — fuld DR-øvelse (gendannelse af hele platformen til staging-miljø).
+- **Årlig** — gendannelse fra Neon PITR som defense-in-depth-test.
+
+> Se `docs/BEREDSKABSPLAN.md` for RTO/RPO-mål, gendannelsesprocedurer og kontaktliste.
+
+---
+
+## 11. Konklusion
+
+Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinfrastruktur og opfylder, med de i afsnit 9 anførte kendte mangler, de krav der stilles til tredjeparts IT-sikkerhed jf. BEK 98 (D5, D6, N23) og GDPR Art. 28 og 32.
 
 | Krav | Status | Begrundelse |
-|------|--------|-------------|
-| **D5 — Tredjeparts IT-sikkerhed** | ✅ Opfyldt | SOC 2 Type II-certificering, AES-256-kryptering, TLS, access control |
-| **D6 — Aftale med 3. part opbevaring** | ✅ Opfyldt | Neons DPA er accepteret som del af abonnementet |
-| **N23 — Formel aftale** | ✅ Opfyldt | DPA opfylder GDPR art. 28 og er tilgængelig i formelt format |
-| **GDPR — EU/EEA-hosting** | ✅ Opfyldt | Primære datacentre i Frankfurt og Amsterdam |
-| **Bogføringsloven §15 — Datalagring** | ✅ Opfyldt | AlphaFlows backup-system med 5-års retention via månedlige backups |
+|---|---|---|
+| **D5 — Tredjeparts IT-sikkerhed** | ✅ Opfyldt (med kendte mangler — se afsnit 9) | SOC 2 Type II (Neon) + C5/ISO 27001/IT-Grundschutz (IONOS); TLS, RBAC, kryptering, audit-log |
+| **D6 — Aftale med 3. part opbevaring** | ✅ Opfyldt | DPA tilgængelig fra både Neon og IONOS; AlphaAi ApS accepterer DPA'erne som del af abonnementet |
+| **N23 — Formel aftale** | ✅ Opfyldt | DPA'erne er formelle juridiske dokumenter, der opfylder GDPR Art. 28-kravene |
+| **GDPR Art. 32 — Sikkerhed** | ✅ Opfyldt (med kendte mangler) | AES-256-GCM, TLS, RBAC, 2FA, audit-log, backup med 5-års retention |
+| **Bogføringsloven §15 — Datalagring** | ✅ Opfyldt | 5-års retention via monthly tenant-backups; Neon PITR som defense-in-depth |
+| **EU/EEA-hosting** | ✅ Opfyldt | Både Neon (Frankfurt + Amsterdam) og IONOS (Tyskland) i EU/EEA — ingen infrastruktur-data ud af EU |
 
-### 8.2 Risikovurdering
-
-| Risiko | Sandsynlighed | Konsekvens | Afbødning |
-|--------|---------------|-------------|------------|
-| Datatab ved Neon-nedetid | Lav | Høj | AlphaFlows uafhængige tenant-backups (defense in depth) |
-| Uautoriseret adgang til database | Meget lav | Kritisk | `sslmode=require`, adgangskontrol, applikationskryptering |
-| Dataoverførsel uden for EU/EEA | Meget lav | Høj | EU-region valgt; DPA forbyder transfer til tredjelande |
-| Service-afbrydelse hos Neon | Lav | Medium | PITR, auto-scaling, AlphaFlows lokale backups (AES-256-GCM krypteret på IONOS VPS i EU) |
-
-### 8.3 Dokumentgodkendelse
-
-| Rolle | Navn | Dato | Underskrift |
-|------|------|------|-------------|
-| Teknisk ansvarlig | AlphaFlow | 2025 | _[underskrift]_ |
-| Databeskyttelsesansvarlig (DPO) | AlphaFlow | 2025 | _[underskrift]_ |
-| Ledelse | AlphaFlow | 2025 | _[underskrift]_ |
+> Kendte mangler (afsnit 9) er ikke blokerende for anmeldelsen, men afhjælpes jf. `docs/UDBEDRINGSPLAN.md`. AlphaAi ApS forpligter sig til at afhjælpe punkterne 3, 5, 6 og 7 (verifikationer) før produktionslancering og punkterne 1, 2, 4 og 8 inden for 6 måneder efter lancering.
 
 ---
 
-*Dette dokument opdateres årligt eller ved væsentlige ændringer i AlphaFlows infrastruktur eller Neons servicevilkår.*
+## 12. Dokumentgodkendelse
+
+| Rolle | Navn | Dato | Underskrift |
+|---|---|---|---|
+| Teknisk ansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| DPO / dataansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| Ledelse (AlphaAi ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+
+---
+
+*Dette dokument opdateres årligt eller ved væsentlige ændringer i AlphaFlows infrastruktur eller udbydernes servicevilkår. Seneste revision: 2026.*

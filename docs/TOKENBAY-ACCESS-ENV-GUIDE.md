@@ -1,94 +1,519 @@
-# TokenBay Access — Environment Variables Guide
+# AlphaFlow — TokenPay Access & Miljøvariabler-guide
 
-The TokenBay Access module uses **two separate .env locations** that must share a matching API key to communicate securely.
-
----
-
-## 1. Host App (AlphaFlow) — `.env`
-
-Place these variables in the **root `.env`** file (next to `DATABASE_URL`, etc.).
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `TOKENPAY_API_KEY` | Yes | `tokenpay-dev-key-2026` | Shared secret used by the proxy routes to authenticate with the Access Service. **Must match `API_SHARED_KEY`** in the mini-service. |
-| `NEXT_PUBLIC_TOKENPAY_PORT` | No | `3100` | Port the TokenPay Access Service listens on. Only change this if you use a different port. |
-
-**How to set `TOKENPAY_API_KEY`:**
-
-Generate a strong random key for production:
-```bash
-openssl rand -hex 32
-```
-Copy the output and paste it as the value. You must use this **exact same value** as `API_SHARED_KEY` in the mini-service (step 2 below).
+**Dokumenttype:** Operationsguide for TokenPay-adgangssystemet + komplet miljøvariabel-reference
+**Version:** 2.0
+**Dato:** 2026
+**Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
+**Målgruppe:** DevOps / systemadministrator (AlphaAi ApS)
 
 ---
 
-## 2. Mini-Service — `.env` (or PM2 env)
+## Indholdsfortegnelse
 
-Place these variables in `mini-services/tokenpay-access-service/.env` **or** set them in `ecosystem.config.js` under the `tokenpay-access` app's `env` block (PM2 takes precedence).
+1. [TokenPay-adgangssystemet](#1-tokenpay-adgangssystemet)
+2. [Miljøvariabler-oversigt](#2-miljøvariabler-oversigt)
+3. [Produktions-opsætning](#3-produktions-opsætning)
+4. [Porte & services](#4-porte--services)
+5. [Sikkerhedscheckliste](#5-sikkerhedscheckliste)
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PORT` | No | `3100` | Port the Access Service binds to. Must match `NEXT_PUBLIC_TOKENPAY_PORT` in the host app if you change it. |
-| `API_SHARED_KEY` | Yes | `tokenpay-dev-key-2026` | Shared secret for authenticating requests from the host app. **Must match `TOKENPAY_API_KEY`** in the host `.env`. |
-| `HOST_CALLBACK_URL` | No | *(empty)* | Full URL to the host app's webhook endpoint. The Access Service sends `access.granted`, `access.revoked`, and `access.expiring` events here. |
-| `DATABASE_PATH` | No | `./data/access.db` | Path to the SQLite database file (relative to the mini-service root). The `data/` directory is auto-created on first run. |
+---
 
-### Where to find the values:
+## 1. TokenPay-adgangssystemet
 
-| Variable | Source |
+TokenPay er AlphaFlows adgangsstyringsmodul, der kontrollerer hvilke brugere der har **read_only** eller **read_write** adgang til platformens funktioner. Adgangskontrollen er token-baseret via krypterede `.tbkey` proof-filer.
+
+### 1.1 Hvad det er
+
+| Komponent | Beskrivelse |
 |---|---|
-| `API_SHARED_KEY` / `TOKENPAY_API_KEY` | **You generate this yourself.** Use `openssl rand -hex 32` for production. Both sides must be identical. |
-| `PORT` | **You choose.** Default `3100` works unless it conflicts with another service. If you change it, also update `NEXT_PUBLIC_TOKENPAY_PORT` in the host `.env` and the `@tokenpay` matcher in `Caddyfile`. |
-| `HOST_CALLBACK_URL` | **Your own server URL + the webhook route.** Format: `http://localhost:3000/api/tokenpay/callback` (local) or `https://yourdomain.com/api/tokenpay/callback` (production). This route already exists in the app — no setup needed beyond pointing to it. |
-| `DATABASE_PATH` | **You choose.** Default `./data/access.db` stores the SQLite file inside `mini-services/tokenpay-access-service/data/`. Only change this if you want the DB file elsewhere. |
+| **`.tbkey` proof-fil** | Binær fil (version 0x01 + 12-byte IV + 16-byte authTag + ciphertext). Produceres eksternt af TokenBay-ZIPProof og uploades af brugeren via `/api/proof-upload`. |
+| **Kryptering** | AES-256-GCM med `PROOF_ENCRYPTION_KEY` (64-char hex, delt med TokenBay-ZIPProof). |
+| **Modul** | `mini-services/tokenpay-access-service/` (Bun + Hono, port 3100). Dekrypterer `.tbkey` for at læse et ZIP-manifest med proof-metadata. |
+| **Dekrypteringslogik** | `mini-services/tokenpay-access-service/src/tbkey-decryption.ts:decryptTbkey()`. |
+
+### 1.2 Access-niveauer
+
+| Niveau | Betydning |
+|---|---|
+| `read_only` | Bruger kan se data men ikke oprette/redigere. Håndhæves af `requireTokenPayAccess()` i `src/lib/route-guard.ts`. |
+| `read_write` | Bruger kan oprette/redigere data (mutationer tilladt). |
+| `owner_bypass` | AlphaAi App Owner (SuperDev) bypasser TokenPay-kontrollen helt. |
+
+### 1.3 Adgangs-tilstande
+
+| Tilstand | Beskrivelse |
+|---|---|
+| **Trial** | 60 dage fra `User.trialClaimedAt` — selv-claimet af brugeren, fuld read_write-adgang. |
+| **Free tier** | Omsætning < 50.000 kr. pr. år — gratis read_write-adgang for små virksomheder. |
+| **Betalt abonnement** | Via Frisbii/Flatpay — `PlanTier`: `monthly`, `annual`, `twoyear`, `threeyear`. |
+| **Expired / Revoked** | `User.subscriptionRevokedAt` sat af App Owner — adgang blokeret. |
+
+### 1.4 Proof-status
+
+Når en `.tbkey` uploades, oprettes en Proof-record i TokenPay-servicens SQLite-database (`data/access.db`) med en af følgende statuser:
+
+- `pending` — uploadet, afventer aktivering.
+- `active` — aktiveret via `/api/proof-activate`, knyttet til userId.
+- `expired` — udløbet (baseret på `expiresAt` i manifest).
+- `revoked` — tilbagetrukket af App Owner.
+- `failed` — dekryptering eller validering fejlede.
+
+Manifestet (JSON i .tbkey) indeholder: `proofId`, `escrowId`, `tier`, `issuedAt`, `expiresAt`.
+
+### 1.5 Webhook-kommunikation
+
+TokenPay-servicen sender events til host-applikationen via `HOST_CALLBACK_URL`:
+- `access.granted` — proof aktiveret.
+- `access.revoked` — proof tilbagetrukket.
+- `access.expiring` — proof udløber snart.
+
+Endpoint: `POST /api/tokenpay/callback` (host-app). Signatur: HMAC-SHA256 via `x-tokenpay-signature`-header, verificeret med `TOKENPAY_API_KEY` som delt secret.
 
 ---
 
-## 3. Quick Start — Minimal Setup
+## 2. Miljøvariabler-oversigt
 
-For development, the defaults work out of the box — no changes needed. Both sides default to `tokenpay-dev-key-2026`.
+Komplet tabel over alle environment variables fra `.env.example`, kategoriseret.
 
-### Production Setup:
+### 2.1 Krypteringsnøgler
 
-**Step 1** — Generate a shared key:
+| Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
+|---|---|---|---|---|
+| `ENCRYPTION_KEY` | AES-256-GCM 64-char hex (32 byte). Bruges til bank-tokens, TOTP-secrets, 2FA-backup-koder, backup-ZIP-filer. | **JA (kritisk)** | (tom) | Service fejler ved opstart hvis manglende. Hvis tabt: permanent datatab. Generer med `openssl rand -hex 32`. |
+| `PROOF_ENCRYPTION_KEY` | AES-256-GCM 64-char hex (32 byte). Bruges til `.tbkey` proof-filer. Skal matche TokenBay-ZIPProof. | **JA** | (tom) | TokenPay-service starter ikke uden. Generer med `openssl rand -hex 32`. |
+
+### 2.2 Database
+
+| Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
+|---|---|---|---|---|
+| `DATABASE_URL` | PostgreSQL Neon connection string med `?sslmode=require`. | **JA** | (tom) | SSL påkrævet — afviser ikke-SSL-forbindelser. Neon EU-region (Frankfurt/Amsterdam). |
+
+### 2.3 AI-integrationer
+
+| Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
+|---|---|---|---|---|
+| `OPENROUTER_API_KEY` | OpenRouter LLM-API (Hermes chat). | **JA for Hermes** | (tom) | Data ud af EU (USA). Sættes også i `hermes-agent` PM2-env. |
+| `OPENROUTER_BASE_URL` | API base URL. | Nej | `https://openrouter.ai/api/v1` | — |
+| `OPENROUTER_MODEL` | LLM-model. | Nej | `anthropic/claude-sonnet-4.5` | — |
+| `OPENROUTER_APP_NAME` | HTTP-Referer header. | Nej | `AlphaFlow` | — |
+| `OPENROUTER_APP_URL` | X-Title header. | Nej | `https://alphaflow.dk` | — |
+| `OPENAI_API_KEY` | OpenAI embeddings (text-embedding-3-small) til knowledge-service RAG. | Nej (alternativ til OPENROUTER) | (tom) | Data ud af EU (USA). $0.02/M tokens. |
+| `ANTHROPIC_API_KEY` | Anthropic Claude VLM (scanner-service). Sættes i `scanner-service` PM2-env. | **JA for scanner** | (tom) | Data ud af EU (USA). Billeder af kvitteringer sendes til Anthropic. |
+
+### 2.4 Inter-service API-nøgler
+
+| Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
+|---|---|---|---|---|
+| `TOKENPAY_API_KEY` | Host app ↔ TokenPay-service. Header `X-Access-Service-Key`. | **JA** | `tokenpay-dev-key-2026` (dev-fallback i kode) | **Skal erstattes med `openssl rand -hex 32` i prod.** Dobbelt-brug som HMAC-key for TokenPay callback webhooks. |
+| `SCANNER_API_KEY` | Host app ↔ scanner-service. Header `X-Api-Shared-Key`. | **JA** | `scanner-dev-key-2026` (dev-fallback i kode) | **Skal erstattes med `openssl rand -hex 32` i prod.** |
+| `HERMES_ADMIN_KEY` | Host app ↔ hermes-agent (Bearer). Fallback til `OPENROUTER_API_KEY` hvis tom. | Nej (anbefalet) | (tom) | Sættes i både `alphaflow`, `hermes-agent` og `knowledge-service` PM2-env. |
+| `API_SHARED_KEY` (mini-service env) | Svarer til `TOKENPAY_API_KEY` / `SCANNER_API_KEY` — sat i mini-servicens egen env. | **JA** | (tom) | **SKAL matche tilsvarende host-app variabel eksakt.** |
+
+### 2.5 Integrationer (eksterne)
+
+| Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
+|---|---|---|---|---|
+| `STORECOVE_API_KEY` | Storecove Peppol/NemHandel e-faktura. | Nej (sim-mode hvis tom) | (tom) | EU (Holland). |
+| `STORECOVE_WEBHOOK_SECRET` | HMAC-SHA256 webhook-verifikation (header `X-Storecove-Signature`). | **JA i prod** | (tom) | **KRITISK:** Hvis tom, accepteres alle webhooks (dev-fallback). |
+| `STORECOVE_API_URL` | API endpoint. | Nej | `https://api.storecove.com/v2` | — |
+| `FLATPAY_API_KEY` | Frisbii/Flatpay abonnementsbetaling. | Nej (mock-mode hvis tom) | (tom) | EU (Tyskland). Frisbii private key starter med `priv_`. |
+| `FLATPAY_WEBHOOK_SECRET` | HMAC-SHA256 webhook (header `Reepay-Signature`/`frisbii-signature`). | **JA i prod** | (tom) | **KRITISK:** Hvis tom, accepteres alle webhooks (dev-fallback). Fallback til `FLATPAY_API_KEY` hvis sat. |
+| `FLATPAY_API_BASE_URL` | Frisbii Checkout API URL. | Nej | `https://checkout-api.frisbii.com/v1` | — |
+| `SKAT_CLIENT_ID` | SKAT Moms-API OAuth2 client_id. | Nej (sim-mode) | (tom) | DK-myndighed. |
+| `SKAT_CLIENT_SECRET` | SKAT OAuth2 client_secret. | Nej (sim-mode) | (tom) | DK-myndighed. KUN moms — ingen årsopgørelse/e-indkomst. |
+| `SKAT_API_BASE` | SKAT API URL. | Nej | `https://api.skat.dk/moms` | — |
+| `NEMHANDEL_API_KEY` | NemHandel e-faktura (Nets Access Point). | Nej (sim-mode) | (tom) | DK. |
+| `NEMHANDEL_API_URL` | NemHandel API URL. | Nej | `https://nemhandel.nets.dk/api/v2` | — |
+| `NEMHANDEL_SIMULATION_MODE` | `true` = sim-mode, `false` = produktion. | Nej | `true` | **Sæt til `false` i prod med rigtige credentials.** |
+| `PEPPOL_AP_URL` | Peppol Access Point URL. | Nej | `https://peppol.accesspoint.dk` | — |
+| `CVR_API_USERNAME` | Erhvervsstyrelsen CVR-register (HTTP Basic Auth). | Nej (sim-mode) | (tom) | DK-myndighed. |
+| `CVR_API_PASSWORD` | CVR-register password. | Nej (sim-mode) | (tom) | DK-myndighed. |
+| `CVR_API_BASE_URL` | CVR API URL. | Nej | `http://distribution.virk.dk` | — |
+| `CVR_SIMULATION_MODE` | `true` = mock-data, `false` = rigtige opslag. | Nej | `false` | Sæt `false` i prod med credentials. |
+
+### 2.6 Email / SMTP
+
+| Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
+|---|---|---|---|---|
+| `SMTP_HOST` | SMTP-server hostname (Simply/Brevo). | Nej (dev jsonTransport hvis tom) | (tom) | EU. |
+| `SMTP_PORT` | SMTP-port. 587 = STARTTLS, 465 = implicit SSL. | Nej | `587` | Auto-vælger `secure: true` ved 465, `secure: false` ved 587. |
+| `SMTP_USER` | SMTP-brugernavn. | Nej | `noreply@alphaflow.dk` | — |
+| `SMTP_PASS` | SMTP-password. | Nej | (tom) | — |
+| `EMAIL_FROM` | Afsender-email vist i "From"-header. | Nej | `noreply@alphaflow.dk` | — |
+| `APP_URL` | Public base URL for email-links (verificering, reset, invites). | Nej | `https://alphaflow.dk` | **VIGTIGT:** Skal matche public domæne i prod. |
+
+### 2.7 Applikation & scheduler
+
+| Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
+|---|---|---|---|---|
+| `BACKUP_TIMEZONE` | Tidszone for backup-cron (Bogføringsloven §15 kræver faste DK-tidspunkter). | Nej | `Europe/Copenhagen` | VPS-tidszone behøver ikke matche. |
+| `DISABLE_BACKUP_SCHEDULER` | `true` deaktiverer backup-scheduler (f.eks. staging). | Nej | (unset = enabled) | Lad være unset i prod. |
+| `HERMES_SERVICE_PORT` | Hermes-agent port. | Nej | `3004` | Skal matche `ecosystem.config.js`. |
+| `KNOWLEDGE_SERVICE_PORT` | Knowledge-service port. | Nej | `3006` | Skal matche `ecosystem.config.js`. |
+| `SCANNER_PORT` | Scanner-service port. | Nej | `3005` | Skal matche `ecosystem.config.js`. |
+| `NEXT_PUBLIC_TOKENPAY_PORT` | TokenPay-service port (client-side). | Nej | `3100` | Skal matche `ecosystem.config.js` + Caddyfile. |
+| `PORT` (mini-service env) | Port-bind for mini-service. | Nej | (per service) | Sættes i PM2-env, ikke i root `.env`. |
+
+### 2.8 Mini-service-specifikke env vars
+
+Disse sættes i `ecosystem.config.js` under hver mini-services `env:`-blok, **ikke** i root `.env`:
+
+| Variabel | Mini-service | Formål |
+|---|---|---|
+| `API_SHARED_KEY` | tokenpay-access, scanner-service | Skal matche `TOKENPAY_API_KEY` / `SCANNER_API_KEY` i root. |
+| `HOST_CALLBACK_URL` | tokenpay-access, scanner-service | Webhook-URL til host-app (f.eks. `https://alphaflow.dk/api/tokenpay/callback`). |
+| `DATABASE_PATH` | tokenpay-access (`./data/access.db`), scanner-service (`./data/scanner.db`) | SQLite-fil-placering. |
+| `PROOF_ENCRYPTION_KEY` | tokenpay-access | Skal matche root `PROOF_ENCRYPTION_KEY`. |
+| `ANTHROPIC_MODEL` | scanner-service | Default: `claude-sonnet-4-20250514`. |
+| `VLM_MAX_TOKENS` | scanner-service | Default: `4096`. |
+| `MAX_FILE_SIZE_MB` | scanner-service | Default: `10`. |
+| `MAX_PAGES` | scanner-service | Default: `10`. |
+| `TESSERACT_LANG` | scanner-service | Default: `dan+eng`. |
+| `LOG_LEVEL` | scanner-service | Default: `info`. |
+
+---
+
+## 3. Produktions-opsætning
+
+### 3.1 Vigtige advarsler
+
+> ⚠️ **PM2 læser IKKE automatisk `.env`-filer.** Hver mini-service (`tokenpay-access`, `hermes-agent`, `knowledge-service`, `scanner-service`, `notification-ws`) har sin egen `env:`-blok i `ecosystem.config.js`. Her SKAL alle påkrævede env vars udfyldes eksplikt — ellers arver servicen intet fra root `.env`.
+
+> ⚠️ **Dev-defaults SKAL erstattes.** Følgende dev-defaults er hardcoded i koden og er **IKKE sikre i produktion**:
+> - `tokenpay-dev-key-2026` (TOKENPAY_API_KEY / API_SHARED_KEY)
+> - `scanner-dev-key-2026` (SCANNER_API_KEY / API_SHARED_KEY)
+>
+> Erstat med: `openssl rand -hex 32`
+
+> ⚠️ **Webhook-secrets SKAL sættes i produktion.** Hvis `STORECOVE_WEBHOOK_SECRET` eller `FLATPAY_WEBHOOK_SECRET` er tom, **accepteres alle webhooks** uden signatur-verifikation (dev-fallback). Dette er en kritisk sikkerhedsrisiko i produktion.
+
+### 3.2 Trin-for-trin produktionssætning
+
+**Trin 1 — Generer krypteringsnøgler og API-nøgler:**
+
 ```bash
-openssl rand -hex 32
-# Example output: a3f8b2c1d4e5f607890abcdef1234567890abcdef1234567890abcdef123456
+# To AES-256-GCM nøgler
+openssl rand -hex 32  # → ENCRYPTION_KEY
+openssl rand -hex 32  # → PROOF_ENCRYPTION_KEY
+
+# Fire inter-service API-nøgler
+openssl rand -hex 32  # → TOKENPAY_API_KEY (også HMAC for TokenPay callback)
+openssl rand -hex 32  # → SCANNER_API_KEY
+openssl rand -hex 32  # → HERMES_ADMIN_KEY (eller genbrug OPENROUTER_API_KEY)
+openssl rand -hex 32  # → STORECOVE_WEBHOOK_SECRET
+openssl rand -hex 32  # → FLATPAY_WEBHOOK_SECRET
 ```
 
-**Step 2** — Add to host `.env`:
+**Trin 2 — Udfyld root `.env`** (kun det Next.js-appen skal bruge):
+
 ```env
-TOKENPAY_API_KEY=a3f8b2c1d4e5f607890abcdef1234567890abcdef1234567890abcdef123456
-NEXT_PUBLIC_TOKENPAY_PORT=3100
+# Krypto
+ENCRYPTION_KEY=<generated-64-hex>
+PROOF_ENCRYPTION_KEY=<generated-64-hex>
+
+# DB
+DATABASE_URL=postgresql://...?sslmode=require
+
+# AI
+OPENROUTER_API_KEY=<key>
+OPENAI_API_KEY=<key>  # hvis knowledge-service skal bruge OpenAI
+
+# Inter-service
+TOKENPAY_API_KEY=<generated-64-hex>
+SCANNER_API_KEY=<generated-64-hex>
+HERMES_ADMIN_KEY=<generated-64-hex>
+
+# Email
+SMTP_HOST=...
+SMTP_PORT=587
+SMTP_USER=...
+SMTP_PASS=...
+EMAIL_FROM=noreply@alphaflow.dk
+APP_URL=https://alphaflow.dk
+
+# Scheduler
+BACKUP_TIMEZONE=Europe/Copenhagen
+
+# Integrationer
+STORECOVE_API_KEY=<key>
+STORECOVE_WEBHOOK_SECRET=<generated-64-hex>
+FLATPAY_API_KEY=<key>
+FLATPAY_WEBHOOK_SECRET=<generated-64-hex>
+SKAT_CLIENT_ID=<id>
+SKAT_CLIENT_SECRET=<secret>
+NEMHANDEL_SIMULATION_MODE=false
+CVR_API_USERNAME=<user>
+CVR_API_PASSWORD=<pass>
+CVR_SIMULATION_MODE=false
 ```
 
-**Step 3** — Add to `ecosystem.config.js` (under `tokenpay-access` env):
+**Trin 3 — Udfyld `ecosystem.config.js`** for hver mini-service:
+
 ```js
+// alphaflow (Next.js)
 env: {
-  API_SHARED_KEY: 'a3f8b2c1d4e5f607890abcdef1234567890abcdef1234567890abcdef123456',
-  HOST_CALLBACK_URL: 'https://yourdomain.com/api/tokenpay/callback',
+  NODE_ENV: 'production',
+  HERMES_ADMIN_KEY: '<generated-64-hex>',
+  HERMES_SERVICE_PORT: '3004',
+  // DATABASE_URL, ENCRYPTION_KEY osv. hentes fra .env.local
+}
+
+// hermes-agent
+env: {
+  NODE_ENV: 'production',
+  OPENROUTER_API_KEY: '<key>',
+  OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
+  OPENROUTER_MODEL: 'anthropic/claude-sonnet-4.5',
+  HERMES_ADMIN_KEY: '<generated-64-hex>',
+  KNOWLEDGE_SERVICE_PORT: '3006',
+  APP_URL: 'https://alphaflow.dk',
+}
+
+// knowledge-service
+env: {
+  NODE_ENV: 'production',
+  PORT: '3006',
+  DATABASE_URL: '<neon-url-with-sslmode=require>',
+  OPENROUTER_API_KEY: '<key>',
+  HERMES_ADMIN_KEY: '<generated-64-hex>',
+}
+
+// tokenpay-access
+env: {
+  NODE_ENV: 'production',
+  PORT: '3100',
+  API_SHARED_KEY: '<samme-som-TOKENPAY_API_KEY>',
+  HOST_CALLBACK_URL: 'https://alphaflow.dk/api/tokenpay/callback',
   DATABASE_PATH: './data/access.db',
+  PROOF_ENCRYPTION_KEY: '<samme-som-root-PROOF_ENCRYPTION_KEY>',
+}
+
+// notification-ws
+env: {
+  NODE_ENV: 'production',
+  PORT: '3001',
+}
+
+// scanner-service
+env: {
+  NODE_ENV: 'production',
+  PORT: '3005',
+  API_SHARED_KEY: '<samme-som-SCANNER_API_KEY>',
+  ANTHROPIC_API_KEY: '<key>',
+  ANTHROPIC_MODEL: 'claude-sonnet-4-20250514',
+  VLM_MAX_TOKENS: '4096',
+  DATABASE_PATH: './data/scanner.db',
+  HOST_CALLBACK_URL: '',
+  MAX_FILE_SIZE_MB: '10',
+  MAX_PAGES: '10',
+  TESSERACT_LANG: 'dan+eng',
+  LOG_LEVEL: 'info',
 }
 ```
 
-**Step 4** — Restart both services:
+**Trin 4 — Verificer at nøgler matcher:**
+
+| Host app variabel | Mini-service variabel | Skal være identisk |
+|---|---|---|
+| `TOKENPAY_API_KEY` | `API_SHARED_KEY` (tokenpay-access) | ✅ |
+| `SCANNER_API_KEY` | `API_SHARED_KEY` (scanner-service) | ✅ |
+| `PROOF_ENCRYPTION_KEY` | `PROOF_ENCRYPTION_KEY` (tokenpay-access) | ✅ |
+| `HERMES_ADMIN_KEY` (alphaflow) | `HERMES_ADMIN_KEY` (hermes-agent + knowledge-service) | ✅ |
+
+**Trin 5 — Genstart PM2:**
+
 ```bash
 pm2 delete all && pm2 start ecosystem.config.js
+pm2 save
+pm2 startup  # enable auto-restart on boot
+```
+
+**Trin 6 — Verificer sundhed:**
+
+```bash
+# TokenPay-service
+curl http://localhost:3100/health
+# Forventet: { "status": "ok", "service": "TokenPay Access Service", "version": "2.0.0", ... }
+
+# Scanner-service
+curl http://localhost:3005/health
+
+# Hermes-agent
+curl -H "Authorization: Bearer $HERMES_ADMIN_KEY" http://localhost:3004/admin/stats
+
+# Notification-ws
+curl http://localhost:3001/health
 ```
 
 ---
 
-## 4. Verification
+## 4. Porte & services
 
-After setup, confirm the service is healthy:
+AlphaFlow kører 6 PM2-apps på IONOS VPS. Caddy router trafik via `?XTransformPort=<port>`-query-parameter for mini-services, og falder tilbage på Next.js (port 3000) for alt andet.
+
+### 4.1 PM2-apps
+
+| # | App-navn | Port | Runtime | Formål | Caddy route |
+|---|---|---|---|---|---|
+| 1 | `alphaflow` | 3000 | Node (Next.js 16) | Hovedapplikation — UI + API | Default fallback |
+| 2 | `notification-ws` | 3001 | Bun (Socket.IO) | Real-time notifikationer | `?XTransformPort=3001` |
+| 3 | `hermes-agent` | 3004 | Bun (Socket.IO) | Hermes AI-chat-assistent | `?XTransformPort=3004` |
+| 4 | `scanner-service` | 3005 | Python (FastAPI) | OCR + VLM-ekstraktion fra kvitteringer/fakturaer | `?XTransformPort=3005` |
+| 5 | `knowledge-service` | 3006 | Bun (HTTP + pgvector) | RAG-videnbase med OpenAI/OpenRouter embeddings | Intern (ikke direkte Caddy-routet) |
+| 6 | `tokenpay-access` | 3100 | Bun (Hono) | TokenPay adgangsstyring + `.tbkey` dekryptering | `?XTransformPort=3100` |
+
+### 4.2 Caddy reverse proxy
+
+Caddy konfigureret til `alphaflow.dk` og `www.alphaflow.dk` med:
+
+- TLS 1.2 / 1.3 (Let's Encrypt auto-cert).
+- HSTS preload (`max-age=31536000; includeSubDomains; preload`).
+- Security headers: `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
+- Per-service routing via `?XTransformPort=<port>`-matcher:
+  - `@notification-ws` → `localhost:3001`
+  - `@hermes-agent` → `localhost:3004`
+  - `@scanner` → `localhost:3005`
+  - `@tokenpay` → `localhost:3100`
+- Default `handle` → `localhost:3000` (Next.js).
+- `rate_limit`-plugin er **ikke installeret** — rate-limiting håndteres i applikationslaget (`src/lib/rate-limit.ts`).
+
+### 4.3 PM2 exec_mode
+
+Alle 6 apps kører i `fork`-mode (ikke cluster). Begrundelser:
+- Bun understøtter ikke Node.js cluster-modul.
+- SQLite (tokenpay-access, scanner-service) kan ikke deles på tværs af workers (WAL-locking).
+- Socket.IO state er in-memory (notification-ws, hermes-agent) — kræver single-instance.
+
+---
+
+## 5. Sikkerhedscheckliste
+
+Brug denne checklist ved produktionssætning og periodisk audit.
+
+### 5.1 Krypteringsnøgler
+
+- [ ] `ENCRYPTION_KEY` er sat og er 64-char hex (verificer med: `echo -n "$ENCRYPTION_KEY" | wc -c` → 64).
+- [ ] `PROOF_ENCRYPTION_KEY` er sat og er 64-char hex.
+- [ ] Begge nøgler er genereret med `openssl rand -hex 32` (ikke hardcodede).
+- [ ] Nøgler er backet op sikkert (f.eks. password manager, offline storage) — tabt nøgle = permanent datatab.
+- [ ] `PROOF_ENCRYPTION_KEY` i `tokenpay-access` mini-service matcher root-værdien eksakt.
+- [ ] Nøgler opbevares KUN i environment variables — aldrig i kode, DB, eller logfiler.
+- [ ] `.env`-filer er i `.gitignore` (verificer med `git status --ignored`).
+
+### 5.2 Inter-service API-nøgler
+
+- [ ] `TOKENPAY_API_KEY` (root) = `API_SHARED_KEY` (tokenpay-access) — eksakt match.
+- [ ] `SCANNER_API_KEY` (root) = `API_SHARED_KEY` (scanner-service) — eksakt match.
+- [ ] `HERMES_ADMIN_KEY` er sat identisk i `alphaflow`, `hermes-agent` og `knowledge-service` PM2-env.
+- [ ] Dev-defaults (`tokenpay-dev-key-2026`, `scanner-dev-key-2026`) er **ikke** til stede i produktion (verificer med `grep -r "dev-key-2026" ecosystem.config.js` → ingen matches).
+
+### 5.3 Webhook-secrets
+
+- [ ] `STORECOVE_WEBHOOK_SECRET` er sat og ikke-tom (forhindrer dev-fallback "accept all").
+- [ ] `FLATPAY_WEBHOOK_SECRET` er sat og ikke-tom (forhindrer dev-fallback "accept all").
+- [ ] Webhook-endpoints er nårbare fra internettet:
+  - `https://alphaflow.dk/api/storecove/webhook`
+  - `https://alphaflow.dk/api/subscription/payment-webhook`
+  - `https://alphaflow.dk/api/tokenpay/callback`
+
+### 5.4 Database & email
+
+- [ ] `DATABASE_URL` indeholder `?sslmode=require`.
+- [ ] SMTP-credentials (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) er sat — ellers sendes ingen rigtige mails.
+- [ ] `APP_URL` matcher public domæne (`https://alphaflow.dk`).
+- [ ] `BACKUP_TIMEZONE` er sat (default `Europe/Copenhagen`).
+
+### 5.5 Eksterne integrationer
+
+- [ ] `OPENROUTER_API_KEY` er sat (ellers svarer Hermes ikke).
+- [ ] `OPENAI_API_KEY` ELLER `OPENROUTER_API_KEY` er sat i knowledge-service (ellers fejler RAG-embedding).
+- [ ] `ANTHROPIC_API_KEY` er sat i scanner-service (ellers fejler VLM-ekstraktion).
+- [ ] `NEMHANDEL_SIMULATION_MODE=false` hvis rigtige e-fakturaer skal sendes.
+- [ ] `CVR_SIMULATION_MODE=false` hvis rigtige CVR-opslag skal foretages.
+- [ ] `SKAT_CLIENT_ID` + `SKAT_CLIENT_SECRET` sat hvis rigtige momsangivelser skal indsendes.
+
+### 5.6 Adgangskontrol
+
+- [ ] SSH-nøgle-login til VPS er aktiveret; password-login deaktiveret.
+- [ ] Root-login begrænset ( kun via sudo).
+- [ ] PM2-logfiler (`logs/*.log`) roteres og beskyttes mod uautoriseret læsning.
+- [ ] `Tenant-Backup/` og `uploads/` mapper har restriktive filesystem-rettigheder (f.eks. `chmod 750`).
+
+### 5.7 Overvågning
+
+- [ ] PM2 auto-restart er aktiveret (`pm2 startup` + `pm2 save`).
+- [ ] CronExecution-log i DB overvåges for fejlede backups.
+- [ ] AuditLog overvåges for `LOGIN_FAILED`-events (muligt brute-force).
+- [ ] HSTS-preload er registreret hos [hstspreload.org](https://hstspreload.org) (valgfrit, men anbefalet).
+
+### 5.8 Verifikation efter deploy
+
+Kør disse kommandoer efter produktionsdeploy for at verificere opsætning:
 
 ```bash
-# Check the Access Service is running
+# 1. Alle PM2-apps kører
+pm2 status
+# Forventet: 6 apps, alle "online"
+
+# 2. TokenPay health
 curl http://localhost:3100/health
 
-# Expected response:
-# { "status": "ok", "service": "TokenPay Access Service", "version": "2.0.0", ... }
+# 3. TokenPay-service har PROOF_ENCRYPTION_KEY (uden at lekke værdien)
+pm2 env tokenpay-access | grep -c PROOF_ENCRYPTION_KEY
+# Forventet: 1
+
+# 4. Webhook-secret sat (uden at lekke værdien)
+test -n "$STORECOVE_WEBHOOK_SECRET" && echo "OK" || echo "MISSING"
+test -n "$FLATPAY_WEBHOOK_SECRET" && echo "OK" || echo "MISSING"
+
+# 5. HTTPS virker og HSTS er aktiv
+curl -sI https://alphaflow.dk | grep -i strict-transport-security
+# Forventet: strict-transport-security: max-age=31536000; includeSubDomains; preload
+
+# 6. TLS-version
+openssl s_client -connect alphaflow.dk:443 -tls1_2 < /dev/null 2>&1 | grep -i "protocol"
+openssl s_client -connect alphaflow.dk:443 -tls1_3 < /dev/null 2>&1 | grep -i "protocol"
 ```
 
-If you get `Unauthorized` from the host app's proxy routes, the `TOKENPAY_API_KEY` and `API_SHARED_KEY` values don't match.
+---
+
+## Appendiks A — Fejlfinding
+
+### "Unauthorized" fra host app's proxy-routes
+
+**Årsag:** `TOKENPAY_API_KEY` (root `.env`) og `API_SHARED_KEY` (tokenpay-access `env`) matcher ikke.
+
+**Løsning:** Generér én nøgle med `openssl rand -hex 32` og sæt den i begge env-blokke. Genstart PM2.
+
+### TokenPay-service starter ikke
+
+**Årsag:** `PROOF_ENCRYPTION_KEY` mangler eller er forkert længde (skal være præcis 64 hex-tegn).
+
+**Løsning:**
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Sæt output som PROOF_ENCRYPTION_KEY i både root .env og tokenpay-access PM2-env.
+pm2 restart tokenpay-access
+```
+
+### Bank-tokens kan ikke dekrypteres
+
+**Årsag:** `ENCRYPTION_KEY` er blevet ændret siden tokens blev krypteret.
+
+**Løsning:** Gendan den oprindelige `ENCRYPTION_KEY`. Hvis den er tabt, er tokens permanent ubrugelige (ingen recovery).
+
+### Webhooks accepteres ikke
+
+**Årsag:** Webhook-secret matcher ikke mellem AlphaFlow og integrationens dashboard.
+
+**Løsning:** Verificer at `STORECOVE_WEBHOOK_SECRET` / `FLATPAY_WEBHOOK_SECRET` i `.env` matcher den secret der er konfigureret i Storecove/Frisbii dashboard. Genstart PM2.
+
+### AI-chats fejler
+
+**Årsag:** `OPENROUTER_API_KEY` mangler i `hermes-agent` PM2-env. PM2 læser ikke `.env` automatisk.
+
+**Løsning:** Sæt `OPENROUTER_API_KEY` eksplicit i `hermes-agent` env-blok i `ecosystem.config.js`. Genstart.
+
+---
+
+*Dette dokument er udarbejdet som operationsdokumentation for AlphaAi ApS. For tekniske krypteringsdetaljer henvises til `ENCRYPTION.md`. For sikkerhedsvurdering og udbedringsplaner henvises til `RISIKOVURDERING.md` og `UDBEDRINGSPLAN.md`.*

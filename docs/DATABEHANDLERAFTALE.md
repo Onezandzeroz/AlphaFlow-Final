@@ -1,6 +1,6 @@
-# DATABEHANDLERAFTALE
+# DATABEHANDLERAFTALE (DPA)
 
-**Mellem AlphaAi (Dataansvarlig) og AlphaFlow-kunde (Databehandler)**
+**Mellem AlphaAi ApS (Databehandler) og kundens virksomhed (Dataansvarlig)**
 
 ---
 
@@ -8,514 +8,785 @@
 
 | Felt | Indhold |
 |------|---------|
-| **Dokumenttype** | Databehandleraftale |
-| **Version** | 2.0 |
-| **Dato** | 1. januar 2025 |
-| **Gældende lov** | Europa-Parlamentets og Rådets forordning (EU) 2016/679 af 27. april 2016 (GDPR), jf. dansk databeskyttelsesloven (LBK nr. 775 af 25. juni 2021), Bogføringsloven (LBK nr. 949 af 18. juni 2024), BEK nr. 98 af 15. februar 2023 |
-| **Parter** | AlphaAi (dataansvarlig) og kunden (databehandler) |
+| **Dokumenttype** | Databehandleraftale (DPA) jf. GDPR artikel 28 |
+| **Version** | 3.0 |
+| **Dato** | 08.06.2026 |
+| **Gældende lov** | Europa-Parlamentets og Rådets forordning (EU) 2016/679 (GDPR); dansk databeskyttelseslovgivning (LBK nr. 775 af 25. juni 2021); Bogføringsloven (LBK nr. 949 af 18. juni 2024); BEK nr. 98 af 15. februar 2023 |
+| **Parter** | **Dataansvarlig:** Kundens virksomhed (kunde hos AlphaFlow) — **Databehandler:** AlphaAi ApS, CVR 46312058 |
 | **Sprog** | Dansk |
-| **Vurderet af** | AlphaAi Compliance |
+| **Klassifikation** | Fortroligt — Compliance-dokumentation |
+| **Udarbejdet af** | AlphaAi ApS Compliance |
 
-Denne databehandleraftale er udarbejdet i forbindelse med AlphaFlows anmeldelse til Erhvervsstyrelsen som standardiseret bogføringssystem jf. Bekendtgørelse nr. 98 af 15. februar 2023 (BEK 98). Aftalen beskriver forpligtelser, sikkerhedsforholdsregler og rettigheder i relation til behandling af personoplysninger og bogføringsdata i AlphaFlow-systemet.
+Denne databehandleraftale indgås som led i AlphaFlows anmeldelse til Erhvervsstyrelsen som standardiseret bogføringssystem jf. BEK nr. 98 af 15. februar 2023, og dokumenterer forpligtelser, sikkerhedsforanstaltninger og rettigheder i relation til AlphaAi ApS' behandling af personoplysninger og bogføringsdata på vegne af kunden. Aftalen dækker samtlige underbehandlere, der anvendes i AlphaFlow-platformen (jf. afsnit 5).
 
 ---
 
-## § 1 Parter
+## § 1 Parter og formål
 
-### 1.1 Dataansvarlig
+### 1.1 Dataansvarlig (Kunden)
 
 | Felt | Oplysninger |
 |------|-------------|
-| **Virksomhedsnavn** | AlphaAi Consult ApS |
-| **CVR-nummer** | [Indsættes ved anmeldelse] |
+| **Virksomhedsnavn** | [Indsættes ved aftaleindgåelse] |
+| **CVR-nummer** | [Indsættes ved aftaleindgåelse] |
+| **Adresse** | [Indsættes ved aftaleindgåelse] |
+| **Kontaktperson (DPO/privacy-ansvarlig)** | [Indsættes ved aftaleindgåelse] |
+| **E-mail** | [Indsættes ved aftaleindgåelse] |
+| **Telefon** | [Indsættes ved aftaleindgåelse] |
+
+Kunden er dataansvarlig for de personoplysninger og bogføringsdata, der behandles i AlphaFlow. Kunden afgør formål og midler for behandlingen, herunder hvilke medarbejdere, kontakter og fakturamodtagere der registreres i systemet.
+
+### 1.2 Databehandler (AlphaAi ApS)
+
+| Felt | Oplysninger |
+|------|-------------|
+| **Virksomhedsnavn** | AlphaAi ApS |
+| **CVR-nummer** | 46312058 |
 | **Adresse** | [Indsættes ved anmeldelse] |
-| **Postnummer/by** | [Indsættes ved anmeldelse] |
-| **Kontaktperson** | [Indsættes ved anmeldelse] |
-| **E-mail** | [Indsættes ved anmeldelse] |
-| **Telefon** | [Indsættes ved anmeldelse] |
+| **Direktør / kontaktperson** | Jess Christoffersen |
+| **E-mail** | alphaaiconsult@gmail.com |
+| **Telefon** | 61 73 60 76 |
 
-AlphaAi er indehaver og driftsansvarlig for AlphaFlow-cloudbogføringssystemet og er dataansvarlig for den tekniske drift af systemet, herunder serverinfrastruktur, databehandling, backup og sikkerhed.
+AlphaAi ApS er indehaver og driftsansvarlig for AlphaFlow — en cloud-baseret dansk bogføringsplatform (SaaS) — og fungerer som databehandler for kunden i forbindelse med levering af bogførings-, fakturerings-, momsangivelses-, e-fakturerings- og AI-assistent-ydelser.
 
-### 1.2 Databehandler (Kunde)
+### 1.3 Formål
 
-| Felt | Oplysninger |
-|------|-------------|
-| **Virksomhedsnavn** | [Kundens virksomhedsnavn] |
-| **CVR-nummer** | [Kundens CVR-nummer] |
-| **Adresse** | [Kundens adresse] |
-| **Postnummer/by** | [Kundens postnummer/by] |
-| **Kontaktperson** | [Kundens kontaktperson] |
-| **E-mail** | [Kundens e-mail] |
-| **Telefon** | [Kundens telefon] |
+AlphaAi ApS behandler udelukkende personoplysninger og bogføringsdata på vegne af og i overensstemmelse med kundens skriftlige instrukser, som afgives gennem kundens brug af AlphaFlow-platformen. Behandlingen omfatter:
 
-Kunden er databehandler i det omfang, at kunden indtaster og håndterer personoplysninger (navne, e-mailadresser, CVR-numre m.v.) i AlphaFlow-systemet i forbindelse med bogføring af virksomhedens økonomiske transaktioner.
+- Dobbelt bogføring (JournalEntry + JournalEntryLine), kontoplan FSR-38, finansjournal, hovedbog.
+- Fakturering (salgsfakturaer, PDF-generering, e-mail-afsendelse, e-fakturering via Peppol/NemHandel/Storecove).
+- Momsrapportering og -indberetning til SKAT (momsangivelse).
+- Bank-forbindelser (scaffolding; ingen reelle PSD2-kald i produktion pr. dags dato).
+- AI-assistent (Hermes) med valgfri tenant-dataadgang (per-tenant opt-in).
+- Dokument-OCR/scanning (Tesseract + Anthropic Claude VLM).
+- Multi-tenant adgangskontrol, audit-log, backup og gendannelse.
 
----
-
-## § 2 Formål og omfang
-
-### 2.1 Formål med databehandlingen
-
-AlphaFlow er et cloud-baseret bogføringssystem, der behandler følgende kategorier af data på vegne af kunden:
-
-| Datakategori | Beskrivelse | Eksempler |
-|--------------|-------------|-----------|
-| **Bogføringsdata** | Finansielle transaktioner, kontoposter, journaler | Bilag, fakturaer, betalinger, saldi |
-| **Virksomhedsoplysninger** | Identifikation af kundens virksomhed | Virksomhedsnavn, adresse, CVR-nummer, bankoplysninger |
-| **Personoplysninger** | Oplysninger om fysisk registrerede personer | Kontakternes navne, e-mailadresser, telefonnumre, adresser, CVR-numre |
-| **Brugeroplysninger** | Oplysninger om kundens brugere af systemet | Navne, e-mailadresser, roller, adgangsrettigheder |
-| **Dokumenter/bilag** | Elektroniske bilag og vedhæftede filer | PDF-fakturaer, kvitteringer, bankudskrifter, kontrakter |
-
-### 2.2 Behandlingens art
-
-Behandlingen omfatter udelukkende:
-
-1. **Indtastning og registrering** af bogføringsdata i kontoplan, journaler og finansposter
-2. **Opbevaring** af bogføringsdata i overensstemmelse med Bogføringslovens § 15 (5 år)
-3. **Kategorisering og kontering** af transaktioner i overensstemmelse med FSR-standardkontoplan eller SKAT's Fællesoffentlige Standardkontoplan
-4. **Generering af rapporter** — resultatopgørelse, balance, momsopgørelse, årsregnskab
-5. **E-fakturahåndtering** — modtagelse og fremsendelse af OIOUBL og Peppol BIS Billing 3.0
-6. **Backup og gendannelse** af kundens data i overensstemmelse med Bogføringslovens § 15
-7. **Audit-logføring** af alle ændringer til bogføringsdata jf. Bogføringslovens §§ 10-12
-
-### 2.3 Begrænsninger
-
-AlphaAi Consult ApS behandler udelukkende data i overensstemmelse med kundens skriftlige instrukser og inden for de rammer, der er fastsat af dansk lovgivning, herunder Bogføringsloven og GDPR. AlphaAi Consult ApS behandler ikke data til egne formål uden forudgående skriftlig samtykke fra kunden.
+AlphaAi ApS behandler ikke data til egne kommercielle formål uden forudgående skriftligt samtykke fra kunden.
 
 ---
 
-## § 3 Databehandlerens forpligtelser
+## § 2 Behandlingens formål og varighed
 
-### 3.1 Generelle forpligtelser
+### 2.1 Formål
 
-Databehandleren (kunden) forpligter sig til:
+Levering af cloud-baseret bogføringsservice til kunden, herunder:
 
-1. **Kun at behandle personoplysninger** i AlphaFlow til de formål, der er angivet i § 2, og i overensstemmelse med gældende databeskyttelseslovgivning
-2. **Sikre fortrolighed** af alle data, der indtastes og behandles i systemet
-3. **Ikke videregive adgangskoder eller login-oplysninger** til uautoriserede tredjeparter
-4. **Anvende systemets indbyggede sikkerhedsfunktioner**, herunder to-faktor-autentificering (2FA) og rollebaseret adgangskontrol
-5. **Holde kontaktoplysninger opdaterede** i systemet
-6. **Anmelde ethvert mistænkt databrud** til AlphaAi uden ugrundlagt ophold
-7. **Overholde Bogføringslovens krav** til dokumentation og opbevaring af bilag
+1. Indtastning, registrering og opbevaring af bogføringsdata jf. Bogføringsloven §§ 10-12.
+2. Kontering og kategorisering efter FSR-standardkontoplan.
+3. Rapportering (resultatopgørelse, balance, cash-flow, ældresaldo, budgetter, SAF-T, årsrapport-XBRL/CSV).
+4. E-fakturering (OIOUBL + Peppol BIS Billing 3.0 via Peppol-netværket).
+5. Momsangivelse til SKAT (kvartalsvis/årligt).
+6. AI-assistent ("Hermes") til dansk regnskabsrådgivning.
+7. Dokument-OCR med FSR-konto-forslag.
+8. Backup og gendannelse i overensstemmelse med Bogføringsloven § 15.
 
-### 3.2 Personalesikkerhed
+### 2.2 Varighed
 
-Kunden skal sikre, at alle medarbejdere og andre, der har adgang til AlphaFlow:
+Aftalen gælder for kundens abonnementsperiode (jvf. AlphaFlows generelle vilkår) **+** den lovpligtige opbevaringsperiode jf. Bogføringsloven §§ 10-12 og § 15 (minimum 5 år fra regnskabsårets udløb). Efter ophør af abonnementet fortsætter opbevaring som beskrevet i § 8.
 
-1. Har modtaget tilstrækkelig instruktion i databeskyttelse
-2. Kun har adgang til de data og funktioner, der er nødvendige for deres arbejdsopgaver
-3. Er underlagt fortrolighedsforpligtelser
-4. Fjernes fra systemet straks ved ophør af ansættelse eller samarbejde
+### 2.3 Behandlingens art
 
-### 3.3 AlphaAis instruksberettigelse
-
-AlphaAi Consult ApS har ret til at udstede tekniske instrukser til kunden vedrørende:
-
-- Nødvendige opdateringer af systemet
-- Sikkerhedsmæssige tiltag (f.eks. påbud om aktivering af 2FA)
-- Sletning eller korrektion af data, der udgør en sikkerhedsrisiko
+Behandlingen er begrænset til det i § 2.1 anførte. Behandlingen sker udelukkende på grundlag af kundens instrukser afgivet gennem platformens brugergrænseflade, undtagen hvor dansk lovgivning (særligt Bogføringsloven) pålægger AlphaAi ApS at udføre specifikke handlinger (f.eks. opretholdelse af immutabel audit-log og 5-års backup-retention).
 
 ---
 
-## § 4 Tekniske sikkerhedsforholdsregler
+## § 3 Kategorier af persondata der behandles
 
-AlphaFlow (Platformen) implementerer følgende tekniske og organisatoriske sikkerhedsforholdsregler jf. GDPR art. 32 og Bogføringslovens krav til it-sikkerhed:
+Følgende datakategorier behandles i AlphaFlow-platformen. Kategorierne er baseret på den faktiske Prisma-datamodel (`prisma/schema.prisma`, 40 modeller, jf. P1-DB-analysen).
 
-### 4.1 Kryptering af data i hvile (Data at Rest)
+### 3.1 Identitetsdata
+
+| Felt | Eksempler | Modeller |
+|------|-----------|----------|
+| **Navn** | Brugers fulde navn, virksomhedsnavn, kontaktnavn, kundenavn på faktura | `User.businessName`, `Company.name`, `Contact.name`, `Invoice.customerName` |
+| **E-mail** | Bruger-login, kontakt-email, fakturamodtager-email | `User.email`, `Company.email`, `Contact.email`, `Invoice.customerEmail`, `Invitation.email` |
+| **Telefon** | Virksomhedstelefon, kontakt-telefon, fakturamodtager-telefon | `Company.phone`, `Contact.phone`, `Invoice.customerPhone` |
+| **Adresse** | Virksomhedsadresse, kontakt-adresse, fakturamodtager-adresse | `Company.address`, `Contact.address`, `Invoice.customerAddress` |
+
+### 3.2 Finansielle data
+
+| Felt | Eksempler | Modeller |
+|------|-----------|----------|
+| **Posteringer** | Beløb, dato, valuta, beskrivelse, momssats | `Transaction`, `JournalEntry`, `JournalEntryLine` |
+| **Fakturaer** | Fakturanummer, linjer (JSON), subtotal, moms, total, status | `Invoice`, `ReceivedInvoice`, `EInvoiceSending` |
+| **Momsangivelser** | Output/input VAT, periode, indberetnings-reference | `VATSubmission` |
+| **Banktransaktioner** | Bankudtog, posteringer til afstemning | `BankStatement`, `BankConnection` (tokens krypteret, jf. § 7) |
+| **Kontoplan** | FSR-38 konti, saldo, bevægelser | `Account`, `StandardAccountMapping` |
+| **Budgetter** | Periode, beløb, kategori | `Budget` |
+
+### 3.3 Adgangsdata og sikkerhedsdata
+
+| Felt | Lagring | Modeller |
+|------|---------|----------|
+| **Adgangskode-hash** | bcrypt 12 salt-runder (aldrig plaintext) | `User.password` |
+| **TOTP 2FA-secret** | AES-256-GCM-krypteret (base32 encoded) | `User.twoFactorSecret` |
+| **2FA backup-koder** | AES-256-GCM-krypteret JSON-array af SHA-256-hashes | `User.twoFactorBackupCodes` |
+| **Bank-tokens** | AES-256-GCM-krypteret (access/refresh-token) | `BankConnection.accessToken`, `BankConnection.refreshToken` |
+| **Session-tokens** | 32-byte krypto-sikker random hex (httpOnly+secure+sameSite=lax) | `Session.token` |
+| **IP-adresse / User-Agent** | Logges på session og audit-log | `Session.ipAddress`, `Session.userAgent`, `AuditLog.ipAddress` |
+| **Proof-filer (.tbkey)** | AES-256-GCM via PROOF_ENCRYPTION_KEY | TokenPay SQLite (`proofs`) |
+
+### 3.4 Organisatoriske data
+
+| Felt | Eksempler | Modeller |
+|------|-----------|----------|
+| **CVR-nummer** | Kundens CVR, fakturamodtager-CVR, leverandør-CVR | `Company.cvrNumber`, `Invoice.customerCvr`, `Contact.cvr` |
+| **Virksomhedsform** | ApS, A/S, ENK, IVS | `Company.companyType` |
+| **Brugeres rolle i tenant** | OWNER, ADMIN, ACCOUNTANT, VIEWER, AUDITOR | `UserCompany.role` |
+
+### 3.5 Hvad der IKKE behandles
+
+Afgrænsning — følgende kategorier behandles **ikke** i AlphaFlow:
+
+| Udelukket data | Begrundelse |
+|----------------|-------------|
+| **CPR-numre** | Ingen CPR-felter i datamodel. CVR anvendes udelukkende. |
+| **Løndata** | Intet lønmodul — `TransactionType.SALARY` findes som enum, men der er ingen løn-kørsel. |
+| **MitID/Bank-ID** | Autentificering er udelukkende e-mail+password+TOTP 2FA. |
+| **Biometriske data** | Ingen biometri. |
+| **Særlige kategorier (art. 9)** | Ingen race, religion, sundhed, sexuelle forhold etc. |
+| **Børnedata** | Platformen er B2B og forventer ingen brugere under 18. |
+
+### 3.6 Felter der opbevares UKRYPTERET i databasen
+
+Af hensyn til søgbarhed og rapportering opbevares følgende felter ukrypteret i Neon PostgreSQL (kryptering på kolonne-niveau er ikke implementeret; database-niveau kryptering varetages af Neon, jf. afsnit 7):
+
+- `Contact.email`, `Contact.phone`, `Contact.address`
+- `BankConnection.accountNumber`, `BankConnection.iban`
+- `Company.bankAccount`, `Company.bankRegistration`, `Company.bankIban`
+- `Invoice.customerEmail`, `Invoice.customerPhone`, `Invoice.customerAddress`
+- `User.email`, `User.businessName`
+- De fleste personnavne, adresser og firmanavne
+
+Følsomme felter (adgangskoder, TOTP-secrets, bank-tokens, backup-koder, proof-filer) er altid AES-256-GCM-krypteret — jf. ENCRYPTION.md for tekniske detaljer.
+
+---
+
+## § 4 Kategorier af registrerede
+
+Følgende kategorier af fysiske personer kan have personoplysninger behandlet i AlphaFlow:
+
+| Kategori | Beskrivelse | Persondata |
+|----------|-------------|------------|
+| **Kundens ansatte (brugere)** | Medlemmer af kundens virksomhed med login til AlphaFlow (`UserCompany`) | Navn, e-mail, brugernavn, IP/User-Agent, adgangskode-hash, 2FA-data, session-data |
+| **Kundens kontakter (kunder/leverandører)** | Personer i kundens kontakt-kartotek (`Contact`) | Navn, e-mail, telefon, adresse, CVR (for virksomheder) |
+| **Fakturamodtagere** | Personer der modtager fakturaer fra kunden | Navn, e-mail, telefon, adresse, CVR |
+| **Inviterede brugere** | Personer inviteret til tenant endnu ikke har accepteret | E-mail, inviteret-rolle |
+| **Kontakt-formular-afsendere** | Afsendere af beskeder via kontakt-formular | Navn, e-mail, besked-indhold |
+
+**Børn:** AlphaFlow er en B2B-platform og forventer ingen registrerede under 18 år. Systemet udfører ikke aldersverifikation.
+
+---
+
+## § 5 Underbehandlere (data processors)
+
+AlphaAi ApS anvender underbehandlere til at levere specifikke dele af AlphaFlow-tjenesten. Nedenstående tabel er den **komplette liste** over eksterne integrationer identificeret i AlphaFlows kodebase (verificeret i P1-INT-analysen, 15 integrationer). Listen udgør Bilag A.
+
+### 5.1 Klassifikation
+
+Underbehandlerne er grupperet efter funktion:
+
+#### 5.1.A — Infrastruktur (EU)
+
+| # | Underbehandler | Juridisk enhed | Lokation (HQ / datacenter) | Formål i AlphaFlow | Data sendt | Retsgrundlag (GDPR Art. 28) | Tredjeland |
+|---|----------------|----------------|---------------------------|---------------------|------------|------------------------------|------------|
+| 1 | **Neon PostgreSQL** | Neon, Inc. | USA (HQ) / EU (Frankfurt + Amsterdam) | Primær database — PostgreSQL (serverless) med pgvector til RAG | **Alt:** virksomhedsoplysninger (CVR, adresse), bruger-emails, bcrypt-password-hashes, TOTP-secrets (AES-256-GCM), bank-access-tokens (AES-256-GCM), alle posteringer, fakturaer, momsangivelser, audit-log, Hermes-konversationer, knowledge-base | Art. 28(2) — DPA + SCC (admin-adgang fra USA) | Nej — data i EU. Admin-adgang fra USA → SCC påkrævet |
+| 2 | **IONOS VPS** | IONOS SE | EU (Tyskland) | Applikationsserver (Next.js, Caddy, PM2) og lokal backup-lagring | AES-256-GCM-krypterede backup-ZIP-filer pr. tenant, SHA-256 checksum, runtime-data i arbejdshukommelse, audit-log via PM2 log-filer | Art. 28(2) — DPA | Nej (Tyskland) |
+
+#### 5.1.B — E-fakturering og betaling (EU)
+
+| # | Underbehandler | Juridisk enhed | Lokation | Formål i AlphaFlow | Data sendt | Retsgrundlag | Tredjeland |
+|---|----------------|----------------|----------|---------------------|------------|--------------|------------|
+| 3 | **Storecove** | Storecove B.V. | Holland (EU) | Peppol Access Point — afsendelse/modtagelse af e-fakturaer (OIOUBL + Peppol BIS Billing 3.0, NemHandel eDelivery) | OIOUBL/Peppol XML: afsender-CVR, modtager-CVR/EAN, fakturanummer, dato, linjer (beskrivelse, antal, pris, momssats), total, betalingsbetingelser, IBAN. B2B — typisk kun firmanavne, CVR, beløb. Ingen CPR. | Art. 28(2) — DPA | Nej (Holland) |
+| 4 | **Frisbii / Flatpay** | Billwerk+ Reepay Group / Frisbii GmbH | Tyskland (EU) | Hosted checkout til AlphaFlows egne abonnementsbetalinger (Månedlig/Pro/Business/Business Extended). **Ikke** betalingsprocessor for kundens fakturaer. | Brugerens e-mail, virksomhedsnavn (brugt som customer first/last name), beløb i DKK øre, betalings-status, callback-URL'er | Art. 28(2) — DPA | Nej (Tyskland) |
+
+#### 5.1.C — AI-underbehandlere (USA — SCC påkrævet)
+
+| # | Underbehandler | Juridisk enhed | Lokation | Formål i AlphaFlow | Data sendt | Retsgrundlag | Tredjeland |
+|---|----------------|----------------|----------|---------------------|------------|--------------|------------|
+| 5 | **OpenAI, Inc.** | OpenAI, Inc. | USA | Embeddings (text-embedding-3-small, 1536 dims) til knowledge-service RAG | Dokument-tekst chunks (~500 tokens) fra danske regnskabsregler, branchekoder, kontoplan-beskrivelser. Potentielt tenant-specifikke dokumenter hvis `dataAccessEnabled=true`. Ingen adgangskoder, ingen CPR. | Art. 28(2) + Art. 46(2)(c) — DPA + SCC (modul 2) + TIA | **JA (USA)** |
+| 6 | **OpenRouter, Inc.** | OpenRouter, Inc. | USA | LLM chat-completions for Hermes AI-assistent | System-prompt (statisk dansk regnskabsviden), brugerens spørgsmål, samtalehistorik (sidste 20 beskeder), tenant-kontekst **KUN hvis `dataAccessEnabled=true`** (virksomhedsnavn, CVR, branche, regnskabssummer, medlemsliste, påmindelser). Ingen individuelle posteringer, ingen CPR. | Art. 28(2) + Art. 46(2)(c) — DPA + SCC (modul 2) + TIA | **JA (USA)** |
+| 7 | **Anthropic PBC** | Anthropic PBC | USA | VLM-ekstraktion i scanner-service (kvitteringer/fakturaer) | Base64-PNG-billeder af dokumentets sider + ekstraktions-prompt. Billederne kan indeholde leverandørnavn, CVR, beløb, momssats, dato, linjebeskrivelser, kunde-oplysninger. Anthropic gemmer ikke billederne (per API terms), men data transiterer USA. | Art. 28(2) + Art. 46(2)(c) — DPA + SCC (modul 2) + TIA | **JA (USA)** |
+
+**Note vedr. upstream-modeller:** OpenRouter videresender anmodninger til upstream-udbydere. Standardmodellen i AlphaFlow er `anthropic/claude-sonnet-4.5` (videresendes til Anthropic). Fallback for free-tier er `meta-llama/llama-3.3-70b-instruct:free` (videresendes til Meta). Begge er USA-baserede og omfattes af SCC.
+
+#### 5.1.D — Email (EU)
+
+| # | Underbehandler | Juridisk enhed | Lokation | Formål i AlphaFlow | Data sendt | Retsgrundlag | Tredjeland |
+|---|----------------|----------------|----------|---------------------|------------|--------------|------------|
+| 8 | **Simply / Brevo (SMTP)** | Simply A/S eller Brevo SAS | DK / FR (EU) | Transaktions-emails: email-verifikation, password-reset, team-invitations, owner-notifikationer, faktura-emails med PDF-vedhæftning | Modtager-email, brugernavn/firmanavn, verification/reset-tokens, invitation-rolle, faktura-PDF (indeholder typisk beløb, CVR, modtager-oplysninger) | Art. 28(2) — DPA | Nej (EU) |
+
+#### 5.1.E — Myndigheder (ikke underbehandlere, men modtagere)
+
+Følgende er ikke underbehandlere efter GDPR Art. 28, da de er offentlige myndigheder der modtager data i henhold til lovpligtige forpligtelser:
+
+| # | Modtager | Formål i AlphaFlow | Data sendt | Retsgrundlag |
+|---|----------|---------------------|------------|--------------|
+| 9 | **Skattestyrelsen (SKAT)** — Moms-API | Indsendelse af momsangivelse (kvartalsvis/årligt). KUN moms — ingen årsopgørelse eller e-indkomst. | CVR-nummer, periode, momsbeløb (output/input/net), breakdown. Ingen personnavne eller CPR. | Bogføringsloven + Momsloven + SKAT's egne vilkår |
+| 10 | **Erhvervsstyrelsen (VIRK/CVR-register)** | CVR-opslag til validering og auto-udfyldning af firmanavn, adresse, postnummer, virksomhedsform | CVR-nummer som term-query (HTTP Basic Auth over `http://distribution.virk.dk`). Ingen persondata. | Offentlig tilgængeligt register |
+
+#### 5.1.F — Interne sub-systemer (ikke selvstændige underbehandlere)
+
+Følgende komponenter er **integrerede dele af AlphaFlow** og kører på AlphaAi's egen infrastruktur (IONOS VPS). De er **ikke** selvstændige underbehandlere:
+
+| # | Sub-system | Port | Formål | Lokation |
+|---|-----------|------|--------|----------|
+| 11 | **tokenpay-access-service** | 3100 | Token-baseret adgangskontrol via `.tbkey` proof-filer (AES-256-GCM dekrypteret med PROOF_ENCRYPTION_KEY), trial-administration, free-tier håndtering, owner-bypass. Lokal SQLite. | IONOS VPS (EU) |
+| 12 | **scanner-service** | 3005 | Python/FastAPI — dokument-OCR (Tesseract + Anthropic VLM fallback). Lokal SQLite. Anthropic kaldes kun ved VLM-fallback. | IONOS VPS (EU) |
+| 13 | **notification-ws-service** | 3001 | Socket.IO real-time notifikationer og `DATA_CHANGED`-invalidering pr. company-rum. In-memory only, ingen database. | IONOS VPS (EU) |
+| 14 | **knowledge-service** | 3006 | RAG knowledge base (pgvector) — semantisk søgning via OpenAI embeddings. | IONOS VPS (EU), embeddings hos OpenAI (USA) |
+| 15 | **hermes-agent** | 3004 | Socket.IO AI chat-assistent — kalder OpenRouter (USA). | IONOS VPS (EU), LLM hos OpenRouter (USA) |
+
+Disse sub-systemer behandler data på AlphaAi's vegne og er underlagt samme sikkerhedsforanstaltninger som hovedapplikationen.
+
+#### 5.1.G — Implementerede men IKKE aktive integrationer
+
+Følgende integrationer findes i koden, men er ikke aktive i produktion. De er inkluderet for transparens, men udgør ikke underbehandlere pt.:
+
+| # | Integration | Status | Begrundelse |
+|---|-------------|--------|-------------|
+| — | **Bank-API'er (Tink, Nordea, Danske Bank, Jyske Bank)** | Stub-only — ingen reelle API-kald. Kun Demo-provider returnerer data. Bank-tokens krypteres dog alligevel med AES-256-GCM før lagring (fremtidssikring). | Implementeret som `createRealBankProvider()` factory, men consent-flow stubbes. `fetchTransactions` kaster "requires production configuration". |
+| — | **z-ai-web-dev-sdk (AI-bankafstemning)** | Sandbox-only — virker ikke i produktion. Fejler gracefully. | Ifølge `.env.example` er SDK'et sandbox-only. |
+
+Hvis disse integrationer aktiveres i fremtiden, vil de blive tilføjet til Bilag A og kunden vil blive underrettet jf. § 14.
+
+### 5.2 Samlet oversigt — SCC-status
+
+| Underbehandler | Tredjeland (USA)? | SCC påkrævet? | TIA påkrævet? |
+|----------------|-------------------|----------------|----------------|
+| Neon PostgreSQL | Nej (admin-adgang USA) | Ja (admin) | Begrænset |
+| IONOS VPS | Nej | Nej | Nej |
+| Storecove | Nej | Nej | Nej |
+| Frisbii / Flatpay | Nej | Nej | Nej |
+| **OpenAI** | **Ja** | **Ja** | **Ja** |
+| **OpenRouter** | **Ja** | **Ja** | **Ja** |
+| **Anthropic** | **Ja** | **Ja** | **Ja** |
+| Simply / Brevo | Nej | Nej | Nej |
+
+Detaljeret Transfer Impact Assessment for de tre USA-baserede AI-underbehandlere findes i `docs/LEVERANDØRSTYRING.md` afsnit 5.
+
+---
+
+## § 6 Data-minimization foranstaltninger
+
+AlphaFlow implementerer følgende data-minimization-foranstaltninger i henhold til GDPR art. 5(1)(c):
+
+### 6.1 HermesAgent.dataAccessEnabled (per-tenant opt-in, default false)
+
+Dette er den primære minimization-foranstaltning for AI-underbehandlerne. Standard er `false` — dvs. uden udtrykkelig opt-in fra tenant-ejer (OWNER) sendes **KUN**:
+
+- Brugerens spørgsmål (naturligt sprog)
+- Statisk dansk regnskabs-system-prompt (`knowledge-base.ts`, 454 LOC — lovtekst, moms-satser, frister, virksomhedsklasser)
+- Samtalehistorik (sidste 20 beskeder)
+- Valgfrie Hermes-skill-prompts (tenant-administreret)
+
+**IKKE** sendt uden opt-in:
+- Virksomhedsnavn, CVR, branche
+- Medlemsliste (navn, rolle, email)
+- Regnskabsoplysninger (balance, momsstatus, indtægter/udgifter, nettoresultat)
+- Afventende påmindelser
+- Individuelle posteringer, fakturaer, kontoplan
+
+Når `dataAccessEnabled=true` aktiveres af tenant-ejer, sendes desuden ovenstående tenant-kontekst. Opt-in registreres i `HermesAgent`-modellen (Prisma) og kan til enhver tid tilbagekaldes.
+
+### 6.2 Scanner-service — billed-niveau minimization
+
+Scanner-service sender **kun** billedet af det dokument, brugeren har valgt at scanne — ikke hele tenant-datasættet. Anthropic kaldes kun som fallback når:
+
+1. PDF uden tekstlag → PNG-rendering → Anthropic VLM
+2. Billede (JPEG/PNG/WebP) med OCR-confidence < 60 → VLM fallback
+
+PDF'er med tekstlag håndteres udelukkende lokalt (PyMuPDF + Tesseract) uden kald til Anthropic.
+
+### 6.3 Knowledge-service — dokument-niveau
+
+Knowledge-service sender kun dokument-tekst chunks (~500 tokens) fra dokumenter, som tenant-administrator aktivt har uploadet til knowledge-base. Default knowledge-base indeholder kun generelle danske regnskabsregler (BRUGSVEJLEDNING.md) — ikke tenant-specifikke finansielle data.
+
+### 6.4 SKAT — moms-niveau
+
+SKAT Moms-API'en sender **kun** CVR, periode og momsbeløb (output/input/net). Ingen personnavne, individuelle transaktioner eller CPR.
+
+### 6.5 CVR-opslag — input-niveau
+
+CVR-opslag sender kun CVR-nummeret som term-query. Ingen persondata udveksles.
+
+### 6.6 Frisbii — abonnements-niveau
+
+Frisbii/Flatpay modtager kun kundens bruger-email og virksomhedsnavn (i B2B-kontekst brugt som customer first/last name) samt beløb og callback-URL'er. Ingen bogføringsdata.
+
+### 6.7 Tenant-isolation
+
+Multi-tenant-isolation via `tenantFilter(ctx)` + per-row `companyId` sikrer, at underbehandlere (særligt Neon og OpenRouter når `dataAccessEnabled=true`) kun modtager data for den korrekte tenant.
+
+---
+
+## § 7 Sikkerhedsforanstaltninger (Art. 32)
+
+AlphaFlow implementerer følgende tekniske og organisatoriske sikkerhedsforanstaltninger jf. GDPR art. 32 og Bogføringslovens it-sikkerhedskrav. Detaljeret teknisk dokumentation findes i `docs/ENCRYPTION.md` og `docs/COMPLIANCE_RAPPORT.md`.
+
+### 7.1 Kryptering i hvile (At-Rest)
 
 | Foranstaltning | Implementering | Reference |
 |----------------|----------------|-----------|
-| **AES-256-GCM kryptering** | Alle følsomme data (bank-tokens, 2FA-secrets, OAuth-tokens) krypteres med AES-256-GCM authenticated encryption | `src/lib/crypto.ts` |
-| **Krypteringsnøgle** | 256-bit (32 bytes) hex-kodet, opbevares udelukkende i miljøvariablen `ENCRYPTION_KEY` | `src/lib/crypto.ts` linje 49-52 |
-| **IV-håndtering** | 96-bit random IV per kryptering (ingen genbrug af IV) | `src/lib/crypto.ts` linje 85 |
-| **Integritetsverificering** | 128-bit GCM authentication tag afviser manipulerede data | `src/lib/crypto.ts` linje 95 |
-| **Backup-kryptering** | SHA-256 checksums på alle backup-filer | `src/lib/backup-engine.ts` linje 109-117 |
+| **AES-256-GCM** (256-bit nøgle, 96-bit IV, 128-bit auth-tag) | Bank-tokens, TOTP-secrets, 2FA backup-koder, proof-filer (.tbkey), backup-filer | `src/lib/crypto.ts` |
+| **Backup-kryptering** | AES-256-GCM fil-kryptering før lagring på IONOS VPS. Format: `[12B IV][16B authTag][ciphertext]` med `.zip.enc`-suffix. SHA-256 checksum på unencrypted ZIP inden secure-delete. | `src/lib/backup-engine.ts` |
+| **Adgangskode-hashing** | bcrypt med 12 salt-runder | `src/lib/password.ts` |
+| **Database-niveau kryptering** | Varetages af Neon (AES-256 i hvile, SOC 2 Type II) | Neon DPA |
+| **Nøglehåndtering** | `ENCRYPTION_KEY` + `PROOF_ENCRYPTION_KEY` (64-hex / 32 bytes) via miljøvariabler, aldrig i kode | `.env` (prod) |
 
-### 4.2 Kryptering af data i transit (Data in Transit)
-
-| Foranstaltning | Implementering | Reference |
-|----------------|----------------|-----------|
-| **TLS 1.3** | Alle dataoverførsler krypteres med TLS 1.3 via Caddy reverse proxy | `Caddyfile` |
-| **HSTS** | Strict-Transport-Security med 1-års max-age, inkl. subdomains og preload | `Caddyfile` linje 70-72 |
-| **SSL/TLS-forbindelse til database** | Neon PostgreSQL forbindes med `sslmode=require` | Databasekonfiguration |
-| **Sikkerheds-headere** | X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy | `Caddyfile` linje 69-87 |
-
-### 4.3 Autentificering og adgangskontrol
+### 7.2 Kryptering i transit (In-Transit)
 
 | Foranstaltning | Implementering | Reference |
 |----------------|----------------|-----------|
-| **Adgangskode-hashing** | bcrypt med 12 salt-runder (BCRYPT_ROUNDS = 12) | `src/lib/password.ts` linje 11 |
-| **TOTP 2FA** | Time-based One-Time Password (RFC 6238), 30-sekunders tidsstep, ±1 step tolerance | `src/lib/two-factor.ts` linje 121-128 |
-| **2FA backup-koder** | 10 engangskoder (8 tegn, SHA-256-hashede, AES-256-GCM-krypterede) | `src/lib/two-factor.ts` linje 174-176 |
-| **RBAC med 5 roller** | OWNER, ADMIN, ACCOUNTANT, VIEWER, AUDITOR med hierarkisk rollestyring | `src/lib/rbac.ts` linje 36-42 |
-| **23 granulære tilladelser** | Fordelt på: Company, Members, Data, Reports, Period, Bank, Backup | `src/lib/rbac.ts` linje 55-92 |
-| **Multi-tenant isolation** | Alle 89+ API-routes er scoped by `companyId` — ingen kryds-tenant dataadgang | `src/lib/rbac.ts` linje 263-284 |
-| **Session-håndtering** | HTTP-only sessionscookies med udløb og invalidering | Session-modul |
+| **TLS 1.2/1.3** | Caddy reverse proxy (min TLS 1.2, preferred TLS 1.3) med Let's Encrypt auto-cert | `Caddyfile` |
+| **HSTS** | `max-age=31536000; includeSubDomains; preload` | `Caddyfile` |
+| **DB-forbindelse** | `sslmode=require` til Neon PostgreSQL | `prisma/schema.prisma` |
+| **Inter-service** | `localhost`-kald (notification-ws, hermes-agent, scanner-service, tokenpay-access, knowledge-service) | `ecosystem.config.example.js` |
 
-### 4.4 Audit trail og uforanderlig logføring
+### 7.3 Autentificering og adgangskontrol
 
 | Foranstaltning | Implementering | Reference |
 |----------------|----------------|-----------|
-| **Uforanderlig audit trail** | Alle CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN/LOGOUT hændelser logges med før/efter værdier | `src/lib/audit.ts` linje 16-36 |
-| **13+ hændelsestyper** | Omfatter: CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, BACKUP_CREATE, BACKUP_RESTORE, BACKUP_DELETE, SESSION_INVALIDATE, DATA_RESET, OVERSIGHT, TWO_FACTOR_*, LOGIN_2FA_VERIFIED | `src/lib/audit.ts` linje 16-36 |
-| **Ingen sletning af audit-log** | Audit-logposter kan aldrig slettes eller ændres (bogføringslovens krav) | `src/lib/audit.ts` linje 78-96 |
-| **Metadata** | IP-adresse, User-Agent, timestamp logges på alle hændelser | `src/lib/audit.ts` linje 197-205 |
+| **Adgangskode** | bcrypt 12 + min. længde 6 tegn (under NIST 800-63B anbefaling på 8 — kendt afvigelse) | `src/lib/password.ts` |
+| **TOTP 2FA** | RFC 6238, 30s step, ±1 tolerance, 10 backup-koder | `src/lib/two-factor.ts` |
+| **Session** | 256-bit random hex-token, httpOnly+secure+sameSite=lax, 7 dages sliding expiry | `src/lib/session.ts` |
+| **RBAC** | 5 roller (OWNER > ADMIN > ACCOUNTANT > VIEWER > AUDITOR), 18 permissions | `src/lib/rbac.ts` |
+| **Multi-tenant isolation** | `tenantFilter(ctx)` + per-row `companyId` (24 modeller) | `src/lib/rbac.ts` |
+| **SuperDev oversight** | Read-only cross-tenant adgang for AlphaAi-teknikere. Alle oversight-sessioner logges som `OVERSIGHT` i audit-log. | `src/lib/rbac.ts` |
 
-### 4.5 Backup og gendannelse
+### 7.4 Audit-trail og immutability (Bogføringsloven §§ 10-12)
 
 | Foranstaltning | Implementering | Reference |
 |----------------|----------------|-----------|
-| **Automatiske backups** | Kronbaseret: hourly, daily (kl. 02:15), weekly (mandag kl. 03:30), monthly (1. kl. 04:00) | `src/lib/backup-scheduler.ts` linje 186-191 |
-| **Backup-format** | Strukturerede JSON-filer pakket i ZIP-arkiv med SHA-256 checksum | `src/lib/backup-engine.ts` linje 138-360 |
-| **Retention policy** | Hourly: 24 stk., Daily: 30 stk., Weekly: 52 stk., Monthly: 60 stk. (5 år), Manual: 999 stk. | `src/lib/backup-engine.ts` linje 76-82 |
-| **Checksum-verificering** | SHA-256 streaming-verifikation ved restore | `src/lib/backup-engine.ts` linje 109-117 |
-| **Atomisk restore** | Database-transaktioner med 10-minutters timeout ved restore | `src/lib/backup-engine.ts` linje 554-575 |
-| **Pre-restore safety backup** | Automatisk safety backup før hver restore-handling | `src/lib/backup-engine.ts` linje 531-537 |
+| **3-niveau immutability** | (1) App-kode KUN CREATE på AuditLog + (2) PostgreSQL BEFORE UPDATE/DELETE triggere + (3) `onDelete: Restrict` cascade | `prisma/audit-immutability.sql` |
+| **25 AuditAction-typer** | CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, BACKUP_*, SESSION_INVALIDATE, DATA_RESET, OVERSIGHT, TWO_FACTOR_*, etc. | `src/lib/audit.ts` |
+| **75+ routes logger** | Alle data-muterende API-ruter | `src/app/api/**` |
+| **Metadata** | IP-adresse, User-Agent, timestamp, før/efter-værdier | `src/lib/audit.ts` |
+
+### 7.5 Rate-limiting og netværkssikkerhed
+
+| Foranstaltning | Implementering | Begrænsning |
+|----------------|----------------|-------------|
+| **App-level rate-limiting** | In-memory sliding window: login 5/min, register 3/min, 2FA 5-10/min, forgot-password 1/5min | Nulstilles ved PM2-restart (kendt begrænsning) |
+| **Security headers** | HSTS, X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy | `next.config.ts` + `Caddyfile` |
+| **Webhook-signering** | HMAC-SHA256 (Storecove, Frisbii, TokenPay, Flatpay, Scanner). Dev-fallback accept-all hvis secret tom — skal sikres i prod | `src/app/api/*/webhook/route.ts` |
+| **Fil-upload** | MIME-whitelist, 25 MB max, path-traversal guard, tenant-scoped serving | Ingen antivirus-scanning (kendt afvigelse) |
+
+### 7.6 Åbne / kendte sikkerhedsmangler
+
+AlphaAi ApS er forpligtet til at informere kunden om følgende kendte sikkerhedsmangler, som er dokumenteret i `docs/RISIKOVURDERING.md`:
+
+1. **Ingen Content-Security-Policy (CSP) header** implementeret.
+2. **Ingen CSRF-token** (kun SameSite=Lax cookie).
+3. **Ingen Next.js middleware.ts** (auth håndteres pr. route via `withGuard`).
+4. **Ingen antivirus-scanning af uploads** (kun MIME-whitelist + størrelsesgrænse).
+5. **Ingen key rotation/versioning** (ENCRYPTION_KEY / PROOF_ENCRYPTION_KEY er statiske).
+6. **Ingen account-lockout** (kun IP-baseret rate-limiting).
+7. **Password min. længde kun 6 tegn** (under NIST 800-63B anbefaling på 8).
+8. **Caddy rate_limit udkommenteret** (kun app-level).
+9. **Webhook HMAC fallback "accept all" i dev** hvis WEBHOOK_SECRET tom.
+10. **Ingen MitID/Bank-ID** (kun email+password+TOTP).
+
+Disse mangler afhjælpes i den rækkefølge, der er angivet i `docs/UDBEDRINGSPLAN.md`.
+
+### 7.7 Backup og gendannelse
+
+AlphaFlow opretholder et 5-lags backup-system:
+
+| Lag | Implementering | Retention |
+|-----|----------------|-----------|
+| 1. Neon PITR | Managed by Neon | 7 dage |
+| 2. AlphaFlow hourly backup | node-cron (`5 * * * *`) — AES-256-GCM ZIP pr. tenant på IONOS VPS | 25 timer (24 stykker) |
+| 3. AlphaFlow daily backup | node-cron (`15 2 * * *`) | 31 dage (30 stykker) |
+| 4. AlphaFlow weekly backup | node-cron (`30 3 * * 1`) | 53 dage (52 stykker) |
+| 5. AlphaFlow monthly backup | node-cron (`0 4 1 * *`) | **5 år** (60 stykker) — Bogføringsloven § 12 |
+| (manuelle backups) | Bruger-initierede | 90 dage (999 stykker) |
+
+**Format:** ZIP pr. tenant + manifest.json v2 + SHA-256 checksum + AES-256-GCM `.zip.enc`.
+**Lokation:** `Tenant-Backup/{companyName}/` på IONOS VPS (EU).
+**Robusthed:** DB-baseret CronExecution-log, startup catch-up, retry 3x exp backoff, overlap guard, pre-restore safety backup, atomisk gendannelse.
 
 ---
 
-## § 5 Underleverandører
+## § 8 Slette- og retention-politik
 
-### 5.1 Godkendte underleverandører
+### 8.1 Bogføringslovens 5-års opbevaringspligt
 
-AlphaAi anvender følgende underleverandører i forbindelse med databehandlingen:
+I henhold til Bogføringsloven §§ 10-12 og § 15 skal bogføringsdata, bilag, fakturaer, bankudtog og audit-log opbevares i **minimum 5 år** fra regnskabsårets udløb. Dette har forrang over GDPR's slettepligt (art. 17(3)(c)).
 
-| Underleverandør | Tjeneste | Lokation | Certificering | Formål |
-|-----------------|----------|----------|---------------|--------|
-| **Neon PostgreSQL** | Hosted database (serverless Postgres) | EU/EØS | SOC 2 Type II | Opbevaring og behandling af alle kundens bogføringsdata |
-| **Caddy Web Server** | Reverse proxy / TLS-terminering | Open-source (selvhostet) | Open-source (Apache 2.0 licens) | Kryptering af data i transit, sikkerheds-headere, load balancing |
+### 8.2 Konto-deaktivering (ikke hard-delete)
 
-### 5.2 Underleverandørens forpligtelser
+AlphaFlow udfører **ikke** hard-delete af brugerkonti. I stedet anvendes **konto-deaktivering** (`User.deactivatedAt` + `User.deactivationReason`):
 
-1. **Neon PostgreSQL** er SOC 2 Type II-certificeret og hoster data inden for EU/EØS. Neon indgår selvstændige databehandleraftaler med deres kunder og opretholder:
-   - Kryptering af data i hvile (AES-256)
-   - Kryptering af data i transit (TLS 1.3)
-   - Daglige automatiske backups med point-in-time recovery
-   - Multi-AZ redundans for høj tilgængelighed
+| Årsag | Beskrivelse |
+|-------|-------------|
+| `self_request` | Brugeren anmoder om deaktivering af egen konto |
+| `admin_action` | Tenant-administrator (OWNER/ADMIN) deaktiverer bruger |
+| `sole_company_cleanup` | Brugeren er ene medlem af et company, der nedlægges |
 
-2. **Caddy** er open-source software, der selvhostes af AlphaAi. Caddy håndterer udelukkende TLS-terminering og reverse proxy-funktionalitet. Caddy har ikke adgang til kundens data.
+Deaktiverede konti kan ikke logge ind. Data opbevares i overensstemmelse med Bogføringslovens 5-års regel.
 
-### 5.3 Ændringer af underleverandører
+### 8.3 Soft-delete via modpostering
 
-AlphaAi Consult ApS forpligter sig til at underrette kunden senest **30 dage før** iværksættelse af væsentlige ændringer i brugen af underleverandører. Kunden har ret til at indsigte i skiftet, såfremt det berører behandlingen af personoplysninger.
+Bogføringsposter (Transaction, JournalEntry, Invoice) kan ikke hard-slettes. Annullering sker via modpostering:
 
-### 5.4 Yderligere underleverandører
+- `Transaction.cancelled = true` + `cancelReason` + `originalId`
+- `Invoice.status = CANCELLED` + `cancelReason`
+- `JournalEntry.status = CANCELLED`
 
-Følgende tjenester kan anvendes af kunden via AlphaFlow-systemets funktioner, men er ikke underleverandører for AlphaAi Consult ApS:
+Dette sikrer fuld sporbarhed jf. Bogføringsloven §§ 10-12.
 
-| Tjeneste | Beskrivelse |
-|----------|-------------|
-| **NemHandel / Peppol Access Point** | E-faktura fremsendelse og modtagelse (kunden konfigurerer selv) |
-| **Skattestyrelsens Moms-API** | Momsindberetning via offentligt API (kunden autentificerer direkte) |
-| **Bankforbindelser (PSD2)** | Banktransaktionssynkronisering via PSD2/OpenBanking (kunden giver samtykke direkte til banken) |
+### 8.4 Backup-retention
 
----
+Som beskrevet i § 7.7. Monthly backups opbevares i 5 år (60 måneder) for at opfylde Bogføringsloven § 12.
 
-## § 6 Tredjepartsrettigheder (Registreredes rettigheder)
+### 8.5 Audit-log — slettes aldrig
 
-I overensstemmelse med GDPR art. 12-23 har registrerede personer følgende rettigheder i relation til de personoplysninger, der behandles via AlphaFlow:
+AuditLog-poster kan **aldrig** slettes eller ændres pga. 3-niveau immutability (app + DB-triggere + cascade-restrict). Dette opfylder Bogføringsloven §§ 10-12's krav om uforanderlig registrering.
 
-### 6.1 Rettighedsoversigt
+### 8.6 Sletning ved ophør
 
-| Rettighed | Artikel | Beskrivelse | AlphaFlows understøttelse |
-|-----------|---------|-------------|--------------------------|
-| **Ret til indsigt** | Art. 15 | Ret til at få at vide, hvilke personoplysninger der behandles | Kundens OWNER/ADMIN kan eksportere alle data via `/api/export-tenant` |
-| **Ret til berigtigelse** | Art. 16 | Ret til at få urigtige oplysninger rettet | Alle rettigheder indeholdt i systemet kan rettes af ACCOUNTANT+ |
-| **Ret til sletning** | Art. 17 | Ret til at få slettet personoplysninger (med forbehold for Bogføringslovens 5-års opbevaringspligt) | Kan ske via CANCEL-funktion; permanent sletning ved udbyderskift |
-| **Ret til begrænsning** | Art. 18 | Ret til at begrænse behandlingen af oplysninger | Periode-lukning og låsning af regnskabsperioder |
-| **Ret til dataportabilitet** | Art. 20 | Ret til at modtage sine data i et struktureret, almindeligt læsbart format | Portabel eksport via `/api/export-tenant` med GUID og SHA-256 checksum |
-| **Ret til indsigelse** | Art. 21 | Ret til at gøre indsigelse mod behandlingen | Kundens ret som dataansvarlig for egne data |
+Ved ophør af abonnement:
 
-### 6.2 Portabel eksport ved udbyderskift
+| Trin | Handling | Frist |
+|------|----------|-------|
+| 1 | Kunden adviseres om at eksportere data via `/api/export-tenant` | Senest 14 dage før ophør |
+| 2 | Kunde foretager portabel eksport | Før ophør |
+| 3 | Konto deaktiveres (ikke hard-delete) | Ved ophør |
+| 4 | Backups opbevares i 5 år jf. Bogføringsloven | 5 år fra regnskabsårets udløb |
+| 5 | Efter 5 år: monthly backups slettes via retention policy | Automatisk |
 
-AlphaFlow tilbyder fuld portabel eksport af alle tenant-data via API-endpointet `GET /api/export-tenant`:
-
-- **Format**: Struktureret JSON (`alphaflow-portable-v2`)
-- **GUID**: Hvert eksport tildeles en unik UUID (crypto.randomUUID())
-- **Integritet**: SHA-256 checksum af hele eksporten
-- **Omfang**: Kontoplan, kontakter, transaktioner, fakturaer, journalposter med linjer og bilag, finansperioder, budgetter, løbende poster, bankudtog, medlemsliste
-- **Valgfri filinkludering**: Via `?includeFiles=true` kan uploadede dokumenter og kvitteringer inkluderes som base64
-- **Compliance-meta**: Export indeholder BEK 98-reference og opbevaringspligt (5 år)
-- **Reference**: `src/app/api/export-tenant/route.ts`
-
-### 6.3 Håndtering af anmodninger
-
-Anmodninger om udøvelse af rettigheder skal rettes til kunden som databehandler. AlphaAi yder teknisk bistand til at opfylde anmodninger inden for lovens frister.
+Kunden kan anmode om hard-delete af data, der ikke længere er under Bogføringslovens opbevaringspligt, forudsat at data er eksporteret og overført til en anden godkendt bogføringsudbyder jf. Bogføringsloven § 15, stk. 3.
 
 ---
 
-## § 7 Data breach (Databrud)
+## § 9 Overførsel til tredjelande (Kapitel V)
 
-### 7.1 Definition af databrud
+### 9.1 USA-overførsler
 
-Et databrud omfatter enhver sikkerhedshændelse, der fører til eller kan føre til:
+Følgende underbehandlere overfører personoplysninger til USA:
+
+| Underbehandler | Data sendt | Minimization |
+|----------------|------------|---------------|
+| **OpenAI, Inc.** | Dokument-tekst chunks (RAG-embeddings) | Kun dokumenter tenant-admin har uploadet |
+| **OpenRouter, Inc.** | Brugerens spørgsmål + system-prompt + (hvis opt-in) tenant-kontekst | `dataAccessEnabled` per-tenant opt-in (default false) |
+| **Anthropic PBC** | Base64-PNG-billeder af dokumenter (kun ved VLM fallback) | Kun ved low OCR-confidence |
+
+### 9.2 nødvendige sikkerhedsforanstaltninger
+
+For hver USA-overførsel gælder:
+
+1. **Standard Contractual Clauses (SCC)** — Kommissionens gennemførelsesafgørelse (EU) 2021/914 af 25. november 2021:
+   - **Modul 2** (Controller-to-Processor) anvendes primært for OpenAI og OpenRouter (da data returneres til kunden som dataansvarlig).
+   - **Modul 3** (Processor-to-Processor) anvendes for Anthropic (da Anthropic er underbehandler for AlphaAi som databehandler).
+2. **Transfer Impact Assessment (TIA)** — Vurdering af det amerikanske retsmiljø, herunder FISA 702, EO 12333 og CLOUD Act. Udføres før ibrugtagning og årligt efterfølgende. Detaljeret TIA findes i `docs/LEVERANDØRSTYRING.md` afsnit 5.
+3. **Supplerende foranstaltninger:**
+   - `HermesAgent.dataAccessEnabled` opt-in (default false) — primær minimization for OpenRouter.
+   - Anthropic API terms — zero-retention for enterprise (skal verificeres årligt).
+   - OpenRouter — kort log-retention ifølge deres DPA (skal verificeres).
+
+### 9.3 Neon admin-adgang fra USA
+
+Neon, Inc. er en US-virksomhed, men alle data hostes i EU (Frankfurt + Amsterdam). Admin-adgang fra Neon-personale (USA) udgør en teoretisk overførsel til USA. DPA + SCC indgås med Neon for at dække dette scenarie.
+
+### 9.4 Ingen andre tredjelande
+
+Ingen andre underbehandlere overfører data til tredjelande. Storecove (Holland), Frisbii (Tyskland), IONOS (Tyskland), Simply/Brevo (DK/FR) er alle EU-baserede.
+
+---
+
+## § 10 Underbehandlerers forpligtelser
+
+### 10.1 Generelle forpligtelser
+
+Hver underbehandler forpligter sig til at:
+
+1. **Kun behandle personoplysninger** på dokumenteret instruks fra AlphaAi ApS (som igen handler på kundens vegne).
+2. **Ikke behandle data** til egne formål (herunder marketing, model-træning etc.) uden forudgående skriftligt samtykke.
+3. **Sikre fortrolighed** — alt personale med adgang er underlagt fortrolighedsforpligtelse.
+4. **Implementere passende sikkerhedsforanstaltninger** jf. GDPR art. 32.
+5. **Respektere kundens rettigheder** jf. GDPR art. 12-22.
+6. **Medvirke ved DSAR** — underbehandler leverer data inden for rimelig frist (typisk 14 dage) når AlphaAi anmoder.
+7. **Slette eller returnere data** ved ophør af DPA — undtagen hvor lovgivning kræver opbevaring.
+8. **Underrette AlphaAi om databrud** uden unødig forsinkelse og senest 24 timer efter opdagelse.
+9. **Tillade revision** — AlphaAi har ret til at revidere underbehandler (selv eller via tredjepart).
+10. **Indhente forudgående skriftligt samtykke** fra AlphaAi før tilkaldelse af nye sub-underbehandlere.
+
+### 10.2 AI-underbehandlerers specifikke forpligtelser
+
+For OpenAI, OpenRouter og Anthropic gælder udover de generelle forpligtelser:
+
+1. **Ingen model-træning** på kundedata. AlphaAi indgår enterprise-/API-aftaler der garanterer zero-retention.
+2. **Kort log-retention** — input/output data slettes efter teknisk nødvendig periode (typisk 30-90 dage for abuse-monitoring).
+3. **SCC + TIA** opretholdes løbende.
+4. **Transparens om upstream-udbydere** — OpenRouter skal oplyse hvilken model der faktisk anvendes og dens lokation.
+
+### 10.3 Myndigheders forpligtelser
+
+SKAT og Erhvervsstyrelsen er ikke underbehandlere, men AlphaFlow transmitterer data til dem i henhold til lovpligtige forpligtelser:
+
+- SKAT: Momsloven + SKAT's API-vilkår.
+- Erhvervsstyrelsen: CVR-loven.
+
+Kunden bærer ansvaret for korrektheden af indberetningsgrundlaget; AlphaAi ApS leverer kun den tekniske transmittering.
+
+---
+
+## § 11 Kunders rettigheder og support
+
+### 11.1 DSAR (Data Subject Access Requests)
+
+Registrerede personer udøver deres rettigheder (art. 15-22) over for kunden som dataansvarlig. AlphaAi ApS yder teknisk bistand via følgende API-endpoints:
+
+| Rettighed | Endpoint / Funktion | Beskrivelse |
+|-----------|---------------------|-------------|
+| **Indsigt (art. 15)** | `GET /api/export-tenant` (OWNER/ADMIN) | Eksporterer alle tenant-data som struktureret JSON med SHA-256 checksum og GUID. Valgfri `?includeFiles=true` for base64-filer. |
+| **Indsigt (art. 15)** | `GET /api/company/export-info` (OWNER/ADMIN) | Eksporterer virksomheds-specifik metadata. |
+| **Berigtigelse (art. 16)** | UI — bruger-profil, kontakt-redigering, faktura-redigering | Direkte redigering via grænseflade (ACCOUNTANT+ for finansielle data) |
+| **Sletning (art. 17)** | Konto-deaktivering (`User.deactivatedAt`) | Soft-delete; hard-delete blokeres af Bogføringsloven §§ 10-12. Sletning af specifikke entiteter via modpostering. |
+| **Begrænsning (art. 18)** | `FiscalPeriod.lockedAt` / `lockedBy` | Lukning af regnskabsperiode forhindrer ændringer. |
+| **Dataportabilitet (art. 20)** | `GET /api/export-tenant`, `GET /api/export-saft`, `GET /api/reports/annual-xbrl`, `GET /api/reports/annual-csv` | Strukturerede, maskinlæsbare formater. |
+| **Indsigelse (art. 21)** | Kunden vurderer og instruerer AlphaAi | AlphaAi eksekverer instruks. |
+
+### 11.2 Sletningsanmodninger vs. Bogføringsloven
+
+Sletningsanmodninger afvejes mod Bogføringslovens 5-års opbevaringspligt (jf. GDPR art. 17(3)(c)). Følgende matrix gælder:
+
+| Data-type | Sletning mulig? | Begrundelse |
+|-----------|-----------------|-------------|
+| Bogføringsdata (posteringer, fakturaer, journaler) | Nej — kun modpostering | Bogføringsloven §§ 10-12 |
+| Bilag (PDF, kvitteringer) | Nej | Bogføringsloven § 15 |
+| Audit-log | Nej | Bogføringsloven §§ 10-12 |
+| Backups (monthly) | Efter 5 år | Automatisk retention |
+| Identitetsdata (navn, email, telefon) | Konto-deaktivering | Soft-delete |
+| Brugerkonto-data (adgangskode, 2FA) | Kan slettes ved kontodeaktivering | Ikke bogføringsdata |
+| Hermes-samtalehistorik | Ja (efter samtale-rulning) | Ikke bogføringsdata |
+| Knowledge-base dokumenter | Ja (tenant-admin sletter) | Ikke bogføringsdata |
+
+### 11.3 Support-kanaler
+
+Kunden kan rette DSAR-henvendelser til AlphaAi ApS via:
+
+- **E-mail:** alphaaiconsult@gmail.com
+- **Telefon:** 61 73 60 76
+- **In-app:** Support-formular
+
+Svartid: 30 dage (jf. GDPR art. 12(3)).
+
+---
+
+## § 12 Brudsprocedures
+
+### 12.1 Definition
+
+Et persondata-brud (personal data breach) er enhver sikkerhedshændelse der fører til eller kan føre til:
 
 - Uautoriseret adgang til personoplysninger
-- Accidental eller ulovlig destruktion, tab, ændring eller uautoriseret videregivelse af personoplysninger
-- Tab af fortrolighed, integritet eller tilgængelighed af behandlede data
+- Accidental eller ulovlig destruktion, tab, ændring eller uautoriseret videregivelse
+- Tab af fortrolighed, integritet eller tilgængelighed
 
-### 7.2 Underretningsprocedure
+### 12.2 Brudprocedure
 
-| Trin | Handling | Ansvarlig | Frist |
-|------|----------|-----------|-------|
-| **1** | Databruddet opdages og registreres i audit trail | AlphaAi / Kunde | Straks |
-| **2** | Kundens support kontaktes via support@alphaflow.dk | Kunde | Straks |
-| **3** | AlphaAi vurderer omfanget og alvorligheden | AlphaAi | Inden 24 timer |
-| **4** | AlphaAi underretter Datatilsynet, hvis bruddet udgør en risiko for registrerede personer | AlphaAi | Inden 72 timer (jef. GDPR art. 33) |
-| **5** | AlphaAi underretter de berørte registrerede personer, hvis bruddet udgør en høj risiko | AlphaAi | Uden unødig forsinkelse (jef. GDPR art. 34) |
-| **6** | Dokumentation af bruddet og tiltag færdiggøres | AlphaAi | Inden 14 dage |
-
-### 7.3 Dokumentation af databrud
-
-AlphaAi dokumenterer ethvert databrud med følgende information:
-
-1. Dato og tidspunkt for bruddet (eller opdagelsen heraf)
-2. Beskrivelse af bruddets art og omfang
-3. Kategorier og antal berørte registrerede personer
-4. Kontaktinformation til databeskyttelsesrådgiver
-5. Formodelige konsekvenser for de registrerede
-6. Foranstaltninger, der er truffet eller foreslået for at afhjælpe bruddet
-
-### 7.4 Audit trail-baseret sporbarhed
-
-Alle hændelser i AlphaFlow logges i den uforanderlige audit trail (`src/lib/audit.ts`). Dette omfatter:
-
-- Alle login-forsøg (vellykkede og mislykkede)
-- Alle dataændringer med før- og efter-værdier
-- Alle backup-handlinger (oprettelse, restore, sletning)
-- Alle 2FA-hændelser (opsætning, aktivering, deaktivering, verifikation)
-
-Disse logge muliggør efterforskning af potentielle databrud og sikrer fuld sporbarhed.
-
----
-
-## § 8 Opbevaringspligt
-
-### 8.1 Lovpligtig opbevaringsperiode
-
-I overensstemmelse med **Bogføringslovens § 15** opbevarer AlphaFlow kundens bogføringsdata i **minimum 5 år** fra udgangen af det regnskabsår, som dataene vedrører.
-
-| Datakategori | Opbevaringsperiode | Lovgrundlag |
-|--------------|-------------------|-------------|
-| **Bogføringsdata** (transaktioner, journaler, konti) | 5 år fra regnskabsårets udgang | Bogføringsloven § 15 |
-| **Bilag og dokumenter** | 5 år fra regnskabsårets udgang | Bogføringsloven § 15 |
-| **Fakturaer (indgående/udgående)** | 5 år fra regnskabsårets udgang | Bogføringsloven § 15 |
-| **Bankudtog** | 5 år fra regnskabsårets udgang | Bogføringsloven § 15 |
-| **Audit-logposter** | Løbende (uforanderlig, slettes aldrig) | Bogføringsloven §§ 10-12 |
-| **Brugerdata og login-historik** | Så længe abonnementet er aktivt + 5 år | Bogføringsloven § 15 + GDPR |
-| **Automatiske backups** | Monthly: 60 stk. (5 år), Weekly: 52 stk., Daily: 30 stk., Hourly: 24 stk. | `src/lib/backup-engine.ts` linje 76-82 |
-
-### 8.2 Automatiseret backup-system
-
-AlphaFlow opretholder et fuldautomatisk backup-system, der sikrer overholdelse af opbevaringspligten:
-
-| Backup-type | Hyppighed | Tidspunkt | Antal | Periode |
-|-------------|-----------|-----------|-------|---------|
-| Hourly | Hver time | Minut 5 | 24 stk. | 25 timer |
-| Daily | Daglig | Kl. 02:15 | 30 stk. | 31 dage |
-| Weekly | Ugentlig | Mandag kl. 03:30 | 52 stk. | 53 uger |
-| Monthly | Månedlig | 1. i måneden kl. 04:00 | 60 stk. | 5 år |
-| Manual | Ved behov | Brugerinitieret | 999 stk. | 90 dage |
-
-*Reference: `src/lib/backup-scheduler.ts` linje 186-191*
-
-### 8.3 Backup-integritet
-
-- Alle backup-filer verificeres med **SHA-256 checksums** ved oprettelse og restore
-- Backup-format er struktureret JSON pakket i ZIP-arkiv med versioneret manifest
-- Ved restore verificeres checksums før data importeres via atomiske database-transaktioner
-
-### 8.4 Udbyderskift og dataoverførelse
-
-Ved skift af bogføringssystem (udbyderskift) tilbyder AlphaFlow portabel eksport af alle data, så kunden kan overføre dataene til en ny udbyder og dermed opfylde 5-års opbevaringspligten hos den nye udbyder, jf. Bogføringslovens § 15, stk. 3.
-
-*Reference: `src/app/api/export-tenant/route.ts`*
-
----
-
-## § 9 Audit-rettigheder
-
-### 9.1 AlphaAis tilsynsfunktion (SUPER_DEV)
-
-AlphaFlow har implementeret en teknisk tilsynsfunktion — **SUPER_DEV oversight** — der giver AlphaAis tekniske personale mulighed for at udføre skrivebeskyttet tilsyn med kundens data:
-
-| Egenskab | Beskrivelse |
-|----------|-------------|
-| **Adgangsniveau** | Skrivebeskyttet (read-only) — ingen mutationer tilladt |
-| **Rolle** | SUPER_DEV-brugere kan vælge en tenant til oversight via oversight-flowet |
-| **Tilladelser** | Begrænset til: COMPANY_VIEW_SETTINGS, DATA_READ, REPORTS_VIEW, REPORTS_EXPORT, MEMBERS_VIEW |
-| **Logføring** | Alle oversight-sessioner logges som `OVERSIGHT`-hændelser i audit trail |
-| **Mutation-blokering** | `blockOversightMutation()` blokerer alle POST/PUT/DELETE/PATCH-anmodninger i oversight-tilstand |
-| **Reference** | `src/lib/rbac.ts` linje 132-138 (SUPER_DEV_READ_PERMISSIONS), linje 336-352 (blockOversightMutation) |
-
-### 9.2 Audit trail-adgang
-
-Kundens OWNER og ADMIN har adgang til den fulde audit trail for sin tenant, herunder:
-
-- Alle oprettede, ændrede og annullerede poster
-- Login-historik (vellykkede og mislykkede forsøg)
-- Backup-historik (oprettelse, restore, sletning)
-- 2FA-hændelser
-- IP-adresse og User-Agent for alle handlinger
-
-### 9.3 AlphaAis kontrolrettigheder
-
-AlphaAi forbeholder sig ret til at:
-
-1. Udføre teknisk tilsyn med systemets sikkerhed og funktion
-2. Gennemgå audit logs for at undersøge mistænkte sikkerhedshændelser
-3. Foretage tekniske ændringer til systemet for at opretholde sikkerhed og stabilitet
-4. Suspendere adgang for brugere, der mistænkes for misbrug
-
-Alle kontrolhandlinger logges som `OVERSIGHT` i audit trail og er sporbare af kunden.
-
----
-
-## § 10 Sletning ved ophør
-
-### 10.1 Ophørsprocedure
-
-Ved ophør af databehandleraftalen (for eksempel ved nedlægelse af kundens AlphaFlow-abonnement) træder følgende procedure i kraft:
+Ved et mistænkt persondata-brud følges proceduren i `docs/BEREDSKABSPLAN.md`. Opsummeret:
 
 | Trin | Handling | Ansvarlig | Frist |
 |------|----------|-----------|-------|
-| **1** | Kundens abonnement opsiges | Kunde | Opsigelsesvarsel |
-| **2** | Kunden adviseres om at eksportere data | AlphaAi | Senest 14 dage før sletning |
-| **3** | Kunden foretager portabel eksport | Kunde | Inden abonnementets ophør |
-| **4** | AlphaAi verificerer at data eksporten er fuldført | AlphaAi | Senest 7 dage efter ophør |
-| **5** | Kundens data slettes fra produktionssystemet | AlphaAi | Senest 30 dage efter ophør |
-| **6** | Existerende backups markeres til sletning | AlphaAi | Løbende via retention policy |
-| **7** | Bekræftelse på sletning sendes til kunden | AlphaAi | Senest 45 dage efter ophør |
+| 1 | Bruddet opdages og registreres i audit trail | AlphaAi / Kunde | Straks |
+| 2 | Kunde underretter AlphaAi (hvis kunden opdager brud) | Kunde | Straks |
+| 3 | AlphaAi vurderer omfang og alvorlighed | AlphaAi Compliance | 24 timer |
+| 4 | Underbehandler underretter AlphaAi ved brud hos underbehandler | Underbehandler | Uden unødig forsinkelse (typisk ≤ 24 timer) |
+| 5 | AlphaAi underretter Datatilsynet ved risiko for registrerede | AlphaAi | 72 timer (GDPR art. 33) |
+| 6 | Kunde underrettes, så kunden kan opfylde sin underretningspligt over for Datatilsynet | AlphaAi | Straks |
+| 7 | Berørte registrerede underrettes ved høj risiko | Kunde (med AlphaAis bistand) | Uden unødig forsinkelse (GDPR art. 34) |
+| 8 | Dokumentation af brud og tiltag afsluttes | AlphaAi | 14 dage |
 
-### 10.2 Forbehold for Bogføringslovens opbevaringspligt
+### 12.3 Underbehandler-underretning
 
-**VIGTIGT**: Sletning af bogføringsdata kan først ske, når den lovpligtige 5-års opbevaringsperiode jf. Bogføringslovens § 15 er udløbet for alle regnskabsår, der er indeholdt i dataene. AlphaAi kan ikke slette data, der stadig er under opbevaringspligt, medmindre kunden dokumenterer, at dataene er overført til en anden godkendt bogføringsudbyder.
+Hver underbehandler forpligter sig til at underrette AlphaAi ApS om ethvert persondata-brud uden unødig forsinkelse og senest **24 timer** efter at bruddet er opdaget. Underretningen skal indeholde:
 
-### 10.3 Portabel eksport før sletning
+1. Beskrivelse af bruddets art
+2. Kategorier og antal berørte registrerede
+3. Kategorier og antal berørte personoplysninger
+4. Sandsynlig konsekvens for de registrerede
+5. Foranstaltninger truffet eller foreslået
+6. Kontaktperson hos underbehandler
 
-Inden sletning skal kunden udnytte AlphaFlows eksportfunktion (`GET /api/export-tenant`) til at hente en fuld kopi af sine data:
+### 12.4 Audit-trail sporing
 
-- **Eksportformat**: Struktureret JSON med GUID og SHA-256 checksum (`alphaflow-portable-v2`)
-- **Omfang**: Alle kontoplan, transaktioner, fakturaer, journalposter, bilag, bankudtog, kontakter, finansperioder, budgetter og medlemsdata
-- **Filinkludering**: Via `?includeFiles=true` kan alle uploadede dokumenter og kvitteringer inkluderes som base64
-- **Reference**: `src/app/api/export-tenant/route.ts`
-
-### 10.4 Sletningsbekræftelse
-
-Efter fuldførelse af sletningen udsteder AlphaAi en skriftlig bekræftelse til kunden, der angiver:
-
-1. Dato for sletning
-2. Dato for eksport (hvis relevant)
-3. Bekræftelse på, at alle produktionsdata er slettet
-4. Information om, at backup-filer slettes i overensstemmelse med den almindelige retention policy (monthly backups opbevares i op til 5 år jf. Bogføringsloven)
+Alle hændelser i AlphaFlow logges i den ufornderlige audit trail (jf. § 7.4), hvilket muliggør teknisk efterforskning af brud.
 
 ---
 
-## § 11 Varighed og opsigelse
+## § 13 Revisionsret (Art. 28(3)(h))
 
-### 11.1 Aftalens varighed
+### 13.1 Kundens revisionsret
 
-Denne databehandleraftale træder i kraft den dato, hvor kunden opretter en virksomhed i AlphaFlow-systemet og accepterer vilkårene. Aftalen gælder for så længe kunden benytter AlphaFlow.
+Kunden har ret til at revidere AlphaAi ApS' databehandling, jf. GDPR art. 28(3)(h). Revisionen kan udføres af kunden selv eller af en uafhængig tredjepart underlagt fortrolighedsforpligtelse.
 
-### 11.2 Opsigelse
+### 13.2 AlphaAis dokumentationsleverancer
 
-| Part | Opsigelsesvarsel | Begrundelse |
-|------|-----------------|-------------|
-| **Kunde** | 30 dage | Vilkårlig |
-| **AlphaAi** | 90 dage | Kræver væsentlig misligholdelse af aftalen |
-| **Fælles** | Øjeblikkelig | Ved grove sikkerhedsbrud eller misbrug |
+AlphaAi ApS stiller følgende dokumentation til rådighed for kundens revision:
 
-### 11.3 Databehandling ved opsigelse
+| Dokument | Sti | Indhold |
+|----------|-----|---------|
+| Compliance-rapport | `docs/COMPLIANCE_RAPPORT.md` | Intern kontrol, sikkerhedsforanstaltninger, compliance-matrix |
+| Krypteringsdokumentation | `docs/ENCRYPTION.md` | AES-256-GCM, TLS, nøglehåndtering |
+| Leverandørstyring | `docs/LEVERANDØRSTYRING.md` | Due diligence, TIA, sub-processor-lister |
+| Risikovurdering | `docs/RISIKOVURDERING.md` | IT-risikovurdering |
+| Beredskabsplan | `docs/BEREDSKABSPLAN.md` | Incident response, kontaktliste |
+| Audit-log | AuditLog-tabellen i Neon DB | Trækkes via `/api/audit` (OWNER/ADMIN) eller `/api/export-tenant` |
+| Sub-processor-liste | Bilag A i dette dokument | Løbende opdateret |
 
-Ved opsigelse gælder følgende:
+### 13.3 Revisionsformer
 
-1. **Kunden** skal senest ved ophørsdatoen have eksporteret alle sine data via den portabile eksportfunktion
-2. **AlphaAi** vil slette kundens data i overensstemmelse med proceduren i § 10, under hensyntagen til Bogføringslovens 5-års opbevaringspligt
-3. **Audit logs** opbevares af AlphaAi i overensstemmelse med Bogføringslovens krav til uforanderlig logføring
-4. **Backups** slettes i overensstemmelse med retention policy (monthly backups: op til 60 måneder)
+| Form | Frekvens | Udføres af |
+|------|----------|------------|
+| **Selvrevision** | Årligt | AlphaAi Compliance Officer |
+| **Ekstern audit** | Efter anmodning | Kundens revisor (under NDA) |
+| **Sikkerhedstest** | Efter anmodning | Uafhængig pentest-firma (omkostninger afholdes af kunden) |
+| **Certificeringsaudit** | Årligt | Neon (SOC 2 Type II), IONOS (C5, IT-Grundschutz) — rapporter tilgængelige på anmodning |
 
-### 11.4 Tilbagelevering af data
+### 13.4 Begrænsninger
 
-AlphaAi leverer ikke data tilbage til kunden uden dennes anmodning. Kunden er ansvarlig for at eksportere data inden opsigelsesfristens udløb. AlphaAi bistår teknisk med eksporten efter anmodning.
-
----
-
-## § 12 Tilbehør
-
-### Bilag A — Liste over underleverandører (underdatabehandlere)
-
-| # | Underleverandør | Tjeneste | Lokation | Kontaktoplysninger |
-|---|-----------------|----------|----------|-------------------|
-| 1 | **Neon** (Neon PostgreSQL) | Hosted database (serverless Postgres) | EU/EØS | https://neon.tech |
-| 2 | **Caddy** (Caddy Web Server) | Reverse proxy / TLS-terminering | Selvhostet af AlphaAi | https://caddyserver.com |
-
-### Bilag B — Teknisk bilag
-
-| Dokument / Modul | Beskrivelse | Filerreference |
-|------------------|-------------|----------------|
-| **Krypteringsmodul** | AES-256-GCM kryptering af følsomme data | `src/lib/crypto.ts` |
-| **Adgangskode-hashing** | bcrypt med 12 salt-runder | `src/lib/password.ts` |
-| **TOTP 2FA-modul** | Two-Factor Authentication med TOTP | `src/lib/two-factor.ts` |
-| **Rollebaseret adgangskontrol** | RBAC med 5 roller og 23 tilladelser | `src/lib/rbac.ts` |
-| **Audit trail-system** | Uforanderlig logføring med 13+ hændelsestyper | `src/lib/audit.ts` |
-| **Backup-motor** | ZIP-baseret backup med SHA-256 checksum | `src/lib/backup-engine.ts` |
-| **Backup-planlægger** | Automatiske hourly/daily/weekly/monthly backups | `src/lib/backup-scheduler.ts` |
-| **Portabel eksport** | Tenant-eksport med GUID og SHA-256 | `src/app/api/export-tenant/route.ts` |
-| **TLS-konfiguration** | Caddy reverse proxy med TLS 1.3 + HSTS | `Caddyfile` |
-| **Prisma database-schema** | Komplet datamodel med multi-tenant isolation | `prisma/schema.prisma` |
-| **E-invoicing parser** | OIOUBL og Peppol BIS Billing 3.0 XML-parser | `src/lib/einvoice-parser.ts` |
-| **E-invoicing response** | ApplicationResponse, MessageLevelResponse, InvoiceResponse | `src/lib/einvoice-response.ts` |
-| **Standardkontoplan** | SKAT Fællesoffentlig Standardkontoplan med auto-mapping | `src/lib/standard-chart-of-accounts.ts` |
-
-### Bilag C — GDPR-artiklereferencer
-
-| Artikel | Emne | Relevans |
-|---------|------|----------|
-| Art. 5 | Principper for databehandling | Gælder for al behandling i AlphaFlow |
-| Art. 13-14 | Informationspligt | AlphaAi informerer kunden via vilkår |
-| Art. 15-22 | Registreredes rettigheder | Understøttet via eksport og rettigheder |
-| Art. 25 | Privacy by Design | Indbygget i systemarkitekturen |
-| Art. 28 | Databehandleraftale | Nærværende aftale |
-| Art. 32 | Sikkerhed i databehandling | Beskrevet i § 4 |
-| Art. 33 | Underretning ved databrud | Beskrevet i § 7 |
-| Art. 34 | Underretning af registrerede | Beskrevet i § 7 |
-| Art. 35 | Virkninger for rettigheder og friheder | Risiko- og sikkerhedsvurdering |
-
-### Bilag D — Bogføringslovens reference
-
-| Paragraf | Emne | AlphaFlows understøttelse |
-|----------|------|---------------------------|
-| § 4 | Dokumentationspligt | Automatisk journalisering og bilagsstyring |
-| § 10 | Uforanderlighed af registreringer | Audit trail med CANCEL (soft-delete), ingen sletning |
-| § 11 | Klarhed og overskuelighed | Struktureret JSON-format med versioneret manifest |
-| § 12 | Spørgsmål om fortløbende registrering | Automatisk dato- og tidsstempling |
-| § 15 | 5-års opbevaringspligt | Automatiske backups med 60 måneders retention (monthly) |
+- Revision må ikke forstyrre driften af AlphaFlow.
+- Revisor må ikke tilgå andre kunders data (tenant-isolation).
+- Resultater der afslører sikkerhedssårbarheder håndteres jf. `docs/BEREDSKABSPLAN.md`.
 
 ---
 
-## § 13 Underskrifter
+## § 14 Ændringer i underbehandlere
 
-Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i AlphaFlow-systemet eller ved underskrift nedenfor.
+### 14.1 Underretningsforpligtelse
 
-### Dataansvarlig — AlphaAi
+AlphaAi ApS forpligter sig til at underrette kunden om enhver planlagt ændring i underbehandlerlisten (Bilag A):
+
+| Ændringstype | Varsel | Kanal |
+|--------------|-------|-------|
+| Tilføjelse af ny underbehandler | 30 dage før ikrafttrædelse | E-mail + statusside |
+| Udskiftning af eksisterende underbehandler | 60 dage før ikrafttrædelse | E-mail + statusside |
+| Ændring i underbehandlers lokation (f.eks. EU→USA) | 60 dage før ikrafttrædelse | E-mail + statusside |
+| Tilføjelse af sub-underbehandler hos eksisterende underbehandler | 30 dage | Opdatering af Bilag A |
+
+### 14.2 Kundens indsigtsret (Art. 28(2))
+
+Kunden kan gøre indsigelse mod tilføjelse eller udskiftning af en underbehandler, hvis det rimeligt kan påvirke behandlingen af personoplysninger negativt (f.eks. ny underbehandler i USA uden SCC). Indsigten skal fremføres skriftligt inden for 30 dage efter underretning.
+
+### 14.3 Konfliktløsning
+
+Hvis parterne ikke kan opnå enighed:
+
+1. AlphaAi ApS udarbejder en alternativ handlingsplan.
+2. Kunden kan opsige DPA'en uden varsel, forudsat at årsagen er dokumenteret.
+3. Data returneres eller slettes jf. § 8.
+
+### 14.4 Nødtilfælde
+
+Ved akut sikkerhedshændelse (f.eks. underbehandler-brud der kræver øjeblikkelig afløsning) kan AlphaAi ApS foretage midlertidig udskiftning uden forudgående varsel, men underretter kunden **straks** efterfølgende.
+
+---
+
+## § 15 Underskrift
+
+Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i AlphaFlow-systemet (ved oprettelse af virksomhed) eller ved underskrift nedenfor.
+
+### 15.1 Databehandler — AlphaAi ApS
 
 | Felt | Underskrift |
 |------|-------------|
-| **Virksomhedsnavn** | AlphaAi Consult ApS |
-| **Underskrevet af** | Jess Christoffersen|
-| **Funktion** | Direktør|
-| **Dato og sted** | 04/06/2026|
-| **CVR-nummer** | 46312058|
+| **Virksomhedsnavn** | AlphaAi ApS |
+| **CVR-nummer** | 46312058 |
+| **Underskrevet af** | Jess Christoffersen |
+| **Funktion** | Direktør |
+| **Dato og sted** | 08.06.2026, [By] |
+| **Underskrift** | _________________________________ |
 
-### Databehandler — Kunde
+### 15.2 Dataansvarlig — Kunde
 
 | Felt | Underskrift |
 |------|-------------|
 | **Virksomhedsnavn** | _________________________________ |
+| **CVR-nummer** | _________________________________ |
 | **Underskrevet af** | _________________________________ |
 | **Funktion** | _________________________________ |
 | **Dato og sted** | _________________________________ |
-| **CVR-nummer** | _________________________________ |
+| **Underskrift** | _________________________________ |
+
+---
+
+## Bilag A — Komplet underbehandler-liste
+
+| # | Navn | Juridisk enhed | Lokation | Formål i AlphaFlow | Data sendt | Rolle | Tredjeland (USA)? | SCC | DPA-status |
+|---|------|----------------|----------|---------------------|------------|-------|--------------------|------|------------|
+| 1 | Neon PostgreSQL | Neon, Inc. | USA HQ / EU DC (Frankfurt+Amsterdam) | Primær database | Alt (virksomhed, brugere, posteringer, fakturaer, moms, audit) | Databehandler | Nej (admin: ja) | Ja (admin) | Indgået |
+| 2 | IONOS VPS | IONOS SE | Tyskland (EU) | Applikationsserver + backup-lagring | AES-256-GCM-krypterede backup-ZIPs, runtime-data | Databehandler | Nej | Nej | Indgået |
+| 3 | Storecove | Storecove B.V. | Holland (EU) | Peppol Access Point — e-fakturering | OIOUBL/Peppol XML (CVR, faktura, linjer, IBAN) | Databehandler | Nej | Nej | Påkræret |
+| 4 | Frisbii / Flatpay | Billwerk+ Reepay Group | Tyskland (EU) | Abonnementsbetalinger | Bruger-email, virksomhedsnavn, beløb, callback-URL'er | Databehandler | Nej | Nej | Påkræret |
+| 5 | OpenAI | OpenAI, Inc. | USA | Embeddings (RAG) | Dokument-tekst chunks (~500 tokens) | Databehandler | **Ja** | **Ja** (Modul 2) | Påkræret + TIA |
+| 6 | OpenRouter | OpenRouter, Inc. | USA | LLM chat (Hermes) | Spørgsmål + system-prompt + (opt-in) tenant-kontekst | Databehandler | **Ja** | **Ja** (Modul 2) | Påkræret + TIA |
+| 7 | Anthropic | Anthropic PBC | USA | VLM (scanner-service) | Base64-PNG-billeder af dokumenter | Databehandler | **Ja** | **Ja** (Modul 3) | Påkræret + TIA |
+| 8 | Simply / Brevo (SMTP) | Simply A/S / Brevo SAS | DK / FR (EU) | Transaktions-emails | Modtager-email, brugernavn, faktura-PDF, tokens | Databehandler | Nej | Nej | Påkræret |
+| 9 | SKAT (Moms-API) | Skattestyrelsen | DK (EU) | Momsangivelse-indberetning | CVR, periode, momsbeløb | Myndighed | Nej | Nej | N/A |
+| 10 | Erhvervsstyrelsen (VIRK/CVR) | Erhvervsstyrelsen | DK (EU) | CVR-opslag | CVR-nummer (term-query) | Myndighed | Nej | Nej | N/A |
+| 11 | tokenpay-access-service | AlphaAi ApS (intern) | IONOS VPS (EU) | Adgangskontrol via .tbkey proofs | Bruger-ID, email, navn, proof-manifest, access-log | Intern sub-system | Nej | Nej | N/A (intern) |
+| 12 | scanner-service | AlphaAi ApS (intern) | IONOS VPS (EU) | Dokument-OCR + VLM-ekstraktion | Dokument-billeder, OCR-resultater | Intern sub-system | Nej | Nej | N/A (intern) |
+| 13 | notification-ws-service | AlphaAi ApS (intern) | IONOS VPS (EU) | Real-time notifikationer | userId, readIds, companyId (in-memory) | Intern sub-system | Nej | Nej | N/A (intern) |
+| 14 | knowledge-service | AlphaAi ApS (intern) | IONOS VPS (EU) | RAG knowledge base | Dokument-tekst, embeddings (pgvector) | Intern sub-system | Nej | Nej | N/A (intern) |
+| 15 | hermes-agent | AlphaAi ApS (intern) | IONOS VPS (EU) | AI chat-assistent | Socket.IO-events, samtalehistorik | Intern sub-system | Nej | Nej | N/A (intern) |
+
+### Bilag A.2 — Implementerede men IKKE aktive integrationer
+
+| Integration | Status | Begrundelse |
+|-------------|--------|-------------|
+| Bank-API'er (Tink, Nordea, Danske Bank, Jyske Bank) | Stub-only — ingen reelle API-kald i produktion. Kun Demo-provider. Bank-tokens krypteres dog alligevel med AES-256-GCM før lagring. | Implementeret men ikke produktionsaktiveret |
+| z-ai-web-dev-sdk (AI-bankafstemning) | Sandbox-only — fejler gracefully i produktion. | Ifølge `.env.example` er SDK'et sandbox-only |
+
+Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
+
+---
+
+## Bilag B — Henvisninger
+
+| Dokument | Sti | Indhold |
+|----------|-----|---------|
+| Krypteringsdokumentation | `docs/ENCRYPTION.md` | AES-256-GCM tekniske detaljer, nøglehåndtering |
+| Compliance-rapport | `docs/COMPLIANCE_RAPPORT.md` | Intern kontrol, RBAC, audit-trail |
+| Leverandørstyring | `docs/LEVERANDØERSTYRING.md` | Due diligence, TIA for USA-underbehandlere |
+| Risikovurdering | `docs/RISIKOVURDERING.md` | IT-risici, åbne afvigelser |
+| Beredskabsplan | `docs/BEREDSKABSPLAN.md` | Incident response, kontaktliste |
+| Udbedringsplan | `docs/UDBEDRINGSPLAN.md` | Åbne sikkerhedsmangler og afhjælpningsplan |
+| Neon & IONOS IT-sikkerhed | `docs/NEON & IONOS_IT_SIKKERHED.md` | Hosting-udbydere sikkerhedsdokumentation |
+
+---
+
+## Bilag C — GDPR-artikel-referencer
+
+| Artikel | Emne | Relevans |
+|---------|------|----------|
+| Art. 5 | Principper for behandling | Minimization (§ 6), formålsbegrænsning (§ 2) |
+| Art. 13-14 | Informationspligt | Kundens ansvar som dataansvarlig |
+| Art. 15-22 | Registreredes rettigheder | Understøttet via eksport-API'er (§ 11) |
+| Art. 25 | Privacy by Design | `dataAccessEnabled` opt-in (§ 6.1), tenant-isolation |
+| Art. 28 | Databehandleraftale | Nærværende aftale |
+| Art. 28(2) | Underbehandler-indsigtsret | § 14 |
+| Art. 28(3)(h) | Revisionsret | § 13 |
+| Art. 32 | Sikkerhed i behandling | § 7 |
+| Art. 33 | Underretning ved brud (Datatilsynet) | § 12.2 trin 5 |
+| Art. 34 | Underretning af registrerede | § 12.2 trin 7 |
+| Art. 35 | DPIA | Henviser til `docs/RISIKOVURDERING.md` |
+| Art. 44-49 | Tredjelandsoverførsler | § 9 — SCC + TIA for USA-underbehandlere |
+| Art. 46(2)(c) | SCC | Standard Contractual Clauses 2021/914 |
+
+---
+
+## Bilag D — Bogføringslovens reference
+
+| Paragraf | Emne | AlphaFlows understøttelse |
+|----------|------|---------------------------|
+| § 4 | Dokumentationspligt | Automatisk journalisering, bilagsstyring |
+| § 10 | Uforanderlighed af registreringer | Audit trail 3-niveau immutability, soft-delete via modpostering |
+| § 11 | Klarhed og overskuelighed | Struktureret JSON + manifest v2 |
+| § 12 | Fortløbende registrering | Automatisk dato- og tidsstempling, fortløbende bilagsnummer (`journalPrefix` + `nextJournalSequence`) |
+| § 15 | 5-års opbevaringspligt | Monthly backups 60 stk. (5 år), Konto-deaktivering i stedet for sletning |
 
 ---
 
@@ -523,11 +794,12 @@ Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i
 
 | Version | Dato | Ændring |
 |---------|------|---------|
-| 1.0 | [Tidligere dato] | Første udkast |
-| 2.0 | 1. januar 2025 | Komplet revidering med konkrete tekniske referencer til FASE 1-6 implementeringer; opdateret underleverandørliste; tilføjet SUPER_DEV oversight-sektion; udvidet backup- og opbevaringsbeskrivelse med konkrete fil- og funktionsreferencer; tilføjet portabel eksport-sektion; GDPR- og Bogføringslovens artikelreferencer systematiseret i bilag C og D |
+| 1.0 | 2025 | Første udkast |
+| 2.0 | 1. januar 2025 | Komplet revidering med tekniske referencer |
+| 3.0 | 08.06.2026 | **Komplet omskrivning (D4-DPA-LEV):** Rettet partrollen (AlphaAi = databehandler, kunde = dataansvarlig); tilføjet komplet underbehandler-tabel for alle 15 integrationer fra P1-INT (Neon, IONOS, Storecove, Frisbii, OpenAI, OpenRouter, Anthropic, Simply/Brevo, SKAT, Erhvervsstyrelsen, + 5 interne sub-systemer); tilføjet data-minimization-sektion med `HermesAgent.dataAccessEnabled` opt-in (default false); tilføjet Tredjelands-overførsels-sektion (§ 9) med SCC 2021/914 + TIA for USA-underbehandlere; tilføjet præcise datakategorier fra P1-DB-analysen; dokumenteret konto-deaktivering vs. hard-delete per Bogføringsloven §§ 10-12; dokumenteret åbne sikkerhedsmangler ærligt (CSP, CSRF, etc.) |
 
 ---
 
-*Udarbejdet af AlphaAi Compliance i forbindelse med anmeldelse til Erhvervsstyrelsen af AlphaFlow som standardiseret bogføringssystem (BEK 98).*
+*Udarbejdet af AlphaAi ApS Compliance som del af anmeldelsen til Erhvervsstyrelsen af AlphaFlow som standardiseret bogføringssystem (BEK 98).*
 
-*Alle tekniske referencer er baseret på faktisk implementeret kode fra AlphaFlow FASE 1-6. Ingen "planlagte" funktioner er inkluderet.*
+*Alle tekniske referencer er baseret på faktisk implementeret kode fra AlphaFlow-kodebasen (verificeret i P1-INT og P1-DB-analyserne). Ingen opdigtede underbehandlere.*

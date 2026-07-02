@@ -37,8 +37,10 @@ export async function GET(request: NextRequest) {
     const paymentId = searchParams.get('payment_id');
     const isMock = searchParams.get('mock') === '1';
     // The frontend URL to redirect to after processing.
-    // Always send to the app root with a payment status query param.
-    const appUrl = new URL('/', request.url);
+    // IMPORTANT: The SPA lives at /login (not /). The payment status query
+    // param is read by the SPA's client-side hydration to show a toast and
+    // refresh auth/plan tier.
+    const appUrl = new URL('/login', request.url);
 
     if (!paymentId) {
       appUrl.searchParams.set('payment', 'error');
@@ -106,7 +108,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(appUrl);
   } catch (error) {
     logger.error('[PAYMENT CALLBACK] Error:', error);
-    const appUrl = new URL('/', request.url);
+    const appUrl = new URL('/login', request.url);
     appUrl.searchParams.set('payment', 'error');
     return NextResponse.redirect(appUrl);
   }

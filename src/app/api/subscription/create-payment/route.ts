@@ -73,14 +73,14 @@ export const POST = withGuard(
       //   This is our server-side callback that verifies the payment status
       //   via the Frisbii API, activates the plan, and redirects to the app.
       // - cancelUrl: the URL Frisbii redirects the user to on CANCEL.
-      //   This is the app's root page with a payment=cancelled flag.
+      //   This is the SPA at /login with a payment=cancelled flag.
       //
       // Note: Frisbii webhooks are configured in the Frisbii admin UI
       // (https://app.frisbii.com), not passed in the API call. The webhook
       // URL should be: https://your-domain.com/api/subscription/payment-webhook
       const origin = request.nextUrl.origin;
       const acceptUrl = `${origin}/api/subscription/payment-callback?payment_id=${payment.id}`;
-      const cancelUrl = `${origin}/?payment=cancelled`;
+      const cancelUrl = `${origin}/login?payment=cancelled`;
 
       // Create the charge session with Frisbii
       const session = await createPaymentSession({

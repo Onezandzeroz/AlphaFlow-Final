@@ -1,450 +1,258 @@
 # AlphaFlow — Anmeldelsespakke
 
-> **Udarbejdet til:** Erhvervsstyrelsen — Anmeldelse af elektronisk bogføringssystem
+> **Anmeldelsespakke til Erhvervsstyrelsen — Registering/godkendelse af elektronisk bogføringssystem**
 >
-> **Bekendtgørelse:** BEK nr. 98 af 13. februar 2024 om elektronisk bogføringssystem
+> **Bekendtgørelse:** Bekendtgørelse om elektroniske bogføringssystemer (BEK nr. 98 af 13. februar 2024)
 >
-> **Version:** 2.0
+> **Lovgrundlag:** Bogføringsloven (LBK nr. 1457 af 13. december 2019)
 >
-> **Dato:** 2025
+> **Pakke-version:** 1.0 — revideret 2026
+>
+> **Ansvarlig:** AlphaAi ApS
 
 ---
 
-## 1. Forside
+## 1. Indledning
 
-**AlphaFlow Anmeldelsespakke**
+Denne anmeldelsespakke er AlphaAi ApS' samlede dokumentation i forbindelse med ansøgning til Erhvervsstyrelsen om **registering/godkendelse af AlphaFlow som elektronisk bogføringssystem** jf. Bogføringsloven og Erhvervsstyrelsens bekendtgørelse om elektroniske bogføringssystemer.
 
-Denne anmeldelsespakke udgør den komplette dokumentation og tekniske beskrivelse af AlphaFlow — et cloudbaseret regnskabssystem udviklet til danske små og mellemstore virksomheder. Pakken er udarbejdet med henblik på anmeldelse til Erhvervsstyrelsen som godkendt elektronisk bogføringssystem i henhold til Bekendtgørelse nr. 98 af 13. februar 2024 (BEK 98) om elektronisk bogføringssystem.
+Anmeldelsespakken fungerer som **forside og indeks** for den samlede dokumentation i projektets `docs/`-mappe og henviser til de specifikke dokumenter, der uddyber de enkelte kravområder. Pakken er udarbejdet med udgangspunkt i den faktiske, implementerede kodebase — ingen planlagte, hypotetiske eller "på vej"-funktioner er beskrevet som eksisterende.
 
-AlphaFlow er udviklet af AlphaAi og overholder kravene i dansk Bogføringslov, herunder pligten til uforanderlig dokumentation, 5-års opbevaringspligt, samt understøttelse af standardiserede eksportformater (SAF-T Financial DK, OIOUBL, Peppol BIS Billing 3.0).
-
----
-
-## 2. Indledning
-
-### Formål
-
-Formålet med denne anmeldelsespakke er at dokumentere, at AlphaFlow opfylder alle krav i BEK 98 om elektroniske bogføringssystemer, herunder:
-
-- **Hovedkrav nr. 1:** Bogføringsmateriale, kontooversigt, bilagsføring, valutakurser, elektronisk udbyderskift
-- **Hovedkrav nr. 2:** IT-sikkerhed, adgangsstyring, risikovurdering, beredskab, databehandleraftale, leverandørstyring
-- **Hovedkrav nr. 3:** Standardkontoplan, e-faktura modtagelse/fremsendelse, årsregnskab, momsindberetning
-
-Dokumentationen bygger på den faktiske, implementerede kodebase (FASE 1-6) og afspejler det fuldt fungerende system — ingen planlagte eller teoretiske funktioner er inkluderet.
-
-### Anmeldelsesgrundlag
-
-Anmeldelsen er baseret på:
-
-- **83 krav** fra Erhvervsstyrelsens tjekliste (AlphaFlow_Tjek og Mangleliste.xlsx)
-- **Teknisk implementering:** FASE 1-6 (20 uger)
-- **Compliance-dokumentation:** FASE 7 (3 uger)
-- **Samlet:** 23 uger fra start til anmeldelse
+> **Princip om åbenhed:** Hvor AlphaFlow endnu ikke fuldt ud dækker et krav (f.eks. kreditnota-flow, lønmodul, MitID), er dette angivet eksplicit i afsnit 4 og 8 med henvisning til `UDBEDRINGSPLAN.md`. Erhvervsstyrelsens anmeldelsespraksis tilskynder åbenhed om kendte mangler.
 
 ---
 
-## 3. Dokumentpakke
+## 2. Ansøger-oplysninger
 
-### Komplet dokumentoversigt
+| Feltpost | Værdi |
+|---|---|
+| **Selskab** | AlphaAi ApS |
+| **CVR-nummer** | _[skabelon: indtast CVR — anvendes ved indsendelse via virk.dk]_ |
+| **Kontaktperson** | _[skabelon: navn, e-mail, telefon]_ |
+| **Produkt-navn** | AlphaFlow |
+| **Produkt-version** | 1.0.0 (pakke-navn: `alphaai-accounting`) |
+| **Domæne** | `alphaflow.dk` (`www.alphaflow.dk`) |
+| **Produkt-type** | Cloud-baseret SaaS — multi-tenant dansk bogføringsplatform |
+| **Lanceringsdato** | _[skabelon: indtast produktions-lanceringsdato]_ |
+| **Dataansvarlig** | AlphaAi ApS (App Owner) |
+| **Hosting-udbydere** | Neon, Inc. (database) + IONOS SE (VPS-hosting + backup-lagring) — begge EU-baserede |
+| **Anmeldelsesansvarlig** | _[skabelon: navn, titel]_ |
 
-Nedenstående tabel viser den komplette dokumentpakke, der indgår i anmeldelsen:
-
-| # | Dokument | Fil | Status | Krav |
-|---|----------|-----|--------|------|
-| 1 | Anmeldelse via virk.dk | — | ✅ | Systeminfo, CVR, kontaktperson |
-| 2 | Intern Kontrolrapport / Compliance Report | docs/COMPLIANCE_REPORT.md | ✅ | v2.0 |
-| 3 | Brugsvejledning | docs/BRUGSVEJLEDNING.md | ✅ | Updated med FASE 1-6 |
-| 4 | Kryptografisk Sikkerhed | docs/ENCRYPTION.md | ✅ | v1.0 (updated) |
-| 5 | Databehandleraftale | docs/DATABEHANDLERAFTALE.md | ✅ | v2.0 |
-| 6 | Risikovurdering | docs/RISIKOVURDERING.md | ✅ | v2.0 |
-| 7 | Leverandørstyring | docs/LEVERANDOERSTYRING.md | ✅ | v2.0 |
-| 8 | Beredskabsplan | docs/BEREDSKABSPLAN.md | ✅ | v2.0 |
-| 9 | Neon IT-sikkerhed | docs/NEON_IT_SIKKERHED.md | ✅ | v2.0 |
-
-Alle dokumenter er udarbejdet i professionelt dansk og er tilgængelige som Markdown-filer i projektets `docs/` mappe.
-
-### Dokumentbeskrivelser
-
-| Dokument | Beskrivelse |
-|----------|-------------|
-| **Compliance Report** | Komplet compliance-rapport med krav-tjekliste (83 krav), tekniske implementeringer, og status for hvert krav |
-| **Brugsvejledning** | Komplet brugermanual med 21 sektioner dækkende alle funktioner (FSR-kontoplan, journalposter, fakturering, moms, bankafstemning, 2FA, e-faktura, årsregnskab, fremmedvaluta, udbyderskift) |
-| **Kryptografisk Sikkerhed** | Detaljeret beskrivelse af alle krypteringsmetoder: AES-256-GCM, bcrypt, SHA-256, TLS 1.3 |
-| **Databehandleraftale** | Standard databehandleraftale mellem AlphaAi (dataansvarlig) og AlphaFlow-brugere, med referencer til implementerede sikkerhedsforanstaltninger |
-| **Risikovurdering** | IT-risikovurdering med trusselsidentifikation, risikomatrix, eksisterende kontroller med kode-referencer, restrisici og accept |
-| **Leverandørstyring** | Evaluering og styring af tekniske leverandører (Neon, Caddy, Peppol AP, NemHandel) |
-| **Beredskabsplan** | Disaster Recovery-plan med RTO/RPO, gendannelsesprocedurer, backup-strategi, kontaktliste |
-| **Neon IT-sikkerhed** | Dokumentation af Neons Data Processing Agreement, SOC 2-certificering, og sikkerhedsforanstaltninger |
+> Alle felter markeret "_[skabelon: …]_" udfyldes ved den endelige indsendelse via [virk.dk](https://www.virk.dk).
 
 ---
 
-## 4. Krav-tjekliste
+## 3. Produktbeskrivelse (kort)
 
-### Fuld 83-krav tjekliste — Alle opfyldt (Ja)
+**AlphaFlow** er en cloud-baseret, multi-tenant dansk bogføringsplatform (SaaS) rettet mod **små og mellemstore danske virksomheder**. Platformen tilbyder:
 
-Nedenstående tjekliste viser samtlige 83 krav fra Erhvervsstyrelsens anmeldelseskrav. Alle krav er opfyldt.
+- **Dobbelt bogføring** med FSR-38 standardkontoplan, finansjournal, hovedbog, tilbagevendende posteringer, regnskabsperioder med lock, årsafslutning.
+- **Fakturering** — salgsfakturaer (DRAFT/SENT/PAID/CANCELLED) med PDF-generering, e-mail-afsendelse og e-fakturering via Peppol/NemHandel (Storecove som Access Point).
+- **E-fakturering** — OIOUBL (NemHandel) + Peppol BIS Billing 3.0; modtagelse af e-fakturaer i indbakke med godkend/afvis-workflow.
+- **Momsangivelse** — indsendelse direkte til Skattestyrelsens Moms-API (OAuth2 `client_credentials`).
+- **Bank-integration** (scaffolding) — bank-forbindelser med AES-256-GCM-krypterede tokens; manuel afstemning ( ingen AI-bankafstemning i produktion).
+- **AI-assistent Hermes** — Socket.IO chat med OpenRouter LLM, per-tenant opt-in (`dataAccessEnabled`), knowledge-RAG via OpenAI-embeddings, proaktive påmindelser.
+- **Dokument-OCR** — Tesseract + Anthropic Claude VLM, returnerer struktureret faktura/kvitteringsdata og FSR-konto-forslag.
+- **PWA** — installerbar, offline-understøttelse, kamera-adgang til kvitteringsfotos.
+- **Multi-tenant isolation** — `Company` som tenant-grænse, RBAC med 5 roller (OWNER/ADMIN/ACCOUNTANT/VIEWER/AUDITOR) og 18 permissions, SuperDev oversight-mode (read-only cross-tenant).
+- **Auth** — email+password (bcrypt, 12 rounds) + TOTP 2FA (RFC 6238) + 10 backup-koder + email-verifikation.
+- **Audit-trail** — 3-niveau immutability (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade).
+- **Backup** — node-cron scheduler (time/dag/uge/måned), AES-256-GCM-krypterede ZIP-filer pr. tenant, SHA-256 checksum, retention op til 5 år (monthly) jf. Bogføringsloven §15.
 
----
+### Begrænsninger — hvad AlphaFlow **ikke** omfatter
 
-#### Hovedkrav nr. 1 — Bogføringsmateriale og funktionelle krav
+Følgende funktioner findes **ikke** i platformen og indgår ikke i anmeldelsesomfanget:
 
-| # | Krav | Status |
-|---|------|--------|
-| 1 | Systemet kan registrere alle bogføringsmateriale | ✅ Ja |
-| 2 | Kontooversigt/kontoplan kan tilgås og ajourføres | ✅ Ja |
-| 3 | FSR-standardkontoplan er tilgængelig | ✅ Ja |
-| 4 | Bilag kan vedhæftes journalposter | ✅ Ja |
-| 5 | Bilag gemmes i mindst 5 år | ✅ Ja |
-| 6 | Bilag opbevares sikkert ved udbyderskift | ✅ Ja |
-| 7 | Valutakurs/omregningsfaktor understøttes | ✅ Ja |
-| 8 | Valutakurser hentes fra officiel kilde (ECB) | ✅ Ja |
-| 9 | Udbyderskift med portabel eksport | ✅ Ja |
-| 10 | SHA-256 checksum ved dataeksport | ✅ Ja |
-| 11 | Dataeksport i maskinlæsbart format (JSON) | ✅ Ja |
-| 12 | 5-års opbevaring af eksportdata | ✅ Ja |
-| 13 | BEK 98 overholdelse ved udbyderskift | ✅ Ja |
-| 14 | SAF-T Financial DK eksport | ✅ Ja |
-| 15 | SAF-T validering før eksport | ✅ Ja |
-| 16 | OIOUBL eksport for udgående fakturaer | ✅ Ja |
-| 17 | Kreditnotaer i OIOUBL-format (InvoiceTypeCode 381) | ✅ Ja |
-| 18 | OIOUBL validering | ✅ Ja |
-| 19 | Periodeafslutning understøttes | ✅ Ja |
-| 20 | Årsafslutning med resultatoverførsel | ✅ Ja |
-| 21 | Regnskabsperiode kan lukkes | ✅ Ja |
-| 22 | Lukkede perioder forhindrer ny bogføring | ✅ Ja |
-| 23 | Annullering af poster (soft delete, ikke fysisk sletning) | ✅ Ja |
-| 24 | Audit trail for alle ændringer | ✅ Ja |
+| Område | Status |
+|---|---|
+| **Lønmodul** | Ikke implementeret (kun `TransactionType.SALARY` enum findes). |
+| **Kreditnota-flow i UI** | Ikke implementeret (`EInvoiceType.CREDIT_NOTE` enum findes, men ingen oprettelsesflow). |
+| **Reelle bank-API-kald** | Ikke implementeret — Tink/Nordea/Danske Bank/Jyske Bank er stubs; kun Demo-provider returnerer data. |
+| **MitID / NemID / BankID** | Ikke implementeret — kun email+password+TOTP. |
+| **Varekartotek** | Ikke implementeret (invoice line-items er JSON, ingen Item-master). |
+| **AM-bidrag / årsopgørelse / e-indkomst til SKAT** | Ikke implementeret — KUN momsangivelse indsendes. |
+| **AI-bankafstemning i produktion** | `z-ai-web-dev-sdk` er sandbox-only og fejler graceful — matching er manuel. |
+| **Native mobil-app** | Ikke implementeret — kun PWA. |
+| **Approval-workflow** | Ikke implementeret (ingen flertrins godkendelse). |
+| **Chat med menneskelig revisor** | Hermes er AI-kun. |
 
----
-
-#### Hovedkrav nr. 2 — IT-sikkerhed
-
-| # | Krav | Status |
-|---|------|--------|
-| 25 | Tilstrækkeligt IT-sikkerhedsniveau | ✅ Ja |
-| 26 | Adgangsstyring med 2FA/MFA | ✅ Ja |
-| 27 | RBAC med mindst 5 roller | ✅ Ja |
-| 28 | Granulære tilladelser (23 tilladelser) | ✅ Ja |
-| 29 | Sessionsikkerhed med tokens | ✅ Ja |
-| 30 | Adgangskoder krypteret (bcrypt, 12 salt-runder) | ✅ Ja |
-| 31 | Datakryptering (AES-256-GCM) | ✅ Ja |
-| 32 | Data i transit krypteret (TLS 1.3) | ✅ Ja |
-| 33 | HSTS aktiveret | ✅ Ja |
-| 34 | Bankadgangskoder krypteret | ✅ Ja |
-| 35 | 2FA secrets krypteret | ✅ Ja |
-| 36 | Backup-koder SHA-256 hashede | ✅ Ja |
-| 37 | Tenant-isolering (multi-tenant dataadskillelse) | ✅ Ja |
-| 38 | Uforanderlig audit trail | ✅ Ja |
-| 39 | Uautoriserede ændringer forhindres | ✅ Ja |
-| 40 | Hændelig tilintetgørelse beskyttes mod | ✅ Ja |
-| 41 | Risikovurdering (tab af tilgængelighed) | ✅ Ja |
-| 42 | Risikovurdering (tredjeparter) | ✅ Ja |
-| 43 | Risikovurdering (trusselsændringer) | ✅ Ja |
-| 44 | Risikovurdering (konsekvens/sandsynlighed) | ✅ Ja |
-| 45 | Beredskab og reetablering (Disaster Recovery) | ✅ Ja |
-| 46 | Backup med automatiseret scheduler | ✅ Ja |
-| 47 | SHA-256 checksum på backup-filer | ✅ Ja |
-| 48 | RTO/RPO kvantificeret | ✅ Ja |
-| 49 | Leverandørstyring dokumenteret | ✅ Ja |
-| 50 | Tredjeparts IT-sikkerhed (Neon) dokumenteret | ✅ Ja |
-| 51 | Databehandleraftale med tredjeparter | ✅ Ja |
-| 52 | Aftale med 3.part opbevaring (formel) | ✅ Ja |
-| 53 | Behandling af persondata/databehandleraftale | ✅ Ja |
-| 54 | GDPR Art. 32 compliance | ✅ Ja |
+> Disse begrænsninger er bevidste produktvalg for AlphaFlows målgruppe (små/mellemstore virksomheder). De fleste påvirker ikke Bogføringslovens krav til selve bogføringsmaterialet, men angives her for fuld gennemsigtighed.
 
 ---
 
-#### Hovedkrav nr. 3 — Tekniske funktionelle krav
+## 4. Omfang & funktionel dækning
 
-| # | Krav | Status |
-|---|------|--------|
-| 55 | Offentlig standardkontoplan (SKAT) direkte tilgængelig | ✅ Ja |
-| 56 | Standardkontoplan mappet (FSR → offentlig) | ✅ Ja |
-| 57 | Mapping-værktøj til standardkontoplan | ✅ Ja |
-| 58 | Konteringsvejledning fra 3. part (SKAT refs) | ✅ Ja |
-| 59 | Brugerdefineret konteringsvejledning per konto | ✅ Ja |
-| 60 | Mapping-værktøj momskoder | ✅ Ja |
-| 61 | Bogføringsguide/assistent med debit/credit-regler | ✅ Ja |
-| 62 | Modtage faktura i OIOUBL | ✅ Ja |
-| 63 | Modtage kreditnota i OIOUBL | ✅ Ja |
-| 64 | Application Response (OIOUBL) | ✅ Ja |
-| 65 | Modtage faktura i Peppol BIS | ✅ Ja |
-| 66 | Modtage kreditnota i Peppol BIS | ✅ Ja |
-| 67 | Message Level Response (Peppol) | ✅ Ja |
-| 68 | Invoice Response (Peppol) | ✅ Ja |
-| 69 | E-faktura indbakke med godkend/afvis workflow | ✅ Ja |
-| 70 | Automatisk kontering af godkendte e-fakturaer | ✅ Ja |
-| 71 | Sende faktura i OIOUBL | ✅ Ja |
-| 72 | Sende kreditnota i OIOUBL | ✅ Ja |
-| 73 | Sende faktura i Peppol BIS | ✅ Ja |
-| 74 | Sende kreditnota i Peppol BIS | ✅ Ja |
-| 75 | Meddelelse om NemHandelsregisteret | ✅ Ja |
-| 76 | Tilmelding NemHandelsregisteret | ✅ Ja |
-| 77 | CSV eksport — Regnskab Basis | ✅ Ja |
-| 78 | XBRL/iXBRL eksport — Regnskab Special | ✅ Ja |
-| 79 | Moms-API integration med Skattestyrelsen | ✅ Ja |
-| 80 | Automatisk momsopgørelse med auto-beregning | ✅ Ja |
+Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 98's hovedkrav. Den detaljerede krav-for-krav kortlægning findes i `docs/COMPLIANCE_RAPPORT.md`.
+
+| Kravområde | Lov-reference | AlphaFlow-implementering | Status |
+|---|---|---|---|
+| **Systemegnethed** | Bogføringsloven §3 | Dobbelt bogføring (JournalEntry + JournalEntryLine), FSR-38 standardkontoplan, finansjournal, hovedbog, regnskabsperioder med lock. | ✅ Opfyldt |
+| **Uforanderlighed / immutability** | Bogføringsloven §10–12 | AuditLog 3-niveau (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade). Konto-deaktivering i stedet for hard-delete. | ✅ Opfyldt (delvist) — ingen kryptografisk hash-chain mellem posteringer; immutability håndhæves via DB-triggere + audit-log. |
+| **Backup & 5-års retention** | Bogføringsloven §15 | node-cron scheduler: hourly/daily/weekly/monthly + cleanup; AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant; SHA-256 checksum; monthly retention 60 måneder = 5 år; `Tenant-Backup/` på IONOS VPS. | ✅ Opfyldt |
+| **SAF-T Financial DK eksport** | BEK 98 | `/api/export-saft` — maskinlæsbar eksport af hele regnskabet. | ✅ Opfyldt |
+| **Årsrapport (XBRL/CSV)** | BEK 98 | `/api/reports/annual-xbrl` + `/api/reports/annual-csv`. | ✅ Opfyldt |
+| **E-fakturering (NemHandel/Peppol)** | BEK 98 | Send/modtag via Storecove som Peppol Access Point. OIOUBL + Peppol BIS Billing 3.0. E-faktura-indbakke med godkend/afvis. | ✅ Opfyldt |
+| **Momsangivelse til SKAT** | BEK 98 | `/api/vat/submit` — OAuth2 `client_credentials`, moms:indberet-scope. **KUN moms** — ingen årsopgørelse/e-indkomst. | ✅ Opfyldt (kun moms) |
+| **Standardkontoplan** | BEK 98 | FSR-38 kontoplan (Account-model) + `StandardAccountMapping` til SKAT's fællesoffentlige standardkontoplan. | ✅ Opfyldt |
+| **Udbyderskift / dataeksport** | Bogføringsloven §13; BEK 98 | `/api/export-tenant` (JSON + filer, SHA-256 manifest), `/api/export-saft`, `/api/company/export-info`. | ✅ Opfyldt |
+| **Fortløbende bilagsnummerering** | Bogføringsloven §10 | `Company.journalPrefix` (default "BIL") + `nextJournalSequence`. | ✅ Opfyldt |
+| **Valutahåndtering** | Bogføringsloven §14 | Transaction-model med `currency`, `exchangeRate`, `amountDKK`. | ✅ Opfyldt |
+| **IT-sikkerhed (RBAC, 2FA, kryptering)** | BEK 98 (Hovedkrav 2) | RBAC 5 roller/18 permissions, TOTP 2FA, AES-256-GCM (bank-tokens/TOTP/backup), bcrypt 12 rounds, TLS 1.2/1.3 via Caddy. | ✅ Opfyldt (se §8 åbenhed om mangler) |
+| **Risikovurdering** | BEK 98 | `docs/RISIKOVURDERING.md`. | ✅ Opfyldt |
+| **Beredskabsplan (DR)** | BEK 98 | `docs/BEREDSKABSPLAN.md`. | ✅ Opfyldt |
+| **Databehandleraftaler** | GDPR Art. 28; BEK 98 | `docs/DATABEHANDLERAFTALE.md` + `docs/LEVERANDØERSTYRING.md`. | ✅ Opfyldt |
+
+> Den fulde krav-for-krav tjekliste findes i `docs/COMPLIANCE_RAPPORT.md`. Krav, hvor AlphaFlow har kendte mangler (f.eks. kreditnota-OIOUBL i UI), er markeret deri og listet i afsnit 8 nedenfor.
 
 ---
 
-#### Dokumentationskrav
+## 5. Arkitektur-oversigt (kort)
 
-| # | Krav | Status |
-|---|------|--------|
-| 81 | Compliance Report med fuld krav-tjekliste | ✅ Ja |
-| 82 | Brugsvejledning for alle funktioner | ✅ Ja |
-| 83 | Anmeldelsespakke med bilag og arkitektur | ✅ Ja |
+AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 5 mini-services, hostet på IONOS VPS med Neon PostgreSQL som databaselag.
 
----
+| Komponent | Teknologi | Rolle |
+|---|---|---|
+| **Web-app** | Next.js 16 (App Router) + TypeScript 5 + Tailwind CSS 4 | Brugergrænseflade, API-routes, SSR. Port 3000. |
+| **Database** | PostgreSQL på Neon (serverless) + Prisma ORM + pgvector | Primært datalager for alle tenant-data. EU-datacentre (Frankfurt + Amsterdam). |
+| **Reverse proxy / TLS** | Caddy (self-hosted på IONOS VPS) | TLS 1.2/1.3 (Let's Encrypt), security headers, routing til mini-services via `?XTransformPort=<port>`. |
+| **Proces-manager** | PM2 (fork-mode, 6 processer) | Autorestart (max 10 restarts, 5s delay), separate log-filer i `./logs/`. |
+| **Hosting** | IONOS VPS (EU/Tyskland, IONOS SE) | Applikationsserver + lokal backup-lagring (`Tenant-Backup/`) + uploads (`uploads/`). |
+| **Mini-service: hermes-agent** | Bun + Socket.IO + Prisma (port 3004) | AI-chat-assistent, OpenRouter LLM, reminders. Deler Neon DB. |
+| **Mini-service: knowledge-service** | Bun + rå HTTP + Prisma + pgvector (port 3006) | RAG-knowledge base, OpenAI-embeddings (1536-dim). Deler Neon DB. |
+| **Mini-service: notification-ws** | Bun + Socket.IO (port 3001) | Real-time notifikationer, in-memory. |
+| **Mini-service: scanner-service** | Python + FastAPI + SQLite (port 3005) | OCR (Tesseract) + Anthropic Claude VLM. |
+| **Mini-service: tokenpay-access** | Bun + Hono + SQLite (port 3100) | `.tbkey` proof-verifikation, adgangsstyring. |
 
-**Resultat:** 83/83 krav opfyldt (100%)
+**Multi-tenant isolation:** `Company` er tenant-grænse, `companyId` på tværs af 24 Prisma-modeller, RBAC-isolation via `tenantFilter(ctx)`. SuperDev oversight-mode tillader read-only cross-tenant adgang for AlphaAi-admin.
 
----
+**Backup-lag:** Neons managed PITR (Point-in-Time Recovery, 7 dage) — defense-in-depth lag 1; AlphaFlows egne `Tenant-Backup/` ZIP-filer (AES-256-GCM, SHA-256, 5-års retention) — lag 2.
 
-## 5. Systemarkitektur oversigt
-
-### Teknologi-stack
-
-| Komponent | Teknologi | Beskrivelse |
-|-----------|-----------|-------------|
-| **Frontend** | Next.js 16 (App Router) | React-baseret SPA med server-side rendering |
-| **Sprog** | TypeScript 5 | Strict typing gennem hele applikationen |
-| **Styling** | Tailwind CSS 4 + shadcn/ui | Responsive design med New York style |
-| **Database** | PostgreSQL (Neon) | Managed PostgreSQL med SOC 2-certificering |
-| **ORM** | Prisma | Type-safe databaseadgang med migrations |
-| **Reverse Proxy** | Caddy | TLS 1.3, HSTS, automatisk certifikat-håndtering |
-| **Autentificering** | NextAuth.js v4 | Cookie-baseret session management |
-| **Kryptering** | AES-256-GCM + bcrypt | Symmetrisk kryptering + password hashing |
-| **2FA** | TOTP (otplib) | Time-based One-Time Password med SHA-256 backup-koder |
-| **State** | Zustand + TanStack Query | Client state + server state management |
-
-### Multi-tenant arkitektur
-
-AlphaFlow er bygget som et multi-tenant system med fuld dataadskillelse:
-
-- **Tenant boundary:** `Company` model som tenant-entitet
-- **Dataadskillelse:** Alle databaseforespørgsler filtreres på `companyId`
-- **RBAC:** 5 roller (Ejer, Administrator, Bogholder, Seer, Revisor) med 23 granulære tilladelser
-- **Tenant-isolering:** Ingen cross-tenant dataadgang uden eksplit `oversightCompanyId`
-
-### E-invoicing mini-service
-
-Asynkron e-faktura håndtering via dedikeret mini-service:
-
-- **Port:** Egen port (3200)
-- **Protokol:** HTTP + WebSocket
-- **Ansvarlig for:** E-faktura fremsendelse, modtagelse, status tracking, retry-logik
+> Den fulde arkitekturbeskrivelse (komponenter, dataflow, netværk) findes i `docs/COMPLIANCE_RAPPORT.md` og `docs/NEON & IONOS_IT_SIKKERHED.md`.
 
 ---
 
-## 6. Databaseskema oversigt
+## 6. Dokumentindeks
 
-### Prisma-modeller (PostgreSQL)
+Nedenstående tabel indekserer **alle 14 dokumenter** i AlphaFlows `docs/`-mappe. 10 dokumenter er revideret i denne anmeldelsesrunde (2026); 4 dokumenter er udenfor scope for denne revision, og den eksisterende version gælder.
 
-| Model | Beskrivelse | Nøglefelter |
-|-------|-------------|-------------|
-| **Company** | Virksomhed/tenant | name, cvrNumber, twoFactorRequired, einvoiceEnabled |
-| **User** | Brugerkonto | email, password, twoFactorSecret, twoFactorEnabled |
-| **UserCompany** | Medlemskab (junction) | userId, companyId, role |
-| **Invitation** | Invitations-token | email, role, token, status |
-| **Session** | Brugersession | token, activeCompanyId, oversightCompanyId |
-| **Account** | Kontoplan-konto | number, name, type, group, publicStandardNumber, postingGuide |
-| **StandardAccountMapping** | FSR → Standardkontoplan mapping | accountId, standardAccountNumber |
-| **JournalEntry** | Journalpost | date, description, status (DRAFT/POSTED/CANCELLED) |
-| **JournalEntryLine** | Journalpost-linje | accountId, debit, credit, vatCode |
-| **Document** | Bilag/dokument | fileName, fileType, filePath, journalEntryId |
-| **Transaction** | Finanspost | date, type, amount, currency, exchangeRate, amountDKK |
-| **Invoice** | Faktura | invoiceNumber, lineItems, subtotal, vatTotal, total, status |
-| **Contact** | Kunde/leverandør | name, cvrNumber, type (CUSTOMER/SUPPLIER/BOTH) |
-| **FiscalPeriod** | Regnskabsperiode | year, month, status (OPEN/CLOSED) |
-| **BankStatement** | Kontoudtog | bankAccount, startDate, endDate |
-| **BankStatementLine** | Kontoudtogslinje | date, description, amount, reconciliationStatus |
-| **BankConnection** | Bankforbindelse | bankName, provider, status, accessToken |
-| **Backup** | Backup-record | triggerType, backupType, filePath, sha256, status |
-| **AuditLog** | Audit-log | action, entityType, entityId, changes, metadata |
-| **RecurringEntry** | Gentagelse | frequency, status, nextExecution, lines |
-| **Budget** | Budget | year, isActive |
-| **HermesAgent** | AI-assistent | enabled, personality, systemPrompt |
-| **ReceivedInvoice** | Modtaget e-faktura | supplierName, format, documentType, rawXml, status |
-| **EInvoiceSending** | Sendt e-faktura | invoiceId, channel, status, responseXml |
-| **VATSubmission** | Momsindberetning | year, period, totalOutputVAT, totalInputVAT, status |
-| **EmailLog** | E-mail log | to, subject, template, status |
-| **NotificationRead** | Læst-notifikation | userId, notificationId, readAt |
+| # | Dokument | Formål | Status |
+|---|---|---|---|
+| 1 | `ANMELDELSESPAKKE.md` | Dette dokument — forside og indeks for anmeldelsen til Erhvervsstyrelsen. | Revideret 2026 |
+| 2 | `COMPLIANCE_RAPPORT.md` | Krav-for-krav kortlægning af Bogføringsloven + BEK 98 med tekniske implementeringsreferencer. | Revideret 2026 |
+| 3 | `BRUGSVEJLEDNING.md` | Brugermanual for alle funktioner i AlphaFlow (bogføring, fakturering, moms, bank, 2FA, e-faktura, årsregnskab m.m.). | Revideret 2026 |
+| 4 | `ENCRYPTION.md` | Detaljeret kryptografisk dokumentation (AES-256-GCM, bcrypt, SHA-256, TLS, nøglehåndtering). | Revideret 2026 |
+| 5 | `DATABEHANDLERAFTALE.md` | Standard databehandleraftale (GDPR Art. 28) mellem AlphaAi ApS og AlphaFlow-brugere, med referencer til underbehandlere. | Revideret 2026 |
+| 6 | `RISIKOVURDERING.md` | IT-risikovurdering — trusselsidentifikation, risikomatrix, eksisterende kontroller, restrisici. | Revideret 2026 |
+| 7 | `LEVERANDØERSTYRING.md` | Evaluering og styring af tekniske leverandører (Neon, IONOS, Storecove, OpenAI/OpenRouter/Anthropic, SKAT, Frisbii). | Revideret 2026 |
+| 8 | `BEREDSKABSPLAN.md` | Disaster Recovery-plan — RTO/RPO, gendannelsesprocedurer, backup-strategi, kontaktliste. | Revideret 2026 |
+| 9 | `NEON & IONOS_IT_SIKKERHED.md` | Tredjeparts IT-sikkerhedsdokumentation for de to primære infrastruktur-udbydere (Neon DB + IONOS VPS). | Revideret 2026 |
+| 10 | `TOKENBAY-ACCESS-ENV-GUIDE.md` | Miljø- og opsætningsguide for TokenPay/TokenBay-adgangssystemet (`.tbkey` proofs, trial, free tier). | Revideret 2026 |
+| 11 | `UDBEDRINGSPLAN.md` | Plan for afhjælpning af kendte mangler (fra P1-SEC-analyse). | Udenfor scope for denne revision — eksisterende version gælder. |
+| 12 | `SUBMISSION_CHECKLIST.md` | Tjekliste for selve indsendelsen til Erhvervsstyrelsen via virk.dk. | Udenfor scope for denne revision — eksisterende version gælder. |
+| 13 | `PROJECTS_IMPLEMENTATION.md` | Implementeringsnoter for valgfrit projekt-modul. | Udenfor scope for denne revision — eksisterende version gælder. |
+| 14 | `MULTI_TENANT_PLAN.md` | Designnoter for multi-tenant-arkitektur. | Udenfor scope for denne revision — eksisterende version gælder. |
 
-### Enums
-
-| Enum | Værdier |
-|------|---------|
-| **AccountType** | ASSET, LIABILITY, EQUITY, REVENUE, EXPENSE |
-| **AccountGroup** | CASH, BANK, RECEIVABLES, INVENTORY, FIXED_ASSETS, PAYABLES, SHARE_CAPITAL, RETAINED_EARNINGS, SALES_REVENUE, OUTPUT_VAT, INPUT_VAT, COST_OF_GOODS, PERSONNEL, OTHER_OPERATING, FINANCIAL_EXPENSE, FINANCIAL_INCOME, TAX |
-| **CompanyRole** | OWNER, ADMIN, ACCOUNTANT, VIEWER, AUDITOR |
-| **JournalEntryStatus** | DRAFT, POSTED, CANCELLED |
-| **InvoiceStatus** | DRAFT, SENT, PAID, CANCELLED |
-| **VATCode** | S25, S12, S0, SEU, K25, K12, K0, KEU, KUF, NONE |
-| **ReceivedInvoiceStatus** | RECEIVED, APPROVED, REJECTED, POSTED |
-| **EInvoiceFormat** | OIOUBL, PEPPOL_BIS |
-| **EInvoiceType** | INVOICE, CREDIT_NOTE, CORRECTED, SELF_BILLED |
-| **EInvoiceSendStatus** | PENDING, QUEUED, SENDING, DELIVERED, ACCEPTED, FAILED, REJECTED, CANCELLED |
-| **VATSubmissionStatus** | DRAFT, SUBMITTED, ACCEPTED, REJECTED, ERROR |
+> Dokumenterne 1–10 udgør den ajourførte anmeldelsespakke for 2026-revisionen. Dokument 11 (UDBEDRINGSPLAN) refereres fra afsnit 8 nedenfor og opretholdes som separat løbende dokument.
 
 ---
 
-## 7. Sikkerhedsarkitektur
+## 7. Compliance-oversigt
 
-### Defense-in-Depth — 5 lag
+Nedenstående tabel henviser til de specifikke dokumenter, der uddyber hvert compliance-område. Anmeldelsen bygger på tværgående dokumentation — intet krav er alene dækket af dette dokument.
 
-AlphaFlow anvender en "defense-in-depth" sikkerhedsarkitektur med fem lag:
+| Compliance-område | Lov-reference | Hoveddokument | Supplerende dokumenter |
+|---|---|---|---|
+| **Bogføringsloven-overholdelse** | LBK 1457/2019 (§3, §10–12, §13, §14, §15) | `COMPLIANCE_RAPPORT.md` | `BRUGSVEJLEDNING.md`, `ENCRYPTION.md` |
+| **BEK 98 — elektroniske bogføringssystemer** | BEK 98 af 13. feb. 2024 | `COMPLIANCE_RAPPORT.md` | `BEREDSKABSPLAN.md`, `RISIKOVURDERING.md` |
+| **GDPR — persondata** | EU 2016/679 (Art. 5, 25, 28, 32, 33, 34) | `DATABEHANDLERAFTALE.md` | `COMPLIANCE_RAPPORT.md`, `LEVERANDØERSTYRING.md` |
+| **IT-sikkerhed** | BEK 98 (Hovedkrav 2); GDPR Art. 32 | `NEON & IONOS_IT_SIKKERHED.md` | `ENCRYPTION.md`, `RISIKOVURDERING.md` |
+| **Risikovurdering** | BEK 98 | `RISIKOVURDERING.md` | `UDBEDRINGSPLAN.md` |
+| **Beredskab / Disaster Recovery** | BEK 98 | `BEREDSKABSPLAN.md` | `NEON & IONOS_IT_SIKKERHED.md` |
+| **Leverandørstyring** | GDPR Art. 28; BEK 98 | `LEVERANDØERSTYRING.md` | `DATABEHANDLERAFTALE.md`, `NEON & IONOS_IT_SIKKERHED.md` |
+| **Databehandleraftaler** | GDPR Art. 28 | `DATABEHANDLERAFTALE.md` | `LEVERANDØERSTYRING.md` |
+| **Kryptografisk sikkerhed** | GDPR Art. 32; BEK 98 | `ENCRYPTION.md` | `NEON & IONOS_IT_SIKKERHED.md` |
+| **Adgangsstyring (RBAC + 2FA)** | BEK 98 | `COMPLIANCE_RAPPORT.md` | `BRUGSVEJLEDNING.md` |
+| **Backup & retention (5 år)** | Bogføringsloven §15 | `COMPLIANCE_RAPPORT.md` | `BEREDSKABSPLAN.md`, `NEON & IONOS_IT_SIKKERHED.md` |
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  LAG 1: NETVÆRK (Network Security)                             │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ Caddy reverse proxy                                         │ │
-│  │ • TLS 1.3 med automatisk certifikat-håndtering             │ │
-│  │ • HSTS (HTTP Strict Transport Security)                      │ │
-│  │ • DDoS-beskyttelse og rate limiting                          │ │
-│  │ • IP-baseret adgangskontrol                                  │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  LAG 2: AUTE NTIFICERING (Authentication)                        │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ NextAuth.js v4 med cookie-baserede sessioner                │ │
-│  │ • TOTP-baseret 2FA/MFA                                       │ │
-│  │ • Tenant-niveau 2FA-krav (optional per virksomhed)          │ │
-│  │ • 10 backup-koder (SHA-256 hashed, AES-256-GCM krypteret)   │ │
-│  │ • Password hashing: bcrypt med 12 salt-runder               │ │
-│  │ • Session expiry med automatisk udløb                        │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  LAG 3: ADGANGSKONTROL (Authorization)                           │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ RBAC med 5 roller og 23 granulære tilladelser                │ │
-│  │ • Tenant-isolering (alle queries filtreres på companyId)      │ │
-│  │ • SuperDev oversight med audit-logning                        │ │
-│  │ • Endpoint-beskyttelse med permission checks                   │ │
-│  │ • Multi-tenant medlemsskab via UserCompany junction          │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  LAG 4: DATAKRYPTERING (Encryption)                              │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ AES-256-GCM (symmetrisk kryptering)                         │ │
-│  │ • Bankadgangskoder                                            │ │
-│  │ • TOTP secrets (2FA)                                          │ │
-│  │ • Backup-koder                                                │ │
-│  │ • Følsomme konfigurationsdata                                 │ │
-│  │                                                             │
-│  │ TLS 1.3 — al data i transit                                   │ │
-│  │ SSL/TLS til databaseforbindelse (sslmode=require)            │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  LAG 5: OVERVÅGNING & GENDANNELSE (Monitoring & Recovery)       │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │ Uforanderlig audit trail (AuditLog)                           │ │
-│  │ • Alle handlinger logges med bruger, tid, ændring            │ │
-│  │ • Soft delete — poster slettes aldrig fysisk                 │ │
-│  │                                                             │
-│  │ Automated backup scheduler                                     │ │
-│  │ • Timebackup: hver time (24 retention)                       │ │
-│  │ • Dagsbackup: daglig (30 retention)                           │ │
-│  │ • Ugebackup: ugentlig (52 retention)                         │ │
-│  │ • Månedsbackup: månedlig (60 retention)                       │ │
-│  │ • SHA-256 checksum verifikation                              │ │
-│  │                                                             │
-│  │ PM2 process management med auto-restart                        │ │
-│  │ • Health check mekanisme                                      │ │
-│  │ • Graceful error handling                                     │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Dataflow ud af EU/EEA
 
-### Sikkerhedsforanstaltninger — Detaljer
+Tre underbehandlere flytter persondata til USA (SCC + TIA påkrævet — se `DATABEHANDLERAFTALE.md` og `LEVERANDØERSTYRING.md`):
 
-| Område | Metode | Reference |
-|--------|--------|-----------|
-| Adgangskoder | bcrypt (12 salt-runder) | Prisma User.password |
-| 2FA secrets | AES-256-GCM kryptering | `src/lib/two-factor.ts` |
-| Backup-koder | SHA-256 hash + AES-256-GCM | `src/lib/two-factor.ts` |
-| Bankadgangskoder | AES-256-GCM kryptering | `src/lib/crypto.ts` |
-| Data i transit | TLS 1.3 (HTTPS) | Caddyfile |
-| Data i hvile (database) | Neon PostgreSQL (krypteret storage) | `prisma/schema.prisma` |
-| Databaseforbindelse | SSL/TLS (sslmode=require) | DATABASE_URL |
-| Sessionsikkerhed | Unikke sessionstokens med expiry | Session model |
-| Tenant-isolering | companyId-filter på alle queries | RBAC middleware |
-| Audit trail | Uforanderlig log af alle handlinger | `src/lib/audit.ts` |
-| Backup-integritet | SHA-256 checksum | `src/lib/backup-engine.ts` |
+1. **OpenAI, Inc.** (USA) — embeddings til Hermes Knowledge RAG.
+2. **OpenRouter, Inc.** (USA) — Hermes chat-LLM (videresender til Anthropic/Meta).
+3. **Anthropic PBC** (USA) — scanner VLM (billeder af kvitteringer/fakturaer).
+
+Data minimization: `HermesAgent.dataAccessEnabled` er per-tenant opt-in (default false) — uden opt-in sendes KUN spørgsmål + statisk system-prompt, ikke tenant-specifikke finansielle data.
 
 ---
 
-## 8. Anmeldelsesprocedure
+## 8. Åbenhed om mangler
 
-### Trin-for-trin guide til anmeldelse via virk.dk
+AlphaAi ApS har i forbindelse med denne anmeldelse identificeret følgende kendte mangler i platformen. Manglerne er uddybet i `docs/RISIKOVURDERING.md` med restrisici, og afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`. Erhvervsstyrelsens anmeldelsespraksis tilskynder åbenhed om kendte mangler, og nedenstående liste er derfor inkluderet her.
 
-**Trin 1: Forberedelse**
+### Sikkerhedsmæssige mangler
 
-- [x] Saml alle dokumenter ifølge dokumentpakken (se sektion 3)
-- [x] Bekræft at alle 83 krav er opfyldt (se sektion 4)
-- [x] Forbered systeminformation (CVR, kontaktperson, teknisk beskrivelse)
+1. **Ingen Content-Security-Policy (CSP) header** — hverken i `next.config.ts` eller Caddyfile. Øger potentiel XSS-konsekvens.
+2. **Ingen CSRF-token** — afhængig af `SameSite=Lax` cookie + Bearer-token Authorization header.
+3. **Ingen Next.js `middleware.ts`** — rate-limiting og auth håndteres pr. route via `withGuard`.
+4. **Ingen antivirus-scanning af uploads** — kun MIME-whitelist + størrelsesgrænse (25 MB).
+5. **Ingen account-lockout** — kun IP-baseret rate-limiting (in-memory, nulstilles ved server-restart).
+6. **Ingen key rotation / versioning** — `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske.
+7. **Caddy `rate_limit` plugin ikke installeret** — rate-limiting udelukkende in-memory app-level.
+8. **Password min. længde kun 6 tegn** — under NIST 800-63B anbefaling på 8.
+9. **Webhook HMAC-fallback "accept all" i dev** — hvis `WEBHOOK_SECRET` er tom; skal sikres i produktion.
 
-**Trin 2: virk.dk anmeldelse**
+### Funktionelle mangler (i relation til anmeldelsen)
 
-1. Gå til [virk.dk](https://www.virk.dk)
-2. Log ind med MitID (erhvervsprofil)
-3. Navigér til **Erhvervsstyrelsen → Anmeldelse af elektronisk bogføringssystem**
-4. Udfyld systemoplysninger:
-   - Systemnavn: AlphaFlow
-   - CVR-nummer: [Virksomhedens CVR]
-   - Kontaktperson: [Navn, e-mail, telefon]
-   - Systemtype: Cloudbaseret regnskabssystem
-   - Teknologi: Next.js 16, PostgreSQL, Neon
-5. Upload dokumentpakke (eller referér til online-dokumentation)
-6. Bekræft anmeldelsen
-7. Modtag kvittering med sagsnummer
+10. **Ingen kryptografisk hash-chain på posteringer** — Bogføringsloven §10–12 immutability håndhæves KUN via AuditLog 3-niveau + PostgreSQL-triggere, ikke via hash-kæde mellem posteringer.
+11. **Ingen kreditnota-flow i UI** — `EInvoiceType.CREDIT_NOTE` enum findes, men ingen oprettelsesflow.
+12. **Ingen reelle bank-API-kald** — Tink/Nordea/Danske/Jyske er stubs; kun Demo-provider virker.
+13. **Ingen MitID/BankID** — kun email+password+TOTP.
+14. **Ingen AI-bankafstemning i produktion** — `z-ai-web-dev-sdk` er sandbox-only.
+15. **Uploads ukrypteret på VPS-disk** — `uploads/`-filer er ukrypteret; backup-filer er derimod AES-256-GCM-krypterede. Afhænger af disk-encryption + adgangskontrol på VPS.
 
-**Trin 3: Efter anmeldelse**
+> Manglende punkt 10 (hash-chain) er den eneste, der potentielt påvirker Erhvervsstyrelsens fortolkning af §10–12 — herunder om den implementerede AuditLog + DB-triggere opfylder kravet om "uforanderlig dokumentation". AlphaAi ApS anser AuditLog 3-niveau for at opfylde kravet, men anerkender at en kryptografisk hash-chain ville være en yderligere sikkerhed.
 
-- Opbevar anmeldelseskvitteringen
-- Svær på eventuelle opfølgende spørgsmål fra Erhvervsstyrelsen
-- Hold dokumentationen opdateret ved ændringer i systemet
-
-> **Bemærk:** Anmeldelsen kan suppleres med yderligere information, hvis Erhvervsstyrelsen anmoder herom. Svarfristen er typisk 30 dage.
+Den fulde restrisiko-matrix findes i `docs/RISIKOVURDERING.md`, og afhjælpningsplanen (med prioriteter og tidsrammer) findes i `docs/UDBEDRINGSPLAN.md`.
 
 ---
 
-## 9. Bilag
+## 9. Vedligeholdelse & ændringsstyring
 
-### Liste over understøttende materialer
+Anmeldelsespakken holdes ajour gennem følgende proces:
 
-| Bilag | Fil | Beskrivelse |
-|-------|-----|-------------|
-| Bilag A | `prisma/schema.prisma` | Komplet Prisma database-schema med alle modeller og relationer |
-| Bilag B | `src/lib/rbac.ts` | RBAC implementering med 5 roller og 23 tilladelser |
-| Bilag C | `src/lib/two-factor.ts` | TOTP 2FA implementering med AES-256-GCM kryptering |
-| Bilag D | `src/lib/crypto.ts` | Kryptografisk bibliotek (AES-256-GCM, hash-funktioner) |
-| Bilag E | `src/lib/audit.ts` | Audit trail implementering |
-| Bilag F | `src/lib/backup-engine.ts` | Backup engine med SHA-256 checksum |
-| Bilag G | `src/lib/backup-scheduler.ts` | Automated backup scheduler |
-| Bilag H | `src/lib/standard-chart-of-accounts.ts` | SKAT Fællesoffentlig Standardkontoplan (~60 konti) |
-| Bilag I | `src/lib/einvoice-parser.ts` | Unified OIOUBL/Peppol BIS XML parser |
-| Bilag J | `src/lib/einvoice-response.ts` | Application Response, Message Level Response, Invoice Response |
-| Bilag K | `Caddyfile` | Reverse proxy konfiguration med TLS 1.3 og HSTS |
-| Bilag L | `docs/ENCRYPTION.md` | Detaljeret kryptografisk dokumentation |
-| Bilag M | `package.json` | Komplet liste over afhængigheder og versioner |
+### Versionsstyring
 
-### Eksterne referencer
+- Alle dokumenter er versioneret i projektets git-repository sammen med kildekoden.
+- Hver dokument-revision har en commit-besked på formen `docs(rev-2026): <fil> — <kort beskrivelse>`.
+- Ændringer i kode, der påvirker dokumentationen (f.eks. nye API-routes, ændrede krypteringsmetoder, nye underbehandlere), skal medføre en tilsvarende dokumentopdatering i samme PR.
 
-| Reference | URL / Kilde |
-|-----------|-------------|
-| Bogføringsloven (LOV nr. 1457 af 13/12/2019) | retsinformation.dk |
-| BEK nr. 98 af 13. februar 2024 | retsinformation.dk |
-| SAF-T Financial DK v1.0 specifikation | skat.dk |
-| OIOUBL 2.1 standard | digst.dk |
-| Peppol BIS Billing 3.0 | peppol.eu |
-| European Central Bank — Frankfurter API | ecb.europa.eu |
-| SKAT Fællesoffentlig Standardkontoplan | skat.dk |
-| NemHandelsregisteret | nemhandel.dk |
+### Review-cadence
+
+| Type | Frekvens | Ansvarlig |
+|---|---|---|
+| **Årlig review** | Hvert år (Q1) | AlphaAi ApS — teknisk ansvarlig |
+| **Ved væsentlig produktændring** | Efter behov | AlphaAi ApS — teknisk ansvarlig |
+| **Ved udbyder-ændring** (f.eks. ny sub-processor hos Neon) | Ved modtagelse af underretnings-e-mail | AlphaAi ApS — DPO / dataansvarlig |
+| **Ved ny regulering** (f.eks. opdatering af BEK 98) | Ved ikrafttrædelse | AlphaAi ApS — compliance-ansvarlig |
+
+### Knyttning til anmeldelsen
+
+- Erhvervsstyrelsen underrettes ved væsentlige ændringer i platformens arkitektur, der påvirker anmeldelsesgrundlaget (jf. BEK 98 § 6).
+- Mindre ændringer (f.eks. version-opdateringer af afhængigheder) dokumenteres i git-historikken uden separat underretning.
 
 ---
 
-*Dokumentet udgør den komplette anmeldelsespakke for AlphaFlow til Erhvervsstyrelsen.*
+## 10. Underskrift
 
-*Udarbejdet af AlphaAi — 2025*
+| Rolle | Navn | Dato | Underskrift |
+|---|---|---|---|
+| Anmeldelsesansvarlig (teknisk) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| DPO / dataansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| Ledelse (AlphaAi ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+
+---
+
+*Bekræftelse: Denne anmeldelsespakke er udarbejdet på baggrund af en fuld kodebase-analyse (Fase 1–7) og afspejler AlphaFlow v1.0.0 som implementeret pr. 2026. Alle tekniske angivelser er verificerbare i kildekoden.*
+
+*Udarbejdet af AlphaAi ApS — 2026*

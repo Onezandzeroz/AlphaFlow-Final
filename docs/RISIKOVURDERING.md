@@ -1,16 +1,16 @@
-# IT-Risikovurdering
-
-## AlphaFlow Cloud Regnskabssystem
+# Risikovurdering (DPIA) — AlphaFlow
 
 | **Felt** | **Oplysning** |
 |---|---|
-| **Dokumenttype** | IT-risikovurdering |
-| **Version** | 2.0 |
-| **Dato** | 1. juli 2025 |
-| **Udarbejdet af** | AlphaAi (dataansvarlig) |
-| **Klassifikation** | Fortroligt |
-| **Gyldighedsperiode** | 12 måneder (næste revision: 1. juli 2026) |
-| **Referencer** | ISO/IEC 27005:2022, Bogføringsloven (LBK nr. 1513), GDPR (forordning 2016/679), BEK nr. 98 om elektronisk bogføring |
+| **Dokumenttype** | Konsekvensanalyse / Data Protection Impact Assessment (DPIA) jf. GDPR Art. 35 + IT-risikovurdering jf. ISO/IEC 27005:2022 |
+| **Version** | 3.0 |
+| **Dato** | 2026 |
+| **Dataansvarlig** | AlphaAi ApS (CVR 46312058) |
+| **System** | AlphaFlow (`alphaai-accounting` v1.0.0) — alphaflow.dk |
+| **Klassifikation** | Fortroligt — Compliance-dokumentation |
+| **Gyldighedsperiode** | 12 måneder (næste årlige revision; desuden ved væsentlige arkitektur- eller infrastrukturændringer) |
+| **Relaterede dokumenter** | `BEREDSKABSPLAN.md`, `UDBEDRINGSPLAN.md`, `ENCRYPTION.md`, `LEVERANDØRSTYRING.md`, `DATABEHANDLERAFTALE.md`, `NEON & IONOS_IT_SIKKERHED.md`, `COMPLIANCE_RAPPORT.md` |
+| **Lovgrundlag** | GDPR (EU 2016/679), Bogføringsloven (LBK nr. 1513), BEK nr. 98 om elektronisk bogføring, ISO/IEC 27001/27005:2022, NIST SP 800-63B |
 
 ---
 
@@ -18,485 +18,655 @@
 
 ### 1.1 Formål
 
-Denne IT-risikovurdering er udarbejdet som led i AlphaFlows anmeldelse til Erhvervsstyrelsen som standardiseret bogføringssystem jf. Bekendtgørelse om godkendelse af standardiserede bogføringssystemer (BEK nr. 98).
+Denne risikovurdering er udarbejdet som en **Konsekvensanalyse (DPIA) jf. GDPR Art. 35** og som IT-risikovurdering jf. **ISO/IEC 27005:2022**. Dokumentet understøtter AlphaFlows anmeldelse til Erhvervsstyrelsen som standardiseret bogføringssystem jf. BEK nr. 98.
 
-Formålet er at identificere, vurdere og håndtere IT-relaterede risici forbundet med drift af AlphaFlow — et multi-tenant cloud-baseret regnskabssystem, der behandler finansielle data for danske virksomheder.
+Formålet er at:
 
-Dokumentet adresserer specifikt følgende krav fra Erhvervsstyrelsen:
+1. Identificere, vurdere og håndtere IT-sikkerheds- og persondatarisici i AlphaFlow-platformen.
+2. Dokumentere eksisterende tekniske og organisatoriske afhjælpninger (verificeret i kodebasen).
+3. Være ærlig om identificerede mangler — se risici R-01..R-20 — og referere til `UDBEDRINGSPLAN.md` for planlagt afhjælpning.
+4. Opfylde Erhvervsstyrelsens hovedkrav: **N2** (risikovurdering af tab af tilgængelighed), **N3** (tredjeparter), **N4** (trusselsændringer), **N5** (konsekvens- og sandsynlighedsvurdering), **D1** (it-sikkerhed på tilstrækkeligt niveau), **D15** (hændelig tilintetgørelse).
 
-| Krav | Beskrivelse |
-|------|-------------|
-| **N2** | Risikovurdering af tab af tilgængelighed |
-| **N3** | Risikovurdering af tredjeparter |
-| **N4** | Risikovurdering af trusselsændringer |
-| **N5** | Risikovurdering med konsekvens- og sandsynlighedsvurdering |
-| **D1** | It-sikkerhed på tilstrækkeligt niveau |
-| **D15** | Hændelig tilintetgørelse af data |
+### 1.2 Scope
 
-### 1.2 Anvendelsesområde
+Vurderingen dækker hele AlphaFlow-platformen — en multi-tenant SaaS bogføringsplatform:
 
-Denne risikovurdering dækker følgende systemkomponenter:
-
-- **Applikation:** AlphaFlow Next.js 16 webapplikation (TypeScript, Prisma ORM)
-- **Applikationsserver:** IONOS VPS (Cloud VPS, C5 + IT-Grundschutz cert., EU-hosted)
-- **Database:** Neon PostgreSQL (hosted, EU-baseret)
-- **Backup-lagring:** IONOS VPS (Tenant-Backup/ folder, AES-256-GCM krypteret)
-- **Reverse proxy/TLS:** Caddy (open source, TLS 1.3)
-- **E-faktura:** OIOUBL og Peppol BIS Billing 3.0 parser/validator
-- **Valutakurser:** Frankfurter API (ECB reference rates)
-- **Backup:** Automatiseret tenant-snapshot backup med AES-256-GCM kryptering og SHA-256 verificering
-- **Tredjepartstjenester:** NemHandel-klient, bank-sync integrationer
+- **Host-app:** Next.js 16 (App Router, TypeScript 5) på IONOS VPS (EU/Tyskland), port 3000, PM2 fork-mode.
+- **Mini-services (6 PM2-apps):** `alphaflow:3000`, `hermes-agent:3004`, `knowledge-service:3006`, `tokenpay-access:3100`, `notification-ws:3001`, `scanner-service:3005` (Python/FastAPI).
+- **Database:** PostgreSQL på Neon (EU: Frankfurt + Amsterdam), Prisma ORM, pgvector-udvidelse.
+- **Reverse proxy/TLS:** Caddy (self-hosted på IONOS VPS), Let's Encrypt, TLS 1.2/1.3.
+- **Backup-lagring:** IONOS VPS (`Tenant-Backup/{companyName}/`), AES-256-GCM-krypterede ZIPs.
+- **15 integrationer:** 12 EU-baserede + 3 USA-baserede (OpenAI, OpenRouter, Anthropic).
 
 ### 1.3 Metodologi
 
-Risikovurderingen er udført i overensstemmelse med principperne i **ISO/IEC 27005:2022** (Information security risk management) og omfatter følgende trin:
+Risikovurderingen er udført i overensstemmelse med ISO/IEC 27005:2022 og omfatter:
 
-1. **Kontekstetablering:** Identifikation af kritiske aktiver, forretningsprocesser og interessenter
-2. **Trusselsidentifikation:** Systematisk kortlægning af trusler mod tilgængelighed, fortrolighed, integritet og persondata
-3. **Risikovurdering:** Kvantitativ vurdering af konsekvens (1–5) og sandsynlighed (1–5)
-4. **Kontrolidentifikation:** Eksisterende tekniske og organisatoriske kontroller
-5. **Restrisikoberegning:** Vurdering af resterende risiko efter implementerede kontroller
-6. **Risikoaccept:** Formel accept af dokumenterede restrisici
+1. **Kontekstetablering** — se afsnit 2–4.
+2. **Trusselsidentifikation** — se afsnit 3.
+3. **Aktiv- og sårbarhedsidentifikation** — se afsnit 4.
+4. **Risikovurdering** — systematisk tabel med 20 risici (R-01..R-20), se afsnit 5.
+5. **Risikomatrix** — se afsnit 6.
+6. **Risikohåndtering** — eksisterende afhjælpninger dokumenteret pr. risiko; planlagte afhjælpninger i `UDBEDRINGSPLAN.md`.
+7. **Restrisiko og accept** — se afsnit 7.
+8. **Konklusion** — se afsnit 8.
 
-### 1.4 Risikovurderingsskala
+Risikoniveau = Sandsynlighed × Konsekvens.
 
-#### Konsekvens (K)
-
-| Niveau | Beskrivelse | Eksempel |
-|-------|-------------|----------|
-| **1 — Forsummelig** | Ubetydelig indvirkning på driften | Midlertidig forsinkelse i rapportgenerering |
-| **2 — Lille** | Begrænset indvirkning, hurtigt gendannet | Enkel bruger mister adgang i kort tid |
-| **3 — Middel** | Mærkbar indvirkning på forretning | Flere brugere mister adgang; data korrupt |
-| **4 — Betydelig** | Betydelig forretningsmæssig skade | Omfattende datatab; system nede i timer |
-| **5 — Katastrofal** | Eksistens truet; lovkrav overtrådt | Komplet datatab; GDPR-breach; bogføringslovbrud |
-
-#### Sandsynlighed (S)
+#### Sandsynlighedsskala
 
 | Niveau | Beskrivelse | Frekvens |
-|-------|-------------|----------|
-| **1 — Meget lav** | Forventes ikke at indtræffe | < 1 gang pr. 5 år |
-| **2 — Lav** | Usandsynligt men muligt | 1 gang pr. 1–5 år |
-| **3 — Middel** | Muligt og forventeligt | 1–3 gange pr. år |
-| **4 — Høj** | Sandsynligt at indtræffe | Månedlig |
-| **5 — Meget høj** | Forventes at indtræffe hyppigt | Ugentlig/daglig |
+|---|---|---|
+| **Lav (L)** | Usandsynligt men muligt | < 1 gang pr. 5 år |
+| **Mellem (M)** | Muligt og forventeligt | 1 gang pr. 1–5 år |
+| **Høj (H)** | Sandsynligt at indtræffe | Månedligt/årligt |
 
-#### Risikoklassificering
+#### Konsekvensskala
 
-| Risiko (K × S) | Klasse | Farve |
-|-----------------|--------|-------|
-| 1–4 | 🟢 **Lav** | Grøn |
-| 5–9 | 🟡 **Middel** | Gul |
-| 10–15 | 🟠 **Høj** | Orange |
-| 16–25 | 🔴 **Kritisk** | Rød |
+| Niveau | Beskrivelse | Eksempel |
+|---|---|---|
+| **Lav (L)** | Ubetydelig indvirkning | Midlertidig forsinkelse; ingen persondata berørt |
+| **Mellem (M)** | Mærkbar indvirkning på forretning | Enkel bruger mister adgang; data korrupt; GDPR-relevant |
+| **Høj (H)** | Betydelig forretningsmæssig skade | Omfattende datatab; system nede i timer; anmeldelsespligt |
+| **Kritisk (K)** | Eksistens truet; lovkrav overtrådt | Komplet datatab; GDPR-breach; bogføringslovbrud |
+
+#### Risikoniveau ( før afhjælpning )
+
+Se matrix i afsnit 6.
+
+### 1.4 Ansvarlig
+
+| Rolle | Navn / Enhed |
+|---|---|
+| Dataansvarlig | AlphaAi ApS (CVR 46312058) |
+| DPO / Compliance-ansvarlig | _[Udfyldes]_ |
+| Teknisk ansvarlig | _[Udfyldes]_ |
+| Årlig review-ansvarlig | _[Udfyldes]_ |
 
 ---
 
-## 2. Aktivoversigt
+## 2. Kontekst & arkitektur
 
-Følgende kritiske informationssystemer er identificeret som væsentlige aktiver for AlphaFlow:
+AlphaFlow er en cloud-baseret dansk bogføringsplatform (SaaS) for små og mellemstore virksomheder. Platformen tilbyder dobbelt bogføring, fakturering, momsangivelse, e-fakturering (NemHandel/Peppol via Storecove), AI-assistent (Hermes), dokument-OCR (Tesseract + Anthropic VLM) og bank-integration (scaffolding).
 
-| Aktiv ID | Aktivnavn | Type | Klassifikation | Beskrivelse |
-|----------|-----------|------|----------------|-------------|
-| **A1** | Regnskabsdata | Data | Fortroligt | Finansielle transaktioner, journalposter, fakturaer, bilag, momsopgørelser, årsregnskaber for alle kunder |
-| **A2** | Brugerdata | Data | Fortroligt | Personoplysninger: navn, e-mail, CPR-relaterede data, adgangskoder (hashed), 2FA-secrets (krypterede) |
-| **A3** | Bankforbindelser | Data | Fortroligt | Bank access tokens, refresh tokens (AES-256-GCM krypterede), kontoudtog, bank-reconciliation data |
-| **A4** | Audit trail | Data | Fortroligt | Uforanderlig log over alle ændringer til regnskabsdata (bogføringslov §10-12) |
-| **A5** | E-faktura data | Data | Fortroligt | Modtagne OIOUBL/Peppol fakturaer, kreditnotaer og genererede responses |
-| **A6** | Backup arkiv | Data | Fortroligt | Automatiske og manuelle snapshots (AES-256-GCM krypteret ZIP med SHA-256 checksum) af alle tenant-data, lagret på IONOS VPS i EU |
-| **A7** | Applikationskode | Software | Internt | Next.js kildekode, API routes, library-moduler |
-| **A8** | Infrastruktur | System | Internt | IONOS VPS (applikationsserver + backup-lagring, C5 + IT-Grundschutz), Neon PostgreSQL database, Caddy reverse proxy |
+### 2.1 Teknisk arkitektur (verificeret)
 
-### Aktivafhængigheder
+| Komponent | Teknologi | Lokation |
+|---|---|---|
+| Host-app | Next.js 16, TypeScript 5, Node runtime | IONOS VPS (EU/Tyskland) |
+| Mini-services | Bun (4 services) + Python/FastAPI (scanner) | Samme VPS |
+| Proces-manager | PM2 fork-mode (6 apps) | Samme VPS |
+| Reverse proxy | Caddy + Let's Encrypt, TLS 1.2/1.3 | Samme VPS |
+| Database | PostgreSQL på Neon (serverless) + Prisma ORM + pgvector | EU (Frankfurt + Amsterdam) |
+| 2 SQLite mini-DBs | `scanner.db`, `access.db` (WAL mode) | VPS-disk |
+| Backup-lagring | `Tenant-Backup/{companyName}/` AES-256-GCM ZIPs | VPS-disk (EU) |
+| Upload-lagring | `uploads/receipts/`, `uploads/documents/` | VPS-disk (EU) |
+
+### 2.2 Multi-tenant isolation
+
+`Company` = tenant-grænse. `companyId` på 24 Prisma-modeller. `tenantFilter(ctx)` i `src/lib/route-guard.ts` gennemtvinger per-row isolation på alle DB-queries. RBAC: 5 roller (OWNER>ADMIN>ACCOUNTANT>VIEWER>AUDITOR), 18 permissions, SuperDev oversight-mode (read-only cross-tenant for AlphaAi-ansatte), demo-firma read-only.
+
+### 2.3 Persondata
+
+AlphaFlow behandler **ikke CPR-numre** — kun CVR. Persondatakategorier (jf. GDPR Art. 4(1)):
+
+- **Identitetsdata:** navn, email, telefon, adresse (på brugere og kontakter).
+- **Finansielle data:** posteringer, fakturaer, momsangivelser, bank-transaktioner.
+- **Adgangskoder:** bcrypt 12 rounds.
+- **2FA-secrets:** AES-256-GCM-krypteret TOTP RFC6238 + 10 SHA-256+salt backup-koder.
+- **Bank-tokens:** AES-256-GCM-krypteret.
+- **IP/User-Agent:** audit-log og session-log.
+
+Felter der opbevares **ukrypteret i DB** (verificeret i P1-DB / P1-SEC): `Contact.email`, `Contact.phone`, `BankConnection.accountNumber`, `BankConnection.iban`, `Company.bankAccount`, `Company.bankRegistration`, de fleste personnavne/adresser. Disse er afhængige af Neons disk-encryption (managed) — se risiko R-12.
+
+### 2.4 Integrationer (15, verificeret)
+
+3 integrationer transmitterer data til USA — se risiko R-13:
+
+| # | Integration | Lokation | Data ud af EU? |
+|---|---|---|---|
+| 1 | Neon PostgreSQL | EU | Nej |
+| 2 | SKAT Moms-API | DK | Nej |
+| 3 | Storecove (Peppol) | Holland | Nej |
+| 4 | Frisbii/Flatpay | Tyskland | Nej |
+| 5 | CVR-opslag (VIRK) | DK | Nej |
+| 6 | **OpenRouter** (Hermes chat) | **USA** | **JA** |
+| 7 | **OpenAI** (embeddings) | **USA** | **JA** |
+| 8 | **Anthropic** (scanner VLM) | **USA** | **JA** |
+| 9 | TokenPay (intern) | Samme VPS | Nej |
+| 10 | SMTP (Simply/Brevo) | EU | Nej |
+| 11 | IONOS VPS | Tyskland | Nej |
+| 12 | notification-ws (intern) | Samme VPS | Nej |
+| 13 | Backup-system | VPS (EU) | Nej |
+| 14 | Bank-API'er | Stub-only | — |
+| 15 | z-ai-web-dev-sdk | Sandbox-only | — |
+
+---
+
+## 3. Trusselsmodel
+
+### 3.1 Trusselaktører
+
+| Trusselaktør | Motivation | Kapacitet |
+|---|---|---|
+| **Ekstern angriber** | Økonomisk gevinst, data-udnyttelse, ransomware | Høj — automatiserede værktøjer, botnets, public-facing overflade |
+| **Ondsindet insider (bruger)** | Konkurrencefordel, hævn, fejlbehæftet handling | Begrænset til egen tenant — men SuperDev oversight-mode har cross-tenant read-adgang |
+| **Forvirret insider (bruger)** | Uheldig fejl, manglende træning | Lav — begrænset af RBAC og audit-log |
+| **Underbehandler-kompromittering** | OpenAI/OpenRouter/Anthropic/Neon/IONOS | Lav–mellem — afhængig af underbehandlers sikkerhedskontrol |
+| **Myndighedskrav** | Lovgivningsmæssig adgang, retskendelse | Lav i DK — retsbeskyttelse via grundloven |
+| **Teknisk fejl** | Software-bug, infrastruktur-fejl, konfiguration | Mellem — kompleks multi-service arkitektur |
+| **Naturkatastrofe / fysisk hændelse** | Brand, strømsvigt, hardware-fejl | Lav — Neon cloud + IONOS VPS i Tyskland |
+
+### 3.2 Trusselsvektorer
+
+- **Netværksbaseret:** XSS, CSRF, SQL-injection, DDoS, MITM (afvist af TLS 1.2/1.3).
+- **Applikationsbaseret:** Insecure direct object reference (IDOR), fil-upload misbrug, path-traversal, deserialisation, klasse-omgivelser.
+- **Identity-based:** Password brute-force, credential stuffing, session-hijack, 2FA-bypass.
+- **Infrastruktur-baseret:** VPS-kompromittering, DB-kompromittering, backup-tyveri, key-lækage.
+- **Leverandør-baseret:** Underbehandler data breach, USA-dataoverførsel (Schrems II).
+- **Intern:** Misconfiguration, ufuldstændig route-guard, udtørret hukommelse (in-memory state nulstilles ved restart).
+
+---
+
+## 4. Aktiver & sårbarheder
+
+### 4.1 Aktiver
+
+| Aktiv ID | Aktiv | Klassifikation | Beskrivelse |
+|---|---|---|---|
+| **A1** | Persondata i Neon DB | Fortroligt | Identitetsdata, finansielle data, adgangskoder, 2FA-secrets, bank-tokens |
+| **A2** | Finansielle data (bogføringsdata) | Fortroligt + Regulatorisk | Posteringer, journalposter, fakturaer, momsangivelser — Bogføringsloven §10-12 immutability + §15 5-års retention |
+| **A3** | `ENCRYPTION_KEY` (64-hex) | Kritisk | AES-256-GCM-nøgle for bank-tokens, TOTP-secrets, backup-koder, backup-filer |
+| **A4** | `PROOF_ENCRYPTION_KEY` (64-hex) | Kritisk | AES-256-GCM-nøgle for `.tbkey` proof-filer (TokenPay adgang) |
+| **A5** | Backup-filer (`Tenant-Backup/`) | Fortroligt + Regulatorisk | AES-256-GCM-krypterede ZIPs pr. tenant + manifest v2 + SHA-256 checksum |
+| **A6** | Upload-lagring (`uploads/`) | Fortroligt | Bilag, kvitteringer, dokumenter pr. tenant |
+| **A7** | Session-tokens | Fortroligt | 256-bit httpOnly+secure+sameSite=lax cookies, 7d sliding expiry |
+| **A8** | Inter-service API-nøgler | Kritisk | `TOKENPAY_API_KEY`, `SCANNER_API_KEY`, `HERMES_ADMIN_KEY`, `FLATPAY_API_KEY+WEBHOOK_SECRET`, `STORECOVE_API_KEY+WEBHOOK_SECRET` |
+| **A9** | Eksterne API-secrets | Kritisk | `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `SKAT_CLIENT_SECRET`, `CVR_API_PASSWORD`, `SMTP_PASS` |
+| **A10** | AI-data (Hermes / embeddings / scanner-billeder) | Fortroligt | Sendes til USA — se R-13 |
+| **A11** | SQLite mini-DBs (`scanner.db`, `access.db`) | Fortroligt | Scan-job-historik + access-log + proof-fil-references — ukrypteret på disk, se R-18 |
+| **A12** | AuditLog | Regulatorisk | 3-niveau immutable audit-trail — Bogføringsloven §10-12 compliance-bevis |
+
+### 4.2 Sårbarheder (verificeret i P1-SEC / P1-DB / P1-INT / P1-SVC-b)
+
+Nedenstående sårbarheder er **bekræftet i kodebasen** og danner grundlag for risici i afsnit 5:
+
+1. Ingen Content-Security-Policy (CSP) header.
+2. Ingen antivirus-scanning af uploads.
+3. Ingen key rotation / versioning — `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske.
+4. Ingen kryptografisk hash-chain på posteringer — immutability via AuditLog + DB-triggere kun.
+5. Ingen account-lockout — kun IP-baseret rate-limiting.
+6. Password min. længde 6 tegn (under NIST 800-63B anbefaling på 8).
+7. Caddy `rate_limit` plugin ikke installeret — konfiguration udkommenteret i Caddyfile.
+8. Ingen `middleware.ts` i Next.js — ingen central request-filter.
+9. Ingen CSRF-token — kun SameSite=Lax cookie.
+10. Ingen OAuth/SSO/SAML.
+11. Webhook HMAC dev-fallback accept-all hvis `WEBHOOK_SECRET` tom (`flatpay-client.ts`, `storecove-client.ts`).
+12. Persondata opbevares ukrypteret i DB (`Contact.email/phone`, `BankConnection.accountNumber/iban`, `Company.bankAccount`).
+13. USA-dataoverførsel: OpenAI, OpenRouter, Anthropic.
+14. TokenPay callback `timingSafeEqual` er manuelt implementeret (string XOR, ikke `crypto.timingSafeEqual`).
+15. Bank-API'er (Tink/Nordea/Danske/Jyske) er stubs — ingen reelle kald.
+16. `z-ai-web-dev-sdk` (AI-bankafstemning) er sandbox-only — virker ikke i produktion.
+17. Backup-scheduler er process-intern (`node-cron` i alphaflow PM2-app) — stopper hvis appen crasher.
+18. SQLite-filer (`scanner.db`, `access.db`) ukrypteret på VPS-disk.
+19. `notification-ws /broadcast` har ingen auth (forventes kun localhost).
+20. Hermes Socket.IO `join`-event har ingen handshake-auth (tenantId/userId/userName sendes ukontrolleret).
+
+### 4.3 Bekræftede sikkerhedsfeatures (verificeret)
+
+Følgende tekniske kontroller er implementeret og udgør den eksisterende afhjælpning:
+
+- ✅ AES-256-GCM kryptering (bank-tokens, TOTP-secrets, backup-koder, backup-filer, `.tbkey` proofs).
+- ✅ Bcrypt password-hashing (12 rounds).
+- ✅ TOTP 2FA RFC 6238 + 10 backup-koder (SHA-256+salt).
+- ✅ Tenant-wide 2FA-tveng (`Company.twoFactorRequired`).
+- ✅ Multi-tenant isolation via `tenantFilter` + per-row `companyId`.
+- ✅ RBAC: 5 roller, 18 permissions, SuperDev oversight read-only.
+- ✅ Path-traversal beskyttelse (`isPathWithin`).
+- ✅ MIME-type whitelist på uploads (25 MB max).
+- ✅ HTTP security headers: HSTS preload, X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy.
+- ✅ TLS 1.2/1.3 (Caddy).
+- ✅ HttpOnly + Secure + SameSite=Lax session cookies.
+- ✅ In-memory rate-limiting på auth-endpoints (login 5/min/IP, register 3/min, 2FA 5-10/min, forgot-password 1/5min/email).
+- ✅ Webhook HMAC-SHA256 verifikation (Frisbii, Storecove, TokenPay) — `timingSafeEqual` for Frisbii.
+- ✅ Audit-trail immutability 3 niveauer: app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggers (`prevent_audit_update`, `prevent_audit_delete`) + `onDelete: Restrict` cascade.
+- ✅ Konto-deaktivering i stedet for hard-delete (Bogføringsloven §10-12 > GDPR Art. 17(3)(c)).
+- ✅ Sliding session expiry (7 dage) — password-reset invaliderer alle eksisterende sessioner.
+- ✅ Audit-logging i 75+ API-routes (auth, mutationer, oversight, 2FA, backup).
+- ✅ Demo-firma read-only for non-SuperDev.
+- ✅ Neons disk-encryption (managed) + PITR 7 dage.
+- ✅ IONOS VPS C5 + IT-Grundschutz cert. (EU-hosting).
+- ✅ AES-256-GCM-krypterede backup-ZIPs (`.zip.enc`) + SHA-256 checksum + manifest v2.
+- ✅ Backup retention: hourly 25t / daily 31d / weekly 53d / monthly 5 år / manual 90d.
+- ✅ CronExecution DB-log + startup catch-up + retry 3x exp. backoff + overlap guard + pre-restore safety backup + atomisk gendannelse.
+- ✅ `HermesAgent.dataAccessEnabled` per-tenant opt-in (default `false`) — data minimization over for USA-underbehandlere.
+
+---
+
+## 5. Risici (systematisk tabel)
+
+For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (før), konsekvens (før), risikoniveau (før), eksisterende afhjælpning (verificeret), rest risiko, henvisning til `UDBEDRINGSPLAN.md`.
+
+### R-01 — Ingen Content-Security-Policy (CSP) header
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Next.js app udsender ingen `Content-Security-Policy` header (verificeret i `next.config.ts` og `Caddyfile`). Tillader potentiel XSS-eksekvering hvis input-validering eller React-escape fejler. |
+| **Trussel** | Ekstern angriber (XSS-injection via f.eks. faktura-beskrivelse, kontakt-note, Hermes chat). |
+| **Sårbarhed** | Manglende CSP-header — bekreftet via P1-SEC afsnit 8. |
+| **Aktiv** | A7 (session-tokens), A1 (persondata i browser). |
+| **Sandsynlighed** | Mellem |
+| **Konsekvens** | Høj |
+| **Risikoniveau (før)** | **Høj** |
+| **Eksisterende afhjælpning** | React/Next escape output som standard; `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection: 1; mode=block`; MIME-type whitelist på uploads forhindrer upload-af-XSS via filer; path-traversal guard. |
+| **Rest risiko** | Mellem |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — tilføj CSP-header (report-only først, derefter enforce) med `script-src 'self' 'nonce-...'`, `object-src 'none'`, `base-uri 'self'`. |
+
+### R-02 — Ingen antivirus-scanning af uploads
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Bilag/PDF/Office-filer (`/api/transactions/upload`, `/api/documents`) scannes ikke for malware. Bekreftet via grep — ingen matches for `virus`, `clamav`, `malware`, `antivirus` i kodebasen. |
+| **Trussel** | Ondsindet bruger uploader malware-inficeret dokument med henblik på lateral movement når filen åbnes af revisor/admin i AlphaFlow (eller downloader filen lokalt). |
+| **Sårbarhed** | Kun MIME-whitelist + størrelsesgrænse (25 MB) + path-traversal guard — ingen indholdsscan. |
+| **Aktiv** | A6 (uploads), A1 (persondata via lateral movement), A12 (VPS-system). |
+| **Sandsynlighed** | Mellem |
+| **Konsekvens** | Høj |
+| **Risikoniveau (før)** | **Høj** |
+| **Eksisterende afhjælpning** | MIME-whitelist (`ALLOWED_RECEIPT_TYPES`: JPEG/PNG/WebP/GIF/BMP/TIFF/PDF) + MIME↔extension cross-check + path-traversal guard + tenant-scoped serving. Office-formater tilladt for `/api/documents` (kan indeholde makroer). |
+| **Rest risiko** | Mellem |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — integrer ClamAV-daemon på VPS, scan alle uploads asynkront før persisted-commit; bloker upload ved positiv detection. Alternativt: scan Office-filer kun (mindre overflade end billeder/PDF). |
+
+### R-03 — Ingen key rotation / versioning
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | `ENCRYPTION_KEY` (AES-256-GCM, 64-hex) og `PROOF_ENCRYPTION_KEY` er statiske env-variabler. Ingen mekanisme til rotation, versioning eller fuld re-encryption. |
+| **Trussel** | Kompromitteret nøgle (f.eks. via `.env`-lækage, tidligere medarbejder, log-fejl). |
+| **Sårbarhed** | Hvis nøglen kompromitteres, forbliver alle krypterede data (bank-tokens, TOTP-secrets, backup-koder, backup-ZIPs, `.tbkey` proofs) kompromitterede indtil manuel fuld re-encryption er udført. |
+| **Aktiv** | A3 (`ENCRYPTION_KEY`), A4 (`PROOF_ENCRYPTION_KEY`), A5 (backup-filer), A1 (krypterede persondata). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Kritisk |
+| **Risikoniveau (før)** | **Høj** |
+| **Eksisterende afhjælpning** | AES-256-GCM (12-byte IV, 16-byte auth-tag); nøgler i env vars (ikke hardcoded); adskilt `ENCRYPTION_KEY` / `PROOF_ENCRYPTION_KEY`; `.env.example` dokumenterer `openssl rand -hex 32` for generering; PM2 ecosystem.config.js for env-injektion. |
+| **Rest risiko** | Høj — manuel rotation + fuld re-encryption er dokumenteret som ikke-implementeret i `UDBEDRINGSPLAN.md`. |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — implementer `keyVersion` kolonne på BankConnection/User/Backup; migration-script der re-krypterer alle data ved nøglerotation; dokumenteret nøglerotation-procedure i `BEREDSKABSPLAN.md` afsnit 5. |
+
+### R-04 — Ingen hash-chain på posteringer
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Bogføringsloven §10-12 immutability håndhæves KUN via AuditLog + PostgreSQL-triggere — ingen kryptografisk hash-chain mellem posteringer (`previousHash`/`hash`/`locked`/`immutable`/`version` felter findes ikke, bekræftet via grep). |
+| **Trussel** | Insider med direkte DB-adgang (DBA, ondsindet Neon-ansat) forsøger at ændre historiske posteringer "usynligt". |
+| **Sårbarhed** | AuditLog-tabellen er immutable (3-niveau), men selve `JournalEntry`/`Transaction`-rækker kan i princippet muteres direkte i DB uden hash-chain-detektion. |
+| **Aktiv** | A2 (finansielle data), A12 (AuditLog). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Høj |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | 3-niveau immutability: (1) app CREATE-only audit-funktioner (`src/lib/audit.ts`), (2) PostgreSQL `BEFORE UPDATE/DELETE` triggers `prevent_audit_update`/`prevent_audit_delete` på AuditLog, (3) `onDelete: Restrict` cascade — User/Company kan ikke slettes når AuditLog-entry findes. AuditLog indeholder `changes` JSON (`{field: {old, new}}`) + `metadata` (IP, userAgent, timestamp, reason). 25 AuditAction-typer, 24 EntityType-typer, 75+ routes logger. |
+| **Rest risiko** | Lav — mutation af selve posteringerne vil ikke afspejles i AuditLog, men det vil kunne ses ved sammenligning med backup-ZIPs. |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — vurder om hash-chain (som Bitcoin-blockchain) er påkrævet af Erhvervsstyrelsen; alternativt periodisk verifikation af posteringer mod backup-checksums. Accepteret for nu — se afsnit 7. |
+
+### R-05 — Ingen account-lockout
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Kun IP-baseret rate-limiting (login 5/min/IP, 2FA verify-login 10/min/IP) — ingen per-account lockout efter N fejlede forsøg. |
+| **Trussel** | Botnet med roterende IP'er udfører distributed brute-force på password eller 2FA. |
+| **Sårbarhed** | Bekræftet i P1-SEC afsnit 7: "Ingen account-lockout after N failures — kun tidsbaseret throttling pr. IP." |
+| **Aktiv** | A1 (brugerkonti, adgangskoder). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Mellem |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | In-memory sliding window rate-limit pr. IP (login 5/min, register 3/min, 2FA 5-10/min, forgot-password 1/5min/email anti-enumeration); TOTP 2FA påkrævet for OWNER/ADMIN hvis `Company.twoFactorRequired=true`; bcrypt 12 rounds (gør brute-force dyrt); `AuditLog.LOGIN_FAILED` med reason (`wrong_password` / `invalid_2fa_code`). |
+| **Rest risiko** | Lav — 2FA + bcrypt gør brute-force upraktisk for de fleste konti. |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — tilføj per-account lockout efter 10 fejlede forsøg pr. 24 timer (midlertidig lås 1 time + email-notifikation). |
+
+### R-06 — Password min. længde kun 6 tegn
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Password-validering kræver kun 6 tegn — under NIST SP 800-63B anbefaling på min. 8 tegn. |
+| **Trussel** | Brute-force / dictionary-attack på svage passwords. |
+| **Sårbarhed** | Bekræftet i P1-SEC / fakta-ark punkt D.24. |
+| **Aktiv** | A1 (brugerkonti). |
+| **Sandsynlighed** | Mellem |
+| **Konsekvens** | Mellem |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | bcrypt 12 rounds; optional TOTP 2FA (påkrævet hvis `Company.twoFactorRequired`); rate-limiting; AuditLog; password-reset invaliderer sessioner; legacy `simpleHash` auto-re-hashes til bcrypt ved login. |
+| **Rest risiko** | Lav–Mellem |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — hæv min. længde til 8 tegn (NIST) eller 12 tegn (CISA-anbefaling); tilføj password-strength-meter i UI; implementer HaveIBeenPwned API-check (k-anonymity). |
+
+### R-07 — Caddy rate_limit ikke installeret
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Caddyfile linje 86-97 definerer to rate-limit-zoner (`static_zone: 100 req/min`, `api_zone: 30 req/min`) — men blokken er **udkommenteret** med note om at `caddy-rate_limit` plugin ikke er installeret. Rate-limiting håndteres udelukkende i applikationslaget (`src/lib/rate-limit.ts`) med in-memory sliding window. |
+| **Trussel** | DDoS / volumetrisk angreb mod Next.js-appen (kan oversvømme in-memory rate-limit-cache). |
+| **Sårbarhed** | In-memory rate-limit nulstilles ved server-restart; ingen cross-instance koordinering (kun én VPS, så mitigations faktor); PM2 max_memory_restart 1500M for alphaflow-app kan udløses ved hukommelsesudtørring. |
+| **Aktiv** | A1 (app-tilgængelighed). |
+| **Sandsynlighed** | Mellem |
+| **Konsekvens** | Mellem |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | In-memory sliding window rate-limit pr. IP/endpoint; cleanup hvert 5. min; central cache-registry sweep hvert 10. min; PM2 max_memory_restart; IONOS VPS-netværksfirewall. |
+| **Rest risiko** | Mellem |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — installer `caddy-rate_limit` plugin, aktivér udkommenteret blok, tilføj `429 Too Many Requests` response-handler. Alternativt: Cloudflare/IONOS edge DDoS-beskyttelse. |
+
+### R-08 — Ingen Next.js middleware
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Der findes ingen `src/middleware.ts` i Next.js-appen — ingen central request-filter. Auth, rate-limiting og tenant-isolation håndteres pr. route via `withGuard()` wrapper i `src/lib/route-guard.ts`. |
+| **Trussel** | Misconfiguration — en API-route mangler `withGuard()` og udsættes utilsigtet uden auth. |
+| **Sårbarhed** | Ingen central through-going kontrol; afhængig af at 150+ routes hver især husker `withGuard()`. |
+| **Aktiv** | A1 (alle API-routes), A7 (session). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Høj |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | `withGuard()` gennemtvinger auth/company/oversight/demo/TokenPay/permissions/features på alle protected routes; `tenantFilter(ctx)` på DB-queries; SuperDev oversight read-only; demo-firma read-only;AuditLog på 75+ routes. |
+| **Rest risiko** | Lav |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — implementer `src/middleware.ts` der gennemtvinger auth-redirect på alle ikke-`/login`/`/register` routes, samt default-deny for API-routes der ikke eksplicit tillader public adgang. Kombinér med CSP-header (R-01). |
+
+### R-09 — Ingen CSRF-token
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Ingen eksplicit CSRF-token i kodebasen (bekræftet via grep — ingen `csrf`, `csrfToken`, `CSRF`). Beskyttelse mod cross-site request forgery afhænger udelukkende af `SameSite=Lax` cookie + custom Bearer-token Authorization headers. |
+| **Trussel** | Cross-site request forgery — angriber lokker bruger til at besøge ondsindet side der udløser POST til AlphaFlow. |
+| **Sårbarhed** | SameSite=Lax blokerer cross-site POST, men tillader top-level navigation GET. Mindre robust end double-submit CSRF. |
+| **Aktiv** | A7 (session-cookie), A2 (mutationer). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Mellem |
+| **Risikoniveau (før)** | **Lav** |
+| **Eksisterende afhjælpning** | `SameSite=Lax` + `HttpOnly` + `Secure` cookie; Next.js indbygget CSRF-beskyttelse for POST-routes (sammen med SameSite=Lax); custom Authorization Bearer-token headers krævet på mutationer; same-origin policy for fetch. |
+| **Rest risiko** | Lav |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — vurder om double-submit CSRF-token eller synchronizer-token-pattern er påkrævet. Accepteret for nu — se afsnit 7. |
+
+### R-10 — Ingen OAuth/SSO/SAML
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Kun email+password+TOTP-auth. Ingen OAuth, SAML, OIDC, MitID eller BankID. Bekræftet i P1-SEC / fakta-ark punkt D.15-D.17. |
+| **Trussel** | Ikke en sikkerhedstrussel — kommerciel/riskiko for at enterprise-kunder afviser platformen. |
+| **Sårbarhed** | Manglende enterprise-feature; visse enterprise-kunder kræver SSO. |
+| **Aktiv** | Kommerciel — enterprise-kunde-base. |
+| **Sandsynlighed** | Høj (sandsynligvis vil nogle enterprise-kunder afvise) |
+| **Konsekvens** | Lav |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | Email+password + TOTP 2FA RFC 6238 + 10 backup-koder; invitation-system; email-verifikation; password-reset; SuperDev oversight-mode for AlphaAi-support. |
+| **Rest risiko** | Mellem (accepteret — feature-afhængig). |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — vurdér MitID-erhverv-integration eller SAML 2.0 til enterprise-kunder. Accepteret for nu — se afsnit 7. |
+
+### R-11 — Webhook HMAC dev-fallback accept-all
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | `src/lib/flatpay-client.ts` og `src/lib/storecove-client.ts` tillader ugyldige webhook-signaturer hvis `WEBHOOK_SECRET` env-variablen er tom (dev-mode fallback). TokenPay-callback bruger manuelt implementeret `timingSafeEqual` (string XOR) i stedet for `crypto.timingSafeEqual`. |
+| **Trussel** | Forged webhook hvis env-variabler ikke er sat i produktion (f.eks. konfigurationsfejl ved deploy). |
+| **Sårbarhed** | Bekræftet i P1-SEC afsnit 6. |
+| **Aktiv** | A8 (inter-service API-nøgler), A2 (abonnement-status, e-faktura-status). |
+| **Sandsynlighed** | Lav (kun hvis env mangler i prod) |
+| **Konsekvens** | Mellem |
+| **Risikoniveau (før)** | **Lav–Mellem** |
+| **Eksisterende afhjælpning** | HMAC-SHA256 verifikation når secret er sat; `timingSafeEqual` Buffer-sammenligning for Frisbii; idempotency-check på webhook-events; AuditLog på alle webhook-modtagere. |
+| **Rest risiko** | Lav (forudsat env sat i prod) — men KRITISK hvis env mangler. |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — fjern dev-fallback i prod-mode (`NODE_ENV=production`), kræv ikke-tom `WEBHOOK_SECRET` ved startup, erstat manuelt `timingSafeEqual` med `crypto.timingSafeEqual`. |
+
+### R-12 — Persondata ukrypteret i DB
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Felter som `Contact.email`, `Contact.phone`, `BankConnection.accountNumber`, `BankConnection.iban`, `Company.bankAccount`, `Company.bankRegistration`, personnavne/adresser opbevares ukrypteret i Neon PostgreSQL. Bekræftet i P1-DB / P1-SEC / fakta-ark punkt H. |
+| **Trussel** | DB-kompromittering, ondsindet DBA/Neon-ansat, SQL-injection. |
+| **Sårbarhed** | Afhængig af Neons disk-encryption (managed) + RBAC. |
+| **Aktiv** | A1 (persondata). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Høj |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | Neon disk-encryption (managed); `sslmode=require` (TLS in transit); RBAC + `tenantFilter`; AES-256-GCM på følsomme secrets (bank-tokens, TOTP-secrets, backup-koder); ingen CPR-felter. |
+| **Rest risiko** | Lav–Mellem |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — vurder om application-level kryptering af `Contact.email/phone` (som `User.email` er unikt og bruges til lookup, er kryptering komplekst med deterministic-mode). Accepteret for nu — se afsnit 7. |
+
+### R-13 — USA-dataoverførsel (OpenAI / OpenRouter / Anthropic)
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Tre underbehandlere er USA-baserede og transmitterer persondata/finansielle data til USA: OpenAI (embeddinger til Knowledge RAG), OpenRouter (Hermes chat LLM, videresender til Anthropic/Meta), Anthropic (scanner-service VLM-analyse af faktura/kvitteringsbilleder). |
+| **Trussel** | Schrems II-dom (C-311/18) — USA-dataoverførsel uden gyldige SCC+TIA er ulovlig; USA-myndigheders adgang (FISA 702) kan udgøre risiko for EU-borgere. |
+| **Sårbarhed** | Bekræftet i P1-INT afsnit 13 + fakta-ark punkt I. |
+| **Aktiv** | A1 (persondata), A10 (AI-data). |
+| **Sandsynlighed** | Mellem |
+| **Konsekvens** | Høj |
+| **Risikoniveau (før)** | **Høj** |
+| **Eksisterende afhjælpning** | `HermesAgent.dataAccessEnabled` per-tenant opt-in (default `false`) — uden opt-in sendes KUN brugerens spørgsmål + statisk system-prompt, IKKE tenant-specifikke finansielle data; scanner-service begrænser billedstørrelse og Anthropic-ansøgninger dokumenterer zero-retention (skal verificeres); OpenRouter DPA ikke gemmer input udover kort log-retention (skal verificeres). |
+| **Rest risiko** | Mellem — kræver SCC + TIA per GDPR kapitel V. |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — (1) indgå DPA + Standard Contractual Clauses 2021/914 modul 2 eller 3 med OpenAI, OpenRouter, Anthropic; (2) udfør Transfer Impact Assessment; (3) dokumenter `HermesAgent.dataAccessEnabled` som data-minimization-foranstaltning i `DATABEHANDLERAFTALE.md`; (4) vurder EU-baserede alternativer (Mistral, SiloGen EU) som fallback-modeller. Se `LEVERANDØRSTYRING.md`. |
+
+### R-14 — TokenPay timingSafeEqual manuelt implementeret
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | `src/app/api/tokenpay/callback/route.ts` implementerer konstant-tid string XOR i stedet for Node.js `crypto.timingSafeEqual`. Bekræftet i P1-SEC afsnit 6. |
+| **Trussel** | Timing attack på webhook-signatur — angriber kan gætte HMAC byte-for-byte ved at måle responstid. |
+| **Sårbarhed** | Manuelt implementeret konstant-tid sammenligning — funktionsmæssigt korrekt, men risiko for subtil side-channel. |
+| **Aktiv** | A8 (`TOKENPAY_API_KEY`), A2 (TokenPay access-niveau). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Lav |
+| **Risikoniveau (før)** | **Lav** |
+| **Eksisterende afhjælpning** | HMAC-SHA256 verifikation; funktionsmæssigt korrekt string XOR (konstant-tid for samme længde); AuditLog på TokenPay-callbacks; owner-beskyttelse mod revocation. |
+| **Rest risiko** | Lav |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — erstat manuelt string XOR med `crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b))` (kræver samme længde — pre-check nødvendig). |
+
+### R-15 — Bank-API stubs (ingen reelle kald)
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | `src/lib/bank-providers.ts` definerer `createRealBankProvider()` factory for Tink, Nordea, Danske Bank, Jyske Bank — men alle stubbes (`fetchTransactions` kaster `"requires production configuration"`). Kun Demo-provider returnerer data. Bank-access-tokens krypteres dog alligevel med AES-256-GCM før lagring (fremtidssikring). |
+| **Trussel** | Ikke en sikkerhedstrussel — feature-forventning. |
+| **Sårbarhed** | Bank-integration reklames som feature men virker kun med Demo-provider i prod. |
+| **Aktiv** | A2 (finansielle data — manglende bank-transaktioner). |
+| **Sandsynlighed** | Høj (kunder forventer bank-integration) |
+| **Konsekvens** | Lav |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | AES-256-GCM kryptering af tokens (klar når integration aktiveres); manuel bank-afstemning virker; Demo-provider returnerer realistiske test-data. |
+| **Rest risiko** | Mellem (accepteret — feature-afhængig). |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — dokumenter bank-integration som "Demo kun" i `BRUGSVEJLEDNING.md`; fremtid: integrer PSD2-licenserede bank-aggregatorer (Tink, Nordigen). Accepteret for nu — se afsnit 7. |
+
+### R-16 — z-ai-web-dev-sdk sandbox-only (AI-bankafstemning virker ikke i prod)
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | `src/lib/matching-engine.ts` bruger `z-ai-web-dev-sdk` til AI-bankafstemning — men SDK'et er **sandbox-only** og virker ikke i produktion. Funktionen fejler gracefully og returnerer ingen matches. |
+| **Trussel** | Ikke en sikkerhedstrussel — feature-forventning/styring. |
+| **Sårbarhed** | AI-bankafstemning reklames i kode/UI men virker ikke i prod — kunder kan blive forvirrede. |
+| **Aktiv** | A2 (finansielle data — manglende AI-afstemning). |
+| **Sandsynlighed** | Høj (kunder forventer det) |
+| **Konsekvens** | Lav |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | Graceful failure (returnerer ingen matches — fallback til manuel matching); manuel matching virker fuldt; Hermes AI-assistent virker (via OpenRouter). |
+| **Rest risiko** | Mellem (accepteret — feature-afhængig). |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — (1) skjul/disable AI-bankafstemning-toggle i prod-UI indtil funktionen er fuldt implementeret; (2) alternativ: integrer OpenAI/OpenRouter direkte til matching-engine. Accepteret for nu — se afsnit 7. |
+
+### R-17 — Backup-scheduler process-intern
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Backup-scheduler er implementeret som process-intern `node-cron` i alphaflow PM2-appen (`src/lib/backup-scheduler.ts` kaldes fra `src/instrumentation.node.ts`). Hvis appen crasher eller PM2 stopper, stopper alle backups. Bekræftet i P1-SVC-b / P1-INT afsnit 12 + fakta-ark punkt G. |
+| **Trussel** | App-crash, hukommelsesudtørring, PM2-fejl, VPS-fejl — backup-scheduler stopper. |
+| **Sårbarhed** | Backups kører så længe alphaflow-appen kører; ingen ekstern cron-job / systemd-timer / PM2 cron_jobs / crontab. |
+| **Aktiv** | A5 (backup-kontinuitet), A2 (5-års retention). |
+| **Sandsynlighed** | Mellem (app kan crash) |
+| **Konsekvens** | Mellem |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | Neon PITR 7 dage (defense-in-depth lag 1, fuld DB-recovery); PM2 `autorestart:true`, `max_restarts:10`, `restart_delay:5000`; `CronExecution` DB-log med startup catch-up (oversete cron-vinduer genkendes og køres); retry 3x exp. backoff (5s/10s/20s); overlap guard via `runningJobs`-Set; per-tenant health monitoring på `/api/backups/scheduler-status`; `ensureInitialBackup()` første-data-triggeret baseline-backup. |
+| **Rest risiko** | Lav — Neon PITR dækker 7 dage, AlphaFlow-backup-ZIPs dækker op til 5 år. |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — vurder om ekstern systemd-timer / PM2 cron_jobs / dedicated backup-cron-script bør tilføjes som backup-of-backup. Accepteret for nu — se afsnit 7. |
+
+### R-18 — SQLite i mini-services ukrypteret på disk
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | `mini-services/scanner-service/data/scanner.db` (scan-job-historik + OCR-resultater) og `mini-services/tokenpay-access-service/data/access.db` (brugere, proofs, access-log, messages) er ukrypteret SQLite-filer på VPS-disk (WAL mode). |
+| **Trussel** | VPS-disk-kompromittering — angriber med filsystem-adgang kan læse SQLite direkte. |
+| **Sårbarhed** | Bekræftet i P1-SVC-a — mini-services bruger `bun:sqlite` / `aiosqlite` uden application-level kryptering. |
+| **Aktiv** | A11 (SQLite mini-DBs). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Mellem |
+| **Risikoniveau (før)** | **Lav–Mellem** |
+| **Eksisterende afhjælpning** | IONOS VPS-disk-encryption (managed); WAL mode; mini-services kører bag Caddy reverse proxy; inter-service API-key auth (`X-Access-Service-Key`); `API_SHARED_KEY` påkrævet; `PROOF_ENCRYPTION_KEY` for `.tbkey` proofs (fil-indhold er krypteret selvom database-references ikke er). |
+| **Rest risiko** | Lav |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — vurder om SQLCipher eller application-level kryptering af følsomme kolonner (proof-id, access-log) bør tilføjes. Accepteret for nu — VPS-disk-encryption anses som tilstrækkelig. |
+
+### R-19 — notification-ws /broadcast ingen auth
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | `mini-services/notification-ws-service/index.ts` eksponerer `POST /broadcast` uden auth — forventes kun kaldt fra localhost af Next.js API'er. Socket.IO handshake kræver `handshake.auth.userId` (påkrævet — ellers disconnect). |
+| **Trussel** | Misbrug af broadcast-endpoint — angriber sender falske `DATA_CHANGED`-events for at invalidere cacher eller forårsage unødvendige re-renders. |
+| **Sårbarhed** | Bekræftet i P1-SVC-a. |
+| **Aktiv** | A1 (real-time notifikationer, bruger-cache). |
+| **Sandsynlighed** | Lav |
+| **Konsekvens** | Lav |
+| **Risikoniveau (før)** | **Lav** |
+| **Eksisterende afhjælpning** | Caddy reverse proxy — `/?XTransformPort=3001` ruter til `localhost:3001`; forventes kun localhost-kald; Socket.IO handshake-auth på user-socket-forbindelser; `/broadcast` kan ikke bruges til at udløse mutationer (kun cache-invalidering). |
+| **Rest risiko** | Lav |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — tilføj `HERMES_ADMIN_KEY` eller dedikeret `NOTIFICATION_API_KEY` header-validering på `/broadcast`. Accepteret for nu — se afsnit 7. |
+
+### R-20 — Hermes Socket.IO join-event ingen handshake-auth
+
+| Attribut | Værdi |
+|---|---|
+| **Beskrivelse** | Hermes-agent (`mini-services/hermes-agent/index.ts`, port 3004) — Socket.IO `join`-event bærer `tenantId/userId/userName` i message-body uden handshake-auth verifikation. HTTP `/admin/*`-endpoints kræver `Bearer HERMES_ADMIN_KEY`. |
+| **Trussel** | Uautoriseret socket-forbindelse — angriber der kender (eller gætter) et tenantId kan forbinde og sende chat-beskeder som en anden bruger. |
+| **Sårbarhed** | Bekræftet i P1-SVC-a. |
+| **Aktiv** | A10 (Hermes chat-data), A1 (persondata hvis `dataAccessEnabled=true`). |
+| **Sandsynlighed** | Mellem |
+| **Konsekvens** | Mellem |
+| **Risikoniveau (før)** | **Mellem** |
+| **Eksisterende afhjælpning** | Socket.IO forbindelse bag Caddy reverse proxy (`/?XTransformPort=3004`); tenant-data hentes via `DatabaseTenantProvider` fra Neon (kun hvis `HermesAgent.dataAccessEnabled=true`); `/admin/stats` kræver Bearer auth; per-tenant rate-limiter; samtalehistorik in-memory + DB-persistens. |
+| **Rest risiko** | Mellem — uden handshake-auth kan angriber potentielt udgive sig for en anden bruger i chat-samtalen. |
+| **Afhjælpning** | `UDBEDRINGSPLAN.md` — tilføj Socket.IO `handshake.auth.token` med session-token-validering mod Neon `Session`-tabel; alternativt kort-levende JWT udstedt af Next.js-login. |
+
+---
+
+## 6. Risikomatrix
+
+Matrix viser risikoniveau = Sandsynlighed × Konsekvens. Risici markeret med deres ID.
 
 ```
-A7 (Applikation) ──afhænger af──→ A8 (Infrastruktur)
-A1 (Regnskabsdata) ──beskyttes af──→ A4 (Audit trail)
-A3 (Bankforbindelser) ──beskyttes af──→ AES-256-GCM kryptering
-A2 (Brugerdata) ──beskyttes af──→ bcrypt + 2FA + RBAC
-A6 (Backup) ──gendanner──→ A1 + A2 + A3 + A4 + A5
-A6 (Backup) ──krypteret med──→ AES-256-GCM filkryptering (lagret på IONOS VPS)
-A8 (Infrastruktur) ──hostet af──→ IONOS VPS (C5 + IT-Grundschutz, EU)
+                 ┌─────────────────────────────┬─────────────────────────────┬─────────────────────────────┐
+                 │  Sandsynlighed: LAV          │  Sandsynlighed: MELLEM       │  Sandsynlighed: HØJ          │
+                 │  (< 1 gang / 5 år)           │  (1 gang / 1-5 år)           │  (månedlig/årlig)            │
+                 ├─────────────────────────────┼─────────────────────────────┼─────────────────────────────┤
+ Kritisk (K)     │  MELLEM                     │  HØJ                        │  KRITISK                    │
+                 │  R-03                       │                             │                             │
+                 ├─────────────────────────────┼─────────────────────────────┼─────────────────────────────┤
+ Høj (H)         │  MELLEM                     │  HØJ                        │  HØJ                        │
+                 │  R-04, R-08, R-12           │  R-01, R-02, R-13           │                             │
+                 ├─────────────────────────────┼─────────────────────────────┼─────────────────────────────┤
+ Mellem (M)      │  LAV                        │  MELLEM                     │  HØJ                        │
+                 │  R-09, R-14, R-18, R-19     │  R-05, R-06, R-07, R-11,    │                             │
+                 │                             │  R-15, R-16, R-17, R-20     │                             │
+                 ├─────────────────────────────┼─────────────────────────────┼─────────────────────────────┤
+ Lav (L)         │  LAV                        │  LAV                        │  MELLEM                     │
+                 │                             │                             │  R-10                       │
+                 └─────────────────────────────┴─────────────────────────────┴─────────────────────────────┘
 ```
 
----
+### Risikoniveau-fordeling (før afhjælpning)
 
-## 3. Trusselsidentifikation
+| Risikoniveau | Antal risici | Risici |
+|---|---|---|
+| **Kritisk** | 0 | — |
+| **Høj** | 4 | R-01, R-02, R-03, R-13 |
+| **Mellem** | 11 | R-04, R-05, R-06, R-07, R-08, R-10, R-11, R-12, R-15, R-16, R-17, R-20 |
+| **Lav** | 5 | R-09, R-14, R-18, R-19 |
 
-Trusler er kategoriseret i fire hovedkategorier baseret på CIKA (Confidentiality, Integrity, Availability, Accountability) principperne med tillæg af en persondata-specifik kategori.
+> Bemærk: R-10 klassificeres som Mellem på grund af høj sandsynlighed for kommerciel afvisning (selvom konsekvensen er lav).
 
-### 3.1 Tilgængelighed (Availability) — Tab af adgang
+### Restrisiko-fordeling (efter eksisterende afhjælpning)
 
-| Trussel ID | Trussel | Beskrivelse |
-|------------|---------|-------------|
-| **T-AV1** | Servernedetid | Hardwarefejl, OS-opdatering, konfigurationsfejl medfører at AlphaFlow-applikationen er utilgængelig |
-| **T-AV2** | DDoS-angreb | Distribueret denial-of-service angreb overbelaster serveren og forhindrer legitime brugere i at få adgang |
-| **T-AV3** | Databasefejl (Neon) | Neon PostgreSQL hostingudbyder oplever nedetid, datakorruption eller forbindelsesproblemer |
-| **T-AV4** | Fil-system fejl | Diskfejl eller fillagring fuldt, hvilket forhindrer backup-oprettelse eller restore |
-| **T-AV5** | Backup-fiasko | Automatiske backups mislykkes pga. diskplads, fejl i cron-scheduler, eller database timeout |
-
-### 3.2 Fortrolighed (Confidentiality) — Dataudlæk
-
-| Trussel ID | Trussel | Beskrivelse |
-|------------|---------|-------------|
-| **T-CF1** | Data breach (ekstern) | Uautoriseret adgang til regnskabsdata, brugeroplysninger eller bankforbindelser via sårbarhed i applikationen |
-| **T-CF2** | Insider-trussel | Medarbejder eller godkendt bruger udnytter sine rettigheder til at tilgå data de ikke bør se (cross-tenant adgang) |
-| **T-CF3** | Session hijacking | Stjålne session-cookies eller JWT-tokens giver uautoriseret adgang til brugerkonti |
-| **T-CF4** | Kompromitteret adgangskode | Brugers adgangskode gættes, stjåles (phishing) eller knækkes via brute-force |
-| **T-CF5** | Lækage af krypteringsnøgler | ENCRYPTION_KEY miljøvariabel eksponeres, hvilket afslører AES-256-GCM krypterede bank-tokens og 2FA-secrets |
-
-### 3.3 Integritet (Integrity) — Data manipulation
-
-| Trussel ID | Trussel | Beskrivelse |
-|------------|---------|-------------|
-| **T-IG1** | Uberettiget ændring af data | Bruger ændrer regnskabsdata, journalposter eller fakturaer uden korrekte rettigheder (RBAC-bypass) |
-| **T-IG2** | Datakorruption via fejl | Softwarefejl i bogføringslogikken forårsager forkerte saldi eller korrupte journalposter |
-| **T-IG3** | Malware/ransomware | Skadelig software krypterer eller ændrer serverfiler inkl. backup-arkivet |
-| **T-IG4** | SQL injection / XSS | Skadelige input-data udnytter sårbarheder til at manipulere databaseindhold eller injicere kode |
-| **T-IG5** | Manipulation af valutakurser | Forkerte eller manipulerede valutakurser fra ekstern API fører til urigtige beløb i regnskabet |
-
-### 3.4 Persondata (GDPR) — GDPR-specifikke trusler
-
-| Trussel ID | Trussel | Beskrivelse |
-|------------|---------|-------------|
-| **T-PD1** | GDPR-breach (personoplysninger) | Uautoriseret adgang til eller lækage af brugernes personoplysninger (navn, e-mail, CPR-data) |
-| **T-PD2** | Manglende ret til sletning | Brugers anmodning om sletning af persondata (art. 17 GDPR) opfyldes ikke korrekt |
-| **T-PD3** | Uautoriseret cross-tenant adgang | Bruger fra én tenant får adgang til en anden tenants data, herunder personoplysninger |
+| Restrisiko | Antal risici | Risici |
+|---|---|---|
+| **Høj** | 1 | R-03 (key rotation — ingen implementeret afhjælpning) |
+| **Mellem** | 8 | R-01, R-02, R-07, R-10, R-12, R-13, R-15, R-16, R-17, R-20 |
+| **Lav** | 10 | R-04, R-05, R-06, R-08, R-09, R-11, R-14, R-18, R-19 |
+| **Accepteret** | 6 | R-04, R-09, R-10, R-15, R-16, R-17 (midlertidigt), R-18, R-19 |
 
 ---
 
-## 4. Tredjepartsrisici
+## 7. Accepterede risici
 
-### 4.1 Neon PostgreSQL (Database Hosting)
+Følgende risici er **accepteret** af AlphaAi ApS med begrundelse — eksisterende afhjælpninger vurderes som tilstrækkelige, eller risikoen afhænger af eksterne faktorer uden for AlphaFlows kontrol.
 
-| Egenskab | Vurdering |
-|----------|-----------|
-| **Type** | Hosted PostgreSQL (serverless) |
-| **Lokation** | EU/EØS (Europa) |
-| **Certificeringer** | SOC 2 Type II |
-| **Kritikalitet** | 🔴 Kritisk — alle data lagres her |
-| **Konsekvens ved nedetid** | Komplet tab af tilgængelighed for hele systemet |
-
-**Identificerede risici:**
-
-| Risiko | Konsekvens | Sandsynlighed | Foranstaltning |
-|--------|------------|---------------|----------------|
-| Service nedetid | 4 | 2 | Multi-region deployment, connection pooling med automatisk retry |
-| Datakorruption | 5 | 1 | Neon's egen backup (point-in-time recovery), automatiske tenant-snapshots |
-| Sikkerhedsbreach hos Neon | 5 | 1 | SOC 2 Type II certificering, sslmode=require krypterer transport |
-| Kontraktligt driftsstop | 4 | 1 | Databehandleraftale indgået, eksport-funktionalitet sikrer portabilitet |
-
-### 4.2 IONOS VPS (Applikationsserver og Backup-lagring)
-
-| Egenskab | Vurdering |
-|----------|-----------|
-| **Type** | Cloud VPS (Virtual Private Server) |
-| **Lokation** | EU/EØS (alle datacentre i Europa) |
-| **Certificeringer** | C5 (BSI Cloud Computing Compliance) + IT-Grundschutz — første europæiske udbyder med begge |
-| **Kritikalitet** | 🔴 Kritisk — applikationsserver og lokal backup-lagring |
-| **Konsekvens ved nedetid** | Komplet tab af tilgængelighed; backup-gendannelse kræver adgang til IONOS VPS |
-| **ISO-certificering** | 25 ISO-certificerede datacentre i Europa med geo-redundans |
-
-**Identificerede risici:**
-
-| Risiko | Konsekvens | Sandsynlighed | Foranstaltning |
-|--------|------------|---------------|----------------|
-| VPS nedetid (hardware) | 4 | 2 | PM2 auto-restart, IONOS geo-redundans, beredskabsplan for servergendannelse |
-| Sikkerhedsbreach på VPS | 5 | 1 | C5 + IT-Grundschutz certificering, DDoS-beskyttelse, 2FA/brute-force beskyttelse, SSH-nøgler |
-| Tab af backup-data | 4 | 1 | AES-256-GCM kryptering af backup-filer, SHA-256 checksum, Neon PITR som alternativ kilde |
-| Dataoverførsel til tredjelande | 5 | 1 | Alle IONOS-datacentre i Europa, DPA indgået, fuld GDPR-compliance |
-| DDoS angreb | 3 | 2 | IONOS automatisk DDoS-detektion og blokering, Caddy rate limiting (`rate_limit` direktiv), applikations-level rate limiting (rate-limit.ts) |
-
-### 4.3 Caddy (Reverse Proxy / TLS)
-
-| Egenskab | Vurdering |
-|----------|-----------|
-| **Type** | Open source reverse proxy (Go) |
-| **Anvendelse** | TLS 1.3 terminering, HTTP→HTTPS omdirigering, security headers |
-| **Kritikalitet** | 🟠 Høj — front-door for al trafik |
-| **Certificeringer** | Open source, regelmæssigt opdateret |
-
-**Identificerede risici:**
-
-| Risiko | Konsekvens | Sandsynlighed | Foranstaltning |
-|--------|------------|---------------|----------------|
-| TLS-konfigurationsfejl | 3 | 1 | Caddy håndterer TLS automatisk (Let's Encrypt), minimal konfiguration |
-| Caddy sårbarhed | 3 | 1 | Regelmæssige opdateringer, open source audit |
-| Certificate expiry | 2 | 1 | Caddy auto-fornyer certifikater via ACME-protokollen |
-
-### 4.4 Frankfurter API (Valutakurser)
-
-| Egenskab | Vurdering |
-|----------|-----------|
-| **Type** | Gratis, åben API |
-| **Datakilde** | ECB (European Central Bank) reference rates |
-| **Kritikalitet** | 🟡 Middel — valutakurser er vigtige men kan håndteres manuelt |
-| **Autentificering** | Ingen påkrævet |
-
-**Identificerede risici:**
-
-| Risiko | Konsekvens | Sandsynlighed | Foranstaltning |
-|--------|------------|---------------|----------------|
-| API nedetid | 2 | 3 | Stale cache fallback (1-time cache), manuel indtastning mulig |
-| Manipulerede kurser | 3 | 1 | ECB er autoriseret offentlig datakilde, validering af responsformat |
-| API deprecation | 2 | 1 | Open source, ECB-reference data, nem udskiftning til alternativ kilde |
-
-### 4.5 E-faktura Netværk (NemHandel / Peppol)
-
-| Egenskab | Vurdering |
-|----------|-----------|
-| **Type** | Offentlig e-faktura infrastruktur |
-| **Anvendelse** | Modtagelse og fremsendelse af OIOUBL/Peppol e-fakturaer |
-| **Kritikalitet** | 🟡 Middel — vigtig funktion men ikke eksistentiel for kernebogføring |
-
-**Identificerede risici:**
-
-| Risiko | Konsekvens | Sandsynlighed | Foranstaltning |
-|--------|------------|---------------|----------------|
-| NemHandel nedetid | 2 | 2 | Asynkron fremsendelse med retry-logik, audit trail af alle forsøg |
-| Invalid e-faktura payload | 2 | 3 | XML-validering i `einvoice-parser.ts`, Application Response med fejlkode |
-| Peppol Access Point fejl | 2 | 2 | Status tracking (SENDT/AFLEVERET/FEJLET), retry-mekanisme |
+| Risiko ID | Accept-begrundelse |
+|---|---|
+| **R-04** (Ingen hash-chain) | 3-niveau immutability (app + DB-triggers + cascade-Restrict) vurderes som tilstrækkelig til Bogføringsloven §10-12. Hash-chain er ikke eksplicit påkrævet af Erhvervsstyrelsen. Periodisk verifikation mod backup-ZIPs er en mulig fremtidig forstærkning. |
+| **R-09** (Ingen CSRF-token) | SameSite=Lax + HttpOnly + Secure cookies + Next.js indbygget CSRF-beskyttelse for POST vurderes som tilstrækkelig for same-origin SPA-arkitektur. |
+| **R-10** (Ingen OAuth/SSO) | Email+password+TOTP er standard for SMB-markedet. SSO kan tilføjes ved enterprise-kunde-efterspørgsel. Accepteret kommercielt. |
+| **R-15** (Bank-API stubs) | Bank-integration er dokumenteret som "Demo kun" — kunder informeres. AES-256-GCM-kryptering er allerede implementeret fremtidssikret for når integration aktiveres. |
+| **R-16** (z-ai-web-dev-sdk sandbox-only) | AI-bankafstemning deaktiveres/skjules i prod-UI (fremtidig afhjælpning i UDBEDRINGSPLAN). Manuel matching fungerer fuldt. |
+| **R-17** (Backup-scheduler process-intern) | Neon PITR 7d + AlphaFlow-backup-ZIPs (5 år retention) + CronExecution startup catch-up + PM2 autorestart vurderes som tilstrækkelig defense-in-depth. Ekstern systemd-timer er fremtidig forstærkning. |
+| **R-18** (SQLite ukrypteret) | VPS-disk-encryption (IONOS managed) + inter-service API-key auth vurderes som tilstrækkelig. `.tbkey` proof-fil-indhold er krypteret uafhængigt. |
+| **R-19** (notification-ws /broadcast ingen auth) | Caddy reverse proxy begrænser til localhost. `/broadcast` kan kun invalidere cacher — ingen mutationer. |
 
 ---
 
-## 5. Risikomatrix
+## 8. Konklusion & anbefalinger
 
-Nedenstående matrix viser alle identificerede trusler med konsekvens-, sandsynlighed- og risikovurdering før og efter eksisterende kontroller.
+### 8.1 Samlet risikoniveau
 
-### Risiko før kontroller (Brutto risiko)
+AlphaFlow-platformens samlede risikoniveau vurderes som **Mellem** efter eksisterende afhjælpninger. Ingen risici er klassificeret som **Kritisk** efter afhjælpning, men én risiko (**R-03 — Ingen key rotation**) forbliver på **Høj**-niveau da ingen teknisk afhjælpning er implementeret (kun manuel procedure).
 
-| # | Trussel ID | Trusselbeskrivelse | K (1-5) | S (1-5) | Risiko (K×S) | Klasse |
-|---|-----------|--------------------|---------|---------|-------------|--------|
-| 1 | T-AV1 | Servernedetid (hardware, OS, konfiguration) | 4 | 3 | **12** | 🟠 Høj |
-| 2 | T-AV2 | DDoS-angreb | 3 | 3 | **9** | 🟡 Middel |
-| 3 | T-AV3 | Databasefejl (Neon PostgreSQL nedetid) | 4 | 2 | **8** | 🟡 Middel |
-| 4 | T-AV4 | Fil-system fejl (diskplads, diskfejl) | 3 | 2 | **6** | 🟡 Middel |
-| 5 | T-AV5 | Backup-fiasko (automatiske backups mislykkes) | 4 | 2 | **8** | 🟡 Middel |
-| 6 | T-CF1 | Data breach (ekstern uautoriseret adgang) | 5 | 2 | **10** | 🟠 Høj |
-| 7 | T-CF2 | Insider-trussel (cross-tenant adgang) | 5 | 2 | **10** | 🟠 Høj |
-| 8 | T-CF3 | Session hijacking | 4 | 2 | **8** | 🟡 Middel |
-| 9 | T-CF4 | Kompromitteret adgangskode | 4 | 3 | **12** | 🟠 Høj |
-| 10 | T-CF5 | Lækage af krypteringsnøgler | 5 | 1 | **5** | 🟡 Middel |
-| 11 | T-IG1 | Uberettiget ændring af regnskabsdata | 5 | 2 | **10** | 🟠 Høj |
-| 12 | T-IG2 | Datakorruption via softwarefejl | 4 | 3 | **12** | 🟠 Høj |
-| 13 | T-IG3 | Malware/ransomware | 5 | 1 | **5** | 🟡 Middel |
-| 14 | T-IG4 | SQL injection / XSS | 5 | 2 | **10** | 🟠 Høj |
-| 15 | T-IG5 | Manipulerede valutakurser | 2 | 2 | **4** | 🟢 Lav |
-| 16 | T-PD1 | GDPR-breach (personoplysninger) | 5 | 2 | **10** | 🟠 Høj |
-| 17 | T-PD2 | Manglende ret til sletning (art. 17 GDPR) | 3 | 2 | **6** | 🟡 Middel |
-| 18 | T-PD3 | Uautoriseret cross-tenant adgang (persondata) | 5 | 2 | **10** | 🟠 Høj |
+Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform, men følgende fire risici bør prioriteres til afhjælpning inden for de næste 6 måneder:
 
-### Risiko efter kontroller (Netto risiko / Restrisiko)
+### 8.2 Prioriteret afhjælpningsplan
 
-| # | Trussel ID | Trusselbeskrivelse | K (1-5) | S (1-5) | Restrisiko | Klasse | Eksisterende kontrol |
-|---|-----------|--------------------|---------|---------|-------------|--------|---------------------|
-| 1 | T-AV1 | Servernedetid | 3 | 2 | **6** | 🟡 Middel | PM2 process management med auto-restart; cron health monitoring; backup-scheduler per-tenant overvågning |
-| 2 | T-AV2 | DDoS-angreb | 2 | 2 | **4** | 🟢 Lav | Caddy reverse proxy med rate limiting (Caddyfile); IONOS automatisk DDoS-detektion; HSTS forhindrer downgrade-angreb; applikations-level rate limiting (rate-limit.ts) på følsomme endpoints |
-| 3 | T-AV3 | Databasefejl (Neon) | 3 | 1 | **3** | 🟢 Lav | Neon SOC 2 Type II; sslmode=require; connection retry i Prisma client |
-| 4 | T-AV4 | Fil-system fejl | 2 | 1 | **2** | 🟢 Lav | Backup scheduler overvåger diskplads; cleanup cron fjerner expired backups dagligt |
-| 5 | T-AV5 | Backup-fiasko | 2 | 1 | **2** | 🟢 Lav | Per-tenant cron health monitoring (idle/pending/healthy/unhealthy); dedup-tracking; pre-restore safety backup |
-| 6 | T-CF1 | Data breach (ekstern) | 4 | 1 | **4** | 🟢 Lav | TLS 1.3 + HSTS (Caddyfile); AES-256-GCM kryptering (crypto.ts); security headers; RBAC (rbac.ts); 2FA (two-factor.ts) |
-| 7 | T-CF2 | Insider-trussel (cross-tenant) | 4 | 1 | **4** | 🟢 Lav | Alle 89+ API routes scoped af `companyScope()`/`tenantFilter()` i rbac.ts; oversight-mode mutation block; 23 RBAC-permissioner |
-| 8 | T-CF3 | Session hijacking | 2 | 1 | **2** | 🟢 Lav | Secure session-håndtering (session.ts); HSTS forbidding HTTP; 2FA kræver ekstra faktor; rate limiting (rate-limit.ts) |
-| 9 | T-CF4 | Kompromitteret adgangskode | 3 | 2 | **6** | 🟡 Middel | bcrypt 12 rounds (password.ts); 2FA/TOTP som ekstra faktor (two-factor.ts); login rate limiting |
-| 10 | T-CF5 | Lækage af krypteringsnøgler | 5 | 1 | **5** | 🟡 Middel | ENCRYPTION_KEY kun i miljøvariabel (aldrig i database/codebase); server-miljøisolering (.env) forhindrer kode-adgang til nøglen; RBAC + 2FA beskytter administrative funktioner |
-| 11 | T-IG1 | Uberettiget ændring af data | 3 | 1 | **3** | 🟢 Lav | RBAC med 23 permissioner (rbac.ts); requirePermission() i alle mutation-endpoints; immutable audit trail med database-level triggers (audit.ts + audit-immutability.sql); onDelete: Restrict forhindrer sletning af refererede brugere/virksomheder; 2FA forhindrer uautoriseret adgang |
-| 12 | T-IG2 | Datakorruption via softwarefejl | 3 | 2 | **6** | 🟡 Middel | Automatiske backups (hourly/daily/weekly/monthly); SHA-256 checksum-verificering ved restore; atomic database-transaktioner |
-| 13 | T-IG3 | Malware/ransomware | 4 | 1 | **4** | 🟢 Lav | Automatiske backups med SHA-256; restore muligt fra clean snapshot; minimal attack surface (kun Caddy eksponeret) |
-| 14 | T-IG4 | SQL injection / XSS | 3 | 1 | **3** | 🟢 Lav | Prisma ORM parameteriserer alle queries; Next.js auto-escapes JSX; security headers (X-XSS-Protection, X-Content-Type-Options) |
-| 15 | T-IG5 | Manipulerede valutakurser | 2 | 1 | **2** | 🟢 Lav | ECB reference rates (officiel EU-kilde); response-validering i currency-utils.ts; 1-time cache; fallback til DKK |
-| 16 | T-PD1 | GDPR-breach | 4 | 1 | **4** | 🟢 Lav | TLS 1.3; AES-256-GCM; RBAC med tenant-isolation; audit trail med database-level immutability; 2FA; data eksport; kontodeaktivering i stedet for sletning (bevarer audit trail per Bogføringsloven §12) |
-| 17 | T-PD2 | Manglende ret til sletning | 2 | 1 | **2** | 🟢 Lav | `/api/auth/delete-account` endpoint (deaktiverer konto, bevarer audit trail per Bogføringsloven §12); tenant-eksport (`export-tenant`) for portabilitet; GDPR Art. 17(3)(c) undtagelse: 5-års opbevaringsplift har forrang over sletningsret |
-| 18 | T-PD3 | Cross-tenant adgang (persondata) | 4 | 1 | **4** | 🟢 Lav | `companyScope()` i alle queries; `tenantFilter()` med demo-company block; oversight read-only mode; audit trail log med database-level immutability |
+| Prioritet | Risiko ID | Estimeret indsats | Henvisning |
+|---|---|---|---|
+| **P1 — Kritisk** | R-03 (key rotation) | 5-10 dage (schema-migration + re-encryption-script + procedure-dokumentation) | `UDBEDRINGSPLAN.md` |
+| **P1 — Kritisk** | R-13 (USA-dataoverførsel) | 2-5 dage (DPA+SCC+TIA per underbehandler) — juridisk arbejde | `UDBEDRINGSPLAN.md`, `DATABEHANDLERAFTALE.md`, `LEVERANDØRSTYRING.md` |
+| **P2 — Høj** | R-01 (CSP-header) | 1-2 dage (report-only først, derefter enforce) | `UDBEDRINGSPLAN.md` |
+| **P2 — Høj** | R-02 (antivirus-scanning) | 2-3 dage (ClamAV-daemon + integration) | `UDBEDRINGSPLAN.md` |
+| **P2 — Høj** | R-20 (Hermes handshake-auth) | 1-2 dage (Socket.IO handshake.auth.token + session-validering) | `UDBEDRINGSPLAN.md` |
+| **P3 — Mellem** | R-05 (account-lockout) | 1 dag | `UDBEDRINGSPLAN.md` |
+| **P3 — Mellem** | R-06 (password min. længde) | 0,5 dag (inkl. UI-opdatering) | `UDBEDRINGSPLAN.md` |
+| **P3 — Mellem** | R-07 (Caddy rate_limit) | 0,5 dag (plugin-installation + aktivér udkommenteret blok) | `UDBEDRINGSPLAN.md` |
+| **P3 — Mellem** | R-08 (Next.js middleware) | 1-2 dage (inkl. test af alle routes) | `UDBEDRINGSPLAN.md` |
+| **P3 — Mellem** | R-11 (webhook dev-fallback) | 0,5 dag | `UDBEDRINGSPLAN.md` |
+| **P3 — Mellem** | R-14 (TokenPay timingSafeEqual) | 0,5 dag | `UDBEDRINGSPLAN.md` |
+| **P4 — Lav** | R-12 (persondata kryptering) | 3-5 dage (komplekst pga. unikke felter) | `UDBEDRINGSPLAN.md` |
+
+### 8.3 Overvågning og løbende opgaver
+
+- **Årlig review** af dette dokument (næste: juli 2027 eller ved væsentlig arkitekturændring).
+- **Kvartalsvis** gennemgang af nye underbehandlere og integrationer.
+- **Løbende** overvågning af `AuditLog`-tabel for anomali-detektion (LOGIN_FAILED, DELETE_ATTEMPT, OVERSIGHT).
+- **Løbende** overvågning af backup-scheduler-health via `/api/backups/scheduler-status`.
+- **Løbende** overvågning af PM2-status via `pm2 status` + `pm2 logs`.
+- **Ved sikkerhedshændelse** — følg `BEREDSKABSPLAN.md` afsnit 6 (Incident response-procedure).
+
+### 8.4 Underskrift
+
+| Rolle | Navn | Dato | Underskrift |
+|---|---|---|---|
+| Dataansvarlig (AlphaAi ApS) | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
+| DPO / Compliance-ansvarlig | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
+| Teknisk ansvarlig | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
 
 ---
 
-## 6. Eksisterende Kontroller
+## Bilag A — Referencer
 
-Alle eksisterende tekniske og organisatoriske kontroller er dokumenteret nedenfor med reference til konkrete kildekodefiler.
+- **Worklog sektioner:** P1-DB (database-modeller), P1-SEC (sikkerhed & krypto, inkl. "Mangler / risici"-liste på 12 punkter + "Bekræftede sikkerhedsfeatures"), P1-INT (integrationer & infrastruktur, inkl. underbehandler-liste), P1-SVC-a (mini-services), P1-SVC-b (scripts, PM2, Caddy, cron/backup), KONSOLIDERET FAKTA-ARK.
+- **Lovgrundlag:** GDPR (EU 2016/679) Art. 32, 33, 34, 35; Bogføringsloven (LBK nr. 1513) §4, §10-12, §15; BEK nr. 98 om elektronisk bogføring (hovedkrav N2, N3, N4, N5, D1, D15).
+- **Standarder:** ISO/IEC 27001:2022, ISO/IEC 27005:2022, NIST SP 800-63B (Digital Identity Guidelines).
+- **Relaterede dokumenter:** `BEREDSKABSPLAN.md`, `UDBEDRINGSPLAN.md`, `ENCRYPTION.md`, `LEVERANDØRSTYRING.md`, `DATABEHANDLERAFTALE.md`, `NEON & IONOS_IT_SIKKERHED.md`, `COMPLIANCE_RAPPORT.md`.
 
-### 6.1 Netværks- og Transportsikkerhed
+## Bilag B — Dokumenthistorik
 
-| Kontrol ID | Kontrol | Reference | Beskrivelse |
-|------------|---------|-----------|-------------|
-| **K-NT1** | TLS 1.2 (minimum) + TLS 1.3 (preferred) + HSTS | `Caddyfile` (linje 68–73, 75–93) | Caddy konfigurerer eksplicit minimum TLS 1.2 med TLS 1.3 som preferred protocol via `tls { protocols tls1.2 tls1.3 }` direktiv. TLS-certifikater håndteres automatisk via Let's Encrypt (ACME). HSTS med `max-age=31536000; includeSubDomains; preload` tvinger HTTPS for alle fremtidige anmodninger. |
-| **K-NT2** | Security Headers | `Caddyfile` (linje 69–87) | X-Frame-Options (SAMEORIGIN), X-Content-Type-Options (nosniff), X-XSS-Protection (1; mode=block), Referrer-Policy (strict-origin-when-cross-origin), Permissions-Policy (camera/microphone/geolocation=deaktiveret). |
-| **K-NT3** | Database Transport Kryptering | Prisma `DATABASE_URL` | `sslmode=require` sikrer at al kommunikation mellem applikation og Neon PostgreSQL er TLS-krypteret. |
-
-### 6.2 Data Kryptering
-
-| Kontrol ID | Kontrol | Reference | Beskrivelse |
-|------------|---------|-----------|-------------|
-| **K-DK1** | AES-256-GCM (Data at Rest) | `src/lib/crypto.ts` | Krypterer følsomme data (bank access tokens, refresh tokens, 2FA secrets) med AES-256-GCM. IV: 12 bytes (96 bit, NIST SP 800-38D), auth tag: 16 bytes (128 bit), key: 32 bytes (256 bit) fra `ENCRYPTION_KEY` miljøvariabel. Unik IV pr. kryptering. Integritetsverificering via GCM auth tag. |
-| **K-DK2** | bcrypt 12 Rounds (Adgangskoder) | `src/lib/password.ts` | Alle adgangskoder hashes med bcrypt med 12 salt rounds. Bagudkompatibilitet med legacy hash-format via `needsRehash()`. |
-| **K-DK3** | SHA-256 Checksums (Backups) | `src/lib/backup-engine.ts` | Alle backup-ZIP-filer verificeres med SHA-256 checksum (streaming). Checksum gemmes i databasen og valideres før restore. |
-
-### 6.3 Adgangskontrol og Autentificering
-
-| Kontrol ID | Kontrol | Reference | Beskrivelse |
-|------------|---------|-----------|-------------|
-| **K-AC1** | RBAC (Role-Based Access Control) | `src/lib/rbac.ts` | 5 roller med hierarki: OWNER(5) > ADMIN(4) > ACCOUNTANT(3) > VIEWER(2) > AUDITOR(1). 23 unikke permissioner fordelt på kategorier: company settings (4), member management (4), accounting data (5), reports (3), period management (3), banking (2), backup (2). `requirePermission()` blokerer uautoriserede handlinger. |
-| **K-AC2** | Tenant Isolation | `src/lib/rbac.ts` (`companyScope()`, `tenantFilter()`) | Alle database-queries er scoped af companyId. `companyScope()` returnerer filter baseret på brugerens activeCompanyId eller oversightCompanyId. Ingen mulighed for at tilgå andre tenanters data. |
-| **K-AC3** | 2FA / MFA (TOTP) | `src/lib/two-factor.ts` | TOTP-baseret two-factor autentificering. 2FA-secrets krypteres med AES-256-GCM. 10 backup-codes (SHA-256 hashed). Tenant-level kravmulighed (Company.twoFactorRequired). SuperDev bypass for udvikling. |
-| **K-AC4** | Oversight Mode (Read-Only) | `src/lib/rbac.ts` (`blockOversightMutation()`) | SUPER_DEV brugere i oversight mode har kun læseadgang til andre tenants. Alle mutationer blokeres med 403-respons. |
-| **K-AC5** | Demo Company Protection | `src/lib/rbac.ts` (`requireNotDemoCompany()`) | Demo-company data kan ikke ændres af almindelige brugere. Kun SuperDev har write-adgang. |
-
-### 6.4 Audit Trail
-
-| Kontrol ID | Kontrol | Reference | Beskrivelse |
-|------------|---------|-----------|-------------|
-| **K-AT1** | Immutable Audit Log (dobbelte beskyttelseslag + kontodeaktivering) | `src/lib/audit.ts` + `prisma/audit-immutability.sql` + `src/app/api/auth/delete-account/route.ts` | Uforanderlig log af alle ændringer til regnskabsdata (bogføringslov §10-12). Immutability håndhæves på **tre uafhængige niveauer**: **1) Applikationsniveau:** `audit.ts` eksporterer kun CREATE-funktioner — ingen update/delete. API route (`audit-logs/route.ts`) eksponerer kun GET-endpoints. **2) Databaseniveau:** PostgreSQL-triggere (`prisma/audit-immutability.sql`) forhindrer UPDATE og DELETE på "AuditLog"-tabellen fuldstændigt. Selv en database-administrator eller kompromitteret forbindelse kan ikke ændre eller slette audit-poster. **3) Kontodeaktivering i stedet for sletning:** Konto-sletning (`delete-account/route.ts`) deaktiverer brugerkontoen (`deactivatedAt` timestamp) i stedet for at slette brugeren og deres audit logs. Dette sikrer at audit trails aldrig fjernes via cascade-sletning. Login for deaktiverede konti blokeres i `login/route.ts` og `session.ts`. Fremmednøgler bruger `onDelete: Restrict` — brugere og virksomheder med audit-poster kan ikke slettes (5-års opbevaringspligt jf. Bogføringsloven §12 forrang over GDPR Art. 17(3)(c)). 22+ event-typer: CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, BACKUP_CREATE, BACKUP_RESTORE, BACKUP_DELETE, SESSION_INVALIDATE, DATA_RESET, OVERSIGHT, TWO_FACTOR_SETUP_STARTED, TWO_FACTOR_ACTIVATED, TWO_FACTOR_DISABLED, TWO_FACTOR_BACKUP_CODES_REGENERATED, TWO_FACTOR_TENANT_TOGGLE, LOGIN_2FA_VERIFIED, ACCOUNT_DEACTIVATED. Alle events inkluderer userId, companyId, entityType, entityId, before/after values, IP, userAgent. |
-| **K-AT2** | Audit på alle mutation-endpoints | Alle API routes i `src/app/api/` | Alle POST/PUT/DELETE API routes kalder `auditLog()` eller hjælpefunktionerne `auditCreate()`, `auditUpdate()`, `auditCancel()`, `auditDeleteAttempt()`. Audit-poster er beskyttet mod ændring/sletning af PostgreSQL-triggere (se K-AT1). |
-
-### 6.5 Backup og Gendannelse
-
-| Kontrol ID | Kontrol | Reference | Beskrivelse |
-|------------|---------|-----------|-------------|
-| **K-BK1** | Automatiske Backups | `src/lib/backup-engine.ts`, `src/lib/backup-scheduler.ts` | Fire niveauer: hourly (minut 5, hver time), daily (kl. 02:15), weekly (mandag kl. 03:30), monthly (1. kl. 04:00). Tenant-snapshot som ZIP med struktureret JSON. **AES-256-GCM filkryptering** af backup-ZIP før lagring på IONOS VPS. SHA-256 checksum. Lagret på IONOS VPS i EU (C5 + IT-Grundschutz cert.). |
-| **K-BK2** | Retention Policy | `src/lib/backup-engine.ts` (linje 76–82) | Hourly: 24 backups (25 timer), Daily: 30 backups (31 dage), Weekly: 52 backups (53 dage), Monthly: 60 backups (5 år, Bogføringsloven §12), Manual: 999 backups (90 dage). Automated cleanup dagligt kl. 03:00. |
-| **K-BK3** | Backup Restore med Verificering | `src/lib/backup-engine.ts` (`restoreBackup()`) | SHA-256 checksum-validering før restore. Pre-restore safety backup oprettes automatisk. Atomic database-transaktion (rollback ved fejl). 10-minut timeout for store restores. |
-| **K-BK4** | Per-Tenant Cron Health | `src/lib/backup-scheduler.ts` (`getCronHealth()`) | Uafhængig overvågning per tenant: idle/pending/healthy/unhealthy. Tracker consecutive errors. Overlever server-genstarter via database-hydratering. |
-| **K-BK5** | Data Eksport (Portabilitet) | `src/app/api/export-tenant/route.ts` | Portabel JSON-eksport med GUID, SHA-256 checksum. Alle tenant-data i ét samlet format til brug ved systemskift. |
-
-### 6.6 E-faktura Sikkerhed
-
-| Kontrol ID | Kontrol | Reference | Beskrivelse |
-|------------|---------|-----------|-------------|
-| **K-EF1** | OIOUBL / Peppol BIS Parser | `src/lib/einvoice-parser.ts` | Forenet parser der understøtter både OIOUBL og Peppol BIS Billing 3.0 format. Auto-detection via CustomizationID/ProfileID. Understøtter InvoiceTypeCode 380, 381, 384, 389. |
-| **K-EF2** | E-faktura Response Generator | `src/lib/einvoice-response.ts` | Genererer Application Response (N9), Message Level Response (N12), og Invoice Response (N13) for Peppol. Response codes: ACCEPTED, REJECTED, PARTIALLY_ACCEPTED. |
-| **K-EF3** | Duplicate Detection | `src/app/api/invoices/receive/route.ts` | Indgående e-fakturaer tjekkes for duplicates før oprettelse. |
-
-### 6.7 Valutakurs-sikkerhed
-
-| Kontrol ID | Kontrol | Reference | Beskrivelse |
-|------------|---------|-----------|-------------|
-| **K-VC1** | ECB Reference Rates | `src/lib/currency-utils.ts` | Frankfurter API (gratis, EU-baseret, ECB datakilde). 10-sekunders timeout. Response-validering (tjekker for rates-objekt). |
-| **K-VC2** | In-Memory Cache (1 time) | `src/lib/currency-utils.ts` | Kurser cachelagres i hukommelsen med 1-times TTL. Stale cache fallback hvis API er utilgængeligt. Undgå at systemet afhænger af real-time API for grundlæggende funktion. |
-
-### 6.8 Rate Limiting og API-beskyttelse
-
-| Kontrol ID | Kontrol | Reference | Beskrivelse |
-|------------|---------|-----------|-------------|
-| **K-RL1** | Rate Limiting (to lag) | `src/lib/rate-limit.ts` + `Caddyfile` (rate_limit direktiv) | **Lag 1 — Caddy (infrastructure):** Global rate limiting per IP i Caddyfile (`rate_limit` direktiv) — 100 req/min generelt, 30 req/min for API-zoner. Persistenter på tværs af server-genstarter. Beskytter mod DDoS og volumetriske angreb før de når applikationen. **Lag 2 — Applikation (granulær):** In-memory rate limiting (`rate-limit.ts`) på specifikke følsomme endpoints (login, 2FA, password reset) med finere grænser. Begrænsning: in-memory Store nulstilles ved server-genstart og gælder kun for single-instance drift. |
-| **K-RL2** | API Error Handler | `src/lib/api-error-handler.ts` | Centraliseret fejlhåndtering der forhindrer lækage af interne detaljer i API-responser. |
-
----
-
-## 7. Restrisici og Accept
-
-### 7.1 Resterende risici
-
-Efter implementering af alle eksisterende kontroller, følgende restrisici forbliver:
-
-| # | Restrisiko | Risikoscore | Klasse | Acceptforanstaltning |
-|---|-----------|-------------|--------|---------------------|
-| **R1** | Kompromitteret adgangskode trods bcrypt | 6 (3×2) | 🟡 Middel | **Accepteret.** 2FA dæmmer konsekvensen. Brugere opfordres til stærke adgangskoder. Login rate limiting forhindrer brute-force. |
-| **R2** | Lækage af ENCRYPTION_KEY | 5 (5×1) | 🟡 Middel | **Accepteret.** Key er kun i miljøvariabel, aldrig i kode eller database. Server-hardening begrænser adgang. Secret management kan forbedres med Vault/HSM i fremtiden. |
-| **R3** | Datakorruption via softwarefejl | 6 (3×2) | 🟡 Middel | **Accepteret.** Automatiske backups muliggør gendannelse inden for 1 time (hourly backup). SHA-256 verificering sikrer backup-integritet. Atomic transaktioner forhindrer partial corruption. |
-| **R4** | Servernedetid trods PM2 auto-restart | 6 (3×2) | 🟡 Middel | **Accepteret.** PM2 genstarter applikationen automatisk. Cron health monitoring alarmerer ved gentagne fejl. Beredskabsplan definerer manual genstart (se separat BEREDSKABSPLAN.md). |
-
-### 7.2 Samlet risikoprofil
-
-```
-Før kontroller (Brutto):
-  Kritisk (16-25):  0 trusler
-  Høj (10-15):      9 trusler
-  Middel (5-9):     7 trusler
-  Lav (1-4):        2 trusler
-
-Efter kontroller (Netto/Restrisiko):
-  Kritisk (16-25):  0 trusler  ← INGEN kritiske risici
-  Høj (10-15):      0 trusler  ← INGEN høje risici
-  Middel (5-9):     4 trusler  ← Alle acceptable (R1-R4)
-  Lav (1-4):       14 trusler  ← Håndteres af eksisterende kontroller
-```
-
-### 7.3 Formel risikoaccept
-
-Alle resterende risici er formelt accepteret af dataansvarlig (AlphaAi) med følgende begrundelse:
-
-> **Accepterklæring:**
->
-> Efter implementering af tekniske kontroller (TLS 1.3, AES-256-GCM, bcrypt 12 rounds, RBAC med 5 roller/23 permissioner, TOTP 2FA, uforanderlig audit trail, automatiske backups med SHA-256 verificering, per-tenant isolation i alle API routes) og organisatoriske foranstaltninger (backup health monitoring, rate limiting, oversight-mode, demo-company protection), vurderes alle resterende risici at være på et acceptabelt niveau.
->
-> De 4 mellemrisici (R1-R4) er alle dæmpet af 2FA-laget, automatiske backups og monitoring, hvilket reducerer den faktiske konsekvens markant. Ingen enkelt rest-risiko udgør en trussel mod AlphaFlows evne til at opfylde Bogføringslovens krav til sikker opbevaring af regnskabsdata.
->
-> Accepteret af: AlphaAi, dataansvarlig
->
-> Dato: 1. juli 2025
-
----
-
-## 8. Behandling af Trusselsændringer
-
-### 8.1 Proces for løbende risikovurdering
-
-AlphaFlow opretholder en struktureret proces for identifikation og håndtering af nye og ændrede trusler:
-
-| Trin | Handling | Ansvarlig | Frekvens |
-|------|----------|-----------|----------|
-| **1. Overvågning** | Overvåge sikkerhedsfeeds (CVE, NIST NVD, Node.js security advisories, Caddy releases, Neon status page) | Teknisk lead | Daglig |
-| **2. Identifikation** | Vurdere om nye sårbarheder gælder for AlphaFlows teknologistak | Teknisk lead | Ved ny CVE |
-| **3. Vurdering** | Opdatere risikomatrix med ny trussels konsekvens og sandsynlighed | Teknisk lead + dataansvarlig | Ved ny trussel |
-| **4. Håndtering** | Implementere patch, konfigurationsændring eller ny kontrol | Teknisk lead | Inden for rimelig tid |
-| **5. Dokumentation** | Opdatere dette dokument med nye trusler og kontroller | Dataansvarlig | Ved revision |
-| **6. Gennemgang** | Samlet revision af hele risikovurderingen | Teknisk lead + dataansvarlig | Årligt (eller ved væsentlige ændringer) |
-
-### 8.2 Triggers for ekstraordinær revision
-
-En ekstraordinær revision af risikovurderingen skal udføres ved:
-
-- **Væsentlige ændringer i systemarkitekturen** (ny database, ny hostingudbyder, nye tredjepartstjenester)
-- **Nye lovkrav** (ændringer i Bogføringsloven, GDPR-vejledning, Erhvervsstyrelsens krav)
-- **Sikkerhedshændelser** (selv hvis afvist, skal konsekvenserne vurderes)
-- **Nye kritiske sårbarheder** i afhængigheder (Next.js, Prisma, Caddy, Neon)
-- **Skift af tredjepartsudbydere** (ny database hosting, ny e-faktura access point)
-
-### 8.3 Dokumentation af ændringer
-
-Alle ændringer i risikovurderingen dokumenteres i tabelform:
-
-| Dato | Ændring | Forårsaget af | Udført af |
-|------|---------|---------------|-----------|
-| 1. juli 2025 | Første version (v2.0) af IT-risikovurdering | System anmeldelse til Erhvervsstyrelsen | AlphaAi |
-| 2025 | Tilføjet IONOS VPS som tredjepartsrisiko (C5 + IT-Grundschutz, EU-hosted), opdateret backup-kryptering til AES-256-GCM | IONOS VPS tilføjet som leverandør | AlphaAi |
-| 2025 | Tilføjet database-level immutability for AuditLog (PostgreSQL-triggere i K-AT1), opdateret FK onDelete fra SetNull til Restrict | Compliance-review: audit trail var kun beskyttet på applikationsniveau | AlphaAi |
-| 04/06/2026 | Rettet T-CF5: fjernet fejlagtig access-guard.ts reference; tilføjet eksplicit TLS 1.2/1.3 konfiguration i Caddyfile (K-NT1); tilføjet Caddy rate limiting (K-RL1); præciseret in-memory begrænsning i rate-limit.ts | Compliance-review: dokumentation matchede ikke faktisk konfiguration | AlphaAi |
-| 04/06/2026 | Ændret kontosletning til kontodeaktivering (K-AT1 niveau 3); tilføjet ACCOUNT_DEACTIVATED audit event; opdateret T-PD1 og T-PD2 til at afspejle deaktivering i stedet for sletning; tilføjet deactivatedAt/deactivationReason felter i User schema | Compliance-review: delete-account slettede audit logs i strid med Bogføringsloven §10-12 | AlphaAi |
-| 04/06/2026 | Rettet monthly backup retention fra 365 dage (1 år) til 1825 dage (5 år) i backup-engine.ts og K-BK2; opdateret BEREDSKABSPLAN retention-tabel | Compliance-review: monthly retention var 1 år, ikke 5 år som dokumenteret | AlphaAi |
-
----
-
-## 9. Konklusion
-
-Denne IT-risikovurdering har identificeret og vurderet **18 specifikke trusler** fordelt på 4 kategorier (tilgængelighed, fortrolighed, integritet, persondata) samt 4 tredjepartsrisici.
-
-### Nøglekonklusioner:
-
-1. **Ingen kritiske eller høje restrisici.** Alle 18 trusler er reduceret til lavt eller middel niveau gennem eksisterende tekniske kontroller.
-
-2. **Kernen af sikkerhedsarkitekturen** er et multi-lager forsvar:
-   - **Netværkslag:** TLS 1.3 + HSTS + security headers (Caddy)
-   - **Transportlag:** sslmode=require (PostgreSQL)
-   - **Krypteringslag:** AES-256-GCM (følsomme data), bcrypt 12 rounds (adgangskoder)
-   - **Autentificeringslag:** 2FA/TOTP + session management + rate limiting
-   - **Autorisationslag:** RBAC med 5 roller, 23 permissioner, tenant isolation i alle queries
-   - **Auditlag:** Uforanderlig log af alle ændringer (bogføringslov §10-12) — **håndhævet på både applikations- og databaseniveau** via PostgreSQL-triggere der forhindrer UPDATE/DELETE på AuditLog-tabellen
-   - **Gendannelseslag:** Automatiske backups (hourly/daily/weekly/monthly), SHA-256 verificering, atomic restore
-
-3. **Compliance:** Systemets kontroller opfylder kravene i:
-   - Bogføringslovens §10-12 (audit trail, uforanderlig dokumentation)
-   - Bogføringslovens §15 (backup og opbevaring i 5 år)
-   - GDPR art. 32 (sikkerhed ved behandling af personoplysninger)
-   - BEK nr. 98 (IT-sikkerhed på tilstrækkeligt niveau, hændelig tilintetgørelse)
-
-4. **Tredjepartsrisici** er acceptable: Neon (SOC 2 Type II, EU-baseret), IONOS VPS (C5 + IT-Grundschutz, EU-baseret, første europæiske udbyder med begge cert.), Caddy (open source, auto-TLS), Frankfurter API (ECB-reference, cache med fallback).
-
-5. **4 accepterede mellemrisici** (R1-R4) er alle effektivt dæmpet af 2FA, automatiske backups og monitoring, og udgør ikke en trussel mod systemets lovmæssige forpligtelser.
-
-**Samlet vurdering:** AlphaFlows IT-sikkerhed er på et **tilstrækkeligt niveau** til at understøtte godkendelse som standardiseret bogføringssystem jf. Erhvervsstyrelsens krav.
-
----
-
-*Dokumentet er udarbejdet af AlphaAi (dataansvarlig) og danner del af anmeldelsespakken til Erhvervsstyrelsen.*
-
-*Næste revision: 1. juli 2026, eller ved væsentlige ændringer i systemet eller trusselsbilledet.*
+| Version | Dato | Ændring | Ansvarlig |
+|---|---|---|---|
+| 1.0 | 2025-07-01 | Første version (generisk IT-risikovurdering). | AlphaAi ApS |
+| 2.0 | 2025-07-01 | Tilføjede N2-N5/D1/D15 mapping, aktivoversigt. | AlphaAi ApS |
+| **3.0** | **2026** | **Fuld omskrivning til DPIA (GDPR Art. 35). 20 risici (R-01..R-20) baseret på P1-SEC mangelliste + P1-INT/P1-SVC-b fakta. Risikomatrix + accept-begrundelser + prioriteret afhjælpningsplan.** | **AlphaAi ApS — Doc-updater D5** |
