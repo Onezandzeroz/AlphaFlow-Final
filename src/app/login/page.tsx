@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAuthStore, User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
@@ -119,15 +120,37 @@ function viewToPath(view: View, search?: string): string {
   return search ? `${base}${search}` : base;
 }
 
-export default function Home() {
+// Wrap in Suspense because useSearchParams() requires it in Next.js 16
+// (otherwise the page de-optimes to client-side rendering for the whole route).
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <Home />
+    </Suspense>
+  );
+}
+
+function Home() {
   const { user, setUser, isLoading, checkAuth } = useAuthStore();
   // Detect ?mode=register from URL — marketing CTA buttons use /login?mode=register
   // to send new users directly to the registration form (instead of login).
-  const [authMode, setAuthMode] = useState<'login' | 'register'>(() => {
-    if (typeof window === 'undefined') return 'login';
-    const params = new URLSearchParams(window.location.search);
-    return params.get('mode') === 'register' ? 'register' : 'login';
-  });
+  // useSearchParams re-renders on client-side navigation (Link clicks),
+  // so this works both on fresh page loads AND when navigating from a
+  // marketing page to /login?mode=register.
+  const searchParams = useSearchParams();
+  const modeParam = searchParams.get('mode');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>(
+    modeParam === 'register' ? 'register' : 'login'
+  );
+  // Sync authMode when the ?mode= query param changes (e.g. user clicks a
+  // marketing CTA that navigates to /login?mode=register while already on
+  // /login). Manual toggling via in-card links calls setAuthMode directly
+  // and is NOT affected because those don't change the URL.
+  useEffect(() => {
+    if (modeParam === 'register' || modeParam === 'login') {
+      setAuthMode(modeParam);
+    }
+  }, [modeParam]);
   const [currentView, setCurrentView] = useState<View>(getInitialView);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [onboardingStepJustDone, setOnboardingStepJustDone] = useState(0);
