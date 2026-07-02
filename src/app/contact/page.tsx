@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowRight, Clock, MessageCircle, HelpCircle, FileText } from "lucide-react";
+import { ArrowRight, Clock, HelpCircle, FileText } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { CTAButton } from "@/components/marketing/cta-button";
 import { ContactForm } from "@/components/marketing/contact-form";
@@ -48,10 +48,6 @@ export default function ContactPage() {
           }}
         />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 sm:pt-28 lg:pt-32 pb-20 sm:pb-24 text-center">
-          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[12px] font-medium text-teal-100 mb-6">
-            <MessageCircle className="h-3.5 w-3.5 text-teal-300" />
-            Vi sidder klar til at hjælpe
-          </span>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-[1.12]">
             Kontakt{" "}
             <span className="bg-gradient-to-r from-teal-300 via-teal-200 to-sky-300 bg-clip-text text-transparent">

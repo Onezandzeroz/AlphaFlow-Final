@@ -7,10 +7,7 @@ import {
   ShieldCheck,
   Clock,
   Star,
-  Zap,
-  FileText,
   TrendingUp,
-  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
@@ -24,7 +21,7 @@ import {
 import { SITE, META, FAQ_DA } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: SITE.name + " — Intelligent regnskabsprogram for danske virksomheder",
+  title: SITE.name + " — Intelligent regnskabsprogram for startups & SMV'er",
   description: META.description,
   alternates: { canonical: "/" },
   openGraph: {
@@ -70,12 +67,12 @@ export default function LandingPage() {
         />
 
         {/* Content */}
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 sm:pt-28 lg:pt-36 pb-20 sm:pb-28 lg:pb-36">
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 sm:pt-28 lg:pt-32 pb-20 sm:pb-24">
           <div className="max-w-3xl">
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold text-white tracking-tight leading-[1.05]">
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-[1.08]">
               Intelligent bogføring{" "}
               <span className="bg-gradient-to-r from-teal-300 via-teal-200 to-sky-300 bg-clip-text text-transparent">
-                for danske virksomheder
+                for startups &amp; SMV&apos;er
               </span>
             </h1>
             <p className="mt-6 text-lg sm:text-xl text-teal-50/90 leading-relaxed max-w-2xl">
@@ -142,10 +139,6 @@ export default function LandingPage() {
           ═══════════════════════════════════════════════════════════════ */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 sm:pt-24 pb-8">
         <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f0fdf9] border border-[#ccfbef] text-[12px] font-medium text-[#0d9488] mb-4">
-            <Zap className="h-3.5 w-3.5" />
-            Se platformen
-          </span>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">
             Hermes AI — din danske regnskabsassistent
           </h2>
@@ -244,10 +237,6 @@ export default function LandingPage() {
           <div className="absolute inset-0 flex items-center">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
               <div className="max-w-xl">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[12px] font-medium text-teal-100 mb-5">
-                  <Globe className="h-3.5 w-3.5 text-teal-300" />
-                  Peppol e-fakturering
-                </span>
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight leading-tight">
                   Send e-fakturaer via Peppol-netværket
                 </h2>
@@ -270,10 +259,6 @@ export default function LandingPage() {
           ═══════════════════════════════════════════════════════════════ */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
         <div className="text-center mb-10 sm:mb-14">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#f0fdf9] border border-[#ccfbef] text-[12px] font-medium text-[#0d9488] mb-4">
-            <FileText className="h-3.5 w-3.5" />
-            Gennemsigtige priser
-          </span>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight">
             Simple, fair priser
           </h2>
