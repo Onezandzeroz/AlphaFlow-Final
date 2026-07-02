@@ -426,15 +426,15 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
 export interface StatItem {
   value: string;
   label: string;
-  /** Optional lucide icon component to render above the value */
+  /** Optional lucide icon component to render inline with the value */
   icon?: LucideIcon;
 }
 
 export const MARKETING_STATS: readonly StatItem[] = [
-  { value: "10", label: "Danske momskoder understøttet" },
-  { value: "38", label: "FSR standardkonti" },
-  { value: "5 ÅR", label: "Backup retention", icon: ShieldCheck },
-  { value: "50k", label: "Gratis omsætning under 50.000 kr." },
+  { value: "0 kr.", label: "Gratis under 50.000 kr. omsætning" },
+  { value: "5 min", label: "Opsætning af din virksomhed" },
+  { value: "24/7", label: "Adgang når det passer dig" },
+  { value: "5 ÅR", label: "Sikker backup retention", icon: ShieldCheck },
 ] as const;
 
 // ─── Trust badges (for /pricing and /about) ──────────────────────────

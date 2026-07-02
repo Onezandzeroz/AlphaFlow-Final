@@ -109,27 +109,44 @@ export default function LandingPage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════
-          STATS BAR — full-width with dark teal/blue gradient
+          STATS BAR — banner-style with glassmorphism cards
           ═══════════════════════════════════════════════════════════════ */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 sm:-mt-6 relative z-10">
-        <div className="rounded-3xl bg-gradient-to-br from-[#134e4a] via-[#0d9488] to-[#0c4a6e] shadow-2xl p-6 sm:p-8 lg:p-10">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
-            {MARKETING_STATS.map((stat) => {
-              const Icon = stat.icon;
-              return (
-              <div key={stat.label} className="text-center">
-                <div className="flex items-center justify-center gap-2">
-                  {Icon && <Icon className="h-7 w-7 sm:h-8 sm:w-8 text-teal-300" />}
-                  <span className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
-                    {stat.value}
-                  </span>
+        <div className="relative overflow-hidden rounded-3xl shadow-2xl">
+          {/* Dark banner background with image */}
+          <div className="absolute inset-0">
+            <Image
+              src="/banner-3.png"
+              alt=""
+              fill
+              className="object-cover"
+              sizes="(max-width: 1280px) 100vw, 1280px"
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-[#042f2e]/90 via-[#0c4a6e]/85 to-[#115e59]/90" />
+          </div>
+          {/* Stats grid over the banner */}
+          <div className="relative p-6 sm:p-8 lg:p-10">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+              {MARKETING_STATS.map((stat) => {
+                const Icon = stat.icon;
+                return (
+                <div
+                  key={stat.label}
+                  className="rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 p-5 sm:p-6 text-center"
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    {Icon && <Icon className="h-7 w-7 sm:h-8 sm:w-8 text-teal-300" />}
+                    <span className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white tracking-tight">
+                      {stat.value}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-[12px] sm:text-[13px] text-teal-100/80 leading-snug">
+                    {stat.label}
+                  </div>
                 </div>
-                <div className="mt-2 text-[12px] sm:text-[13px] text-teal-100/80 leading-snug">
-                  {stat.label}
-                </div>
-              </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
       </section>
