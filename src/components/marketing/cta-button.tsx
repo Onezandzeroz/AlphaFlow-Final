@@ -24,6 +24,13 @@ import { ArrowRight } from "lucide-react";
  * These link to `/login?mode=register` which auto-shows the RegisterForm.
  * Omit it (or `register={false}`) for the "Log ind" button which sends
  * existing users to the login form.
+ *
+ * PLAN SELECTION:
+ * Set `planId="annual"` (or any of 'free'|'monthly'|'annual'|'2year'|'3year')
+ * to pass the selected plan through the registration flow. The login page
+ * stashes it in localStorage so it survives email verification, and after
+ * login the SubscriptionPlansPrompt auto-starts the payment flow for that
+ * specific plan instead of showing the full plan chooser.
  */
 
 type Variant = "primary-light" | "outline-light" | "primary-dark";
@@ -53,6 +60,13 @@ interface CTAButtonProps {
    * i gang", "Start gratis", package selection buttons).
    */
   register?: boolean;
+  /**
+   * Optional plan ID to pass through the registration → verification →
+   * login flow. After login, the SubscriptionPlansPrompt auto-starts the
+   * payment flow for this plan instead of showing the full chooser.
+   * Valid values: 'free' | 'monthly' | 'annual' | '2year' | '3year'.
+   */
+  planId?: string;
 }
 
 export function CTAButton({
@@ -62,17 +76,24 @@ export function CTAButton({
   className = "",
   showArrow = false,
   register = false,
+  planId,
 }: CTAButtonProps) {
   const sizeClasses =
     "inline-flex items-center justify-center gap-2 h-12 px-8 text-[15px] font-medium rounded-md transition-all duration-200 whitespace-nowrap shrink-0";
 
-  // Append ?mode=register for new-user CTAs. Preserve any existing query
-  // params (though currently none of the marketing CTAs use them).
-  const finalHref = register
-    ? href.includes("?")
-      ? `${href}&mode=register`
-      : `${href}?mode=register`
-    : href;
+  // Build the query string from register + planId props.
+  // register=true  → ?mode=register
+  // planId="annual" → &plan=annual
+  const params: string[] = [];
+  if (register) params.push("mode=register");
+  if (planId) params.push(`plan=${planId}`);
+
+  const finalHref =
+    params.length > 0
+      ? href.includes("?")
+        ? `${href}&${params.join("&")}`
+        : `${href}?${params.join("&")}`
+      : href;
 
   return (
     <Link

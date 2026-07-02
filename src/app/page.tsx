@@ -353,6 +353,7 @@ export default function LandingPage() {
                   variant="primary-light"
                   className="w-full h-11 px-4 text-[14px] shadow-lg"
                   register
+                  planId={plan.id}
                 >
                   {plan.cta}
                 </CTAButton>
@@ -362,7 +363,9 @@ export default function LandingPage() {
                   variant="outline"
                   className="w-full h-11 text-[14px] rounded-md"
                 >
-                  <Link href="/login?mode=register">{plan.cta}</Link>
+                  <Link href={`/login?mode=register&plan=${plan.id}`}>
+                    {plan.cta}
+                  </Link>
                 </Button>
               )}
             </div>

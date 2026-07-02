@@ -139,6 +139,7 @@ function Home() {
   // marketing page to /login?mode=register.
   const searchParams = useSearchParams();
   const modeParam = searchParams.get('mode');
+  const planParam = searchParams.get('plan');
   const [authMode, setAuthMode] = useState<'login' | 'register'>(
     modeParam === 'register' ? 'register' : 'login'
   );
@@ -151,6 +152,19 @@ function Home() {
       setAuthMode(modeParam);
     }
   }, [modeParam]);
+
+  // Stash the selected plan (from ?plan= query param) into localStorage so
+  // it survives the email-verification round-trip. After login, the
+  // SubscriptionPlansPrompt reads this and auto-starts the payment flow for
+  // the specific plan instead of showing the full plan chooser.
+  // Key: 'alphaflow-selected-plan' — value: plan ID ('free'|'monthly'|'annual'|'2year'|'3year').
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const validPlans = ['free', 'monthly', 'annual', '2year', '3year'];
+    if (planParam && validPlans.includes(planParam)) {
+      window.localStorage.setItem('alphaflow-selected-plan', planParam);
+    }
+  }, [planParam]);
   const [currentView, setCurrentView] = useState<View>(getInitialView);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [onboardingStepJustDone, setOnboardingStepJustDone] = useState(0);

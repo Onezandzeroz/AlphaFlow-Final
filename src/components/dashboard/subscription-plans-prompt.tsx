@@ -1016,6 +1016,56 @@ export function SubscriptionPlansPrompt() {
     }, 300);
   }, []);
 
+  // ── Auto-start payment for a pre-selected plan (from marketing pages) ──
+  // When a user clicks a specific plan CTA on /pricing or the landing page
+  // (e.g. "Vælg Pro"), the plan ID is stashed in localStorage
+  // ('alphaflow-selected-plan') by the login page. After login, this effect
+  // detects it and auto-invokes handleSelectPlan for that plan — skipping
+  // the full plan chooser modal entirely.
+  const autoPlanChecked = useRef(false);
+  useEffect(() => {
+    if (!user || autoPlanChecked.current) return;
+    if (typeof window === 'undefined') return;
+    // Skip for SuperDev / demo — they don't need payment.
+    if (user.isSuperDev || user.isDemoCompany) return;
+    // Only auto-start for users who don't already have a paid plan.
+    if (user.planTier && user.planTier !== 'free') return;
+
+    autoPlanChecked.current = true;
+    const storedPlanId = window.localStorage.getItem('alphaflow-selected-plan');
+    if (!storedPlanId) return;
+
+    // Validate the stored plan ID against the known plan IDs.
+    const validPlanIds = ['free', 'monthly', 'annual', '2year', '3year'];
+    if (!validPlanIds.includes(storedPlanId)) {
+      window.localStorage.removeItem('alphaflow-selected-plan');
+      return;
+    }
+
+    // Find the matching plan from the PLANS array.
+    const plan = PLANS.find((p) => p.id === storedPlanId);
+    if (!plan) {
+      window.localStorage.removeItem('alphaflow-selected-plan');
+      return;
+    }
+
+    // Clear the stored plan so it doesn't re-trigger on next login.
+    window.localStorage.removeItem('alphaflow-selected-plan');
+
+    // Mark as scheduled so the normal auto-show effect doesn't also fire
+    // and show the chooser modal.
+    hasScheduled.current = true;
+    localStorage.setItem(`${EVER_LOGGED_PREFIX}${user.id}`, 'true');
+
+    // Auto-start the payment flow for the selected plan.
+    // Small delay so the dashboard layout has time to settle before the
+    // payment overlay/result appears.
+    const timer = setTimeout(() => {
+      handleSelectPlan(plan);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [user, handleSelectPlan]);
+
   useEffect(() => {
     if (!visible) return;
     const handleKeyDown = (e: KeyboardEvent) => {
