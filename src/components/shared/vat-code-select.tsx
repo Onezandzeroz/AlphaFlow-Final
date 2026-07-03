@@ -39,7 +39,11 @@
  */
 
 import { VAT_CODE_TO_PUBLIC_MAPPING } from '@/lib/standard-chart-of-accounts';
-import { OUTPUT_VAT_CODES, INPUT_VAT_CODES } from '@/lib/vat-utils';
+// IMPORTANT: import the pure (db-free) constants from vat-codes, NOT vat-utils.
+// vat-utils imports Prisma's `db` client, which crashes in the browser with
+// "Extensions.defineExtension is unable to run in this browser environment"
+// if pulled into a client bundle.
+import { OUTPUT_VAT_CODES, INPUT_VAT_CODES } from '@/lib/vat-codes';
 import { useTranslation } from '@/lib/use-translation';
 import {
   Select,

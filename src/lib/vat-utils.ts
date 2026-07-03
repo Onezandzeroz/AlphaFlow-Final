@@ -22,22 +22,17 @@
 
 import { db } from '@/lib/db';
 import { AccountGroup } from '@prisma/client';
-
-// ─── Single canonical VAT definitions ────────────────────────────────────────
-
-/** VAT code → rate mapping — the ONLY place this is defined */
-export const VAT_RATE_MAP: Record<string, number> = {
-  S25: 25, S12: 12, S0: 0, SEU: 0,
-  K25: 25, K12: 12, K0: 0, KEU: 0, KUF: 0, NONE: 0,
-};
-
-/** Output VAT codes (udgående / salgsmoms) */
-export const OUTPUT_VAT_CODES = ['S25', 'S12', 'S0', 'SEU'] as const;
-/** Input VAT codes (indgående / købsmoms) */
-export const INPUT_VAT_CODES = ['K25', 'K12', 'K0', 'KEU', 'KUF'] as const;
-
-/** Valid VAT percentages for Danish tax — the ONLY place this set is defined */
-export const VALID_VAT_PERCENTAGES = [0, 12, 25] as const;
+// Import the pure (db-free) constants from vat-codes so this server-only
+// module can use them internally AND re-export them for backward
+// compatibility. Client components MUST import directly from
+// '@/lib/vat-codes' to avoid pulling Prisma into the browser bundle.
+import {
+  VAT_RATE_MAP,
+  OUTPUT_VAT_CODES,
+  INPUT_VAT_CODES,
+  VALID_VAT_PERCENTAGES,
+} from '@/lib/vat-codes';
+export { VAT_RATE_MAP, OUTPUT_VAT_CODES, INPUT_VAT_CODES, VALID_VAT_PERCENTAGES };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
