@@ -1984,7 +1984,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
               </div>
               {isDa ? 'Købslinjer' : 'Purchase Lines'}
             </CardTitle>
-            <Button variant="outline" size="sm" onClick={addPurchaseLineItem} className="gap-1.5">
+            <Button type="button" variant="outline" size="sm" onClick={addPurchaseLineItem} className="gap-1.5">
               <Plus className="h-4 w-4" />
               {t('addItem')}
             </Button>

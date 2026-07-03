@@ -1282,6 +1282,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                   </Badge>
                 </div>
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   onClick={addLine}

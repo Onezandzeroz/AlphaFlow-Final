@@ -799,7 +799,11 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   // ─── VAT breakdown for pie chart ─────────────────────────────
 
   const currentMonth = format(new Date(), 'yyyy-MM');
+  // Exclude cancelled transactions — they are preserved per bogføringsloven but
+  // must NOT count towards this month's sales/purchase tallies. Their reversal
+  // journal entry already nets them out in ledger/report figures.
   const thisMonthTransactions = transactions.filter((t) => {
+    if (t.cancelled) return false;
     const dateStr = t.date?.substring(0, 7) || '';
     return dateStr.startsWith(currentMonth);
   });

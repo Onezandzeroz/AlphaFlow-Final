@@ -399,21 +399,26 @@ export function ExportsPage({ user }: ExportsPageProps) {
     return Array.from({ length: 4 }, (_, i) => currentYear - i);
   }, []);
 
-  // ─── Filtered transactions: main period ───
+  // ─── Filtered transactions: main period (excluding cancelled) ───
+  // Cancelled transactions are excluded from all export totals — they are
+  // preserved per bogføringsloven but netted out by their reversal journal
+  // entry, so including them here would double-count gross amounts.
   const filteredTransactions = useMemo(() => {
     const periodStart = mainPeriodRange.start.getTime();
     const periodEnd = mainPeriodRange.end.getTime();
     return transactions.filter((tx) => {
+      if (tx.cancelled) return false;
       const txDate = new Date(tx.date).getTime();
       return txDate >= periodStart && txDate <= periodEnd;
     });
   }, [transactions, mainPeriodRange]);
 
-  // ─── Filtered transactions: effective SAF-T period ───
+  // ─── Filtered transactions: effective SAF-T period (excluding cancelled) ───
   const saftFilteredTransactions = useMemo(() => {
     const periodStart = effectiveSaftRange.start.getTime();
     const periodEnd = effectiveSaftRange.end.getTime();
     return transactions.filter((tx) => {
+      if (tx.cancelled) return false;
       const txDate = new Date(tx.date).getTime();
       return txDate >= periodStart && txDate <= periodEnd;
     });

@@ -203,6 +203,10 @@ export function VATReport({ user }: VATReportProps) {
     const monthStr = selectedMonth.padStart(2, '0');
     const filterPrefix = `${selectedYear}-${monthStr}`;
     return allTransactions.filter((t) => {
+      // Exclude cancelled — netted out by reversal JE in the VAT register
+      // (which is the primary source of truth); the fallback sums below must
+      // also stay consistent with those figures.
+      if (t.cancelled) return false;
       const dateStr = t.date?.substring(0, 10) || '';
       return dateStr.startsWith(filterPrefix);
     });

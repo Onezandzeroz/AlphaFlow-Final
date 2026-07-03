@@ -481,6 +481,15 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
     return result;
   }, [transactions, searchQuery, typeFilter, vatFilter, sortField, sortDirection]);
 
+  // Active (non-cancelled) filtered transactions — used for footer totals so
+  // cancelled rows remain visible in the list (struck-through, audit trail)
+  // but do NOT inflate the sum totals. Cancelled entries are netted out by
+  // their reversal journal entry in the ledger; the client totals must match.
+  const activeFiltered = useMemo(
+    () => filteredTransactions.filter(tx => !tx.cancelled),
+    [filteredTransactions]
+  );
+
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -514,18 +523,24 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
     setTypeFilter('all');
   };
 
-  // Calculate summary stats from ALL transactions (unfiltered)
+  // Calculate summary stats from ALL transactions (unfiltered by search/type,
+  // but EXCLUDING cancelled — stats cards must reflect live figures only).
+  // Cancelled transactions are preserved per bogføringsloven but must NOT
+  // contribute to any totals; their reversal journal entry already nets
+  // them out in the ledger/reports, so the client stats must match by
+  // excluding them here too.
   const stats = useMemo(() => {
-    const sales = transactions.filter(t => t.type === 'SALE' || !t.type);
-    const purchases = transactions.filter(t => t.type === 'PURCHASE');
+    const active = transactions.filter(t => !t.cancelled);
+    const sales = active.filter(t => t.type === 'SALE' || !t.type);
+    const purchases = active.filter(t => t.type === 'PURCHASE');
 
     const salesAmount = sales.reduce((sum, t) => sum + Number(t.amount), 0);
     const purchasesAmount = purchases.reduce((sum, t) => sum + Number(t.amount), 0);
 
-    const outputVAT = transactions
+    const outputVAT = active
       .filter(t => t.type === 'SALE' || !t.type)
       .reduce((sum, t) => sum + Math.abs(getDisplayVAT(t).amount), 0);
-    const inputVAT = transactions
+    const inputVAT = active
       .filter(t => t.type === 'PURCHASE')
       .reduce((sum, t) => sum + Math.abs(getDisplayVAT(t).amount), 0);
 
@@ -948,7 +963,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('total')}</span>
                   <div className="text-right">
                     <span className="text-base font-bold text-gray-900 dark:text-white">
-                      {tc(filteredTransactions.reduce((sum, tx) => sum + tx.amount, 0))}
+                      {tc(activeFiltered.reduce((sum, tx) => sum + tx.amount, 0))}
                     </span>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {filteredTransactions.length} {t('transactionsWord')}
@@ -1239,9 +1254,9 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                     <TableCell />
                     <TableCell />
                     <TableCell className="font-semibold">{t('total')}</TableCell>
-                    <TableCell className="text-right font-semibold">{tc(filteredTransactions.reduce((sum, tx) => sum + Math.abs(Number(tx.amount)), 0))}</TableCell>
+                    <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + Math.abs(Number(tx.amount)), 0))}</TableCell>
                     <TableCell />
-                    <TableCell className="text-right font-semibold">{tc(filteredTransactions.reduce((sum, tx) => sum + Math.abs(getDisplayVAT(tx).amount), 0))}</TableCell>
+                    <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + Math.abs(getDisplayVAT(tx).amount), 0))}</TableCell>
                     <TableCell />
                   </TableRow>
                 </TableBody>
