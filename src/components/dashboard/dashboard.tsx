@@ -117,6 +117,7 @@ interface Transaction {
   vatPercent: number;
   receiptImage: string | null;
   invoiceId?: string | null;
+  cancelled?: boolean;
 }
 
 interface Invoice {

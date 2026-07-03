@@ -144,6 +144,7 @@ interface Transaction {
   // Journal-entry-derived VAT (authoritative) — from double-entry journal.
   // null when no journal entry exists (the transaction has no VAT posting).
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
+  cancelled?: boolean;
 }
 
 interface VATRegisterSummary {

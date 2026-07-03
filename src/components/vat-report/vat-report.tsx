@@ -49,6 +49,7 @@ interface Transaction {
   receiptImage: string | null;
   invoiceId?: string | null;
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
+  cancelled?: boolean;
 }
 
 interface Invoice {
