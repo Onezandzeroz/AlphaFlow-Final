@@ -45,6 +45,7 @@ import { ProjectSelector } from '@/components/projects/project-selector';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { ClearFormButton } from '@/components/ui/clear-form-button';
+import { VATCodeSelect } from '@/components/shared/vat-code-select';
 
 const CURRENCIES = ['DKK', 'EUR', 'USD', 'GBP', 'SEK', 'NOK'] as const;
 
@@ -1294,7 +1295,13 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-1.5">
         <Label className="dark:text-gray-300 text-sm font-medium">{isDa ? 'Moms %' : 'VAT %'}</Label>
-        <Input type="number" step="0.1" min="0" max="100" value={vatPercent} onChange={(e) => setVatPercent(e.target.value)} disabled={isLoading} className="bg-gray-50 dark:bg-white/5" />
+        <VATCodeSelect
+          value={parseFloat(vatPercent) || 0}
+          onValueChange={(rate) => setVatPercent(String(rate))}
+          direction="input"
+          disabled={isLoading}
+          triggerClassName="bg-gray-50 dark:bg-white/5"
+        />
       </div>
       <div className="space-y-1.5">
         <Label className="dark:text-gray-300 text-sm font-medium">{t('currency')}</Label>
@@ -1625,19 +1632,12 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
             {/* VAT % */}
             <div className="w-20 space-y-1">
               <Label className="text-xs text-gray-500 dark:text-gray-400">{t('vatPercent')}</Label>
-              <Select
-                value={item.vatPercent.toString()}
-                onValueChange={(val) => updatePurchaseLineItem(index, 'vatPercent', parseFloat(val))}
-              >
-                <SelectTrigger className="h-10 bg-white dark:bg-white/5">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-[#1a1f1e] dark:border-[#232740]">
-                  <SelectItem value="0">0%</SelectItem>
-                  <SelectItem value="12">12%</SelectItem>
-                  <SelectItem value="25">25%</SelectItem>
-                </SelectContent>
-              </Select>
+              <VATCodeSelect
+                value={item.vatPercent}
+                onValueChange={(rate) => updatePurchaseLineItem(index, 'vatPercent', rate)}
+                direction="input"
+                triggerClassName="h-10 bg-white dark:bg-white/5"
+              />
             </div>
             {/* Amount (read-only) */}
             <div className="w-24 space-y-1">
@@ -1883,7 +1883,13 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="dark:text-gray-300 text-sm font-medium">{isDa ? 'Moms %' : 'VAT %'}</Label>
-                  <Input type="number" step="0.1" min="0" max="100" value={vatPercent} onChange={(e) => setVatPercent(e.target.value)} disabled={isLoading} className="bg-gray-50 dark:bg-white/5" />
+                  <VATCodeSelect
+                    value={parseFloat(vatPercent) || 0}
+                    onValueChange={(rate) => setVatPercent(String(rate))}
+                    direction="input"
+                    disabled={isLoading}
+                    triggerClassName="bg-gray-50 dark:bg-white/5"
+                  />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="dark:text-gray-300 text-sm font-medium">{t('currency')}</Label>

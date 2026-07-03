@@ -120,6 +120,7 @@ import { readDraft } from '@/lib/draft-store';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatsCard } from '@/components/shared/stats-card';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
+import { VATCodeSelect } from '@/components/shared/vat-code-select';
 import { SendInvoiceDialog } from '@/components/invoices/send-invoice-dialog';
 import { SendEInvoiceDialog } from '@/components/invoices/send-einvoice-dialog';
 import { EInvoiceSendStatus } from '@/components/invoices/einvoice-send-status';
@@ -2542,19 +2543,12 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                   {/* VAT % */}
                   <div className="w-20 space-y-1">
                     <Label className="text-xs text-gray-500 dark:text-gray-400">{t('vatPercent')}</Label>
-                    <Select
-                      value={item.vatPercent.toString()}
-                      onValueChange={(val) => updateLineItem(index, 'vatPercent', parseFloat(val))}
-                    >
-                      <SelectTrigger className="h-10 bg-white dark:bg-white/5">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-[#1a1f1e] dark:border-[#232740]">
-                        <SelectItem value="0">0%</SelectItem>
-                        <SelectItem value="12">12%</SelectItem>
-                        <SelectItem value="25">25%</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <VATCodeSelect
+                      value={item.vatPercent}
+                      onValueChange={(rate) => updateLineItem(index, 'vatPercent', rate)}
+                      direction="output"
+                      triggerClassName="h-10 bg-white dark:bg-white/5"
+                    />
                   </div>
                   {/* Amount */}
                   <div className="w-24 space-y-1">
