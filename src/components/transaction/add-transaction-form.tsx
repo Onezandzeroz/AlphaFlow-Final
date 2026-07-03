@@ -300,7 +300,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     isRecurring ||
     currency !== 'DKK' ||
     exchangeRate !== '' ||
-    purchaseLines.some((l) => l.description.trim() !== '' || l.unitPrice > 0 || l.accountId !== '');
+    purchaseLines.some((l) => l.description.trim() !== '' || l.unitPrice !== 0 || l.accountId !== '');
   useWarnOnUnsaved(isTransactionDirty, {
     onConfirmDiscard: () => {
       clearDraft();
@@ -425,7 +425,9 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
 
   // ─── Card data detection (for conditional account validation) ───
   const receiptCardHasData = !!(amount && parseFloat(amount) > 0) || !!(description && description.trim() !== '');
-  const purchaseLinesHasData = purchaseLines.some(line => !!(line.description?.trim()) || line.unitPrice > 0);
+  // A line is considered to "have data" if it has a description OR a non-zero
+  // unitPrice (including negative — e.g. a discount line with unitPrice = -100).
+  const purchaseLinesHasData = purchaseLines.some(line => !!(line.description?.trim()) || line.unitPrice !== 0);
 
   // ─── Line item callbacks ───
   const addPurchaseLineItem = useCallback(() => {
@@ -863,7 +865,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     // invisible lines from blocking submission on mobile.
     if (purchaseLinesHasData && !(layout !== 'cards' && receiptCardHasData)) {
       const lineMissingAccount = purchaseLines.find(
-        line => (line.description?.trim() || line.unitPrice > 0) && !line.accountId
+        line => (line.description?.trim() || line.unitPrice !== 0) && !line.accountId
       );
       if (lineMissingAccount) {
         setError(isDa
@@ -911,8 +913,28 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         txAccountId = selectedAccountId || undefined;
         txVatPercent = parseFloat(vatPercent);
       } else {
-        // Derive from purchase lines
-        txAmount = lineTotals.subtotal; // net amount from lines
+        // Derive from purchase lines.
+        //
+        // ⚠️ AGGREGATION MODEL ("Solution A"): all purchase lines — including
+        // negative discount lines — are summed into a SINGLE net amount sent
+        // to the API. The backend then creates one 3-line journal entry
+        // (expense / input VAT / bank). This means a discount is "baked into"
+        // the net amount rather than posted on its own line.
+        //
+        // This is compliant with bogføringsloven for trade discounts shown on
+        // the supplier's invoice (the voucher retains the full breakdown), but
+        // has known limitations:
+        //   1. Discounts are invisible in reports (no YTD discount total).
+        //   2. Mixed VAT rates: only the most-common VAT% is applied to the
+        //      whole net — see backend route.ts for the correctness gap.
+        //   3. Credit notes / annual rebates after purchase should NOT be
+        //      posted as a negative purchase; use a separate entry instead.
+        //   4. All lines share ONE projectId (no per-line project split).
+        //
+        // See the full posting-model + limitations comment in
+        // src/app/api/transactions/route.ts (PURCHASE journal-entry section)
+        // and the "Solution B" refactor notes there.
+        txAmount = lineTotals.subtotal; // net amount from lines (sum of all line items incl. discounts)
         const descriptions = purchaseLines
           .filter(l => l.description?.trim())
           .map(l => l.description.trim());
@@ -921,7 +943,10 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           : (isDa ? 'Køb' : 'Purchase');
         txDate = purchaseLinesDate;
         txAccountId = purchaseLines.find(l => l.accountId)?.accountId || undefined;
-        // Use the most common VAT% among lines, or default to 25
+        // Use the most common VAT% among lines, or default to 25.
+        // NOTE: this is the source of the mixed-VAT-rate limitation — see
+        // backend route.ts. If lines have different VAT rates, only the
+        // majority rate is applied to the entire aggregated net.
         const vatCounts = purchaseLines.reduce((acc, l) => { acc[l.vatPercent] = (acc[l.vatPercent] || 0) + 1; return acc; }, {} as Record<number, number>);
         txVatPercent = Number(Object.entries(vatCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 25);
       }
@@ -1522,12 +1547,12 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-600/10 text-emerald-600 dark:bg-emerald-400/20 dark:text-emerald-400">
                   6xxx–9xxx
                 </span>
-                {purchaseLinesHasData && (item.description?.trim() || item.unitPrice > 0) && <span className="text-[10px] text-red-500 dark:text-red-400 ml-1">*</span>}
+                {purchaseLinesHasData && (item.description?.trim() || item.unitPrice !== 0) && <span className="text-[10px] text-red-500 dark:text-red-400 ml-1">*</span>}
               </div>
               <Select
                 value={item.accountId}
                 onValueChange={(val) => updatePurchaseLineItem(index, 'accountId', val)}
-                disabled={!purchaseLinesHasData || (!(item.description?.trim()) && item.unitPrice === 0)}
+                disabled={!purchaseLinesHasData || (!(item.description?.trim()) && item.unitPrice === 0 && !item.accountId)}
               >
                 <SelectTrigger className="h-10 bg-gray-50 dark:bg-white/5">
                   <SelectValue placeholder={isDa ? 'Vælg konto...' : 'Select account...'} />
@@ -1582,13 +1607,19 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
             {/* Unit Price */}
             <div className="w-28 space-y-1">
               <Label className="text-xs text-gray-500 dark:text-gray-400">{t('unitPrice')}</Label>
+              {/* Allow negative unit prices for discount/rebate lines.
+                  The browser default min="0" blocked legitimate discounts,
+                  e.g. an invoice line representing a discount carries a
+                  negative amount that should reduce the purchase total. */}
               <Input
                 type="number"
-                min="0"
                 step="0.01"
                 value={item.unitPrice || ''}
-                onChange={(e) => updatePurchaseLineItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                className="h-10 bg-white dark:bg-white/5 text-right"
+                onChange={(e) => {
+                  const parsed = parseFloat(e.target.value);
+                  updatePurchaseLineItem(index, 'unitPrice', isNaN(parsed) ? 0 : parsed);
+                }}
+                className={`h-10 bg-white dark:bg-white/5 text-right ${item.unitPrice < 0 ? 'text-red-600 dark:text-red-400 font-medium' : ''}`}
               />
             </div>
             {/* VAT % */}
@@ -1611,7 +1642,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
             {/* Amount (read-only) */}
             <div className="w-24 space-y-1">
               <Label className="text-xs text-gray-500 dark:text-gray-400">{t('amount')}</Label>
-              <div className="h-10 px-3 flex items-center justify-end text-sm font-medium text-gray-900 dark:text-white bg-gray-100 dark:bg-gray-700 rounded-md">
+              <div className={`h-10 px-3 flex items-center justify-end text-sm font-medium bg-gray-100 dark:bg-gray-700 rounded-md ${item.unitPrice < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}`}>
                 {tc(item.quantity * item.unitPrice)}
               </div>
             </div>

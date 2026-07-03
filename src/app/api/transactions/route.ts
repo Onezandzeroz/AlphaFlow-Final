@@ -208,13 +208,58 @@ export const POST = withGuard({
         });
 
         // 2. For PURCHASE, create the paired journal entry
+        //
+        // ── POSTING MODEL (current — "Solution A") ──────────────────────────
+        // The client aggregates all purchase lines (including negative discount
+        // lines) into a SINGLE net amount and sends it here as `amount`. We
+        // create ONE journal entry with three lines: expense (net), input VAT,
+        // bank (gross). A discount on the invoice is therefore "baked into"
+        // the net amount rather than posted on its own line.
+        //
+        // This is compliant with bogføringsloven for the common case of a
+        // trade discount shown on the supplier's invoice at purchase time:
+        //   • The voucher (receiptImage) shows the full breakdown (gross item,
+        //     discount line, net, VAT, total) — satisfies §10 traceability.
+        //   • VAT is computed on the actually-paid net (after discount) —
+        //     correct per momsloven.
+        //   • Immutability (§7-8) is preserved: entries are never deleted,
+        //     only reversed via a counter-entry.
+        //
+        // ── KNOWN LIMITATIONS (consider "Solution B" if these bite) ─────────
+        // 1. Management information: discounts are invisible in reports — you
+        //    cannot see total discounts received YTD because they are folded
+        //    into the net expense. Not a legal issue, but an MIS limitation.
+        // 2. Mixed VAT rates: the client picks the MOST COMMON VAT% among
+        //    lines and applies it to the whole net. If an invoice has lines
+        //    at different VAT rates (e.g. 25% goods + 0% rebate), VAT will be
+        //    computed on the wrong rate for part of the amount. In practice
+        //    discounts carry the same rate as the item they reduce, so this is
+        //    rarely triggered — but it is a latent correctness gap.
+        // 3. Credit notes / annual rebates received AFTER the original
+        //    purchase: posting these as a "negative purchase" (netAmount < 0,
+        //    direction reversed below) is technically possible but is NOT
+        //    best practice. They should ideally be a separate journal entry
+        //    to a dedicated rebate/other-operating-income account. Use the
+        //    negative-net path here for on-invoice discounts only.
+        // 4. Per-line project allocation: the whole entry uses ONE projectId.
+        //    Lines cannot be split across projects in a single transaction.
+        //
+        // "Solution B" (future refactor) would accept an array of lines from
+        // the client and create one journal line per purchase line (with its
+        // own account, VAT code, and project), giving full fidelity. It is a
+        // larger change to both the API contract and the client aggregation
+        // logic, so it is deferred until a concrete need arises.
         if (txType === 'PURCHASE') {
           const netAmount = parsedAmount;
           const vatPct = vatPercent ?? 25;
           const vatAmount = (netAmount * vatPct) / 100;
           const grossAmount = netAmount + vatAmount;
 
-          if (netAmount <= 0 || grossAmount <= 0) {
+          // Validate against non-finite values only. A net amount of zero or
+          // negative is allowed: a negative net represents a discount/credit
+          // (e.g. an invoice line with a negative amount, or a credit note)
+          // and is recorded by reversing the debit/credit direction below.
+          if (!isFinite(netAmount) || !isFinite(grossAmount)) {
             throw new Error(`Invalid amount: net=${netAmount}, gross=${grossAmount}`);
           }
 
@@ -229,26 +274,41 @@ export const POST = withGuard({
             throw new Error('Required account disappeared during transaction');
           }
 
+          // Determine the posting direction from the sign of netAmount.
+          // A normal purchase (netAmount > 0): debit expense + input VAT, credit bank.
+          // A discount/credit (netAmount < 0): credit expense + input VAT, debit bank —
+          // the reversal direction, so debit/credit values stay positive (proper
+          // double-entry convention) and the entry balances to zero.
+          // netAmount === 0 produces no movement; we still create the entry for the
+          // audit trail but all lines are zero (rejected by the balance check below,
+          // so in practice the client must send a non-zero amount).
+          const isNegative = netAmount < 0;
+          const absNet = Math.abs(netAmount);
+          const absVat = Math.abs(vatAmount);
+          const absGross = Math.abs(grossAmount);
+
           const jeLines: Array<{ accountId: string; debit: number; credit: number; description: string; vatCode: VATCode | null; companyId: string; projectId: string | null }> = [];
 
-          // Debit expense account (net amount) — carries projectId
+          // Expense account (net amount) — carries projectId.
+          // Normal: debit; discount/credit: credit.
           jeLines.push({
             accountId: expenseAccount.id,
-            debit: netAmount,
-            credit: 0,
+            debit: isNegative ? 0 : Math.round(absNet * 100) / 100,
+            credit: isNegative ? Math.round(absNet * 100) / 100 : 0,
             description,
             vatCode: null,
             companyId: ctx.activeCompanyId!,
             projectId: effectiveProjectId || null,
           });
 
-          // Debit input VAT account (VAT amount) — no projectId (VAT is company-level)
-          if (inputVatAccount && vatAmount > 0) {
+          // Input VAT account (VAT amount) — no projectId (VAT is company-level).
+          // Normal: debit; discount/credit: credit. Only posted when non-zero.
+          if (inputVatAccount && absVat > 0) {
             const vatCode: VATCode = vatPct === 25 ? 'K25' : vatPct === 12 ? 'K12' : 'K0';
             jeLines.push({
               accountId: inputVatAccount.id,
-              debit: Math.round(vatAmount * 100) / 100,
-              credit: 0,
+              debit: isNegative ? 0 : Math.round(absVat * 100) / 100,
+              credit: isNegative ? Math.round(absVat * 100) / 100 : 0,
               description: `${description} – Indgående moms ${vatPct}%`,
               vatCode,
               companyId: ctx.activeCompanyId!,
@@ -256,11 +316,12 @@ export const POST = withGuard({
             });
           }
 
-          // Credit bank account (gross amount) — no projectId
+          // Bank account (gross amount) — no projectId.
+          // Normal: credit (money out); discount/credit: debit (money back in).
           jeLines.push({
             accountId: bankAccount.id,
-            debit: 0,
-            credit: Math.round(grossAmount * 100) / 100,
+            debit: isNegative ? Math.round(absGross * 100) / 100 : 0,
+            credit: isNegative ? 0 : Math.round(absGross * 100) / 100,
             description: `${description} – Betaling`,
             vatCode: null,
             companyId: ctx.activeCompanyId!,
