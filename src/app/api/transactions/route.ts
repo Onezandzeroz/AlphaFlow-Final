@@ -9,6 +9,7 @@ import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { enrichTransactionsWithVAT } from '@/lib/vat-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { notifyDataChanges } from '@/lib/notify-data-change';
+import { VAT_RATE_MAP } from '@/lib/vat-codes';
 
 // GET - Fetch all non-cancelled transactions for the logged-in user
 export const GET = withGuard({
@@ -89,7 +90,7 @@ export const POST = withGuard({
 }, async (request, ctx) => {
   try {
     const body = await request.json();
-    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId } = body;
+    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId, lineItems } = body;
 
     // ── Project Mode (FASE 4) ──
     // Defence-in-depth: when the session is in project mode, force projectId
@@ -159,25 +160,39 @@ export const POST = withGuard({
     }
 
     // ─── Pre-flight check for PURCHASE journal-entry prerequisites ──────
-    // A purchase MUST produce a balanced journal entry. If any required
-    // system account is missing (Bank 1100, Input VAT 5410/5420), we fail
-    // LOUDLY before creating anything — so the user gets a clear error
-    // instead of a silently half-created transaction with no journal entry.
+    // A purchase MUST produce a balanced journal entry. We need the Bank
+    // account (1100) always, plus the input VAT accounts (5410 for 25%,
+    // 5420 for 12%) when any line carries a VAT code with that rate.
+    // We fail LOUDLY before creating anything so the user gets a clear error.
     if (txType === 'PURCHASE') {
-      const vatPct = vatPercent ?? 25;
-      const [bankAccount, inputVatAccount, expenseAccount] = await Promise.all([
-        db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '1100', isActive: true } }),
-        db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: vatPct === 12 ? '5420' : '5410', isActive: true } }),
-        accountId ? db.account.findFirst({ where: { id: accountId, companyId: ctx.activeCompanyId! } }) : Promise.resolve(null),
-      ]);
-
       const missing: string[] = [];
+      const bankAccount = await db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '1100', isActive: true } });
       if (!bankAccount) missing.push('1100 Bankkonto');
-      if (!inputVatAccount) missing.push(`${vatPct === 12 ? '5420' : '5410'} Indgående moms`);
-      if (!expenseAccount) missing.push('valgt omkostningskonto');
+
+      // Check which VAT rates are needed (Solution B: per-line VAT codes)
+      const neededRates = new Set<number>();
+      if (lineItems && Array.isArray(lineItems)) {
+        for (const li of lineItems) {
+          const rate = VAT_RATE_MAP[li.vatCode] ?? 0;
+          if (rate > 0) neededRates.add(rate);
+        }
+      } else {
+        // Backward compat (Solution A): single vatPercent
+        const vatPct = vatPercent ?? 25;
+        if (vatPct > 0) neededRates.add(vatPct);
+      }
+
+      if (neededRates.has(25)) {
+        const vat25 = await db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '5410', isActive: true } });
+        if (!vat25) missing.push('5410 Indgående moms 25%');
+      }
+      if (neededRates.has(12)) {
+        const vat12 = await db.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '5420', isActive: true } });
+        if (!vat12) missing.push('5420 Indgående moms 12%');
+      }
 
       if (missing.length > 0) {
-        const isDa = true; // default to Danish for the error message
+        const isDa = true;
         const msg = isDa
           ? `Kan ikke bogføre indkøb — følgende konti mangler i kontoplanen: ${missing.join(', ')}. Gå til Kontoplan og klik "Standardkonti" for at oprette den danske standardkontoplan.`
           : `Cannot record purchase — the following accounts are missing from the chart of accounts: ${missing.join(', ')}. Go to Chart of Accounts and click "Seed" to create the standard Danish chart.`;
@@ -207,130 +222,188 @@ export const POST = withGuard({
           },
         });
 
-        // 2. For PURCHASE, create the paired journal entry
+        // 2. For PURCHASE, create the paired journal entry.
         //
-        // ── POSTING MODEL (current — "Solution A") ──────────────────────────
-        // The client aggregates all purchase lines (including negative discount
-        // lines) into a SINGLE net amount and sends it here as `amount`. We
-        // create ONE journal entry with three lines: expense (net), input VAT,
-        // bank (gross). A discount on the invoice is therefore "baked into"
-        // the net amount rather than posted on its own line.
+        // ── POSTING MODEL ("Solution B" — per-line fidelity) ───────────────
+        // The client sends a `lineItems` array where each line has its own
+        // accountId, netAmount, and VAT code. We create ONE journal entry
+        // with multiple lines:
+        //   • One expense line per purchase line (debit if positive, credit
+        //     if negative — e.g. a discount).
+        //   • One input-VAT line per line with VAT > 0 (on 5410 for 25% or
+        //     5420 for 12%), tagged with the line's VAT code.
+        //   • One bank line for the total gross (credit if money out, debit
+        //     if money back in — when the total is negative).
         //
-        // This is compliant with bogføringsloven for the common case of a
-        // trade discount shown on the supplier's invoice at purchase time:
-        //   • The voucher (receiptImage) shows the full breakdown (gross item,
-        //     discount line, net, VAT, total) — satisfies §10 traceability.
-        //   • VAT is computed on the actually-paid net (after discount) —
-        //     correct per momsloven.
-        //   • Immutability (§7-8) is preserved: entries are never deleted,
-        //     only reversed via a counter-entry.
+        // This correctly handles:
+        //   • Mixed accounts in one transaction (8200, 8300, 8400 …)
+        //   • Mixed VAT codes per line (K0, K25, K12 …)
+        //   • Negative lines (discounts/credits) with reversed direction
+        //   • The VAT register reads the VAT lines → correct totals per code
         //
-        // ── KNOWN LIMITATIONS (consider "Solution B" if these bite) ─────────
-        // 1. Management information: discounts are invisible in reports — you
-        //    cannot see total discounts received YTD because they are folded
-        //    into the net expense. Not a legal issue, but an MIS limitation.
-        // 2. Mixed VAT rates: the client picks the MOST COMMON VAT% among
-        //    lines and applies it to the whole net. If an invoice has lines
-        //    at different VAT rates (e.g. 25% goods + 0% rebate), VAT will be
-        //    computed on the wrong rate for part of the amount. In practice
-        //    discounts carry the same rate as the item they reduce, so this is
-        //    rarely triggered — but it is a latent correctness gap.
-        // 3. Credit notes / annual rebates received AFTER the original
-        //    purchase: posting these as a "negative purchase" (netAmount < 0,
-        //    direction reversed below) is technically possible but is NOT
-        //    best practice. They should ideally be a separate journal entry
-        //    to a dedicated rebate/other-operating-income account. Use the
-        //    negative-net path here for on-invoice discounts only.
-        // 4. Per-line project allocation: the whole entry uses ONE projectId.
-        //    Lines cannot be split across projects in a single transaction.
+        // Backward compatibility: if `lineItems` is absent (old clients), we
+        // fall back to the Solution A path — a single 3-line entry using the
+        // aggregate `amount`, `vatPercent`, and `accountId`.
         //
-        // "Solution B" (future refactor) would accept an array of lines from
-        // the client and create one journal line per purchase line (with its
-        // own account, VAT code, and project), giving full fidelity. It is a
-        // larger change to both the API contract and the client aggregation
-        // logic, so it is deferred until a concrete need arises.
+        // Compliance: bogføringsloven §7-8 (immutability — entries are only
+        // reversed, never deleted), §10 (traceability — the voucher is
+        // attached via receiptImage), and momsloven (VAT computed on the
+        // actually-paid net per line).
         if (txType === 'PURCHASE') {
-          const netAmount = parsedAmount;
-          const vatPct = vatPercent ?? 25;
-          const vatAmount = (netAmount * vatPct) / 100;
-          const grossAmount = netAmount + vatAmount;
-
-          // Validate against non-finite values only. A net amount of zero or
-          // negative is allowed: a negative net represents a discount/credit
-          // (e.g. an invoice line with a negative amount, or a credit note)
-          // and is recorded by reversing the debit/credit direction below.
-          if (!isFinite(netAmount) || !isFinite(grossAmount)) {
-            throw new Error(`Invalid amount: net=${netAmount}, gross=${grossAmount}`);
-          }
-
-          // Re-fetch accounts inside the transaction (consistent read)
-          const [bankAccount, inputVatAccount, expenseAccount] = await Promise.all([
-            tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '1100', isActive: true } }),
-            tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: vatPct === 12 ? '5420' : '5410', isActive: true } }),
-            accountId ? tx.account.findFirst({ where: { id: accountId, companyId: ctx.activeCompanyId! } }) : Promise.resolve(null),
-          ]);
-
-          if (!bankAccount || !expenseAccount) {
-            throw new Error('Required account disappeared during transaction');
-          }
-
-          // Determine the posting direction from the sign of netAmount.
-          // A normal purchase (netAmount > 0): debit expense + input VAT, credit bank.
-          // A discount/credit (netAmount < 0): credit expense + input VAT, debit bank —
-          // the reversal direction, so debit/credit values stay positive (proper
-          // double-entry convention) and the entry balances to zero.
-          // netAmount === 0 produces no movement; we still create the entry for the
-          // audit trail but all lines are zero (rejected by the balance check below,
-          // so in practice the client must send a non-zero amount).
-          const isNegative = netAmount < 0;
-          const absNet = Math.abs(netAmount);
-          const absVat = Math.abs(vatAmount);
-          const absGross = Math.abs(grossAmount);
-
           const jeLines: Array<{ accountId: string; debit: number; credit: number; description: string; vatCode: VATCode | null; companyId: string; projectId: string | null }> = [];
+          let totalGross = 0;
+          let totalDebit = 0;
+          let totalCredit = 0;
+          const r2 = (n: number) => Math.round(n * 100) / 100;
 
-          // Expense account (net amount) — carries projectId.
-          // Normal: debit; discount/credit: credit.
-          jeLines.push({
-            accountId: expenseAccount.id,
-            debit: isNegative ? 0 : Math.round(absNet * 100) / 100,
-            credit: isNegative ? Math.round(absNet * 100) / 100 : 0,
-            description,
-            vatCode: null,
-            companyId: ctx.activeCompanyId!,
-            projectId: effectiveProjectId || null,
-          });
+          if (lineItems && Array.isArray(lineItems) && lineItems.length > 0) {
+            // ── Solution B: multi-line path ──
+            // Pre-fetch system accounts inside the transaction (consistent read)
+            const bankAccount = await tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '1100', isActive: true } });
+            if (!bankAccount) throw new Error('Bank account 1100 disappeared during transaction');
 
-          // Input VAT account (VAT amount) — no projectId (VAT is company-level).
-          // Normal: debit; discount/credit: credit. Only posted when non-zero.
-          if (inputVatAccount && absVat > 0) {
-            const vatCode: VATCode = vatPct === 25 ? 'K25' : vatPct === 12 ? 'K12' : 'K0';
+            // Cache VAT accounts to avoid repeated queries
+            const vatAccountCache: Record<number, string | null> = {};
+            for (const li of lineItems) {
+              const rate = VAT_RATE_MAP[li.vatCode] ?? 0;
+              if (rate > 0 && !(rate in vatAccountCache)) {
+                const vatAcc = await tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: rate === 12 ? '5420' : '5410', isActive: true } });
+                vatAccountCache[rate] = vatAcc?.id ?? null;
+              }
+            }
+
+            for (const li of lineItems) {
+              const netAmount = Number(li.netAmount);
+              if (!isFinite(netAmount)) {
+                throw new Error(`Invalid line amount: ${li.netAmount}`);
+              }
+
+              const vatCode = li.vatCode as VATCode;
+              const rate = VAT_RATE_MAP[li.vatCode] ?? 0;
+              const vatAmount = (netAmount * rate) / 100;
+              const lineGross = netAmount + vatAmount;
+              totalGross += lineGross;
+
+              // Validate the expense account belongs to this company
+              const expenseAccount = await tx.account.findFirst({ where: { id: li.accountId, companyId: ctx.activeCompanyId! } });
+              if (!expenseAccount) {
+                throw new Error(`Invalid expense account: ${li.accountId}`);
+              }
+
+              const lineDesc = li.description?.trim() || description;
+              const isNegative = netAmount < 0;
+              const absNet = Math.abs(netAmount);
+
+              // Expense line — debit (normal) or credit (discount/credit)
+              jeLines.push({
+                accountId: li.accountId,
+                debit: isNegative ? 0 : r2(absNet),
+                credit: isNegative ? r2(absNet) : 0,
+                description: lineDesc,
+                vatCode,
+                companyId: ctx.activeCompanyId!,
+                projectId: effectiveProjectId || null,
+              });
+              if (isNegative) totalCredit += r2(absNet); else totalDebit += r2(absNet);
+
+              // Input VAT line — only when non-zero VAT
+              if (Math.abs(vatAmount) > 0.005) {
+                const vatAccId = vatAccountCache[rate];
+                if (!vatAccId) {
+                  throw new Error(`Input VAT account for rate ${rate}% not found`);
+                }
+                const absVat = Math.abs(vatAmount);
+                jeLines.push({
+                  accountId: vatAccId,
+                  debit: isNegative ? 0 : r2(absVat),
+                  credit: isNegative ? r2(absVat) : 0,
+                  description: `${lineDesc} – Indgående moms ${rate}%`,
+                  vatCode,
+                  companyId: ctx.activeCompanyId!,
+                  projectId: null,
+                });
+                if (isNegative) totalCredit += r2(absVat); else totalDebit += r2(absVat);
+              }
+            }
+
+            // Bank line — total gross
+            const absGross = Math.abs(totalGross);
+            const grossNegative = totalGross < 0;
             jeLines.push({
-              accountId: inputVatAccount.id,
-              debit: isNegative ? 0 : Math.round(absVat * 100) / 100,
-              credit: isNegative ? Math.round(absVat * 100) / 100 : 0,
-              description: `${description} – Indgående moms ${vatPct}%`,
-              vatCode,
+              accountId: bankAccount.id,
+              debit: grossNegative ? r2(absGross) : 0,
+              credit: grossNegative ? 0 : r2(absGross),
+              description: `${description} – Betaling`,
+              vatCode: null,
+              companyId: ctx.activeCompanyId!,
+              projectId: null,
+            });
+            if (grossNegative) totalDebit += r2(absGross); else totalCredit += r2(absGross);
+
+          } else {
+            // ── Backward compatibility: Solution A (single-line) path ──
+            // Used by old clients / recurring entries that don't send lineItems.
+            const netAmount = parsedAmount;
+            const vatPct = vatPercent ?? 25;
+            const vatAmount = (netAmount * vatPct) / 100;
+            const grossAmount = netAmount + vatAmount;
+
+            if (!isFinite(netAmount) || !isFinite(grossAmount)) {
+              throw new Error(`Invalid amount: net=${netAmount}, gross=${grossAmount}`);
+            }
+
+            const [bankAccount, inputVatAccount, expenseAccount] = await Promise.all([
+              tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: '1100', isActive: true } }),
+              tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: vatPct === 12 ? '5420' : '5410', isActive: true } }),
+              accountId ? tx.account.findFirst({ where: { id: accountId, companyId: ctx.activeCompanyId! } }) : Promise.resolve(null),
+            ]);
+
+            if (!bankAccount || !expenseAccount) {
+              throw new Error('Required account disappeared during transaction');
+            }
+
+            const isNegative = netAmount < 0;
+            const absNet = Math.abs(netAmount);
+            const absVat = Math.abs(vatAmount);
+            const absGross = Math.abs(grossAmount);
+
+            jeLines.push({
+              accountId: expenseAccount.id,
+              debit: isNegative ? 0 : r2(absNet),
+              credit: isNegative ? r2(absNet) : 0,
+              description,
+              vatCode: null,
+              companyId: ctx.activeCompanyId!,
+              projectId: effectiveProjectId || null,
+            });
+
+            if (inputVatAccount && absVat > 0) {
+              const vatCode: VATCode = vatPct === 25 ? 'K25' : vatPct === 12 ? 'K12' : 'K0';
+              jeLines.push({
+                accountId: inputVatAccount.id,
+                debit: isNegative ? 0 : r2(absVat),
+                credit: isNegative ? r2(absVat) : 0,
+                description: `${description} – Indgående moms ${vatPct}%`,
+                vatCode,
+                companyId: ctx.activeCompanyId!,
+                projectId: null,
+              });
+            }
+
+            jeLines.push({
+              accountId: bankAccount.id,
+              debit: isNegative ? r2(absGross) : 0,
+              credit: isNegative ? 0 : r2(absGross),
+              description: `${description} – Betaling`,
+              vatCode: null,
               companyId: ctx.activeCompanyId!,
               projectId: null,
             });
           }
 
-          // Bank account (gross amount) — no projectId.
-          // Normal: credit (money out); discount/credit: debit (money back in).
-          jeLines.push({
-            accountId: bankAccount.id,
-            debit: isNegative ? Math.round(absGross * 100) / 100 : 0,
-            credit: isNegative ? 0 : Math.round(absGross * 100) / 100,
-            description: `${description} – Betaling`,
-            vatCode: null,
-            companyId: ctx.activeCompanyId!,
-            projectId: null,
-          });
-
           // Validate balance BEFORE creating
-          const totalDebit = jeLines.reduce((s, l) => s + l.debit, 0);
-          const totalCredit = jeLines.reduce((s, l) => s + l.credit, 0);
+          totalDebit = jeLines.reduce((s, l) => s + l.debit, 0);
+          totalCredit = jeLines.reduce((s, l) => s + l.credit, 0);
           if (jeLines.length < 2 || Math.abs(totalDebit - totalCredit) >= 0.01) {
             throw new Error(`Unbalanced journal entry: DR=${totalDebit}, CR=${totalCredit}, lines=${jeLines.length}`);
           }
@@ -351,8 +424,6 @@ export const POST = withGuard({
                   credit: l.credit,
                   description: l.description,
                   vatCode: l.vatCode,
-                  // Prisma v6 requires relation connections via { connect },
-                  // not the raw foreign-key field name, inside nested creates.
                   ...(l.projectId ? { project: { connect: { id: l.projectId } } } : {}),
                 })),
               },
@@ -360,7 +431,7 @@ export const POST = withGuard({
           });
 
           await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
-          logger.info(`[PURCHASE] Created journal entry ${je.id} for transaction ${newTx.id}: DR=${totalDebit}, CR=${totalCredit}, projectId=${effectiveProjectId || 'none'}`);
+          logger.info(`[PURCHASE] Created journal entry ${je.id} for transaction ${newTx.id}: DR=${totalDebit}, CR=${totalCredit}, lines=${jeLines.length}, projectId=${effectiveProjectId || 'none'}`);
         }
 
         return newTx;

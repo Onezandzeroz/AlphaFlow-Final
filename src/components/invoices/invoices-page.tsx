@@ -121,6 +121,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { StatsCard } from '@/components/shared/stats-card';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
 import { VATCodeSelect } from '@/components/shared/vat-code-select';
+import { VAT_RATE_MAP } from '@/lib/vat-codes';
 import { SendInvoiceDialog } from '@/components/invoices/send-invoice-dialog';
 import { SendEInvoiceDialog } from '@/components/invoices/send-einvoice-dialog';
 import { EInvoiceSendStatus } from '@/components/invoices/einvoice-send-status';
@@ -153,7 +154,8 @@ interface LineItem {
   description: string;
   quantity: number;
   unitPrice: number;
-  vatPercent: number;
+  vatPercent: number;  // derived from vatCode (for display/calc only)
+  vatCode: string;     // canonical VAT code, e.g. 'S25' — source of truth (Solution B)
   accountId: string;
 }
 
@@ -295,7 +297,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     issueDate: (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
     dueDate: (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
     lineItems: [
-      { description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' } as LineItem,
+      { description: '', quantity: 1, unitPrice: 0, vatPercent: 25, vatCode: 'S25', accountId: '' } as LineItem,
     ] as LineItem[],
     notes: '',
   });
@@ -397,7 +399,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
         dueDate: typeof d.dueDate === 'string' ? d.dueDate : (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
         lineItems: Array.isArray(d.lineItems) && d.lineItems.length > 0
           ? (d.lineItems as LineItem[])
-          : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+          : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, vatCode: 'S25', accountId: '' }],
         notes: typeof d.notes === 'string' ? d.notes : '',
       });
     } else {
@@ -412,7 +414,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
         customerCvr: '',
         issueDate: (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
         dueDate: (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
-        lineItems: [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+        lineItems: [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, vatCode: 'S25', accountId: '' }],
         notes: '',
       });
     }
@@ -618,7 +620,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const addLineItem = useCallback(() => {
     setInvoiceForm(prev => ({
       ...prev,
-      lineItems: [...prev.lineItems, { description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+      lineItems: [...prev.lineItems, { description: '', quantity: 1, unitPrice: 0, vatPercent: 25, vatCode: 'S25', accountId: '' }],
     }));
   }, []);
 
@@ -726,7 +728,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
         customerCvr: '',
         issueDate: (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
         dueDate: (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
-        lineItems: [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+        lineItems: [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, vatCode: 'S25', accountId: '' }],
         notes: '',
       });
 
@@ -911,7 +913,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       customerCvr: invoice.customerCvr || '',
       issueDate: invoice.issueDate,
       dueDate: invoice.dueDate,
-      lineItems: items.length > 0 ? items : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+      lineItems: items.length > 0 ? items : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, vatCode: 'S25', accountId: '' }],
       notes: invoice.notes || '',
     };
     // Merge any existing draft over server data (user edits win).
@@ -1991,7 +1993,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                   customerCvr: '',
                   issueDate: (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
                   dueDate: (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`; })(),
-                  lineItems: [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, accountId: '' }],
+                  lineItems: [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, vatCode: 'S25', accountId: '' }],
                   notes: '',
                 });
                 setSelectedContactId('');
@@ -2544,8 +2546,11 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                   <div className="w-20 space-y-1">
                     <Label className="text-xs text-gray-500 dark:text-gray-400">{t('vatPercent')}</Label>
                     <VATCodeSelect
-                      value={item.vatPercent}
-                      onValueChange={(rate) => updateLineItem(index, 'vatPercent', rate)}
+                      value={item.vatCode}
+                      onValueChange={(code) => {
+                        updateLineItem(index, 'vatCode', code);
+                        updateLineItem(index, 'vatPercent', VAT_RATE_MAP[code] ?? 0);
+                      }}
                       direction="output"
                       triggerClassName="h-10 bg-white dark:bg-white/5"
                     />

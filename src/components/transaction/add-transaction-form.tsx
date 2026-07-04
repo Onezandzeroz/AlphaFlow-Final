@@ -46,6 +46,7 @@ import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { ClearFormButton } from '@/components/ui/clear-form-button';
 import { VATCodeSelect } from '@/components/shared/vat-code-select';
+import { VAT_RATE_MAP } from '@/lib/vat-codes';
 
 const CURRENCIES = ['DKK', 'EUR', 'USD', 'GBP', 'SEK', 'NOK'] as const;
 
@@ -65,7 +66,8 @@ interface PurchaseLineItem {
   description: string;
   quantity: number;
   unitPrice: number;
-  vatPercent: number;
+  vatPercent: number;  // derived from vatCode (for display/calc only)
+  vatCode: string;     // canonical VAT code, e.g. 'K25' — the source of truth (Solution B)
   accountId: string;
 }
 
@@ -128,6 +130,7 @@ const EMPTY_LINE_ITEM: PurchaseLineItem = {
   quantity: 1,
   unitPrice: 0,
   vatPercent: 25,
+  vatCode: 'K25',
   accountId: '',
 };
 
@@ -159,6 +162,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   const [description, setDescription] = useState('');
 
   const [vatPercent, setVatPercent] = useState('25');
+  const [vatCode, setVatCode] = useState('K25');
 
   // ─── Recurring purchase state ───
   const [isRecurring, setIsRecurring] = useState(false);
@@ -280,6 +284,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
                 quantity: typeof l.quantity === 'number' ? l.quantity : 1,
                 unitPrice: typeof l.unitPrice === 'number' ? l.unitPrice : 0,
                 vatPercent: typeof l.vatPercent === 'number' ? l.vatPercent : 25,
+                vatCode: typeof l.vatCode === 'string' ? l.vatCode : 'K25',  // backward compat: old drafts lack vatCode
                 accountId: typeof l.accountId === 'string' ? l.accountId : '',
               }))
           );
@@ -906,6 +911,10 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       let txDate: string;
       let txAccountId: string | undefined;
       let txVatPercent: number;
+      // Solution B: per-line items sent to the backend so it can create a
+      // multi-line journal entry (one expense + one VAT line per purchase
+      // line, plus one bank line). Empty for recurring entries.
+      let txLineItems: Array<{ accountId: string; description: string; netAmount: number; vatCode: string }> = [];
 
       if (receiptCardHasData) {
         txAmount = includesVAT ? netAmount : parsedAmount;
@@ -913,29 +922,31 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         txDate = date;
         txAccountId = selectedAccountId || undefined;
         txVatPercent = parseFloat(vatPercent);
+        // Receipt card → single line item for Solution B
+        txLineItems = [{
+          accountId: selectedAccountId || '',
+          description: description,
+          netAmount: netAmount,
+          vatCode: vatCode,
+        }];
       } else {
-        // Derive from purchase lines.
-        //
-        // ⚠️ AGGREGATION MODEL ("Solution A"): all purchase lines — including
-        // negative discount lines — are summed into a SINGLE net amount sent
-        // to the API. The backend then creates one 3-line journal entry
-        // (expense / input VAT / bank). This means a discount is "baked into"
-        // the net amount rather than posted on its own line.
-        //
-        // This is compliant with bogføringsloven for trade discounts shown on
-        // the supplier's invoice (the voucher retains the full breakdown), but
-        // has known limitations:
-        //   1. Discounts are invisible in reports (no YTD discount total).
-        //   2. Mixed VAT rates: only the most-common VAT% is applied to the
-        //      whole net — see backend route.ts for the correctness gap.
-        //   3. Credit notes / annual rebates after purchase should NOT be
-        //      posted as a negative purchase; use a separate entry instead.
-        //   4. All lines share ONE projectId (no per-line project split).
-        //
-        // See the full posting-model + limitations comment in
-        // src/app/api/transactions/route.ts (PURCHASE journal-entry section)
-        // and the "Solution B" refactor notes there.
-        txAmount = lineTotals.subtotal; // net amount from lines (sum of all line items incl. discounts)
+        // ── Solution B: send each purchase line individually to the backend ──
+        // Each line keeps its own accountId, net amount, and VAT code. The
+        // backend creates a multi-line journal entry with one expense line
+        // per purchase line, one VAT line per line with VAT, and one bank
+        // line. This allows:
+        //   • Different accounts per line (8200, 8300, 8400 in one transaction)
+        //   • Different VAT codes per line (K0, K25, K0)
+        //   • Negative amounts for discounts (posted as credit, not debit)
+        txLineItems = purchaseLines
+          .filter(l => l.accountId && (l.description?.trim() || l.unitPrice !== 0))
+          .map(l => ({
+            accountId: l.accountId,
+            description: l.description || '',
+            netAmount: l.quantity * l.unitPrice,  // net (can be negative for discounts)
+            vatCode: l.vatCode,
+          }));
+        txAmount = lineTotals.subtotal; // metadata for the Transaction record
         const descriptions = purchaseLines
           .filter(l => l.description?.trim())
           .map(l => l.description.trim());
@@ -944,12 +955,8 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           : (isDa ? 'Køb' : 'Purchase');
         txDate = purchaseLinesDate;
         txAccountId = purchaseLines.find(l => l.accountId)?.accountId || undefined;
-        // Use the most common VAT% among lines, or default to 25.
-        // NOTE: this is the source of the mixed-VAT-rate limitation — see
-        // backend route.ts. If lines have different VAT rates, only the
-        // majority rate is applied to the entire aggregated net.
-        const vatCounts = purchaseLines.reduce((acc, l) => { acc[l.vatPercent] = (acc[l.vatPercent] || 0) + 1; return acc; }, {} as Record<number, number>);
-        txVatPercent = Number(Object.entries(vatCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 25);
+        // For Transaction.vatPercent metadata: use the first line's rate.
+        txVatPercent = purchaseLines.find(l => l.accountId)?.vatPercent ?? 25;
       }
 
       // ─── If recurring is ON: only create a recurring entry ──
@@ -1041,6 +1048,9 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           receiptImage: receiptImagePath,
           accountId: txAccountId,
           projectId: projectId || undefined,
+          // Solution B: per-line items so the backend can create a proper
+          // multi-line journal entry with per-line accounts + VAT codes.
+          lineItems: txLineItems,
         }),
       });
 
@@ -1296,8 +1306,11 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       <div className="space-y-1.5">
         <Label className="dark:text-gray-300 text-sm font-medium">{isDa ? 'Moms %' : 'VAT %'}</Label>
         <VATCodeSelect
-          value={parseFloat(vatPercent) || 0}
-          onValueChange={(rate) => setVatPercent(String(rate))}
+          value={vatCode}
+          onValueChange={(code) => {
+            setVatCode(code);
+            setVatPercent(String(VAT_RATE_MAP[code] ?? 0));
+          }}
           direction="input"
           disabled={isLoading}
           triggerClassName="bg-gray-50 dark:bg-white/5"
@@ -1633,8 +1646,11 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
             <div className="w-20 space-y-1">
               <Label className="text-xs text-gray-500 dark:text-gray-400">{t('vatPercent')}</Label>
               <VATCodeSelect
-                value={item.vatPercent}
-                onValueChange={(rate) => updatePurchaseLineItem(index, 'vatPercent', rate)}
+                value={item.vatCode}
+                onValueChange={(code) => {
+                  updatePurchaseLineItem(index, 'vatCode', code);
+                  updatePurchaseLineItem(index, 'vatPercent', VAT_RATE_MAP[code] ?? 0);
+                }}
                 direction="input"
                 triggerClassName="h-10 bg-white dark:bg-white/5"
               />
@@ -1884,8 +1900,11 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
                 <div className="space-y-1.5">
                   <Label className="dark:text-gray-300 text-sm font-medium">{isDa ? 'Moms %' : 'VAT %'}</Label>
                   <VATCodeSelect
-                    value={parseFloat(vatPercent) || 0}
-                    onValueChange={(rate) => setVatPercent(String(rate))}
+                    value={vatCode}
+                    onValueChange={(code) => {
+                      setVatCode(code);
+                      setVatPercent(String(VAT_RATE_MAP[code] ?? 0));
+                    }}
                     direction="input"
                     disabled={isLoading}
                     triggerClassName="bg-gray-50 dark:bg-white/5"
