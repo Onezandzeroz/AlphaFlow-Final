@@ -72,6 +72,7 @@ import {
   Play,
   Video,
   GripVertical,
+  RotateCcw,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { DateRangeFilter } from '@/components/shared/date-range-filter';
@@ -217,6 +218,10 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   const dashboardVersion = useDataVersion('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Activity feed: cancelled items (reversed transactions + their reversal
+  // journal entries) are collapsed by default to keep the feed focused on
+  // live activity. Expand on click.
+  const [showCancelledActivity, setShowCancelledActivity] = useState(false);
 
   const { t, tc, td, tm, language } = useTranslation();
 
@@ -1085,6 +1090,39 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
 
     return items;
   }, [journalEntries, transactions, hasDoubleEntryData]);
+
+  // Split activity into active + cancelled. A cancelled item is either:
+  //  - a transaction with cancelled=true, or
+  //  - a journal entry whose reference starts with REVERSAL- (the reversal
+  //    of a cancelled transaction), or
+  //  - a journal entry whose reference matches a reversed original (TX-<id8>
+  //    where a REVERSAL-TX-<id8> also exists).
+  // These are collapsed by default to keep the feed focused on live activity.
+  const { activeActivity, cancelledActivity } = useMemo(() => {
+    const reversedRefs = new Set<string>();
+    for (const it of unifiedActivity) {
+      if (it.kind === 'journal' && it.entry.reference?.startsWith('REVERSAL-')) {
+        reversedRefs.add(it.entry.reference.slice('REVERSAL-'.length));
+      }
+    }
+    const active: ActivityItem[] = [];
+    const cancelled: ActivityItem[] = [];
+    for (const it of unifiedActivity) {
+      let isCancelled = false;
+      if (it.kind === 'transaction' && it.tx.cancelled) isCancelled = true;
+      if (it.kind === 'journal') {
+        if (it.entry.reference?.startsWith('REVERSAL-')) isCancelled = true;
+        else if (it.entry.reference && reversedRefs.has(it.entry.reference)) isCancelled = true;
+      }
+      if (isCancelled) cancelled.push(it); else active.push(it);
+    }
+    return { activeActivity: active, cancelledActivity: cancelled };
+  }, [unifiedActivity]);
+
+  // What the feed actually renders: active only, or active + cancelled.
+  const displayActivity = showCancelledActivity
+    ? [...activeActivity, ...cancelledActivity].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    : activeActivity;
 
   // ─── Financial Health Score ────────────────────────────────────
 
@@ -2940,8 +2978,29 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
               </div>
               <CardContent className="p-4 sm:p-5 pt-0">
                 <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {/* Collapsed banner for cancelled items (reversed transactions + reversals) */}
+                  {cancelledActivity.length > 0 && (
+                    <button
+                      onClick={() => setShowCancelledActivity(s => !s)}
+                      className="w-full flex items-center justify-between gap-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors text-left mb-1"
+                    >
+                      <span className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <RotateCcw className="h-3.5 w-3.5 text-gray-400" />
+                        <span>
+                          {showCancelledActivity
+                            ? (language === 'da' ? 'Skjul annullerede' : 'Hide cancelled')
+                            : (language === 'da'
+                                ? `${cancelledActivity.length} annulleret${cancelledActivity.length !== 1 ? 'e' : ''} (vis)`
+                                : `${cancelledActivity.length} cancelled (show)`)}
+                        </span>
+                      </span>
+                      {showCancelledActivity
+                        ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+                        : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+                    </button>
+                  )}
                   {/* Unified activity feed: journal entries + transactions, sorted by date */}
-                  {unifiedActivity.slice(0, 15).map((item) => {
+                  {displayActivity.slice(0, 15).map((item) => {
                     if (item.kind === 'journal') {
                       const entry = item.entry;
                       const total = getJournalEntryTotal(entry);
@@ -3052,7 +3111,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                     );
                   })}
 
-                  {unifiedActivity.length === 0 && (
+                  {displayActivity.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-8 gap-3">
                       <div className="h-12 w-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                         <Activity className="h-5 w-5 text-gray-400 dark:text-gray-600" />

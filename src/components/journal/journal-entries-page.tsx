@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { translateSystemReason } from '@/lib/system-reason-i18n';
+import { groupByCancellation, type CancellationGroup } from '@/lib/cancellation-grouping';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -313,6 +314,25 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
         )
     );
   }, [entries, searchQuery]);
+
+  // Group entries into cancellation pairs (original + reversal collapsed together)
+  // and standalone entries. This improves overview by not letting cancelled
+  // entries + their reversals take up space from active entries.
+  const groupedEntries = useMemo(
+    () => groupByCancellation(filteredEntries, (e) => e.reference),
+    [filteredEntries]
+  );
+
+  // Track which collapsed cancelled-pairs are expanded (to show both entries).
+  const [expandedPairs, setExpandedPairs] = useState<Set<string>>(new Set());
+  const togglePair = useCallback((key: string) => {
+    setExpandedPairs((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   // ─── Stats ──────────────────────────────────────────────────────────────
 
@@ -915,258 +935,321 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
             </div>
           ) : (
             <div className="divide-y divide-gray-100 dark:divide-gray-700/50">
-              {filteredEntries.map((entry) => {
-                const isExpanded = expandedIds.has(entry.id);
-                const entryTotalDebit = entry.lines.reduce((s, l) => s + Number(l.debit || 0), 0);
-                const entryTotalCredit = entry.lines.reduce((s, l) => s + Number(l.credit || 0), 0);
-                const isEntryBalanced = Math.abs(entryTotalDebit - entryTotalCredit) < 0.005;
-                const isEntryCancelled = !!entry.cancelled || entry.status === 'CANCELLED';
-                const isReversal = !!entry.reference?.startsWith('REVERSAL-');
-                const isOriginalReversed = !isReversal && !!entry.reference && reversedOriginalRefs.has(entry.reference);
-                const isDimmed = isEntryCancelled || isReversal || isOriginalReversed;
+              {groupedEntries.map((group) => {
+                // Helper: render a single journal entry in full (header row +
+                // expandable lines table). Used for standalone entries AND for
+                // each entry inside an expanded cancelled pair.
+                const renderEntry = (entry: JournalEntry) => {
+                  const isExpanded = expandedIds.has(entry.id);
+                  const entryTotalDebit = entry.lines.reduce((s, l) => s + Number(l.debit || 0), 0);
+                  const entryTotalCredit = entry.lines.reduce((s, l) => s + Number(l.credit || 0), 0);
+                  const isEntryBalanced = Math.abs(entryTotalDebit - entryTotalCredit) < 0.005;
+                  const isEntryCancelled = !!entry.cancelled || entry.status === 'CANCELLED';
+                  const isReversal = !!entry.reference?.startsWith('REVERSAL-');
+                  const isOriginalReversed = !isReversal && !!entry.reference && reversedOriginalRefs.has(entry.reference);
+                  const isDimmed = isEntryCancelled || isReversal || isOriginalReversed;
 
-                return (
-                  <div key={entry.id} className={isDimmed ? 'opacity-60 bg-gray-50/50 dark:bg-gray-800/30' : ''}>
-                    {/* Entry Header Row */}
-                    <div
-                      className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer"
-                      onClick={() => toggleExpand(entry.id)}
-                    >
-                      {/* Expand Toggle */}
-                      <button className="shrink-0 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors" aria-label="Toggle">
-                        {isExpanded ? (
-                          <ChevronDown className="h-4 w-4 text-gray-400" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-gray-400" />
+                  return (
+                    <div key={entry.id} className={isDimmed ? 'opacity-60 bg-gray-50/50 dark:bg-gray-800/30' : ''}>
+                      {/* Entry Header Row */}
+                      <div
+                        className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer"
+                        onClick={() => toggleExpand(entry.id)}
+                      >
+                        {/* Expand Toggle */}
+                        <button className="shrink-0 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors" aria-label="Toggle">
+                          {isExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          )}
+                        </button>
+
+                        {/* Date */}
+                        <span className={`text-sm font-medium shrink-0 min-w-[90px] ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                          {formatDateStr(entry.date, language)}
+                        </span>
+
+                        {/* Reference */}
+                        {entry.reference && (
+                          <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-300'}`}>
+                            {entry.reference}
+                          </Badge>
                         )}
-                      </button>
 
-                      {/* Date */}
-                      <span className={`text-sm font-medium shrink-0 min-w-[90px] ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
-                        {formatDateStr(entry.date, language)}
-                      </span>
+                        {/* Description */}
+                        <span className={`text-sm flex-1 truncate min-w-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-300'}`}>
+                          {entry.description}
+                        </span>
 
-                      {/* Reference */}
-                      {entry.reference && (
-                        <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-300'}`}>
-                          {entry.reference}
+                        {/* Reversal Badge */}
+                        {isReversal && (
+                          <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
+                            <RotateCcw className="h-3 w-3" />
+                            {isDanish ? 'Modpostering' : 'Reversal'}
+                          </Badge>
+                        )}
+
+                        {/* Original Reversed Badge — shown on the parent entry that was cancelled */}
+                        {isOriginalReversed && (
+                          <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-400 border-red-500/20 gap-1">
+                            <XCircle className="h-3 w-3" />
+                            {isDanish ? 'Annulleret' : 'Cancelled'}
+                          </Badge>
+                        )}
+
+                        {/* Status Badge */}
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] sm:text-xs font-medium shrink-0 ${getStatusBadgeStyle(entry.status)}`}
+                        >
+                          {getStatusLabel(entry.status, isDanish)}
                         </Badge>
+
+                        {/* Balance Indicator */}
+                        <div className="flex items-center gap-1 text-xs shrink-0">
+                          {isEntryBalanced ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-red-500" />
+                          )}
+                          <span className="hidden sm:inline text-gray-500 dark:text-gray-400">
+                            {formatCurrencyValue(entryTotalDebit, language)} kr
+                          </span>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          {entry.status === 'DRAFT' && (
+                            <>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => openEditDialog(entry)}
+                                      className="text-gray-400 hover:text-[#0d9488] dark:hover:text-[#2dd4bf] h-8 w-8 p-0"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{isDanish ? 'Rediger' : 'Edit'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handlePostEntry(entry)}
+                                      className="text-gray-400 hover:text-green-600 dark:hover:text-green-400 h-8 w-8 p-0"
+                                    >
+                                      <CheckCircle2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{isDanish ? 'Bogfør' : 'Post'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setCancelTarget(entry)}
+                                      className="text-gray-400 hover:text-red-500 h-8 w-8 p-0"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{isDanish ? 'Annuller postering' : 'Cancel Entry'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Expanded Lines */}
+                      {isExpanded && (
+                        <div className="px-4 pb-4 sm:px-14 journal-entry-expand">
+                          <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            {/* Table Header */}
+                            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/50 dark:bg-white/5 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                              <div className="col-span-4 sm:col-span-5">
+                                {isDanish ? 'Konto' : 'Account'}
+                              </div>
+                              <div className="col-span-3 sm:col-span-2 text-right">
+                                {isDanish ? 'Debet' : 'Debit'}
+                              </div>
+                              <div className="col-span-3 sm:col-span-2 text-right">
+                                {isDanish ? 'Kredit' : 'Credit'}
+                              </div>
+                              <div className="col-span-2 sm:col-span-3 hidden sm:block">
+                                {isDanish ? 'Beskrivelse' : 'Description'}
+                              </div>
+                            </div>
+
+                            {/* Lines */}
+                            {entry.lines.map((line, idx) => (
+                              <div
+                                key={line.id || idx}
+                                className={`grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t border-gray-100/50 dark:border-gray-800 ${isDimmed ? 'line-through' : ''}`}
+                              >
+                                {/* Account */}
+                                <div className="col-span-4 sm:col-span-5">
+                                  <span className={isDimmed ? 'font-medium text-gray-400 dark:text-gray-500' : 'font-medium text-gray-900 dark:text-white'}>
+                                    {line.account?.number || '—'}
+                                  </span>
+                                  <span className="text-gray-500 dark:text-gray-400 ml-1.5 text-xs">
+                                    {line.account?.name || ''}
+                                  </span>
+                                </div>
+                                {/* Debit */}
+                                <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
+                                  {line.debit ? formatCurrencyValue(Number(line.debit), language) : ''}
+                                </div>
+                                {/* Credit */}
+                                <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
+                                  {line.credit ? formatCurrencyValue(Number(line.credit), language) : ''}
+                                </div>
+                                {/* Description */}
+                                <div className="col-span-2 sm:col-span-3 text-xs text-gray-500 dark:text-gray-400 hidden sm:block truncate">
+                                  {line.description || ''}
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* Totals */}
+                            <div className={`grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/30 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 font-semibold text-sm ${isDimmed ? 'line-through' : ''}`}>
+                              <div className="col-span-4 sm:col-span-5 text-gray-700 dark:text-gray-300">
+                                {isDanish ? 'I alt' : 'Total'}
+                              </div>
+                              <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
+                                {entryTotalDebit > 0 ? formatCurrencyValue(entryTotalDebit, language) : ''}
+                              </div>
+                              <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
+                                {entryTotalCredit > 0 ? formatCurrencyValue(entryTotalCredit, language) : ''}
+                              </div>
+                              <div className="col-span-2 sm:col-span-3 hidden sm:flex items-center justify-end gap-1">
+                                {isEntryBalanced ? (
+                                  <span className="text-green-600 dark:text-green-400 text-xs flex items-center gap-1">
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    {isDanish ? 'I balance' : 'Balanced'}
+                                  </span>
+                                ) : (
+                                  <span className="text-red-500 text-xs flex items-center gap-1">
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    {isDanish ? 'Ikke i balance' : 'Not balanced'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Cancel reason — shown inside the collapsible field when expanded */}
+                          {entry.cancelled && entry.cancelReason && isExpanded && (
+                            <div className="mt-2 flex items-start gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2.5">
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                              <span>
+                                {isDanish ? 'Annulleringsårsag: ' : 'Cancel reason: '}
+                                {translateSystemReason(entry.cancelReason, isDanish ? 'da' : 'en')}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Reversal note — shown inside the collapsible field when expanded */}
+                          {isReversal && isExpanded && (
+                            <div className="mt-2 flex items-start gap-2 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/5 rounded-lg p-2.5">
+                              <RotateCcw className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                              <span>
+                                {isDanish ? 'Modpostering — denne journalpost neutraliserer en annulleret postering (bogføringsloven §10-12)' : 'Reversal entry — this journal entry neutralises a cancelled entry (Bookkeeping Act §10-12)'}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Original reversed note — shown on the parent entry that was cancelled */}
+                          {isOriginalReversed && isExpanded && (
+                            <div className="mt-2 flex items-start gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2.5">
+                              <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                              <span>
+                                {isDanish ? 'Denne postering er annulleret — en modpostering har neutraliseret den (bogføringsloven §10-12)' : 'This entry has been cancelled — a reversal entry has neutralised it (Bookkeeping Act §10-12)'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       )}
+                    </div>
+                  );
+                };
 
-                      {/* Description */}
-                      <span className={`text-sm flex-1 truncate min-w-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-300'}`}>
-                        {entry.description}
-                      </span>
-
-                      {/* Reversal Badge */}
-                      {isReversal && (
-                        <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
-                          <RotateCcw className="h-3 w-3" />
-                          {isDanish ? 'Modpostering' : 'Reversal'}
-                        </Badge>
-                      )}
-
-                      {/* Original Reversed Badge — shown on the parent entry that was cancelled */}
-                      {isOriginalReversed && (
+                // ── Cancelled pair: render as a single collapsed row ──
+                if (group.isCancelledPair && group.original && group.reversal) {
+                  const isPairExpanded = expandedPairs.has(group.key);
+                  const orig = group.original;
+                  return (
+                    <div key={group.key} className="opacity-60 bg-gray-50/50 dark:bg-gray-800/30">
+                      {/* Collapsed summary row */}
+                      <div
+                        className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 table-row-teal-hover transition-colors cursor-pointer"
+                        onClick={() => togglePair(group.key)}
+                      >
+                        <button className="shrink-0 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors" aria-label="Toggle pair">
+                          {isPairExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-gray-400" />
+                          )}
+                        </button>
+                        <span className="text-sm font-medium shrink-0 min-w-[90px] text-gray-400 dark:text-gray-500 line-through">
+                          {formatDateStr(orig.date, language)}
+                        </span>
+                        {orig.reference && (
+                          <Badge variant="outline" className="text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 text-gray-400 dark:text-gray-500 line-through">
+                            {orig.reference}
+                          </Badge>
+                        )}
+                        <span className="text-sm flex-1 truncate min-w-0 text-gray-400 dark:text-gray-500 line-through">
+                          {orig.description}
+                        </span>
                         <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-red-500/10 text-red-500 dark:bg-red-500/20 dark:text-red-400 border-red-500/20 gap-1">
                           <XCircle className="h-3 w-3" />
                           {isDanish ? 'Annulleret' : 'Cancelled'}
                         </Badge>
-                      )}
-
-                      {/* Status Badge */}
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] sm:text-xs font-medium shrink-0 ${getStatusBadgeStyle(entry.status)}`}
-                      >
-                        {getStatusLabel(entry.status, isDanish)}
-                      </Badge>
-
-                      {/* Balance Indicator */}
-                      <div className="flex items-center gap-1 text-xs shrink-0">
-                        {isEntryBalanced ? (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <AlertTriangle className="h-4 w-4 text-red-500" />
-                        )}
-                        <span className="hidden sm:inline text-gray-500 dark:text-gray-400">
-                          {formatCurrencyValue(entryTotalDebit, language)} kr
+                        <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+                          {isDanish ? '2 poster · netto 0' : '2 entries · net 0'}
+                        </span>
+                        <span className="text-sm font-semibold tabular-nums text-gray-400 dark:text-gray-500 shrink-0">
+                          {isDanish ? '0,00 kr' : '0.00 kr'}
                         </span>
                       </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        {entry.status === 'DRAFT' && (
-                          <>
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => openEditDialog(entry)}
-                                    className="text-gray-400 hover:text-[#0d9488] dark:hover:text-[#2dd4bf] h-8 w-8 p-0"
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{isDanish ? 'Rediger' : 'Edit'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handlePostEntry(entry)}
-                                    className="text-gray-400 hover:text-green-600 dark:hover:text-green-400 h-8 w-8 p-0"
-                                  >
-                                    <CheckCircle2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{isDanish ? 'Bogfør' : 'Post'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setCancelTarget(entry)}
-                                    className="text-gray-400 hover:text-red-500 h-8 w-8 p-0"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{isDanish ? 'Annuller postering' : 'Cancel Entry'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Expanded Lines */}
-                    {isExpanded && (
-                      <div className="px-4 pb-4 sm:px-14 journal-entry-expand">
-                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                          {/* Table Header */}
-                          <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/50 dark:bg-white/5 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                            <div className="col-span-4 sm:col-span-5">
-                              {isDanish ? 'Konto' : 'Account'}
-                            </div>
-                            <div className="col-span-3 sm:col-span-2 text-right">
-                              {isDanish ? 'Debet' : 'Debit'}
-                            </div>
-                            <div className="col-span-3 sm:col-span-2 text-right">
-                              {isDanish ? 'Kredit' : 'Credit'}
-                            </div>
-                            <div className="col-span-2 sm:col-span-3 hidden sm:block">
-                              {isDanish ? 'Beskrivelse' : 'Description'}
-                            </div>
-                          </div>
-
-                          {/* Lines */}
-                          {entry.lines.map((line, idx) => (
-                            <div
-                              key={line.id || idx}
-                              className={`grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t border-gray-100/50 dark:border-gray-800 ${isDimmed ? 'line-through' : ''}`}
-                            >
-                              {/* Account */}
-                              <div className="col-span-4 sm:col-span-5">
-                                <span className={isDimmed ? 'font-medium text-gray-400 dark:text-gray-500' : 'font-medium text-gray-900 dark:text-white'}>
-                                  {line.account?.number || '—'}
-                                </span>
-                                <span className="text-gray-500 dark:text-gray-400 ml-1.5 text-xs">
-                                  {line.account?.name || ''}
-                                </span>
-                              </div>
-                              {/* Debit */}
-                              <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
-                                {line.debit ? formatCurrencyValue(Number(line.debit), language) : ''}
-                              </div>
-                              {/* Credit */}
-                              <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
-                                {line.credit ? formatCurrencyValue(Number(line.credit), language) : ''}
-                              </div>
-                              {/* Description */}
-                              <div className="col-span-2 sm:col-span-3 text-xs text-gray-500 dark:text-gray-400 hidden sm:block truncate">
-                                {line.description || ''}
-                              </div>
-                            </div>
-                          ))}
-
-                          {/* Totals */}
-                          <div className={`grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/30 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 font-semibold text-sm ${isDimmed ? 'line-through' : ''}`}>
-                            <div className="col-span-4 sm:col-span-5 text-gray-700 dark:text-gray-300">
-                              {isDanish ? 'I alt' : 'Total'}
-                            </div>
-                            <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
-                              {entryTotalDebit > 0 ? formatCurrencyValue(entryTotalDebit, language) : ''}
-                            </div>
-                            <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
-                              {entryTotalCredit > 0 ? formatCurrencyValue(entryTotalCredit, language) : ''}
-                            </div>
-                            <div className="col-span-2 sm:col-span-3 hidden sm:flex items-center justify-end gap-1">
-                              {isEntryBalanced ? (
-                                <span className="text-green-600 dark:text-green-400 text-xs flex items-center gap-1">
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  {isDanish ? 'I balance' : 'Balanced'}
-                                </span>
-                              ) : (
-                                <span className="text-red-500 text-xs flex items-center gap-1">
-                                  <XCircle className="h-3.5 w-3.5" />
-                                  {isDanish ? 'Ikke i balance' : 'Not balanced'}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                      {/* Expanded: show both original + reversal in full */}
+                      {isPairExpanded && (
+                        <div className="border-t border-gray-200 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700/50">
+                          {renderEntry(group.original)}
+                          {renderEntry(group.reversal)}
                         </div>
+                      )}
+                    </div>
+                  );
+                }
 
-                        {/* Cancel reason — shown inside the collapsible field when expanded */}
-                        {entry.cancelled && entry.cancelReason && isExpanded && (
-                          <div className="mt-2 flex items-start gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2.5">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                            <span>
-                              {isDanish ? 'Annulleringsårsag: ' : 'Cancel reason: '}
-                              {translateSystemReason(entry.cancelReason, isDanish ? 'da' : 'en')}
-                            </span>
-                          </div>
-                        )}
+                // ── Standalone entry: render normally ──
+                if (group.standalone) {
+                  return renderEntry(group.standalone);
+                }
 
-                        {/* Reversal note — shown inside the collapsible field when expanded */}
-                        {isReversal && isExpanded && (
-                          <div className="mt-2 flex items-start gap-2 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-500/5 rounded-lg p-2.5">
-                            <RotateCcw className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                            <span>
-                              {isDanish ? 'Modpostering — denne journalpost neutraliserer en annulleret postering (bogføringsloven §10-12)' : 'Reversal entry — this journal entry neutralises a cancelled entry (Bookkeeping Act §10-12)'}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Original reversed note — shown on the parent entry that was cancelled */}
-                        {isOriginalReversed && isExpanded && (
-                          <div className="mt-2 flex items-start gap-2 text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/5 rounded-lg p-2.5">
-                            <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                            <span>
-                              {isDanish ? 'Denne postering er annulleret — en modpostering har neutraliseret den (bogføringsloven §10-12)' : 'This entry has been cancelled — a reversal entry has neutralised it (Bookkeeping Act §10-12)'}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
+                return null;
               })}
             </div>
           )}

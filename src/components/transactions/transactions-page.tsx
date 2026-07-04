@@ -179,6 +179,9 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  // Collapsed section for cancelled transactions — they take up space and
+  // clutter the overview. Collapsed by default; expand on click.
+  const [showCancelled, setShowCancelled] = useState(false);
   const [mobileDisplayCount, setMobileDisplayCount] = useState(10);
 
   // ── Cancel transaction state ──
@@ -496,17 +499,35 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
     setMobileDisplayCount(10);
   }, [searchQuery, typeFilter, vatFilter]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredTransactions.length / pageSize);
+  // Split filtered transactions into active + cancelled.
+  // Cancelled transactions are hidden behind a collapsed banner by default
+  // so they don't take space from active entries. The banner shows the count
+  // and expands on click to reveal the cancelled rows.
+  const activeTransactions = useMemo(
+    () => filteredTransactions.filter(tx => !tx.cancelled),
+    [filteredTransactions]
+  );
+  const cancelledTransactions = useMemo(
+    () => filteredTransactions.filter(tx => tx.cancelled),
+    [filteredTransactions]
+  );
+  // What the list actually renders: active only, or active + cancelled (when expanded).
+  const displayTransactions = useMemo(
+    () => showCancelled ? filteredTransactions : activeTransactions,
+    [showCancelled, filteredTransactions, activeTransactions]
+  );
+
+  // Pagination (based on what's actually displayed)
+  const totalPages = Math.ceil(displayTransactions.length / pageSize);
   const paginatedTransactions = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredTransactions.slice(start, start + pageSize);
+    return displayTransactions.slice(start, start + pageSize);
   }, [filteredTransactions, currentPage, pageSize]);
 
   // Mobile: show-more pagination (independent of desktop pagination)
   const mobileVisibleTransactions = useMemo(() => {
-    return filteredTransactions.slice(0, mobileDisplayCount);
-  }, [filteredTransactions, mobileDisplayCount]);
+    return displayTransactions.slice(0, mobileDisplayCount);
+  }, [displayTransactions, mobileDisplayCount]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -758,6 +779,31 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
             </div>
           ) : (
               <>
+              {/* ===== Collapsed banner for cancelled transactions ===== */}
+              {cancelledTransactions.length > 0 && (
+                <div className="px-3 pt-3">
+                  <button
+                    onClick={() => setShowCancelled(s => !s)}
+                    className="w-full flex items-center justify-between gap-2 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-800/60 transition-colors text-left"
+                  >
+                    <span className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                      <XCircle className="h-4 w-4 text-gray-400" />
+                      <span>
+                        {showCancelled
+                          ? (language === 'da' ? 'Skjul annullerede posteringer' : 'Hide cancelled transactions')
+                          : (language === 'da'
+                              ? `${cancelledTransactions.length} annulleret${cancelledTransactions.length !== 1 ? 'e' : ''} postering${cancelledTransactions.length !== 1 ? 'er' : ''} (klik for at vise)`
+                              : `${cancelledTransactions.length} cancelled transaction${cancelledTransactions.length !== 1 ? 's' : ''} (click to show)`)}
+                      </span>
+                    </span>
+                    {showCancelled ? (
+                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+              )}
               {/* ===== Mobile Card List (lg:hidden) ===== */}
               <div className="lg:hidden p-3 space-y-3">
                 {mobileVisibleTransactions.map((transaction) => {
@@ -945,7 +991,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                 })}
 
                 {/* Show More Button */}
-                {mobileVisibleTransactions.length < filteredTransactions.length && (
+                {mobileVisibleTransactions.length < displayTransactions.length && (
                   <div className="pt-1">
                     <Button
                       variant="outline"
@@ -1262,12 +1308,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                 </TableBody>
               </Table>
               {/* Pagination */}
-              {filteredTransactions.length > pageSize && (
+              {displayTransactions.length > pageSize && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-[var(--border)]">
                   <div className="text-sm text-muted-foreground">
                     {language === 'da'
-                      ? `Viser ${((currentPage - 1) * pageSize) + 1}–${Math.min(currentPage * pageSize, filteredTransactions.length)} af ${filteredTransactions.length}`
-                      : `Showing ${((currentPage - 1) * pageSize) + 1}–${Math.min(currentPage * pageSize, filteredTransactions.length)} of ${filteredTransactions.length}`}
+                      ? `Viser ${((currentPage - 1) * pageSize) + 1}–${Math.min(currentPage * pageSize, displayTransactions.length)} af ${displayTransactions.length}`
+                      : `Showing ${((currentPage - 1) * pageSize) + 1}–${Math.min(currentPage * pageSize, displayTransactions.length)} of ${displayTransactions.length}`}
                   </div>
                   <div className="flex items-center gap-1">
                     <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="h-8 w-8 p-0">
