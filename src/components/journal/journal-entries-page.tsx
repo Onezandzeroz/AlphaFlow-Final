@@ -966,19 +966,19 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                         </button>
 
                         {/* Date */}
-                        <span className={`text-sm font-medium shrink-0 min-w-[90px] ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-900 dark:text-white'}`}>
+                        <span className={`text-sm font-medium shrink-0 min-w-[90px] ${isDimmed ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>
                           {formatDateStr(entry.date, language)}
                         </span>
 
                         {/* Reference */}
                         {entry.reference && (
-                          <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-600 dark:text-gray-300'}`}>
+                          <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}>
                             {entry.reference}
                           </Badge>
                         )}
 
                         {/* Description */}
-                        <span className={`text-sm flex-1 truncate min-w-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500 line-through' : 'text-gray-700 dark:text-gray-300'}`}>
+                        <span className={`text-sm flex-1 truncate min-w-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>
                           {entry.description}
                         </span>
 
@@ -1104,7 +1104,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                             {entry.lines.map((line, idx) => (
                               <div
                                 key={line.id || idx}
-                                className={`grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t border-gray-100/50 dark:border-gray-800 ${isDimmed ? 'line-through' : ''}`}
+                                className={`grid grid-cols-12 gap-2 px-3 py-2 text-sm border-t border-gray-100/50 dark:border-gray-800`}
                               >
                                 {/* Account */}
                                 <div className="col-span-4 sm:col-span-5">
@@ -1131,7 +1131,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                             ))}
 
                             {/* Totals */}
-                            <div className={`grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/30 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 font-semibold text-sm ${isDimmed ? 'line-through' : ''}`}>
+                            <div className={`grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/30 dark:bg-white/5 border-t border-gray-200 dark:border-gray-700 font-semibold text-sm`}>
                               <div className="col-span-4 sm:col-span-5 text-gray-700 dark:text-gray-300">
                                 {isDanish ? 'I alt' : 'Total'}
                               </div>

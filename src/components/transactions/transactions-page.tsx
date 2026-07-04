@@ -522,7 +522,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
   const paginatedTransactions = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return displayTransactions.slice(start, start + pageSize);
-  }, [filteredTransactions, currentPage, pageSize]);
+  }, [displayTransactions, currentPage, pageSize]);
 
   // Mobile: show-more pagination (independent of desktop pagination)
   const mobileVisibleTransactions = useMemo(() => {
@@ -827,7 +827,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         <div className="flex-1 min-w-0">
                           <p className={cn(
                             "text-sm font-medium truncate",
-                            isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : "text-gray-900 dark:text-white"
+                            isCancelled ? "text-gray-400 dark:text-gray-500" : "text-gray-900 dark:text-white"
                           )}>
                             {transaction.description}
                           </p>
@@ -861,7 +861,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         </div>
                         <span className={cn(
                           "text-base font-bold whitespace-nowrap",
-                          isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : typeInfo.amountClass
+                          isCancelled ? "text-gray-400 dark:text-gray-500" : typeInfo.amountClass
                         )}>
                           {tc(transaction.amount)}
                         </span>
@@ -871,7 +871,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       <div className="flex items-center justify-between mt-2">
                         <span className={cn(
                           "text-xs",
-                          isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : "text-gray-500 dark:text-gray-400"
+                          isCancelled ? "text-gray-400 dark:text-gray-500" : "text-gray-500 dark:text-gray-400"
                         )}>
                           {td(new Date(transaction.date))}
                         </span>
@@ -1115,12 +1115,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className={cn("font-medium whitespace-nowrap", isCancelled && "text-gray-400 dark:text-gray-500 line-through")}>
+                      <TableCell className={cn("font-medium whitespace-nowrap", isCancelled && "text-gray-400 dark:text-gray-500")}>
                         {td(new Date(transaction.date))}
                       </TableCell>
                       <TableCell className="max-w-[150px] lg:max-w-[250px] truncate">
                         <div className="flex items-center gap-1.5">
-                          <span className={cn("truncate", isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : "")}>{transaction.description}</span>
+                          <span className={cn("truncate", isCancelled ? "text-gray-400 dark:text-gray-500" : "")}>{transaction.description}</span>
                           {transaction.project && (
                             <Badge
                               className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1"
@@ -1136,17 +1136,17 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className={cn("text-right whitespace-nowrap font-medium", isCancelled && "text-gray-400 dark:text-gray-500 line-through")}>
+                      <TableCell className={cn("text-right whitespace-nowrap font-medium", isCancelled && "text-gray-400 dark:text-gray-500")}>
                         {tc(transaction.amount)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className={cn("text-sm", isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : "text-gray-600 dark:text-gray-400")}>
+                        <span className={cn("text-sm", isCancelled ? "text-gray-400 dark:text-gray-500" : "text-gray-600 dark:text-gray-400")}>
                           {getDisplayVAT(transaction).rate}%
                         </span>
                       </TableCell>
                       <TableCell className={cn(
                         "text-right whitespace-nowrap font-medium",
-                        isCancelled ? "text-gray-400 dark:text-gray-500 line-through" : transaction.type === 'PURCHASE' ? 'text-amber-600 dark:text-amber-400' : 'text-[#0d9488] dark:text-[#2dd4bf]'
+                        isCancelled ? "text-gray-400 dark:text-gray-500" : transaction.type === 'PURCHASE' ? 'text-amber-600 dark:text-amber-400' : 'text-[#0d9488] dark:text-[#2dd4bf]'
                       )}>
                         {tc(getDisplayVAT(transaction).amount)}
                       </TableCell>
