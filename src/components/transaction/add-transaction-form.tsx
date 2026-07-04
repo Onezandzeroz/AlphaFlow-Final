@@ -665,16 +665,21 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           quantity: line.quantity || 1,
           unitPrice: line.unitPrice || 0,
           vatPercent: line.vatPercent || 25,
+          // Derive the VAT code from the OCR'd vatPercent (Solution B requires vatCode).
+          vatCode: (line.vatPercent ?? 25) === 12 ? 'K12' : (line.vatPercent ?? 25) === 0 ? 'K0' : 'K25',
           accountId: '',
         }));
       }
 
       if (newLines.length === 0 && result.amount !== null) {
+        const ocrVatPct = result.vatPercent ?? 25;
         newLines.push({
           description: result.description || (isDa ? 'Køb' : 'Purchase'),
           quantity: 1,
           unitPrice: result.amount,
-          vatPercent: result.vatPercent ?? 25,
+          vatPercent: ocrVatPct,
+          // Derive the VAT code from the OCR'd vatPercent (Solution B requires vatCode).
+          vatCode: ocrVatPct === 12 ? 'K12' : ocrVatPct === 0 ? 'K0' : 'K25',
           accountId: '',
         });
       }
