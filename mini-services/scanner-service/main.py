@@ -151,6 +151,7 @@ def main() -> None:
         host="0.0.0.0",
         port=config.PORT,
         reload=config.NODE_ENV == "development",
+        reload_excludes=["logs/*", "data/*", "*.db", "*.db-*"],
         log_level=config.LOG_LEVEL,
         access_log=True,
         workers=1,  # Single worker — match other mini-services (fork mode in PM2)
