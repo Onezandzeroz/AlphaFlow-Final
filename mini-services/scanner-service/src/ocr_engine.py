@@ -177,7 +177,7 @@ async def process_document(
     # prompt/schema automatically invalidate stale cached results. Bump this
     # whenever the prompt or extraction schema changes — old cached scans with
     # the previous version will be re-processed with the new prompt.
-    _PROMPT_VERSION = "v2-openrouter-2026-07"  # bump on prompt/schema changes
+    _PROMPT_VERSION = "v3-vlm-primary-2026-07"  # bump on prompt/schema changes
     file_hash = hashlib.sha256(
         file_bytes + _PROMPT_VERSION.encode()
     ).hexdigest()
@@ -378,8 +378,69 @@ async def _process_image(
     user_id: Optional[str],
     progress_cb,
 ) -> ScanResult:
-    """Process a standalone image — enhance → Tesseract → optional VLM fallback."""
+    """Process a standalone image — VLM primary (if key set), Tesseract fallback.
+
+    When OPENROUTER_API_KEY is set, VLM is the PRIMARY processor for images
+    (invoices/receipts) because it captures multiple line items, subtotals, VAT
+    breakdowns, and supplier details that Tesseract+regex cannot reliably parse.
+    Tesseract is still run in parallel for text extraction (CVR lookup, account
+    suggestion) but the structured data comes from the VLM.
+
+    If no API key is set, falls back to Tesseract + Danish regex parser only.
+    """
     await progress_cb(15, "enhance")
+
+    # ── VLM primary path (when API key available) ──
+    if config.OPENROUTER_API_KEY:
+        await progress_cb(30, "vlm")
+        log.info("image.vlm_primary", job_id=scan_job_id, model=config.OPENROUTER_VLM_MODEL)
+
+        # Enhance image for better VLM reading (sharper text, higher contrast)
+        enhanced_png, _ = enhance_image_bytes(image_bytes)
+
+        try:
+            vlm_result = await extract_with_vlm([enhanced_png])
+            extraction = vlm_result.extraction
+
+            # Also run Tesseract on the side for CVR extraction + text-based
+            # account suggestion (the VLM doesn't always catch CVR numbers
+            # embedded in small print).
+            tesseract_text, _ = _run_tesseract(enhanced_png)
+
+            line_items = [
+                {
+                    "description": li.description,
+                    "quantity": li.quantity,
+                    "unitPrice": li.unitPrice,
+                    "vatPercent": li.vatPercent,
+                }
+                for li in extraction.lines
+            ]
+
+            raw_lines = _build_raw_lines(
+                extraction.description, extraction.amount, extraction.date,
+                extraction.vatPercent, line_items,
+            )
+
+            ext_data = _build_vlm_extensions(vlm_result, tesseract_text)
+
+            return ScanResult(
+                text=vlm_result.raw_response,
+                amount=extraction.amount,
+                date=extraction.date,
+                vatPercent=extraction.vatPercent,
+                confidence=vlm_result.confidence,
+                rawLines=raw_lines,
+                vlmLines=line_items,
+                vlmDescription=extraction.description,
+                extensions=ext_data,
+            )
+        except Exception as e:
+            # VLM failed — fall through to Tesseract path below
+            log.warning("image.vlm_failed_fallback_to_tesseract", job_id=scan_job_id, error=str(e))
+
+    # ── Tesseract fallback path (no API key, or VLM failed) ──
+    await progress_cb(40, "ocr")
 
     # ── Image quality assessment ──
     img_array = load_image_from_bytes(image_bytes)

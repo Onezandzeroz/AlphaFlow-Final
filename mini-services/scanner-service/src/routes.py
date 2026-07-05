@@ -217,7 +217,7 @@ async def scan_async(
     # improvements invalidate stale cached results.
     import hashlib
     import uuid
-    _PROMPT_VERSION = "v2-openrouter-2026-07"  # bump on prompt/schema changes
+    _PROMPT_VERSION = "v3-vlm-primary-2026-07"  # bump on prompt/schema changes
     file_hash = hashlib.sha256(
         file_bytes + _PROMPT_VERSION.encode()
     ).hexdigest()
