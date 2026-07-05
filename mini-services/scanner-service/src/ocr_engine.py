@@ -607,8 +607,17 @@ def _build_result_from_vlm(
         "supplierCvr": cvr_validated or extraction.supplierCvr,
         "invoiceNumber": extraction.invoiceNumber,
         "dueDate": extraction.dueDate,
+        "customerName": extraction.customerName,
         "subtotal": extraction.subtotalExVat,
         "vatAmount": extraction.vatAmount,
+        "vatBreakdown": [
+            {
+                "rate": vb.rate,
+                "baseAmount": vb.baseAmount,
+                "vatAmount": vb.vatAmount,
+            }
+            for vb in extraction.vatBreakdown
+        ],
         "model": vlm_result.model,
         "needsReview": vlm_result.confidence < 70,
         "sourceNotes": source_notes or [],
@@ -672,8 +681,17 @@ def _build_vlm_extensions(vlm_result: VLMResult, tesseract_text: str) -> dict[st
         "supplierCvr": cvr_validated or extraction.supplierCvr,
         "invoiceNumber": extraction.invoiceNumber,
         "dueDate": extraction.dueDate,
+        "customerName": extraction.customerName,
         "subtotal": extraction.subtotalExVat,
         "vatAmount": extraction.vatAmount,
+        "vatBreakdown": [
+            {
+                "rate": vb.rate,
+                "baseAmount": vb.baseAmount,
+                "vatAmount": vb.vatAmount,
+            }
+            for vb in extraction.vatBreakdown
+        ],
         "model": vlm_result.model,
     }
     if account_suggestion:

@@ -96,6 +96,18 @@ export interface OCRResult {
   invoiceNumber?: string;
   /** Due date in ISO format (YYYY-MM-DD) */
   dueDate?: string;
+  /** Customer/buyer name from the document */
+  customerName?: string;
+  /** Subtotal excluding VAT */
+  subtotal?: number;
+  /** Total VAT amount */
+  vatAmount?: number;
+  /** Per-rate VAT breakdown from the invoice's VAT summary box */
+  vatBreakdown?: Array<{
+    rate: number;
+    baseAmount?: number | null;
+    vatAmount?: number | null;
+  }>;
   /** Whether the result needs manual review (confidence < 70) */
   needsReview?: boolean;
 }

@@ -31,7 +31,10 @@ pytesseract==0.3.13                # Wrapper for Tesseract CLI (dan+eng)
 rapidfuzz==3.11.0                  # Fuzzy vendor name matching (Levenshtein)
 
 # ── VLM / LLM ──────────────────────────────────────────────────
-anthropic==0.42.0                  # Claude Sonnet 4 direct (removes Z.ai proxy hop)
+# OpenRouter is now the single AI source (same key as Hermes).
+# VLM calls go through OpenRouter's OpenAI-compatible /chat/completions
+# endpoint via httpx (already listed above). No anthropic SDK needed.
+# Browse vision models: https://openrouter.ai/models?capabilities=image
 pydantic==2.10.4                   # Pydantic v2 — JSON schema enforcement for VLM output
 
 # ── Danish validation ──────────────────────────────────────────

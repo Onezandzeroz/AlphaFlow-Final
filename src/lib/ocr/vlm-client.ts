@@ -101,6 +101,16 @@ function transformVLMResponse(
   const supplierCvr = (ext.supplierCvr as string) || undefined;
   const invoiceNumber = (ext.invoiceNumber as string) || undefined;
   const dueDate = (ext.dueDate as string) || undefined;
+  const customerName = (ext.customerName as string) || undefined;
+  const subtotal = typeof ext.subtotal === 'number' ? ext.subtotal : undefined;
+  const vatAmount = typeof ext.vatAmount === 'number' ? ext.vatAmount : undefined;
+  const vatBreakdown = Array.isArray(ext.vatBreakdown)
+    ? ext.vatBreakdown.map((vb: { rate?: number; baseAmount?: number | null; vatAmount?: number | null }) => ({
+        rate: vb.rate ?? 0,
+        baseAmount: vb.baseAmount ?? undefined,
+        vatAmount: vb.vatAmount ?? undefined,
+      }))
+    : undefined;
   const needsReview = (ext.needsReview as boolean) || false;
 
   return {
@@ -130,6 +140,10 @@ function transformVLMResponse(
     supplierCvr,
     invoiceNumber,
     dueDate,
+    customerName,
+    subtotal,
+    vatAmount,
+    vatBreakdown,
     needsReview,
 
     // Metadata
