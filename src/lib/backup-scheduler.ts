@@ -338,9 +338,8 @@ export async function getCronHealth(companyId: string): Promise<{
     // kick it off now. This is the self-healing path: the next time the UI
     // polls /api/backups/scheduler-status, getCronHealth will see the scheduler
     // is running and flip to "healthy". This covers the case where the
-    // instrumentation hook didn't fire (e.g. the old instrumentation.node.ts
-    // naming issue) — the scheduler still starts, just a few seconds later
-    // on the first status poll instead of at boot.
+    // instrumentation hook didn't fire at boot — the scheduler still starts,
+    // just a few seconds later on the first status poll instead of at boot.
     if (process.env.DISABLE_BACKUP_SCHEDULER !== 'true') {
       ensureSchedulerStarted();
     }

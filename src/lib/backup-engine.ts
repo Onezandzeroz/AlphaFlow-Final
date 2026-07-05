@@ -1460,9 +1460,15 @@ export async function runAutomaticBackup(userId: string, companyId: string, back
     throw new Error(`Automatic ${backupType} backup failed for company ${companyId}: ${detail}`);
   }
 
-  // Cleanup old backups for this company (only on success — no point cleaning
-  // up if we just failed and wrote nothing).
-  await cleanupExpiredBackups(companyId);
+  // NOTE: Retention cleanup is NOT called here. It ran previously after every
+  // successful backup, which caused existing backup files to be deleted on
+  // server restart/reboot (the first cron tick after restart would create a
+  // new backup and immediately trigger cleanup, deleting older files).
+  //
+  // Retention is now enforced SOLELY by the daily cleanup cron at 03:00
+  // (see backup-scheduler.ts `cleanupTask`). This ensures restarts never
+  // touch existing backup files — the scheduler only creates new ones going
+  // forward, as required for data safety.
 }
 
 /**
