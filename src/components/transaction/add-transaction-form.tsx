@@ -664,8 +664,11 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           description: line.description || '',
           quantity: line.quantity || 1,
           unitPrice: line.unitPrice || 0,
-          vatPercent: line.vatPercent || 25,
-          // Derive the VAT code from the OCR'd vatPercent (Solution B requires vatCode).
+          // Use ?? (nullish coalescing) not || — vatPercent 0 is a VALID value
+          // (VAT-free items like paintings/insurance). `0 || 25` would wrongly
+          // give 25%, causing a mismatch between the VAT dropdown (K0) and the
+          // calculated VAT total (25%).
+          vatPercent: line.vatPercent ?? 25,
           vatCode: (line.vatPercent ?? 25) === 12 ? 'K12' : (line.vatPercent ?? 25) === 0 ? 'K0' : 'K25',
           accountId: '',
         }));
