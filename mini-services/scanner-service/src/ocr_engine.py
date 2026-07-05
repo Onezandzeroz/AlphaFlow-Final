@@ -173,7 +173,14 @@ async def process_document(
                 pass
 
     await _progress(5, "upload")
-    file_hash = hashlib.sha256(file_bytes).hexdigest()
+    # Cache key includes a PROMPT_VERSION so that improvements to the VLM
+    # prompt/schema automatically invalidate stale cached results. Bump this
+    # whenever the prompt or extraction schema changes — old cached scans with
+    # the previous version will be re-processed with the new prompt.
+    _PROMPT_VERSION = "v2-openrouter-2026-07"  # bump on prompt/schema changes
+    file_hash = hashlib.sha256(
+        file_bytes + _PROMPT_VERSION.encode()
+    ).hexdigest()
     file_size = len(file_bytes)
     log.info(
         "scan.start",
@@ -182,6 +189,7 @@ async def process_document(
         size_bytes=file_size,
         mime=mime_type,
         hash=file_hash[:16],
+        prompt_version=_PROMPT_VERSION,
     )
 
     # ── Create scan job ──
@@ -326,8 +334,8 @@ async def _process_pdf(
         )
 
     # ── Slow path: scanned PDF → VLM ──
-    if not config.ANTHROPIC_API_KEY:
-        log.warning("pdf.no_vlm_key", job_id=scan_job_id, msg="ANTHROPIC_API_KEY not set — falling back to Tesseract")
+    if not config.OPENROUTER_API_KEY:
+        log.warning("pdf.no_vlm_key", job_id=scan_job_id, msg="OPENROUTER_API_KEY not set — falling back to Tesseract")
 
         # Fall back to Tesseract on rendered images
         all_text = ""
@@ -414,7 +422,7 @@ async def _process_image(
     # ── VLM fallback if Tesseract confidence is low ──
     use_vlm_fallback = (
         tesseract_conf < 60
-        and config.ANTHROPIC_API_KEY
+        and config.OPENROUTER_API_KEY
         and (amount is None or not line_items)
     )
 

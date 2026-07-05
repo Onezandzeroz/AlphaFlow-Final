@@ -65,7 +65,7 @@ async def health() -> dict[str, Any]:
         "version": config.SERVICE_VERSION,
         "uptime": int(time.time() - _START_TIME),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "vlm_enabled": bool(config.ANTHROPIC_API_KEY),
+        "vlm_enabled": bool(config.OPENROUTER_API_KEY),
         "stats": data_layer.get_stats(),
     }
 
@@ -212,10 +212,15 @@ async def scan_async(
     # For async mode, we generate it here and pass it in (or use hash lookup).
     # Simplest: return a placeholder and let the client poll stats.
     # Better: pre-create the job and pass ID through.
-    # For v1: compute a job_id upfront
+    # For v1: compute a job_id upfront.
+    # Cache key includes PROMPT_VERSION (must match ocr_engine.py) so prompt
+    # improvements invalidate stale cached results.
     import hashlib
     import uuid
-    file_hash = hashlib.sha256(file_bytes).hexdigest()
+    _PROMPT_VERSION = "v2-openrouter-2026-07"  # bump on prompt/schema changes
+    file_hash = hashlib.sha256(
+        file_bytes + _PROMPT_VERSION.encode()
+    ).hexdigest()
     job_id = f"scn_{uuid.uuid4().hex[:16]}"
 
     # Pre-create the job so client can poll immediately
