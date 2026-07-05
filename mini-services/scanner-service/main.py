@@ -48,13 +48,17 @@ def _validate_config() -> None:
         if config.API_SHARED_KEY == "scanner-dev-key-2026":
             log.error("FATAL: API_SHARED_KEY must be set in production (not the dev default)")
             sys.exit(1)
-        if not config.ANTHROPIC_API_KEY:
-            log.error("FATAL: ANTHROPIC_API_KEY must be set in production")
+        if not config.OPENROUTER_API_KEY:
+            log.error(
+                "FATAL: OPENROUTER_API_KEY must be set in production. "
+                "Use the same key as Hermes (unified AI source)."
+            )
             sys.exit(1)
-    elif not config.ANTHROPIC_API_KEY:
+    elif not config.OPENROUTER_API_KEY:
         log.warning(
-            "ANTHROPIC_API_KEY not set — VLM extraction will be unavailable. "
-            "Only Tesseract + Danish regex parser will be used (lower accuracy on PDFs)."
+            "OPENROUTER_API_KEY not set — VLM extraction will be unavailable. "
+            "Only Tesseract + Danish regex parser will be used (lower accuracy on PDFs). "
+            "Set OPENROUTER_API_KEY in .env (same key as Hermes)."
         )
 
 
@@ -88,7 +92,7 @@ async def lifespan(app: FastAPI):
         log.warning("scanner.tesseract_missing", error=str(e),
                      hint="Install: sudo apt-get install -y tesseract-ocr tesseract-ocr-dan tesseract-ocr-eng")
 
-    log.info("scanner.listening", port=config.PORT, vlm_enabled=bool(config.ANTHROPIC_API_KEY))
+    log.info("scanner.listening", port=config.PORT, vlm_enabled=bool(config.OPENROUTER_API_KEY))
 
     yield
 
