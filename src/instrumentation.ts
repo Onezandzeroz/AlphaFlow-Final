@@ -25,9 +25,13 @@
  * Both can be disabled via env vars:
  *   - DISABLE_BACKUP_SCHEDULER=true
  *   - DISABLE_RECURRING_SCHEDULER=true
+ *
+ * NOTE ON IMPORTS: ALL imports here are dynamic (inside register/unregister),
+ * including `logger`. This is intentional — a static top-level import of
+ * `logger` pulls `process.stderr` into the Edge instrumentation bundle,
+ * triggering "Node.js API not supported in Edge Runtime" build warnings.
+ * Dynamic imports after the NEXT_RUNTIME guard keep the Edge bundle clean.
  */
-
-import { logger } from '@/lib/logger';
 
 export async function register(): Promise<void> {
   // Only start background services in the Node.js runtime.
@@ -37,22 +41,21 @@ export async function register(): Promise<void> {
   }
 
   try {
-    logger.info('[INSTRUMENTATION] Node.js runtime — initializing background services');
-
-    // Dynamic imports ensure these Node-only modules are not bundled into
-    // the Edge runtime build. Each module's start function is idempotent.
+    // Dynamic imports — including logger — so Node-only modules are NOT
+    // statically pulled into the Edge instrumentation bundle.
+    const { logger } = await import('@/lib/logger');
     const { startBackupScheduler } = await import('@/lib/backup-scheduler');
     const { startRecurringScheduler } = await import('@/lib/recurring-scheduler');
 
+    logger.info('[INSTRUMENTATION] Node.js runtime — initializing background services');
     startBackupScheduler();
     startRecurringScheduler();
-
     logger.info('[INSTRUMENTATION] Background services initialized successfully');
   } catch (error) {
     // Never let instrumentation failure crash the server boot. Background
     // services are important but not critical to serving requests — the
     // app should still start and respond to users.
-    logger.error('[INSTRUMENTATION] Failed to initialize background services:', error);
+    console.error('[INSTRUMENTATION] Failed to initialize background services:', error);
   }
 }
 
@@ -62,15 +65,15 @@ export async function unregister(): Promise<void> {
   }
 
   try {
-    logger.info('[INSTRUMENTATION] Server shutting down — stopping background services');
-
+    const { logger } = await import('@/lib/logger');
     const { stopBackupScheduler } = await import('@/lib/backup-scheduler');
     const { stopRecurringScheduler } = await import('@/lib/recurring-scheduler');
 
+    logger.info('[INSTRUMENTATION] Server shutting down — stopping background services');
     stopBackupScheduler();
     stopRecurringScheduler();
   } catch (error) {
     // Best-effort cleanup — never let unregister throw during shutdown.
-    logger.error('[INSTRUMENTATION] Error during unregister:', error);
+    console.error('[INSTRUMENTATION] Error during unregister:', error);
   }
 }
