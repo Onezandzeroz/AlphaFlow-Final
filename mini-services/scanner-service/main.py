@@ -13,7 +13,7 @@ Architecture:
   - cv2 for image enhancement (port of v10 pipeline)
   - PyMuPDF for PDF text extraction + rendering
   - pytesseract for OCR (dan+eng)
-  - Anthropic SDK for VLM (Claude Sonnet 4)
+  - OpenRouter for VLM (vision models — unified with Hermes, same API key)
   - HMAC-SHA256 webhook signing (mirror of tokenpay pattern)
 
 Mirrors the layout of tokenpay-access-service/index.ts.

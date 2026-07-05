@@ -204,9 +204,19 @@ module.exports = {
         PORT: '3005',
         // API_SHARED_KEY must match SCANNER_API_KEY in the host app's .env
         API_SHARED_KEY: '',
-        // Anthropic API key for VLM (Claude Sonnet 4) extraction
-        ANTHROPIC_API_KEY: '',
-        ANTHROPIC_MODEL: 'claude-sonnet-4-20250514',
+        // ─── OpenRouter (REQUIRED for VLM extraction) ───────────────
+        // Unified with Hermes — uses the SAME OPENROUTER_API_KEY.
+        // This is now the single AI source for the whole app (chat + OCR).
+        // Get a key at https://openrouter.ai → Dashboard → Keys.
+        // Browse vision models: https://openrouter.ai/models?capabilities=image
+        OPENROUTER_API_KEY: '',
+        OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1',
+        // Vision-capable model for invoice/receipt extraction. Default is
+        // a strong general-purpose model; switch to a cheaper/free one if
+        // cost is a concern (e.g. 'google/gemini-2.5-flash-preview').
+        OPENROUTER_VLM_MODEL: 'anthropic/claude-sonnet-4.5',
+        OPENROUTER_APP_NAME: 'AlphaFlow',
+        APP_URL: 'https://alphaflow.dk',
         VLM_MAX_TOKENS: '4096',
         // SQLite database path
         DATABASE_PATH: './data/scanner.db',
@@ -219,6 +229,13 @@ module.exports = {
         TESSERACT_LANG: 'dan+eng',
         // Logging
         LOG_LEVEL: 'info',
+        // ── DEPRECATED (kept for backward compat only) ──
+        // ANTHROPIC_API_KEY / ANTHROPIC_MODEL are no longer used.
+        // If OPENROUTER_API_KEY is unset, ANTHROPIC_API_KEY is used as a
+        // fallback key value — but the call still goes to OpenRouter.
+        // Remove these from your .env when migration is complete.
+        //ANTHROPIC_API_KEY: '',
+        //ANTHROPIC_MODEL: 'claude-sonnet-4-20250514',
       },
       // Single worker — match other mini-services (SQLite WAL locking)
       exec_mode: 'fork',

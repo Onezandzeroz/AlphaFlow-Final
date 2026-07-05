@@ -3,11 +3,34 @@ config.py — Centralized configuration for the scanner service.
 
 Reads from environment variables with sensible defaults.
 Mirrors the pattern from tokenpay-access-service/index.ts.
+
+ENV LOADING: In development, this module loads the .env file in the
+service root (mini-services/scanner-service/.env) via python-dotenv.
+In production (PM2), env vars come from the ecosystem.config.js env
+block — dotenv's override=False default means PM2's env vars take
+precedence over the .env file, so both modes work correctly.
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+# ── Load .env file (development mode) ──────────────────────────
+# python-dotenv loads the .env file next to the service root into
+# os.environ. override=False (default) means existing process env
+# vars (set by PM2 in production) take precedence over .env values.
+# This makes the .env file work in dev without breaking PM2 prod.
+try:
+    from dotenv import load_dotenv
+    _SERVICE_ROOT = Path(__file__).resolve().parent.parent
+    _ENV_PATH = _SERVICE_ROOT / ".env"
+    if _ENV_PATH.exists():
+        load_dotenv(_ENV_PATH, override=False)
+except ImportError:
+    # python-dotenv not installed yet (fresh clone before pip install)
+    # — env vars must come from the process environment (PM2 / shell).
+    pass
 
 
 def _env(key: str, default: str = "") -> str:
