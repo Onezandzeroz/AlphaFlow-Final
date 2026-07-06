@@ -117,6 +117,7 @@ enum ReconciliationStatus {
 
 enum BankConnectionStatus {
   ACTIVE
+  INACTIVE
   EXPIRED
   PENDING
   REVOKED
@@ -808,7 +809,7 @@ model BankStatement {
   userId           String?
   bankConnectionId String?
   user             User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
-  bankConnection   BankConnection?     @relation(fields: [bankConnectionId], references: [id])
+  bankConnection   BankConnection?     @relation(fields: [bankConnectionId], references: [id], onDelete: SetNull)
   lines            BankStatementLine[]
   companyId        String
   company          Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)

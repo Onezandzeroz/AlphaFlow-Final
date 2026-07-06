@@ -32,6 +32,13 @@ export const POST = withGuard(
         );
       }
 
+      if (connection.status === 'INACTIVE') {
+        return NextResponse.json(
+          { error: 'Bankforbindelse er deaktiveret — reaktivér den før du kan synkronisere' },
+          { status: 400 }
+        );
+      }
+
       // Check if already syncing
       const pendingSync = await db.bankConnectionSync.findFirst({
         where: {

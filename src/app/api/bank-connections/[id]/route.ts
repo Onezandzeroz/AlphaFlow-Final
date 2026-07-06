@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { auditCreate, auditUpdate, requestMetadata } from '@/lib/audit';
+import { auditCreate, auditDeleteAttempt, auditUpdate, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
@@ -47,7 +47,18 @@ export const GET = withGuard(
   }
 );
 
-// DELETE - Delete a bank connection (revoke consent)
+// DELETE - Hard-delete a bank connection.
+//
+// SAFETY: A bank connection can only be permanently deleted when it is already
+// deactivated (status INACTIVE) or has its consent revoked (status REVOKED).
+// This prevents accidental data-affecting deletions of active connections.
+//
+// DATA PRESERVATION: Already synchronized/uploaded bank statements and their
+// lines are NOT deleted. The BankStatement.bankConnection relation uses
+// onDelete: SetNull, so when the BankConnection row is removed, the related
+// BankStatements simply have their bankConnectionId set to NULL — the
+// transaction data stays fully intact and visible in the reconciliation views.
+// Only the BankConnectionSync log rows (sync metadata) are cascade-deleted.
 export const DELETE = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
   async (request, ctx, context) => {
@@ -56,6 +67,14 @@ export const DELETE = withGuard(
 
       const connection = await db.bankConnection.findFirst({
         where: { id, ...tenantFilter(ctx) },
+        include: {
+          _count: {
+            select: {
+              bankStatements: true,
+              syncs: true,
+            },
+          },
+        },
       });
 
       if (!connection) {
@@ -65,29 +84,53 @@ export const DELETE = withGuard(
         );
       }
 
-      // Mark as revoked instead of deleting (compliance: keep audit trail)
-      await db.bankConnection.update({
+      // Enforce the safety gate: only deactivated/revoked connections can be
+      // permanently deleted. Active or pending connections must be deactivated
+      // first.
+      if (connection.status !== 'INACTIVE' && connection.status !== 'REVOKED') {
+        return NextResponse.json(
+          {
+            error:
+              'Bankforbindelsen skal deaktiveres før den kan slettes permanent',
+            status: connection.status,
+          },
+          { status: 409 }
+        );
+      }
+
+      const preservedStatements = connection._count.bankStatements;
+      const removedSyncLogs = connection._count.syncs;
+
+      // Hard-delete the connection.
+      // → BankStatement rows: bankConnectionId set to NULL (data preserved)
+      // → BankConnectionSync rows: cascade-deleted (sync metadata only)
+      await db.bankConnection.delete({
         where: { id },
-        data: {
-          status: 'REVOKED',
-          accessToken: null,
-          refreshToken: null,
-          consentExpiresAt: new Date(),
-        },
       });
 
-      await auditCreate(
+      await auditDeleteAttempt(
         ctx.id,
         'BankConnection',
         id,
-        { action: 'revoke', bankName: connection.bankName, accountNumber: connection.accountNumber },
-        requestMetadata(request),
+        {
+          ...requestMetadata(request),
+          bankName: connection.bankName,
+          accountNumber: connection.accountNumber,
+          provider: connection.provider,
+          previousStatus: connection.status,
+          preservedStatements,
+          removedSyncLogs,
+        },
         ctx.activeCompanyId
       );
 
       notifyDataChange({ scope: 'bank-connections', companyId: ctx.activeCompanyId!, action: 'delete' }).catch(() => {});
 
-      return NextResponse.json({ success: true });
+      return NextResponse.json({
+        success: true,
+        preservedStatements,
+        removedSyncLogs,
+      });
     } catch (error) {
       logger.error('Delete bank connection error:', error);
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -95,14 +138,25 @@ export const DELETE = withGuard(
   }
 );
 
-// PATCH - Update connection settings
+// PATCH - Update connection details.
+//
+// Allows editing: bankName, registrationNumber, accountNumber, iban,
+// accountName, syncFrequency. Changing accountNumber is checked against the
+// @@unique([companyId, accountNumber]) constraint to avoid duplicates.
 export const PATCH = withGuard(
   { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BANK_CONNECT] },
   async (request, ctx, context) => {
     try {
       const { id } = await context.params as { id: string };
       const body = await request.json();
-      const { syncFrequency, accountName } = body;
+      const {
+        bankName,
+        registrationNumber,
+        accountNumber,
+        iban,
+        accountName,
+        syncFrequency,
+      } = body;
 
       const connection = await db.bankConnection.findFirst({
         where: { id, ...tenantFilter(ctx) },
@@ -115,12 +169,75 @@ export const PATCH = withGuard(
         );
       }
 
-      const oldData = { syncFrequency: connection.syncFrequency, accountName: connection.accountName };
+      // Capture old values for the audit trail (only fields we may change).
+      const oldData = {
+        bankName: connection.bankName,
+        registrationNumber: connection.registrationNumber,
+        accountNumber: connection.accountNumber,
+        iban: connection.iban,
+        accountName: connection.accountName,
+        syncFrequency: connection.syncFrequency,
+      };
 
       const updateData: Record<string, unknown> = {};
-      if (syncFrequency && ['hourly', 'daily', 'manual'].includes(syncFrequency)) {
+
+      // bankName
+      if (typeof bankName === 'string' && bankName.trim() && bankName !== connection.bankName) {
+        updateData.bankName = bankName.trim();
+      }
+
+      // registrationNumber (nullable; accept null to clear)
+      if (registrationNumber !== undefined) {
+        const normalized = typeof registrationNumber === 'string' ? registrationNumber.trim() : '';
+        if (normalized && !/^\d{4}$/.test(normalized)) {
+          return NextResponse.json(
+            { error: 'Registreringsnummer skal være 4 cifre' },
+            { status: 400 }
+          );
+        }
+        updateData.registrationNumber = normalized || null;
+      }
+
+      // accountNumber — validate uniqueness if it is changing
+      if (typeof accountNumber === 'string' && accountNumber.trim() && accountNumber.trim() !== connection.accountNumber) {
+        const newAccountNumber = accountNumber.trim();
+        const duplicate = await db.bankConnection.findFirst({
+          where: {
+            companyId: connection.companyId,
+            accountNumber: newAccountNumber,
+            NOT: { id },
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          return NextResponse.json(
+            { error: 'En anden bankforbindelse bruger allerede dette kontonummer' },
+            { status: 409 }
+          );
+        }
+        updateData.accountNumber = newAccountNumber;
+      }
+
+      // iban (nullable; accept null/empty to clear)
+      if (iban !== undefined) {
+        const normalized = typeof iban === 'string' ? iban.trim() : '';
+        updateData.iban = normalized || null;
+      }
+
+      // accountName (nullable; accept empty string to clear)
+      if (accountName !== undefined) {
+        updateData.accountName = typeof accountName === 'string' ? accountName.trim() || null : null;
+      }
+
+      // syncFrequency — recompute nextSyncAt when it changes
+      if (syncFrequency !== undefined) {
+        if (!['hourly', 'daily', 'manual'].includes(syncFrequency)) {
+          return NextResponse.json(
+            { error: 'Ugyldig synkroniseringsfrekvens' },
+            { status: 400 }
+          );
+        }
         updateData.syncFrequency = syncFrequency;
-        // Update nextSyncAt based on new frequency
         if (syncFrequency === 'manual') {
           updateData.nextSyncAt = null;
         } else {
@@ -134,8 +251,10 @@ export const PATCH = withGuard(
           updateData.nextSyncAt = nextSync;
         }
       }
-      if (accountName !== undefined) {
-        updateData.accountName = accountName;
+
+      // If nothing changed, short-circuit (still 200, no-op).
+      if (Object.keys(updateData).length === 0) {
+        return NextResponse.json({ connection, unchanged: true });
       }
 
       const updated = await db.bankConnection.update({
@@ -152,6 +271,8 @@ export const PATCH = withGuard(
         requestMetadata(request),
         ctx.activeCompanyId
       );
+
+      notifyDataChange({ scope: 'bank-connections', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
 
       return NextResponse.json({ connection: updated });
     } catch (error) {

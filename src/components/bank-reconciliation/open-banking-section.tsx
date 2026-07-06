@@ -73,6 +73,8 @@ import {
   Zap,
   ArrowDownToLine,
   Info,
+  Pencil,
+  Power,
 } from 'lucide-react';
 
 // ──────────────── Types ────────────────
@@ -101,7 +103,7 @@ interface BankConnection {
   lastSyncAt: string | null;
   nextSyncAt: string | null;
   syncFrequency: string;
-  status: 'ACTIVE' | 'EXPIRED' | 'PENDING' | 'REVOKED' | 'ERROR';
+  status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED' | 'PENDING' | 'REVOKED' | 'ERROR';
   consentId: string | null;
   consentExpiresAt: string | null;
   retryCount: number;
@@ -170,6 +172,13 @@ function getStatusConfig(status: BankConnection['status'], language: string) {
         icon: Wifi,
         bgClass: 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400 border-green-500/20',
         dotClass: 'bg-green-500',
+      };
+    case 'INACTIVE':
+      return {
+        label: language === 'da' ? 'Deaktiveret' : 'Deactivated',
+        icon: Power,
+        bgClass: 'bg-slate-500/10 text-slate-600 dark:bg-slate-400/20 dark:text-slate-300 border-slate-500/20',
+        dotClass: 'bg-slate-500',
       };
     case 'PENDING':
       return {
@@ -252,12 +261,19 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
   const [connectionToDelete, setConnectionToDelete] = useState<BankConnection | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Edit frequency dialog
+  // Edit dialog
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [connectionToEdit, setConnectionToEdit] = useState<BankConnection | null>(null);
-  const [editFrequency, setEditFrequency] = useState('daily');
+  const [editBankName, setEditBankName] = useState('');
+  const [editRegNumber, setEditRegNumber] = useState('');
+  const [editAccountNumber, setEditAccountNumber] = useState('');
+  const [editIban, setEditIban] = useState('');
   const [editAccountName, setEditAccountName] = useState('');
+  const [editFrequency, setEditFrequency] = useState('daily');
   const [isEditing, setIsEditing] = useState(false);
+
+  // Deactivate / activate
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
 
   // Consent renew
   const [renewingConsentIds, setRenewingConsentIds] = useState<Set<string>>(new Set());
@@ -299,7 +315,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
   const editDraftKey = connectionToEdit ? `bank-connection:edit:${connectionToEdit.id}` : 'bank-connection:edit:none';
   const { clearDraft: clearEditDraft } = useDraftSync(
     editDraftKey,
-    { editFrequency, editAccountName },
+    { editBankName, editRegNumber, editAccountNumber, editIban, editAccountName, editFrequency },
     {
       label: language === 'da' ? 'Rediger bankforbindelse' : 'Edit bank connection',
       disabled: !editDialogOpen,
@@ -316,10 +332,21 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
     connectAccountName.trim() !== '' ||
     connectSyncFrequency !== 'daily'
   );
-  const loadedEditBankRef = useRef<{ freq: string; name: string } | null>(null);
+  const loadedEditBankRef = useRef<{
+    bankName: string;
+    regNumber: string;
+    accountNumber: string;
+    iban: string;
+    accountName: string;
+    freq: string;
+  } | null>(null);
   const isEditBankDirty = editDialogOpen && loadedEditBankRef.current !== null && (
-    editFrequency !== loadedEditBankRef.current.freq ||
-    editAccountName !== loadedEditBankRef.current.name
+    editBankName !== loadedEditBankRef.current.bankName ||
+    editRegNumber !== loadedEditBankRef.current.regNumber ||
+    editAccountNumber !== loadedEditBankRef.current.accountNumber ||
+    editIban !== loadedEditBankRef.current.iban ||
+    editAccountName !== loadedEditBankRef.current.accountName ||
+    editFrequency !== loadedEditBankRef.current.freq
   );
   const connectGuard = useWarnOnUnsaved(isConnectDirty, {
     onConfirmDiscard: () => { clearConnectDraft(); setConnectDialogOpen(false); },
@@ -352,18 +379,41 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
   const openEditDialog = useCallback((connection: BankConnection) => {
     const serverFreq = connection.syncFrequency || 'daily';
     const serverName = connection.accountName || '';
+    const serverBankName = connection.bankName || '';
+    const serverRegNumber = connection.registrationNumber || '';
+    const serverAccountNumber = connection.accountNumber || '';
+    const serverIban = connection.iban || '';
     const draft = readDraft(`bank-connection:edit:${connection.id}`);
     let initialFreq = serverFreq;
     let initialName = serverName;
+    let initialBankName = serverBankName;
+    let initialRegNumber = serverRegNumber;
+    let initialAccountNumber = serverAccountNumber;
+    let initialIban = serverIban;
     if (draft?.data) {
       const d = draft.data;
       if (typeof d.editFrequency === 'string') initialFreq = d.editFrequency;
       if (typeof d.editAccountName === 'string') initialName = d.editAccountName;
+      if (typeof d.editBankName === 'string') initialBankName = d.editBankName;
+      if (typeof d.editRegNumber === 'string') initialRegNumber = d.editRegNumber;
+      if (typeof d.editAccountNumber === 'string') initialAccountNumber = d.editAccountNumber;
+      if (typeof d.editIban === 'string') initialIban = d.editIban;
     }
     setConnectionToEdit(connection);
-    setEditFrequency(initialFreq);
+    setEditBankName(initialBankName);
+    setEditRegNumber(initialRegNumber);
+    setEditAccountNumber(initialAccountNumber);
+    setEditIban(initialIban);
     setEditAccountName(initialName);
-    loadedEditBankRef.current = { freq: initialFreq, name: initialName };
+    setEditFrequency(initialFreq);
+    loadedEditBankRef.current = {
+      bankName: initialBankName,
+      regNumber: initialRegNumber,
+      accountNumber: initialAccountNumber,
+      iban: initialIban,
+      accountName: initialName,
+      freq: initialFreq,
+    };
     setEditDialogOpen(true);
   }, []);
 
@@ -700,12 +750,16 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
         method: 'DELETE',
       });
 
-      if (!response.ok) throw new Error('Delete failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Delete failed');
+      }
 
-      toast.success(language === 'da' ? 'Bankforbindelse slettet' : 'Bank connection removed', {
+      const result = await response.json();
+      toast.success(language === 'da' ? 'Bankforbindelse slettet permanent' : 'Bank connection permanently deleted', {
         description: language === 'da'
-          ? `${connectionToDelete.bankName} er nu fjernet`
-          : `${connectionToDelete.bankName} has been removed`,
+          ? `${connectionToDelete.bankName} er nu slettet${result.preservedStatements ? ` — ${result.preservedStatements} kontoudtogs posteringer bevaret` : ''}`
+          : `${connectionToDelete.bankName} has been deleted${result.preservedStatements ? ` — ${result.preservedStatements} statement(s) of transactions preserved` : ''}`,
       });
 
       setDeleteDialogOpen(false);
@@ -728,18 +782,49 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
   const handleEdit = useCallback(async () => {
     if (!connectionToEdit) return;
 
+    const trimmedReg = editRegNumber.trim();
+    if (trimmedReg && !/^\d{4}$/.test(trimmedReg)) {
+      toast.error(language === 'da' ? 'Ugyldigt registreringsnummer' : 'Invalid registration number', {
+        description: language === 'da'
+          ? 'Registreringsnummer skal være 4 cifre'
+          : 'Registration number must be 4 digits',
+      });
+      return;
+    }
+
+    if (!editBankName.trim()) {
+      toast.error(language === 'da' ? 'Banknavn mangler' : 'Bank name required', {
+        description: language === 'da' ? 'Angiv et banknavn' : 'Please enter a bank name',
+      });
+      return;
+    }
+
+    if (!editAccountNumber.trim()) {
+      toast.error(language === 'da' ? 'Kontonummer mangler' : 'Account number required', {
+        description: language === 'da' ? 'Angiv et kontonummer' : 'Please enter an account number',
+      });
+      return;
+    }
+
     setIsEditing(true);
     try {
       const response = await fetch(`/api/bank-connections/${connectionToEdit.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          bankName: editBankName.trim(),
+          registrationNumber: trimmedReg || undefined,
+          accountNumber: editAccountNumber.trim(),
+          iban: editIban.trim() || undefined,
+          accountName: editAccountName.trim() || undefined,
           syncFrequency: editFrequency,
-          accountName: editAccountName || undefined,
         }),
       });
 
-      if (!response.ok) throw new Error('Update failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Update failed');
+      }
 
       toast.success(language === 'da' ? 'Indstillinger opdateret' : 'Settings updated', {
         description: language === 'da'
@@ -754,14 +839,72 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
       await fetchConnections();
     } catch (err) {
       toast.error(language === 'da' ? 'Kunne ikke opdatere' : 'Failed to update', {
-        description: language === 'da'
+        description: err instanceof Error ? err.message : (language === 'da'
           ? 'Der opstod en fejl ved opdatering af bankforbindelsen'
-          : 'An error occurred while updating the bank connection',
+          : 'An error occurred while updating the bank connection'),
       });
     } finally {
       setIsEditing(false);
     }
-  }, [connectionToEdit, editFrequency, editAccountName, language, fetchConnections]);
+  }, [connectionToEdit, editBankName, editRegNumber, editAccountNumber, editIban, editAccountName, editFrequency, language, fetchConnections]);
+
+  // ── Deactivate / Activate ──
+
+  const handleToggleActive = useCallback(async (connection: BankConnection) => {
+    const isCurrentlyActive = connection.status === 'ACTIVE';
+    const action = isCurrentlyActive ? 'deactivate' : 'activate';
+    setTogglingIds((prev) => new Set(prev).add(connection.id));
+    try {
+      const response = await fetch(`/api/bank-connections/${connection.id}/${action}`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || (language === 'da' ? 'Handlingen mislykkedes' : 'Action failed'));
+      }
+      const result = await response.json();
+      if (result.needsConsentRenewal) {
+        toast.warning(language === 'da' ? 'Godkendelse udløbet' : 'Consent expired', {
+          description: language === 'da'
+            ? 'Bankgodkendelsen er udløbet. Forny godkendelsen for at reaktivere forbindelsen.'
+            : 'The bank consent has expired. Renew consent to reactivate the connection.',
+        });
+      } else {
+        toast.success(
+          isCurrentlyActive
+            ? (language === 'da' ? 'Bankforbindelse deaktiveret' : 'Bank connection deactivated')
+            : (language === 'da' ? 'Bankforbindelse reaktiveret' : 'Bank connection reactivated'),
+          {
+            description: isCurrentlyActive
+              ? (language === 'da'
+                ? `${connection.bankName} er deaktiveret. Automatisk synk er stoppet. Tidligere posteringer bevares.`
+                : `${connection.bankName} has been deactivated. Auto-sync is stopped. Existing transactions are preserved.`)
+              : (language === 'da'
+                ? `${connection.bankName} er aktiv igen.`
+                : `${connection.bankName} is active again.`),
+          }
+        );
+      }
+      await fetchConnections();
+    } catch (err) {
+      toast.error(
+        isCurrentlyActive
+          ? (language === 'da' ? 'Kunne ikke deaktivere' : 'Failed to deactivate')
+          : (language === 'da' ? 'Kunne ikke reaktivere' : 'Failed to reactivate'),
+        {
+          description: err instanceof Error ? err.message : (language === 'da'
+            ? 'Der opstod en fejl'
+            : 'An error occurred'),
+        }
+      );
+    } finally {
+      setTogglingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(connection.id);
+        return next;
+      });
+    }
+  }, [language, fetchConnections]);
 
   // ── Renew consent ──
 
@@ -1175,6 +1318,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                     const BankIcon = getBankIcon(connection.provider);
                     const isSyncing = syncingIds.has(connection.id);
                     const isRenewing = renewingConsentIds.has(connection.id);
+                    const isToggling = togglingIds.has(connection.id);
                     const isRevokedOrExpired = connection.status === 'REVOKED' || connection.status === 'EXPIRED';
 
                     return (
@@ -1183,9 +1327,11 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                         className={`flex items-center gap-3 p-3 sm:p-4 rounded-xl border transition-colors ${
                           isRevokedOrExpired
                             ? 'bg-red-50/50 dark:bg-red-500/5 border-red-200/50 dark:border-red-500/10'
-                            : connection.status === 'PENDING'
-                              ? 'bg-amber-50/50 dark:bg-amber-500/5 border-amber-200/50 dark:border-amber-500/10'
-                              : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/10 hover:border-[#0d9488]/30'
+                            : connection.status === 'INACTIVE'
+                              ? 'bg-slate-50/50 dark:bg-slate-500/5 border-slate-200/50 dark:border-slate-500/10'
+                              : connection.status === 'PENDING'
+                                ? 'bg-amber-50/50 dark:bg-amber-500/5 border-amber-200/50 dark:border-amber-500/10'
+                                : 'bg-gray-50 dark:bg-white/5 border-gray-100 dark:border-white/10 hover:border-[#0d9488]/30'
                         }`}
                       >
                         {/* Bank icon */}
@@ -1284,7 +1430,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                               size="sm"
                               className="h-8 w-8 p-0 text-[#0d9488] hover:text-[#0f766e] hover:bg-[#0d9488]/10"
                               onClick={() => handleSync(connection.id)}
-                              disabled={isSyncing || connection.status === 'REVOKED'}
+                              disabled={isSyncing || connection.status === 'REVOKED' || connection.status === 'INACTIVE'}
                               title={language === 'da' ? 'Synkroniser nu' : 'Sync now'}
                             >
                               {isSyncing ? (
@@ -1306,13 +1452,38 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                                 <Settings className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuContent align="end" className="w-56">
                               <DropdownMenuItem
                                 onClick={() => openEditDialog(connection)}
                               >
-                                <Clock className="h-4 w-4 mr-2" />
-                                {language === 'da' ? 'Skift synk-frekvens' : 'Change sync frequency'}
+                                <Pencil className="h-4 w-4 mr-2" />
+                                {language === 'da' ? 'Rediger oplysninger' : 'Edit details'}
                               </DropdownMenuItem>
+                              {connection.status === 'ACTIVE' ? (
+                                <DropdownMenuItem
+                                  onClick={() => handleToggleActive(connection)}
+                                  disabled={isToggling}
+                                >
+                                  {isToggling ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Power className="h-4 w-4 mr-2" />
+                                  )}
+                                  {language === 'da' ? 'Deaktiver' : 'Deactivate'}
+                                </DropdownMenuItem>
+                              ) : (connection.status === 'INACTIVE' || connection.status === 'REVOKED') ? (
+                                <DropdownMenuItem
+                                  onClick={() => handleToggleActive(connection)}
+                                  disabled={isToggling}
+                                >
+                                  {isToggling ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Power className="h-4 w-4 mr-2" />
+                                  )}
+                                  {language === 'da' ? 'Reaktiver' : 'Reactivate'}
+                                </DropdownMenuItem>
+                              ) : null}
                               <DropdownMenuItem
                                 onClick={() => handleRenewConsent(connection)}
                                 disabled={isRenewing}
@@ -1327,13 +1498,24 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() => {
+                                  if (connection.status !== 'INACTIVE' && connection.status !== 'REVOKED') {
+                                    toast.warning(
+                                      language === 'da' ? 'Deaktivér først forbindelsen' : 'Deactivate the connection first',
+                                      {
+                                        description: language === 'da'
+                                          ? 'En aktiv bankforbindelse kan ikke slettes permanent. Deaktivér den først, og slet den derefter.'
+                                          : 'An active bank connection cannot be permanently deleted. Deactivate it first, then delete it.',
+                                      }
+                                    );
+                                    return;
+                                  }
                                   setConnectionToDelete(connection);
                                   setDeleteDialogOpen(true);
                                 }}
                                 className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />
-                                {language === 'da' ? 'Slet forbindelse' : 'Remove connection'}
+                                {language === 'da' ? 'Slet permanent' : 'Delete permanently'}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1706,12 +1888,12 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
 
       {/* ── Edit Settings Dialog ── */}
       <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) clearEditDraft(); setEditDialogOpen(open); }}>
-        <DialogContent className="sm:max-w-sm" {...editBankGuard.dialogProps}>
+        <DialogContent className="sm:max-w-md" {...editBankGuard.dialogProps}>
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <Settings className="h-4 w-4 text-[#0d9488]" />
-                {language === 'da' ? 'Indstillinger' : 'Settings'}
+                {language === 'da' ? 'Rediger bankforbindelse' : 'Edit bank connection'}
               </div>
               <ClearFormButton
                 size="xs"
@@ -1720,8 +1902,12 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                 onClear={() => {
                   // Revert to the values that were loaded when the edit dialog opened.
                   if (loadedEditBankRef.current) {
+                    setEditBankName(loadedEditBankRef.current.bankName);
+                    setEditRegNumber(loadedEditBankRef.current.regNumber);
+                    setEditAccountNumber(loadedEditBankRef.current.accountNumber);
+                    setEditIban(loadedEditBankRef.current.iban);
+                    setEditAccountName(loadedEditBankRef.current.accountName);
                     setEditFrequency(loadedEditBankRef.current.freq);
-                    setEditAccountName(loadedEditBankRef.current.name);
                   }
                   clearEditDraft();
                 }}
@@ -1735,7 +1921,55 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {language === 'da' ? 'Kontonavn' : 'Account name'}
+                {language === 'da' ? 'Banknavn' : 'Bank name'}
+              </Label>
+              <Input
+                value={editBankName}
+                onChange={(e) => setEditBankName(e.target.value)}
+                placeholder={language === 'da' ? 'Angiv banknavn' : 'Enter bank name'}
+                className="bg-gray-50 dark:bg-white/5"
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  {language === 'da' ? 'Registreringsnummer' : 'Registration number'}
+                </Label>
+                <Input
+                  value={editRegNumber}
+                  onChange={(e) => setEditRegNumber(e.target.value)}
+                  placeholder="1234"
+                  inputMode="numeric"
+                  maxLength={4}
+                  className="bg-gray-50 dark:bg-white/5"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  {language === 'da' ? 'Kontonummer' : 'Account number'}
+                </Label>
+                <Input
+                  value={editAccountNumber}
+                  onChange={(e) => setEditAccountNumber(e.target.value)}
+                  placeholder={language === 'da' ? 'Angiv kontonummer' : 'Enter account number'}
+                  className="bg-gray-50 dark:bg-white/5"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {language === 'da' ? 'IBAN' : 'IBAN'}
+              </Label>
+              <Input
+                value={editIban}
+                onChange={(e) => setEditIban(e.target.value.toUpperCase())}
+                placeholder="DK00 0000 0000 0000 00"
+                className="bg-gray-50 dark:bg-white/5"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {language === 'da' ? 'Kontonavn (visning)' : 'Account name (display)'}
               </Label>
               <Input
                 value={editAccountName}
@@ -1791,15 +2025,30 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
               <div className="h-8 w-8 rounded-full bg-red-500/10 flex items-center justify-center">
                 <Trash2 className="h-4 w-4 text-red-500" />
               </div>
-              {language === 'da' ? 'Slet bankforbindelse' : 'Remove bank connection'}
+              {language === 'da' ? 'Slet bankforbindelse permanent' : 'Delete bank connection permanently'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {connectionToDelete && (
-                <>
-                  {language === 'da'
-                    ? `Er du sikker på, at du vil fjerne forbindelsen til ${connectionToDelete.bankName} (${maskAccountNumber(connectionToDelete.accountNumber)})? Godkendelsen vil blive tilbagekaldt og automatisk synkronisering stoppes.`
-                    : `Are you sure you want to remove the connection to ${connectionToDelete.bankName} (${maskAccountNumber(connectionToDelete.accountNumber)})? Consent will be revoked and automatic synchronization will stop.`}
-                </>
+                <div className="space-y-2">
+                  <p>
+                    {language === 'da'
+                      ? `Er du sikker på, at du vil slette forbindelsen til ${connectionToDelete.bankName} (${maskAccountNumber(connectionToDelete.accountNumber)}) permanent?`
+                      : `Are you sure you want to permanently delete the connection to ${connectionToDelete.bankName} (${maskAccountNumber(connectionToDelete.accountNumber)})?`}
+                  </p>
+                  <div className="flex items-start gap-2 rounded-md bg-green-500/10 border border-green-500/20 p-2.5 text-green-700 dark:text-green-400">
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                    <p className="text-xs">
+                      {language === 'da'
+                        ? 'Allerede synkroniserede posteringer og kontoudtog bevares fuldstændigt — kun selve bankforbindelsen og synk-loggen fjernes.'
+                        : 'Already synchronized transactions and bank statements are fully preserved — only the bank connection itself and sync logs are removed.'}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {language === 'da'
+                      ? 'Denne handling kan ikke fortrydes.'
+                      : 'This action cannot be undone.'}
+                  </p>
+                </div>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1813,7 +2062,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
               className="bg-red-600 hover:bg-red-700 text-white gap-2"
             >
               {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {language === 'da' ? 'Slet forbindelse' : 'Remove connection'}
+              {language === 'da' ? 'Slet permanent' : 'Delete permanently'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
