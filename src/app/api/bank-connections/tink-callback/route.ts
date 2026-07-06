@@ -26,6 +26,7 @@ import {
   getTinkConfig,
   exchangeCodeForToken,
   listAccounts,
+  listCredentials,
   type TinkAccount,
 } from '@/lib/tink-client';
 
@@ -78,8 +79,25 @@ export async function GET(request: Request) {
     // ─── Step 1: Exchange code for access token ─────────────────
     const tokenResponse = await exchangeCodeForToken(config, code);
 
-    // ─── Step 2: Fetch user's bank accounts ─────────────────────
-    const accounts = await listAccounts(config, tokenResponse.access_token);
+    // ─── Step 2: Fetch the user's credentials (for re-authorization) ──
+    // Tink v2 API does not return credentialsId per account, so we fetch the
+    // user's credentials list separately. The first credential is used as
+    // the primary credentialsId for re-authorization later.
+    let primaryCredentialsId = '';
+    try {
+      const credentials = await listCredentials(config, tokenResponse.access_token);
+      primaryCredentialsId = credentials[0]?.id || '';
+      logger.info('Tink credentials fetched', { count: credentials.length, primaryCredentialsId });
+    } catch (credError) {
+      // Non-fatal: credentials fetch may fail for some app configurations,
+      // but account listing + transaction fetch can still proceed.
+      logger.warn('Tink list credentials failed (non-fatal)', {
+        error: credError instanceof Error ? credError.message : 'Unknown',
+      });
+    }
+
+    // ─── Step 3: Fetch user's bank accounts ─────────────────────
+    const accounts = await listAccounts(config, tokenResponse.access_token, primaryCredentialsId);
 
     if (accounts.length === 0) {
       return new NextResponse(renderErrorPage(
@@ -88,12 +106,10 @@ export async function GET(request: Request) {
       ), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     }
 
-    // ─── Step 3: Store access token on the connection ───────────
+    // ─── Step 4: Store access token on the connection ───────────
     // We encrypt the access token with AES-256-GCM before storing.
-    // The credentialsId from the first account is stored in refreshToken
-    // for potential re-authorization later.
-    const primaryCredentialsId = accounts[0].credentialsId;
-
+    // The credentialsId is stored in refreshToken for potential
+    // re-authorization later.
     await db.bankConnection.update({
       where: { id: connection.id },
       data: {

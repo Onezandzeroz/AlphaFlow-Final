@@ -49,7 +49,18 @@ function formatArgs(args: LogArgs): string {
       parts.push(args.error.stack);
     }
   } else if (args.error !== undefined) {
-    parts.push(String(args.error));
+    // Support structured data passed as the "error" argument (e.g. Tink client
+    // passes { status, body, accountId }). Without this, objects render as
+    // "[object Object]" which makes production logs unreadable.
+    if (args.error && typeof args.error === 'object') {
+      try {
+        parts.push(JSON.stringify(args.error));
+      } catch {
+        parts.push(String(args.error));
+      }
+    } else {
+      parts.push(String(args.error));
+    }
   }
   return parts.join(' ');
 }

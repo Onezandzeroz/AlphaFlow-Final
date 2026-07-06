@@ -56,7 +56,7 @@ export interface TinkTokenResponse {
   scope: string;
 }
 
-/** A single bank account from Tink */
+/** A single bank account from Tink (normalized from v2 API response) */
 export interface TinkAccount {
   /** Tink's internal account ID — used for transaction fetches */
   id: string;
@@ -69,18 +69,114 @@ export interface TinkAccount {
     amount: number;
     currencyCode: string;
   }>;
-  /** Bank identifier (e.g., "nordea-dk", "danskebank-dk") */
+  /** Account holder name (if available) */
   holderName?: string;
-  /** The bank this account belongs to */
+  /**
+   * The credentials ID this account belongs to.
+   * NOTE: Tink v2 API does NOT return credentialsId per account.
+   * It is populated by the caller using the user's single credential
+   * (Tink Link permanent users have one credential per bank connection).
+   */
   credentialsId: string;
   /** Bank display name */
   institution: {
     name: string;
   };
-  /** Account number in the bank's format */
+  /** Account number in the bank's format (BBAN) */
   accountNumber?: string;
   /** IBAN if available */
   iban?: string;
+}
+
+/**
+ * Raw Tink v2 API account response shape (subset of fields we use).
+ * Tink v2 returns balances as { booked: { amount: { currencyCode, value: { scale, unscaledValue } } } }
+ * rather than the flat v1 array format.
+ */
+interface TinkV2AccountRaw {
+  id: string;
+  name?: string;
+  type?: string;
+  balances?: {
+    booked?: {
+      amount?: {
+        currencyCode?: string;
+        value?: {
+          scale?: string | number;
+          unscaledValue?: string | number;
+        };
+      };
+    };
+    available?: {
+      amount?: {
+        currencyCode?: string;
+        value?: {
+          scale?: string | number;
+          unscaledValue?: string | number;
+        };
+      };
+    };
+  };
+  identifiers?: {
+    iban?: {
+      iban?: string;
+      bban?: string;
+    };
+  };
+  financialInstitutionId?: string;
+  dates?: {
+    lastRefreshed?: string;
+  };
+}
+
+/**
+ * Convert Tink v2's scaled-amount representation to a plain number.
+ * Tink returns amounts as { scale, unscaledValue } where the real value
+ * is unscaledValue * 10^scale (scale is typically negative, e.g. -2 for cents).
+ */
+function parseTinkAmount(value?: { scale?: string | number; unscaledValue?: string | number }): number | null {
+  if (!value || value.unscaledValue === undefined || value.unscaledValue === null) return null;
+  const unscaled = Number(value.unscaledValue);
+  const scale = Number(value.scale ?? 0);
+  if (Number.isNaN(unscaled) || Number.isNaN(scale)) return null;
+  return unscaled * Math.pow(10, scale);
+}
+
+/**
+ * Map a raw Tink v2 account to the normalized TinkAccount interface.
+ * credentialsId must be supplied by the caller (from the user's credential).
+ */
+function mapV2Account(raw: TinkV2AccountRaw, credentialsId: string): TinkAccount {
+  const balArr: Array<{ amount: number; currencyCode: string }> = [];
+  const bookedBal = parseTinkAmount(raw.balances?.booked?.amount?.value);
+  if (bookedBal !== null) {
+    balArr.push({
+      amount: bookedBal,
+      currencyCode: raw.balances?.booked?.amount?.currencyCode || 'DKK',
+    });
+  }
+  const availBal = parseTinkAmount(raw.balances?.available?.amount?.value);
+  if (availBal !== null) {
+    balArr.push({
+      amount: availBal,
+      currencyCode: raw.balances?.available?.amount?.currencyCode || 'DKK',
+    });
+  }
+
+  return {
+    id: raw.id,
+    name: raw.name || raw.type || 'Konto',
+    type: raw.type || 'CHECKING',
+    balances: balArr.length > 0
+      ? balArr
+      : [{ amount: 0, currencyCode: 'DKK' }],
+    credentialsId,
+    institution: {
+      name: 'Bank', // v2 doesn't return institution name; caller can enrich
+    },
+    accountNumber: raw.identifiers?.iban?.bban || undefined,
+    iban: raw.identifiers?.iban?.iban || undefined,
+  };
 }
 
 /** A single transaction from Tink */
@@ -274,8 +370,12 @@ export async function exchangeCodeForToken(
 export async function listAccounts(
   config: TinkConfig,
   accessToken: string,
+  credentialsId?: string,
 ): Promise<TinkAccount[]> {
-  const url = `${config.apiBaseUrl}/api/v1/accounts/list`;
+  // Tink v2 API: GET /data/v2/accounts
+  // Returns { accounts: [...], nextPageToken? } where each account uses the
+  // v2 shape (balances.booked.amount.value.{scale,unscaledValue}, etc.).
+  const url = `${config.apiBaseUrl}/data/v2/accounts`;
 
   const response = await fetch(url, {
     method: 'GET',
@@ -296,12 +396,19 @@ export async function listAccounts(
     );
   }
 
-  const data = await response.json() as { accounts: TinkAccount[] };
+  const data = await response.json() as { accounts?: TinkV2AccountRaw[]; nextPageToken?: string };
+
+  // v2 does not return credentialsId per account. Use the caller-supplied
+  // credentialsId (typically from listCredentials()) so callers that need it
+  // (e.g. tink-callback storing it for re-auth) still have it.
+  const fallbackCred = credentialsId || 'unknown';
+  const accounts = (data.accounts || []).map(a => mapV2Account(a, fallbackCred));
+
   logger.info('Tink accounts fetched', {
-    count: data.accounts?.length ?? 0,
+    count: accounts.length,
   });
 
-  return data.accounts || [];
+  return accounts;
 }
 
 // ─── Transactions ───────────────────────────────────────────────────────
@@ -323,6 +430,55 @@ export async function listAccounts(
  * @returns Transaction list response with pagination cursor
  * @throws Error if the API call fails
  */
+/**
+ * Raw Tink v2 transaction shape (subset of fields we use).
+ * v2 returns amounts as { value: { scale, unscaledValue } } and dates as
+ * ISO-8601 strings (e.g. "2024-01-15"). The transaction payload is wrapped
+ * in a "transaction" object inside each result entry, but the /data/v2/transactions
+ * endpoint returns a flat array of transactions directly.
+ */
+interface TinkV2TransactionRaw {
+  id?: string;
+  accountId?: string;
+  amount?: {
+    value?: { scale?: string | number; unscaledValue?: string | number };
+    currencyCode?: string;
+  };
+  // v2 may also return currencyDenominatedAmount with the same shape
+  currencyDenominatedAmount?: {
+    currencyCode?: string;
+    value?: { scale?: string | number; unscaledValue?: string | number };
+  };
+  date?: string;          // ISO date "YYYY-MM-DD"
+  description?: string;
+  originalDescription?: string;
+  pending?: boolean;
+  status?: string;        // "BOOKED" | "PENDING" | etc.
+  balance?: {
+    value?: { scale?: string | number; unscaledValue?: string | number };
+    currencyCode?: string;
+  };
+}
+
+function mapV2Transaction(raw: TinkV2TransactionRaw): TinkTransaction {
+  const amount = parseTinkAmount(raw.amount?.value) ?? 0;
+  const balance = parseTinkAmount(raw.balance?.value) ?? undefined;
+  const currencyCode =
+    raw.amount?.currencyCode ||
+    raw.currencyDenominatedAmount?.currencyCode ||
+    'DKK';
+
+  return {
+    id: raw.id || `${raw.date}-${raw.description}-${amount}`,
+    date: raw.date || new Date().toISOString().split('T')[0],
+    description: raw.description || raw.originalDescription || '',
+    amount,
+    balance,
+    currencyCode,
+    pending: raw.pending ?? (raw.status === 'PENDING'),
+  };
+}
+
 export async function fetchAccountTransactions(
   config: TinkConfig,
   accessToken: string,
@@ -334,7 +490,10 @@ export async function fetchAccountTransactions(
     pageToken?: string;
   },
 ): Promise<TinkTransactionsResponse> {
-  const url = new URL(`${config.apiBaseUrl}/api/v1/data/transactions`);
+  // Tink v2 API: GET /data/v2/transactions?accountId=...&startDate=...&endDate=...
+  // Returns { transactions: [...], nextPageToken? } where each transaction uses
+  // the v2 shape (amount.value.{scale,unscaledValue}, date as ISO string, etc.).
+  const url = new URL(`${config.apiBaseUrl}/data/v2/transactions`);
 
   const params = url.searchParams;
   params.set('accountId', accountId);
@@ -372,8 +531,14 @@ export async function fetchAccountTransactions(
     );
   }
 
-  const data = await response.json() as TinkTransactionsResponse;
-  return data;
+  const data = await response.json() as { transactions?: TinkV2TransactionRaw[]; nextPageToken?: string; count?: number };
+  const transactions = (data.transactions || []).map(mapV2Transaction);
+
+  return {
+    transactions,
+    nextPageToken: data.nextPageToken,
+    totalTransactions: data.count ?? transactions.length,
+  };
 }
 
 /**
