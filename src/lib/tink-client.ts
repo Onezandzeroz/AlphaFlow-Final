@@ -558,11 +558,18 @@ export async function deleteCredential(
  * we use a conservative heuristic: if the connection was last synced more
  * than 25 minutes ago, consider the token expired.
  *
+ * IMPORTANT: A null lastSyncAt means the connection has never been synced
+ * yet — but the access token was just obtained moments ago in the Tink
+ * OAuth callback (tink-callback/route.ts). A freshly-issued token cannot
+ * be expired, so we return false in this case. This prevents a false
+ * "token expired" alarm on the first sync after account selection.
+ *
  * @param lastSyncAt - When the connection was last successfully synced
  * @returns true if the token should be considered expired
  */
 export function isTokenLikelyExpired(lastSyncAt: Date | null): boolean {
-  if (!lastSyncAt) return true;
+  // First sync: token was just obtained in the OAuth callback — not expired.
+  if (!lastSyncAt) return false;
   const TOKEN_LIFETIME_MS = 25 * 60 * 1000; // 25 minutes (conservative)
   return Date.now() - lastSyncAt.getTime() > TOKEN_LIFETIME_MS;
 }

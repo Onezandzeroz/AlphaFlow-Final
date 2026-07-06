@@ -303,27 +303,17 @@ async function performSync(connectionId: string, userId: string) {
             logger.info('Tink token re-authorized successfully', { connectionId });
           }
         } catch (reauthError) {
-          // Re-authorization failed — mark connection as needing user re-auth
-          logger.warn('Tink re-authorization failed, marking for re-auth', {
+          // Re-authorization failed — but the existing token may still be
+          // valid (e.g. the re-auth endpoint rejects already-authenticated
+          // credentials, yet the access token itself hasn't expired).
+          // Do NOT abort the sync here. Fall through and attempt the actual
+          // transaction fetch with the current token. If that also fails
+          // with a 401, the main error handler below will mark the
+          // connection for user re-auth.
+          logger.warn('Tink re-authorization failed, will try sync with existing token', {
             connectionId,
             error: reauthError instanceof Error ? reauthError.message : 'Unknown',
           });
-          await db.bankConnection.update({
-            where: { id: connectionId },
-            data: { status: 'PENDING', lastError: 'Tink adgangstoken er udløbet. Gen godkend din bankforbindelse.' },
-          });
-
-          await db.bankConnectionSync.update({
-            where: { id: sync.id },
-            data: {
-              status: 'FAILED',
-              completedAt: new Date(),
-              errorMessage: 'Tink adgangstoken udløbet — gen godkendelse påkrævet',
-              errorCode: 'TOKEN_EXPIRED',
-            },
-          });
-
-          return { error: 'TINK_REAUTH_REQUIRED', needsReauth: true };
         }
       }
     }
@@ -522,6 +512,41 @@ async function performSync(connectionId: string, userId: string) {
     logger.error('Bank connection sync error:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+    // ─── Detect genuine Tink token-expiry (HTTP 401) ───────────────
+    // The re-auth block above is non-fatal, so we only reach here if the
+    // actual transaction fetch failed. A 401 from Tink means the access
+    // token is truly expired/invalid and the user must re-authorize via
+    // Tink Link. Other errors (network, 5xx, parsing) are treated as
+    // transient sync failures with retry semantics.
+    const isTinkTokenExpired = connection.provider === 'tink' && (
+      errorMessage.includes('(401)') ||
+      errorMessage.toLowerCase().includes('unauthorized') ||
+      errorMessage.toLowerCase().includes('invalid_token') ||
+      errorMessage.toLowerCase().includes('access token')
+    );
+
+    if (isTinkTokenExpired) {
+      await db.bankConnectionSync.update({
+        where: { id: sync.id },
+        data: {
+          status: 'FAILED',
+          completedAt: new Date(),
+          errorMessage: 'Tink adgangstoken udløbet — gen godkendelse påkrævet',
+          errorCode: 'TOKEN_EXPIRED',
+        },
+      });
+
+      await db.bankConnection.update({
+        where: { id: connectionId },
+        data: {
+          status: 'PENDING',
+          lastError: 'Tink adgangstoken er udløbet. Gen godkend din bankforbindelse.',
+        },
+      });
+
+      return { error: 'TINK_REAUTH_REQUIRED', needsReauth: true };
+    }
 
     await db.bankConnectionSync.update({
       where: { id: sync.id },
