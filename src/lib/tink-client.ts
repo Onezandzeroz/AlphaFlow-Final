@@ -505,7 +505,9 @@ export async function fetchAccountTransactions(
     params.set('endDate', options.toDate.toISOString().split('T')[0]);
   }
   if (options?.pageSize) {
-    params.set('pageSize', String(Math.min(options.pageSize, 1000)));
+    // Tink v2 API enforces a maximum page size of 100. Requesting more
+    // returns HTTP 400: "Max page size exceeded". Cap here to be safe.
+    params.set('pageSize', String(Math.min(options.pageSize, 100)));
   }
   if (options?.pageToken) {
     params.set('pageToken', options.pageToken);
@@ -565,14 +567,14 @@ export async function fetchAllTransactions(
   do {
     const page = await fetchAccountTransactions(config, accessToken, accountId, {
       ...options,
-      pageSize: 500,
+      pageSize: 100, // Tink v2 max page size
       pageToken,
     });
 
     allTransactions.push(...(page.transactions || []));
     pageToken = page.nextPageToken;
 
-    // Safety: stop after 20 pages (10,000 transactions) to prevent infinite loops
+    // Safety: stop after 100 pages (10,000 transactions) to prevent infinite loops
     if (allTransactions.length > 10000) {
       logger.warn('Tink transaction fetch hit 10k limit, truncating');
       break;
