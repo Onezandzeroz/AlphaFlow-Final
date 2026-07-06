@@ -117,6 +117,7 @@ interface AvailableBank {
   name: string;
   isDemo?: boolean;
   isConfigured?: boolean;
+  providesAccounts?: boolean;
 }
 
 interface AiMatchSummary {
@@ -270,6 +271,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
     bankName: string;
     redirectUrl: string;
     sandboxMode: boolean;
+    providerProvidesAccounts?: boolean;
   } | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
 
@@ -427,7 +429,10 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
   // ── Connect ──
 
   const handleConnect = useCallback(async () => {
-    if (!connectProvider || !connectAccountNumber) {
+    // For Tink (providesAccounts), accountNumber is not needed upfront
+    const selectedBank = availableBanks.find(b => b.id === connectProvider);
+    const needsAccount = !selectedBank?.providesAccounts;
+    if (!connectProvider || (needsAccount && !connectAccountNumber)) {
       toast.error(language === 'da' ? 'Manglende felter' : 'Missing fields', {
         description: language === 'da'
           ? 'Udfyld venligst bank og kontonummer'
@@ -480,6 +485,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
           bankName: result.connection.bankName,
           redirectUrl: result.consentRedirect,
           sandboxMode: result.sandboxMode || false,
+          providerProvidesAccounts: result.providerProvidesAccounts || false,
         });
         setConsentDialogOpen(true);
         await fetchConnections();
@@ -555,13 +561,62 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
         window.open(consentInfo.redirectUrl, 'bank-authorization', 'width=600,height=700');
 
         // Listen for the callback message from the popup
-        const handleMessage = (event: MessageEvent) => {
+        const handleMessage = async (event: MessageEvent) => {
+          // Tink: account selected in the callback page → finalize the connection
+          if (event.data?.type === 'tink-accounts-selected' && consentInfo) {
+            window.removeEventListener('message', handleMessage);
+            setConsentDialogOpen(false);
+
+            const { connectionId, account } = event.data;
+            try {
+              toast.loading(
+                language === 'da' ? 'Tilkobler konto...' : 'Connecting account...',
+                { id: 'tink-connect' }
+              );
+              const response = await fetch('/api/bank-connections/tink-accounts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  connectionId,
+                  accountId: account.id,
+                  accountNumber: account.accountNumber,
+                  iban: account.iban,
+                  accountName: account.name,
+                  bankName: account.bankName,
+                  balance: account.balance,
+                  credentialsId: account.credentialsId,
+                }),
+              });
+              if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.error || 'Kunne ikke tilkoble kontoen');
+              }
+              toast.dismiss('tink-connect');
+              toast.success(
+                language === 'da' ? 'Konto tilkoblet!' : 'Account connected!',
+                {
+                  description: `${account.name || account.type} — ${account.bankName}`,
+                }
+              );
+              setConsentInfo(null);
+              await fetchConnections();
+              onSyncComplete?.();
+            } catch (err: any) {
+              toast.dismiss('tink-connect');
+              toast.error(
+                language === 'da' ? 'Kunne ikke tilkoble konto' : 'Failed to connect account',
+                { description: err.message }
+              );
+            }
+          }
+
+          // Legacy: non-Tink consent callback
           if (event.data?.type === 'bank-consent-complete') {
             window.removeEventListener('message', handleMessage);
             toast.success(language === 'da' ? 'Bankgodkendelse fuldført' : 'Bank authorization completed', {
               description: language === 'da'
-                ? `${consentInfo.bankName} er nu godkendt`
-                : `${consentInfo.bankName} is now authorized`,
+                ? `${consentInfo?.bankName} er nu godkendt`
+                : `${consentInfo?.bankName} is now authorized`,
             });
             setConsentDialogOpen(false);
             setConsentInfo(null);
@@ -1477,7 +1532,21 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
               </Select>
             </div>
 
-            {/* Registration number */}
+            {/* Tink notice: accounts are selected after bank authentication */}
+            {connectProvider === 'tink' && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+              <div className="text-[12px] text-blue-700 dark:text-blue-300 leading-relaxed">
+                <p className="font-medium mb-0.5">{language === 'da' ? 'Tink Open Banking' : 'Tink Open Banking'}</p>
+                <p>{language === 'da'
+                  ? 'Du bliver sendt til Tink, hvor du logger ind med dit bank-ID. Efter godkendelse vælger du hvilken konto der skal synkroniseres med AlphaFlow.'
+                  : 'You\'ll be redirected to Tink where you log in with your bank ID. After authorization, you\'ll select which account to sync with AlphaFlow.'}</p>
+              </div>
+            </div>
+            )}
+
+            {/* Registration number — hidden for Tink (provides accounts after OAuth) */}
+            {connectProvider !== 'tink' && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
                 {language === 'da' ? 'Registreringsnummer' : 'Registration number'}{' '}
@@ -1502,8 +1571,10 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                 {language === 'da' ? '4 cifre' : '4 digits'}
               </p>
             </div>
+            )}
 
-            {/* Account number */}
+            {/* Account number — hidden for Tink */}
+            {connectProvider !== 'tink' && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
                 {language === 'da' ? 'Kontonummer' : 'Account number'}{' '}
@@ -1521,8 +1592,10 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                 className={`font-mono ${autofilledFields.has('accountNumber') ? 'bg-[#0d9488]/5 dark:bg-[#0d9488]/10 border-[#0d9488]/20' : 'bg-gray-50 dark:bg-white/5'}`}
               />
             </div>
+            )}
 
-            {/* IBAN (optional) */}
+            {/* IBAN (optional) — hidden for Tink */}
+            {connectProvider !== 'tink' && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
                 IBAN{' '}
@@ -1542,8 +1615,10 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                 className={`font-mono ${autofilledFields.has('iban') ? 'bg-[#0d9488]/5 dark:bg-[#0d9488]/10 border-[#0d9488]/20' : 'bg-gray-50 dark:bg-white/5'}`}
               />
             </div>
+            )}
 
-            {/* Account name (optional) */}
+            {/* Account name (optional) — hidden for Tink */}
+            {connectProvider !== 'tink' && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">
                 {language === 'da' ? 'Kontonavn' : 'Account name'}{' '}
@@ -1563,6 +1638,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                 className={autofilledFields.has('accountName') ? 'bg-[#0d9488]/5 dark:bg-[#0d9488]/10 border-[#0d9488]/20' : 'bg-gray-50 dark:bg-white/5'}
               />
             </div>
+            )}
 
             {/* Sync frequency */}
             <div className="space-y-2">
@@ -1612,7 +1688,7 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
             </Button>
             <Button
               onClick={handleConnect}
-              disabled={isConnecting || !connectProvider || !connectAccountNumber}
+              disabled={isConnecting || !connectProvider || (connectProvider !== 'tink' && !connectAccountNumber)}
               className="gap-2 bg-[#0d9488] hover:bg-[#0f766e] text-white font-medium"
             >
               {isConnecting ? (
@@ -1796,15 +1872,26 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
               </div>
             )}
 
-            {/* Explanation */}
-            <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
-              <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#0d9488]" />
-              <p className="leading-relaxed">
-                {language === 'da'
-                  ? 'For at oprette forbindelse til din bank, skal du godkende adgang via bankens sikre godkendelsesside (SCA — Strong Customer Authentication). Dette er et krav fra PSD2/EU-lovgivningen for at beskytte dine data.'
-                  : 'To connect to your bank, you must authorize access through the bank\'s secure authorization page (SCA — Strong Customer Authentication). This is required by PSD2/EU legislation to protect your data.'}
-              </p>
-            </div>
+            {/* Explanation — Tink-specific vs generic */}
+            {consentInfo?.providerProvidesAccounts ? (
+              <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#0d9488]" />
+                <p className="leading-relaxed">
+                  {language === 'da'
+                    ? 'Du vil blive sendt til Tink, hvor du logger ind med dit bank-ID (MitID/NemID). Efter godkendelse vælger du hvilken konto der skal synkroniseres med AlphaFlow.'
+                    : 'You\'ll be redirected to Tink where you log in with your bank ID. After authorization, you\'ll select which account to sync with AlphaFlow.'}
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#0d9488]" />
+                <p className="leading-relaxed">
+                  {language === 'da'
+                    ? 'For at oprette forbindelse til din bank, skal du godkende adgang via bankens sikre godkendelsesside (SCA — Strong Customer Authentication). Dette er et krav fra PSD2/EU-lovgivningen for at beskytte dine data.'
+                    : 'To connect to your bank, you must authorize access through the bank\'s secure authorization page (SCA — Strong Customer Authentication). This is required by PSD2/EU legislation to protect your data.'}
+                </p>
+              </div>
+            )}
 
             {/* Consent ID for reference */}
             {consentInfo && (
@@ -1840,7 +1927,9 @@ export function OpenBankingSection({ user, onSyncComplete }: OpenBankingSectionP
                   <Shield className="h-4 w-4" />
                   {consentInfo?.sandboxMode
                     ? (language === 'da' ? 'Godkend (Sandbox)' : 'Authorize (Sandbox)')
-                    : (language === 'da' ? 'Godkend hos bank' : 'Authorize at Bank')}
+                    : consentInfo?.providerProvidesAccounts
+                      ? (language === 'da' ? 'Åbn Tink & vælg konto' : 'Open Tink & select account')
+                      : (language === 'da' ? 'Godkend hos bank' : 'Authorize at Bank')}
                 </>
               )}
             </Button>

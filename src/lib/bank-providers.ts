@@ -2,18 +2,28 @@
  * Bank Provider Abstraction Layer
  *
  * Supports:
- * - Tink API (preferred Open Banking aggregator)
- * - Direct bank APIs (Nordea, Danske Bank, Jyske Bank)
- * - Demo provider for testing
+ * - Tink API (preferred Open Banking aggregator) — FULL integration
+ * - Direct bank APIs (Nordea, Danske Bank, Jyske Bank) — stubs
+ * - Demo provider for testing with synthetic Danish transactions
  *
  * All providers implement the BankProvider interface.
  * OAuth2 + SCA consent flow is handled per-provider.
+ *
+ * Tink integration uses Tink Link for user authentication, Tink API
+ * for account listing and transaction fetching. Requires:
+ *   TINK_CLIENT_ID, TINK_CLIENT_SECRET (and optionally TINK_REDIRECT_URI)
  *
  * IMPORTANT: Real bank providers (Nordea, Danske Bank, etc.) require
  * API credentials to be configured via environment variables. Without
  * credentials, they return a simulated consent flow with status 'pending'
  * and a redirectUrl. They do NOT fall back to demo data.
  */
+
+import {
+  getTinkConfig,
+  buildTinkLinkUrl,
+  fetchAllTransactions,
+} from '@/lib/tink-client';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -47,10 +57,18 @@ export interface BankProvider {
   isDemo: boolean;
   /** Whether this provider has real API credentials configured */
   isConfigured: boolean;
+  /**
+   * Whether this provider handles its own account selection after consent.
+   * Tink returns a list of accounts from the bank — the user picks one
+   * after the OAuth callback, so accountNumber is not needed upfront.
+   */
+  providesAccounts?: boolean;
   initiateConsent(params: {
     registrationNumber: string;
     accountNumber: string;
     iban?: string;
+    /** Connection ID used as OAuth state parameter (for Tink) */
+    connectionId?: string;
   }): Promise<ConsentResult>;
   refreshConsent(params: {
     consentId: string;
@@ -270,14 +288,98 @@ function createRealBankProvider(config: {
   };
 }
 
+// ─── Tink Provider (Full Integration) ────────────────────────────
+
+function createTinkProvider(): BankProvider {
+  const config = getTinkConfig();
+  const isConfigured = config !== null;
+
+  return {
+    name: 'Tink (Open Banking)',
+    id: 'tink',
+    isDemo: false,
+    isConfigured,
+    providesAccounts: true, // Tink returns account list after OAuth
+
+    async initiateConsent(params) {
+      if (!config) {
+        // No credentials configured — fall back to generic sandbox stub
+        // (same as the old createRealBankProvider behavior for unconfigured providers)
+        const consentId = `tink-sandbox-${Date.now()}`;
+        return {
+          consentId,
+          redirectUrl: `/api/bank-connections/consent-callback?consent_id=${consentId}&provider=tink`,
+          status: 'pending',
+          sandboxMode: true,
+        };
+      }
+
+      // Build the Tink Link authorization URL.
+      // The `state` parameter carries the connection ID so the callback
+      // can update the correct BankConnection record.
+      const state = params.connectionId || `tink-${Date.now()}`;
+      const redirectUrl = buildTinkLinkUrl(config, state);
+
+      return {
+        consentId: state,
+        redirectUrl,
+        status: 'pending',
+      };
+    },
+
+    async refreshConsent(params) {
+      if (!config) {
+        return { consentId: params.consentId, status: 'active' };
+      }
+
+      // Attempt to re-authorize via stored credentialsId (refreshToken field)
+      // If the credential is still valid on Tink's side, we can get a new
+      // access token without user interaction.
+      // Note: This requires a currently-valid access_token, which we may not
+      // have. In that case, the user must re-authenticate through Tink Link.
+      // The re-auth flow is handled in the sync route.
+      return {
+        consentId: params.consentId,
+        redirectUrl: buildTinkLinkUrl(config, params.consentId),
+        status: 'pending',
+      };
+    },
+
+    async fetchTransactions(params) {
+      if (!config) {
+        throw new Error(
+          'Tink er ikke konfigureret. Sæt TINK_CLIENT_ID og TINK_CLIENT_SECRET i .env.'
+        );
+      }
+
+      // The accessToken here is the decrypted Tink access_token.
+      // The accountNumber here is the Tink accountId (stored after account selection).
+      const result = await fetchAllTransactions(config, params.accessToken, params.accountNumber, {
+        fromDate: params.fromDate,
+        toDate: params.toDate,
+      });
+
+      // Convert Tink transactions to BankTransaction format
+      const transactions: BankTransaction[] = result.map(tx => ({
+        date: tx.date,
+        description: tx.description || tx.merchantName || '',
+        reference: tx.id,
+        amount: tx.amount,
+        balance: tx.balance ?? 0,
+        currency: tx.currencyCode || 'DKK',
+      }));
+
+      return {
+        transactions,
+        hasMore: false, // fetchAllTransactions handles pagination internally
+      };
+    },
+  };
+}
+
 // ─── Provider Instances ─────────────────────────────────────────────
 
-const TinkProvider = createRealBankProvider({
-  name: 'Tink (Open Banking)',
-  id: 'tink',
-  envKey: 'TINK_CLIENT_ID',
-  authorizeUrl: 'https://link.tink.com/1.0/authorize',
-});
+const TinkProvider = createTinkProvider();
 
 const NordeaProvider = createRealBankProvider({
   name: 'Nordea',
@@ -318,12 +420,13 @@ export function getAllProviders(): BankProvider[] {
   return Array.from(providers.values());
 }
 
-export function getAvailableBanks(): { id: string; name: string; isDemo: boolean; isConfigured: boolean }[] {
+export function getAvailableBanks(): { id: string; name: string; isDemo: boolean; isConfigured: boolean; providesAccounts?: boolean }[] {
   return Array.from(providers.values()).map(p => ({
     id: p.id,
     name: p.name,
     isDemo: p.isDemo,
     isConfigured: p.isConfigured,
+    providesAccounts: p.providesAccounts,
   }));
 }
 

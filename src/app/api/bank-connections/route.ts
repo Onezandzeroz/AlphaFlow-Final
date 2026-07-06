@@ -80,30 +80,7 @@ export const POST = withGuard(
         syncFrequency = 'daily',
       } = body;
 
-      if (!bankName || !provider || !accountNumber) {
-        return NextResponse.json(
-          { error: 'Missing required fields: bankName, provider, accountNumber' },
-          { status: 400 }
-        );
-      }
-
-      
-      // Check for duplicate account
-      const existing = await db.bankConnection.findFirst({
-        where: {
-          ...tenantFilter(ctx),
-          accountNumber,
-        },
-      });
-
-      if (existing) {
-        return NextResponse.json(
-          { error: 'En bankforbindelse med dette kontonummer findes allerede' },
-          { status: 409 }
-        );
-      }
-
-      // Get the provider
+      // Get the provider early to check if it provides accounts (like Tink)
       const bankProvider = getProvider(provider);
       if (!bankProvider) {
         return NextResponse.json(
@@ -112,12 +89,72 @@ export const POST = withGuard(
         );
       }
 
-      // Initiate consent
+      // Tink (and other providers with providesAccounts) don't need accountNumber
+      // upfront — the user selects an account after the OAuth callback.
+      const needsAccountUpfront = !bankProvider.providesAccounts;
+      if (!bankName || !provider || (needsAccountUpfront && !accountNumber)) {
+        return NextResponse.json(
+          { error: 'Missing required fields: bankName, provider' + (needsAccountUpfront ? ', accountNumber' : '') },
+          { status: 400 }
+        );
+      }
+
+      // Check for duplicate account (only for providers that require accountNumber)
+      if (accountNumber) {
+        const existing = await db.bankConnection.findFirst({
+          where: {
+            ...tenantFilter(ctx),
+            accountNumber,
+          },
+        });
+
+        if (existing) {
+          return NextResponse.json(
+            { error: 'En bankforbindelse med dette kontonummer findes allerede' },
+            { status: 409 }
+          );
+        }
+      }
+
+      // Create the connection record first so we have an ID for the OAuth state.
+      // For providers like Tink that provide accounts, we use a placeholder
+      // accountNumber that gets replaced after the user selects an account.
+      const placeholderAccountNumber = bankProvider.providesAccounts
+        ? `pending-${provider}-${Date.now()}`
+        : accountNumber;
+
+      const connection = await db.bankConnection.create({
+        data: {
+          bankName,
+          provider,
+          registrationNumber: registrationNumber || null,
+          accountNumber: placeholderAccountNumber,
+          iban: iban || null,
+          accountName: accountName || null,
+          syncFrequency,
+          status: 'PENDING',
+          consentId: null, // Will be set by initiateConsent below
+          consentExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+          nextSyncAt: null, // No auto-sync until fully authorized
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId!,
+        },
+      });
+
+      // Initiate consent — pass the connectionId so Tink can use it as OAuth state
       const consentResult = await bankProvider.initiateConsent({
         registrationNumber: registrationNumber || '',
-        accountNumber,
+        accountNumber: placeholderAccountNumber,
         iban,
+        connectionId: connection.id,
       });
+
+      // Update the connection with the consentId from the provider
+      await db.bankConnection.update({
+        where: { id: connection.id },
+        data: { consentId: consentResult.consentId },
+      });
+      connection.consentId = consentResult.consentId;
 
       // Calculate next sync time
       const now = new Date();
@@ -128,30 +165,20 @@ export const POST = withGuard(
         nextSyncAt.setDate(nextSyncAt.getDate() + 1);
         nextSyncAt.setHours(6, 0, 0, 0); // 6 AM next day
       }
-      // manual = no auto sync
 
-      // For real banks with pending consent, don't schedule auto-sync until authorized
       const isActiveConsent = consentResult.status === 'active';
       const effectiveNextSyncAt = isActiveConsent && syncFrequency !== 'manual' ? nextSyncAt : null;
 
-      const connection = await db.bankConnection.create({
+      // Update the connection with the consent result
+      await db.bankConnection.update({
+        where: { id: connection.id },
         data: {
-          bankName,
-          provider,
-          registrationNumber: registrationNumber || null,
-          accountNumber,
-          iban: iban || null,
-          accountName: accountName || null,
-          syncFrequency,
           status: isActiveConsent ? 'ACTIVE' : 'PENDING',
-          consentId: consentResult.consentId,
-          consentExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days default
           accessToken: consentResult.consentId ? encryptOrNull(consentResult.consentId) : null,
           nextSyncAt: effectiveNextSyncAt,
-          userId: ctx.id,
-          companyId: ctx.activeCompanyId!,
         },
       });
+      connection.status = isActiveConsent ? 'ACTIVE' : 'PENDING';
 
       await auditCreate(
         ctx.id,
@@ -160,7 +187,7 @@ export const POST = withGuard(
         {
           bankName,
           provider,
-          accountNumber,
+          accountNumber: placeholderAccountNumber,
           status: connection.status,
         },
         requestMetadata(request),
@@ -179,9 +206,10 @@ export const POST = withGuard(
       }
 
       // For real banks: return the consent redirect URL
-      // Include connection_id in the redirect so the callback can update the connection
+      // For Tink, the redirect URL already has the connection ID in the state param,
+      // so we don't need to append connection_id to the URL.
       let consentRedirect = consentResult.redirectUrl || null;
-      if (consentRedirect && !consentRedirect.includes('connection_id')) {
+      if (consentRedirect && !bankProvider.providesAccounts && !consentRedirect.includes('connection_id')) {
         const separator = consentRedirect.includes('?') ? '&' : '?';
         consentRedirect = `${consentRedirect}${separator}connection_id=${connection.id}`;
       }
@@ -191,6 +219,7 @@ export const POST = withGuard(
           connection,
           consentRedirect,
           sandboxMode: consentResult.sandboxMode || false,
+          providerProvidesAccounts: bankProvider.providesAccounts || false,
         },
         { status: 201 }
       );
@@ -247,8 +276,60 @@ async function performSync(connectionId: string, userId: string) {
     const fromDate = connection.lastSyncAt || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const toDate = new Date();
 
+    let accessToken = decryptToken(connection.accessToken);
+
+    // ─── Tink token refresh ─────────────────────────────────────
+    // Tink access tokens expire in ~30 minutes. If the token is likely
+    // expired, attempt to re-authorize via the stored credentialsId.
+    if (connection.provider === 'tink' && accessToken) {
+      const { isTokenLikelyExpired, getTinkConfig, reauthorizeCredential, exchangeCodeForToken } = await import('@/lib/tink-client');
+      const tinkConfig = getTinkConfig();
+
+      if (tinkConfig && isTokenLikelyExpired(connection.lastSyncAt)) {
+        logger.info('Tink token likely expired, attempting re-authorization', { connectionId });
+        try {
+          const credentialsId = decryptToken(connection.refreshToken);
+          if (credentialsId && accessToken) {
+            const newCode = await reauthorizeCredential(tinkConfig, accessToken, credentialsId);
+            const newToken = await exchangeCodeForToken(tinkConfig, newCode);
+            accessToken = newToken.access_token;
+
+            // Store the fresh token
+            await db.bankConnection.update({
+              where: { id: connectionId },
+              data: { accessToken: encryptOrNull(newToken.access_token) },
+            });
+
+            logger.info('Tink token re-authorized successfully', { connectionId });
+          }
+        } catch (reauthError) {
+          // Re-authorization failed — mark connection as needing user re-auth
+          logger.warn('Tink re-authorization failed, marking for re-auth', {
+            connectionId,
+            error: reauthError instanceof Error ? reauthError.message : 'Unknown',
+          });
+          await db.bankConnection.update({
+            where: { id: connectionId },
+            data: { status: 'PENDING', lastError: 'Tink adgangstoken er udløbet. Gen godkend din bankforbindelse.' },
+          });
+
+          await db.bankConnectionSync.update({
+            where: { id: sync.id },
+            data: {
+              status: 'FAILED',
+              completedAt: new Date(),
+              errorMessage: 'Tink adgangstoken udløbet — gen godkendelse påkrævet',
+              errorCode: 'TOKEN_EXPIRED',
+            },
+          });
+
+          return { error: 'TINK_REAUTH_REQUIRED', needsReauth: true };
+        }
+      }
+    }
+
     const result = await provider.fetchTransactions({
-      accessToken: decryptToken(connection.accessToken),
+      accessToken,
       accountNumber: connection.accountNumber,
       fromDate,
       toDate,
