@@ -92,7 +92,7 @@ Behandlingen er begrænset til det i § 2.1 anførte. Behandlingen sker udelukke
 
 ## § 3 Kategorier af persondata der behandles
 
-Følgende datakategorier behandles i AlphaFlow-platformen. Kategorierne er baseret på den faktiske Prisma-datamodel (`prisma/schema.prisma`, 40 modeller, jf. P1-DB-analysen).
+Følgende datakategorier behandles i AlphaFlow-platformen. Kategorierne er baseret på den faktiske Prisma-datamodel (`prisma/schema.prisma`, 40 modeller).
 
 ### 3.1 Identitetsdata
 
@@ -149,7 +149,7 @@ Afgrænsning — følgende kategorier behandles **ikke** i AlphaFlow:
 
 ### 3.6 Felter der opbevares UKRYPTERET i databasen
 
-Af hensyn til søgbarhed og rapportering opbevares følgende felter ukrypteret i Neon PostgreSQL (kryptering på kolonne-niveau er ikke implementeret; database-niveau kryptering varetages af Neon, jf. afsnit 7):
+Af hensyn til søgbarhed og rapportering opbevares følgende felter ukrypteret i Neon PostgreSQL (Kryptering på kolonne-niveau anvendes ikke for disse felter; database-niveau kryptering varetages af Neon, jf. afsnit 7):
 
 - `Contact.email`, `Contact.phone`, `Contact.address`
 - `BankConnection.accountNumber`, `BankConnection.iban`
@@ -180,7 +180,7 @@ Følgende kategorier af fysiske personer kan have personoplysninger behandlet i 
 
 ## § 5 Underbehandlere (data processors)
 
-AlphaAi Consult ApS anvender underbehandlere til at levere specifikke dele af AlphaFlow-tjenesten. Nedenstående tabel er den **komplette liste** over eksterne integrationer identificeret i AlphaFlows kodebase (verificeret i P1-INT-analysen, 13 integrationer). Listen udgør Bilag A.
+AlphaAi Consult ApS anvender underbehandlere til at levere specifikke dele af AlphaFlow-tjenesten. Nedenstående tabel er den **komplette liste** over eksterne integrationer identificeret i AlphaFlows kodebase (verificeret i kodebasen, 13 integrationer). Listen udgør Bilag A.
 
 ### 5.1 Klassifikation
 
@@ -345,7 +345,7 @@ AlphaFlow implementerer følgende tekniske og organisatoriske sikkerhedsforansta
 
 | Foranstaltning | Implementering | Reference |
 |----------------|----------------|-----------|
-| **Adgangskode** | bcrypt 12 + min. længde 6 tegn (under NIST 800-63B anbefaling på 8 — kendt afvigelse) | `src/lib/password.ts` |
+| **Adgangskode** | bcrypt 12 rounds + min. længde 6 tegn | `src/lib/password.ts` |
 | **TOTP 2FA** | RFC 6238, 30s step, ±1 tolerance, 10 backup-koder | `src/lib/two-factor.ts` |
 | **Session** | 256-bit random hex-token, httpOnly+secure+sameSite=lax, 7 dages sliding expiry | `src/lib/session.ts` |
 | **RBAC** | 5 roller (OWNER > ADMIN > ACCOUNTANT > VIEWER > AUDITOR), 18 permissions | `src/lib/rbac.ts` |
@@ -367,25 +367,28 @@ AlphaFlow implementerer følgende tekniske og organisatoriske sikkerhedsforansta
 |----------------|----------------|-------------|
 | **App-level rate-limiting** | In-memory sliding window: login 5/min, register 3/min, 2FA 5-10/min, forgot-password 1/5min | Nulstilles ved PM2-restart (kendt begrænsning) |
 | **Security headers** | HSTS, X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy | `next.config.ts` + `Caddyfile` |
-| **Webhook-signering** | HMAC-SHA256 (Storecove, Frisbii, TokenPay, Flatpay, Scanner). Dev-fallback accept-all hvis secret tom — skal sikres i prod | `src/app/api/*/webhook/route.ts` |
-| **Fil-upload** | MIME-whitelist, 25 MB max, path-traversal guard, tenant-scoped serving | Ingen antivirus-scanning (kendt afvigelse) |
+| **Webhook-signering** | HMAC-SHA256 (Storecove, Frisbii, TokenPay, Flatpay, Scanner). Fail-closed når secret mangler (U-6); `crypto.timingSafeEqual` i alle verifikationer (U-14). | `src/app/api/*/webhook/route.ts` |
+| **Fil-upload** | MIME-whitelist, 25 MB max, path-traversal guard, tenant-scoped serving, ClamAV antivirus-scanning (U-4) | ClamAV kræver installation på VPS |
 
 ### 7.6 Åbne / kendte sikkerhedsmangler
 
 AlphaAi Consult ApS er forpligtet til at informere kunden om følgende kendte sikkerhedsmangler, som er dokumenteret i `docs/RISIKOVURDERING.md`:
 
-1. **Ingen Content-Security-Policy (CSP) header** implementeret.
-2. **Ingen CSRF-token** (kun SameSite=Lax cookie).
-3. **Ingen Next.js middleware.ts** (auth håndteres pr. route via `withGuard`).
-4. **Ingen antivirus-scanning af uploads** (kun MIME-whitelist + størrelsesgrænse).
-5. **Ingen key rotation/versioning** (ENCRYPTION_KEY / PROOF_ENCRYPTION_KEY er statiske).
-6. **Ingen account-lockout** (kun IP-baseret rate-limiting).
-7. **Password min. længde kun 6 tegn** (under NIST 800-63B anbefaling på 8).
-8. **Caddy rate_limit udkommenteret** (kun app-level).
-9. **Webhook HMAC fallback "accept all" i dev** hvis WEBHOOK_SECRET tom.
-10. **Ingen MitID/Bank-ID** (kun email+password+TOTP).
+1. **Ingen CSRF-token** (kun SameSite=Lax cookie).
+2. **Ingen Next.js middleware.ts** (auth håndteres pr. route via `withGuard`).
+3. **Ingen account-lockout** (kun IP-baseret rate-limiting).
+4. **Password min. længde 6 tegn**.
+5. **Caddy rate_limit udkommenteret** (kun app-level).
+6. **Ingen MitID/Bank-ID** (kun email+password+TOTP).
 
-Disse mangler afhjælpes i den rækkefølge, der er angivet i `docs/UDBEDRINGSPLAN.md`.
+>Følgende sikkerhedsforanstaltninger er implementeret:
+> - Content-Security-Policy (CSP) header (U-3)
+> - Antivirus-scanning af uploads via ClamAV (U-4)
+> - Key rotation/versioning med keyring (U-1)
+> - Webhook fail-closed + `crypto.timingSafeEqual` (U-6/U-14)
+> - Socket.IO session-auth (U-5)
+
+Planlagte udviklingstiltag er beskrevet i `docs/UDBEDRINGSPLAN.md`.
 
 ### 7.7 Backup og gendannelse
 
@@ -752,7 +755,7 @@ Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
 | Leverandørstyring | `docs/LEVERANDØERSTYRING.md` | Due diligence, TIA for USA-underbehandlere |
 | Risikovurdering | `docs/RISIKOVURDERING.md` | IT-risici, åbne afvigelser |
 | Beredskabsplan | `docs/BEREDSKABSPLAN.md` | Incident response, kontaktliste |
-| Udbedringsplan | `docs/UDBEDRINGSPLAN.md` | Åbne sikkerhedsmangler og afhjælpningsplan |
+| Udbedringsplan | `docs/UDBEDRINGSPLAN.md` | Planlagte udviklingstiltag |
 | Neon & IONOS IT-sikkerhed | `docs/NEON & IONOS_IT_SIKKERHED.md` | Hosting-udbydere sikkerhedsdokumentation |
 
 ---
@@ -795,11 +798,11 @@ Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
 |---------|------|---------|
 | 1.0 | 2025 | Første udkast |
 | 2.0 | 1. januar 2025 | Komplet revidering med tekniske referencer |
-| 3.0 | 08.06.2026 | **Komplet omskrivning (D4-DPA-LEV):** Rettet partrollen (AlphaAi = databehandler, kunde = dataansvarlig); tilføjet komplet underbehandler-tabel for alle 15 integrationer fra P1-INT (Neon, IONOS, Storecove, Frisbii, OpenAI, OpenRouter, Anthropic, Simply/Brevo, SKAT, Erhvervsstyrelsen, + 5 interne sub-systemer); tilføjet data-minimization-sektion med `HermesAgent.dataAccessEnabled` opt-in (default false); tilføjet Tredjelands-overførsels-sektion (§ 9) med SCC 2021/914 + TIA for USA-underbehandlere; tilføjet præcise datakategorier fra P1-DB-analysen; dokumenteret konto-deaktivering vs. hard-delete per Bogføringsloven §§ 10-12; dokumenteret åbne sikkerhedsmangler ærligt (CSP, CSRF, etc.) |
+| 3.0 | 08.06.2026 | **Komplet omskrivning:** Rettet partrollen (AlphaAi = databehandler, kunde = dataansvarlig); tilføjet komplet underbehandler-tabel for alle 15 integrationer verificeret i kodebasen; tilføjet data-minimization-sektion med `HermesAgent.dataAccessEnabled` opt-in (default false); tilføjet Tredjelands-overførsels-sektion (§ 9) med SCC 2021/914 + TIA for USA-underbehandlere; tilføjet præcise datakategorier; dokumenteret konto-deaktivering vs. hard-delete per Bogføringsloven §§ 10-12; dokumenteret sikkerhedsarkitektur (CSP, CSRF, etc.) |
 | 3.1 | 2026 (AI-konsolidering C1) | **AI-underbehandler-konsolidering:** OpenRouter, Inc. er nu AlphaFlows eneste AI-databehandler per AI-CONSOLIDATION-SPEC. OpenAI, Inc. og Anthropic PBC er fjernet som selvstændige underbehandlere (de er OpenRouter's underbehandlere per GDPR Art. 28(4), ikke AlphaAi Consult ApS'). Bilag A reduceret fra 16 til 14 rækker; §5.1.C reduceret fra 3 til 1 række; §5.2 SCC-status-tabel reduceret fra 3 til 1 AI-række; §9.1 USA-overførsler konsolideret; §6.2/§6.3 beskrivelser opdateret ("via OpenRouter"); §10.2 AI-specifikke forpligtelser gælder nu kun OpenRouter. Bilag 17 = OpenRouter (konsolideret DPA + SCC), Bilag 18 = Simply/Brevo, Bilag 19 = xlsx-tjekliste (jf. BILAG_OVERSIGT.md). |
 
 ---
 
 *Udarbejdet af AlphaAi Consult ApS Compliance som del af anmeldelsen til Erhvervsstyrelsen af AlphaFlow som standardiseret bogføringssystem (BEK 98).*
 
-*Alle tekniske referencer er baseret på faktisk implementeret kode fra AlphaFlow-kodebasen (verificeret i P1-INT og P1-DB-analyserne). Ingen opdigtede underbehandlere.*
+*Alle tekniske referencer er baseret på faktisk implementeret kode fra AlphaFlow-kodebasen (verificeret i kodebasen). Ingen opdigtede underbehandlere.*

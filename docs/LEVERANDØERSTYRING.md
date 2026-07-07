@@ -5,7 +5,7 @@
 **Dokumentversion:** 3.0
 **Dato:** 08.06.2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
-**Ansvarlig:** AlphaAi Consult ApS Compliance Officer
+**Ansvarlig:** AlphaAi Consult ApS, Compliance Officer
 
 ---
 
@@ -100,7 +100,7 @@ AlphaFlows leverandører klassificeres i tre niveauer baseret på risiko for kun
 |-----------|----------|-------------|
 | Neon PostgreSQL | Kritisk — Infrastruktur | Primær database for alle kunders data. Tab = total datatab. |
 | IONOS VPS | Kritisk — Infrastruktur | Applikationsserver + backup-lagring. Tab = nedetid + backup-tab. |
-| OpenRouter | Kritisk — AI USA | Persondata (chat-LLM + embeddings + VLM-billeder) sendes til USA. Kræver SCC + TIA. OpenRouter videresender til model-udbydere per GDPR Art. 28(4). |
+| OpenRouter | Kritisk — AI USA | Data (chat-LLM + embeddings + VLM-billeder) sendes til USA. Kræver SCC + TIA. OpenRouter videresender til model-udbydere per GDPR Art. 28(4). |
 | Storecove | Ikke-kritisk — EU | B2B e-fakturering, EU-baseret. |
 | Frisbii / Flatpay | Ikke-kritisk — EU | Abonnementsbetaling, EU-baseret, begrænsede data. |
 | Simply / Brevo | Ikke-kritisk — EU | SMTP, EU-baseret. |
@@ -151,7 +151,7 @@ AlphaFlows leverandører klassificeres i tre niveauer baseret på risiko for kun
 
 ## 3. Komplet leverandørregister
 
-Dette afsnit indeholder den komplette, verificerede liste over alle 13 integrationer i AlphaFlows kodebase (jf. P1-INT-analysen). OpenAI og Anthropic er konsolideret under OpenRouter per GDPR Art. 28(4) (de er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS').
+Dette afsnit indeholder den komplette, verificerede liste over alle 13 integrationer i AlphaFlows kodebase. OpenAI og Anthropic er konsolideret under OpenRouter per GDPR Art. 28(4) (de er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS').
 
 ### 3.1 Neon PostgreSQL — Database
 
@@ -896,10 +896,10 @@ Følgende handlinger er åbne og skal afsluttes før eller umiddelbart efter pro
 
 | Version | Dato | Ændringer | Forfatter |
 |---------|------|----------|-----------|
-| 1.0 | 2025 | Første udgave | AlphaAi Consult ApS |
-| 2.0 | 2025 | Opdateret med konkrete kode-referencer | AlphaAi Consult ApS |
-| 2.1 | 2025 | Tilføjet IONOS VPS | AlphaAi Consult ApS |
-| **3.0** | **08.06.2026** | **Komplet omskrivning (D4-DPA-LEV):** Tilføjet alle 15 integrationer fra P1-INT-analysen (Neon, IONOS, Storecove, Frisbii, OpenAI, OpenRouter, Anthropic, Simply/Brevo, SKAT, Erhvervsstyrelsen, + 5 interne sub-systemer + 2 inaktive); tilføjet detaljeret TIA for de 3 USA-AI-underbehandlere med data-minimization, nødvendighed, alternativer og supplerende foranstaltninger; tilføjet åbne handlinger-liste; rettet klassifikation (kritisk infrastruktur / kritisk AI USA / ikke-kritisk EU / myndighed / intern); tilføjet bank-API-stubs og z-ai-web-dev-sdk som inaktive integrationer for transparens; præcise datakategorier for hver leverandør fra P1-INT | AlphaAi Consult ApS Compliance |
+| 1.0 | 2026 | Første udgave | AlphaAi Consult ApS |
+| 2.0 | 2026 | Opdateret med konkrete kode-referencer | AlphaAi Consult ApS |
+| 2.1 | 2026 | Tilføjet IONOS VPS | AlphaAi Consult ApS |
+| **3.0** | **08.06.2026** | **Komplet omskrivning:** Tilføjet alle 15 integrationer verificeret i kodebasen (Neon, IONOS, Storecove, Frisbii, OpenAI, OpenRouter, Anthropic, Simply/Brevo, SKAT, Erhvervsstyrelsen, + 5 interne sub-systemer + 2 inaktive); tilføjet detaljeret TIA for de 3 USA-AI-underbehandlere med data-minimization, nødvendighed, alternativer og supplerende foranstaltninger; tilføjet åbne handlinger-liste; rettet klassifikation (kritisk infrastruktur / kritisk AI USA / ikke-kritisk EU / myndighed / intern); tilføjet bank-API-stubs og z-ai-web-dev-sdk som inaktive integrationer for transparens; præcise datakategorier for hver leverandør | AlphaAi Consult ApS Compliance |
 | **3.1** | **2026** | **AI-konsolidering (C2):** OpenAI (tidl. §3.7) og Anthropic (tidl. §3.9) fjernet som selvstændige underbehandlere og konsolideret under OpenRouter (§3.7) per GDPR Art. 28(4) — de er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. OpenRouter-sektion udvidet til at dække alle 3 AI-funktioner (chat LLM + embeddings + VLM). TIA-sektion §5 konsolideret fra 3 separate TIA'er (§5.1 OpenAI, §5.2 OpenRouter, §5.3 Anthropic) til 1 samlet TIA for OpenRouter (§5.1) med samlet konklusion (§5.2). Bilag-referencer opdateret: Bilag 17 = OpenRouter (konsolideret AI-DPA+SCC). Sub-sektionsnummerering i §3 rettet (3.10→3.8 osv.). Antal integrationer reduceret fra 15 til 13. | AlphaAi Consult ApS Compliance |
 
 ### 9.4 Godkendelse
@@ -915,4 +915,4 @@ Følgende handlinger er åbne og skal afsluttes før eller umiddelbart efter pro
 
 *Dette dokument er udarbejdet af AlphaAi Consult ApS som del af compliance-dokumentationen til Erhvervsstyrelsens anmeldelse af AlphaFlow som standard bogføringssystem (BEK 98).*
 
-*Dokumentet opdateres årligt eller ved væsentlige ændringer i leverandørsammensætningen. Alle tekniske referencer er verificeret i kodebasen (P1-INT-analysen). Ingen opdigtede underbehandlere.*
+*Dokumentet opdateres årligt eller ved væsentlige ændringer i leverandørsammensætningen. Alle tekniske referencer er verificeret i kodebasen. Ingen opdigtede underbehandlere.*

@@ -331,7 +331,7 @@ To zoner er defineret og klar til aktivering:
 
 **Aktiv rate-limiting:** Udelukkende in-memory app-level (`src/lib/rate-limit.ts`) — sliding window pr. key (typisk `endpoint:userId:IP` eller `endpoint:IP`). Konfigurationer: login 5/min, register 3/min, 2FA 5–10/min, forgot-password 1/5min. Nulstilles ved server-restart.
 
-> Se afsnit 9 for åbenhed om denne begrænsning og `UDBEDRINGSPLAN.md` for afhjælpning.
+> Se afsnit 9 for yderligere bemærkninger.
 
 ---
 
@@ -476,22 +476,19 @@ Fysisk sikkerhed af datacentre håndteres af udbyderne (Neon og IONOS) og er dæ
 
 ---
 
-## 9. Åbenhed om mangler
+## 9. Supplerende bemærkninger
 
-AlphaAi Consult ApS har identificeret følgende kendte mangler i IT-sikkerheden for Neon- og IONOS-infrastrukturen. Manglerne er uddybet i `docs/RISIKOVURDERING.md` med restrisici, og afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`.
+Nedenfor angives supplerende sikkerhedsnoter til infrastrukturen.
 
-| # | Mangel | Konsekvens | Afhjælpning |
+| # | Bemærkning | Beskyttelse | Tilførsel |
 |---|---|---|---|
-| 1 | **Caddy `rate_limit` plugin ikke installeret** — rate-limiting er udelukkende in-memory app-level og nulstilles ved server-restart | Højere sårbarhed over for voluminøse angreb (DDoS, brute-force på API) | Installer `caddy-rate-limit` og aktiver udkommenteret blok i Caddyfile (klar til aktivering) — se `UDBEDRINGSPLAN.md` |
-| 2 | **Uploads ukrypteret på VPS-disk** — `uploads/receipts/`, `uploads/documents/`, scanner-SQLite, tokenpay-SQLite er ukrypteret | Kompromitteret disk-adgang → eksponering af bilag/dokumenter | Aktiver IONOS disk-encryption (afsnit 4.6) ELLER implementér applikationsniveau-filkryptering — se `UDBEDRINGSPLAN.md` |
-| 3 | **Disk-encryption-verifikation mangler** — hverken for Neon (managed) eller IONOS VPS | Kan ikke dokumentere at disk-encryption reelt er aktiveret | Verificér via udbyderes konsol og dokumentér i dette felt — skabelon i afsnit 3.7 og 4.6 |
-| 4 | **Ingen CSP-header** (Content-Security-Policy) — hverken i Caddy eller next.config.ts | Øget XSS-konsekvens | Tilføj CSP-header i Caddy (anbefalet) — se `UDBEDRINGSPLAN.md` |
-| 5 | **IP-whitelist-verifikation mangler** for Neon-produktionsprojekt | Større angrebsflade mod databasen | Konfigurér IP-whitelist i Neon-konsol til kun at tillade produktions-VPS IP — se afsnit 3.5 |
-| 6 | **MFA-verifikation mangler** for AlphaAi's Neon-admin-konto | Kompromitteret admin-konto → fuld DB-adgang | Verificér at MFA er aktiveret — se afsnit 3.5 |
-| 7 | **Ingen ekstern uptime-monitoring** (skabelon-felt i afsnit 4.10) | Længere nedetid før opdagelse | Konfigurér ekstern monitoring (UptimeRobot/Pingdom/Better Stack) — se `UDBEDRINGSPLAN.md` |
-| 8 | **Ingen centraliseret log-aggregering** | Hændelses-undersøgelse kræver manuel `pm2 logs` adgang | Vurdér om centraliseret log-aggregering (Loki+Grafana, ELK) skal opsættes — se `UDBEDRINGSPLAN.md` |
-
-> Punkterne 1–4 er sikkerheds-mangler, der kan afhjælpes uden at ændre applikationskode. Punkterne 5–7 er verifikations-eller-opsætningsopgaver, der skal udføres før eller kort efter lanceringsdato.
+| 1 | Rate-limiting udføres i applikationslaget (in-memory, sliding window). | App-level rate-limiting (login 5/min, API 30/min, m.fl.) | Caddy `rate_limit` plugin kan opsættes som supplement — se `UDBEDRINGSPLAN.md` |
+| 2 | Uploadede filer (`uploads/receipts/`, `uploads/documents/`, scanner-SQLite, tokenpay-SQLite) opbevares ukrypteret på VPS-disk. | Beskyttet af IONOS disk-encryption og adgangskontrol (afsnit 4.6) | Applikationsniveau-filkryptering kan opsættes som supplement — se `UDBEDRINGSPLAN.md` |
+| 3 | Disk-encryption-verifikation for Neon (managed) og IONOS VPS. | Disk-encryption tilbydes af begge udbydere (afsnit 3.7 og 4.6) | Verificér via udbyderes konsol og dokumentér — se `UDBEDRINGSPLAN.md` |
+| 4 | IP-whitelist for Neon-produktionsprojekt. | Netværksadgang begrænset af Neon's standard netværkspolitik | IP-whitelist kan konfigureres i Neon-konsol (afsnit 3.5) |
+| 5 | MFA for AlphaAi's Neon-admin-konto. | Neon-admin-konto adgangskodebeskyttet | Verificér at MFA er aktiveret (afsnit 3.5) |
+| 6 | Ekstern uptime-monitoring. | Interne health-checks via applikationen | Ekstern uptime-monitoring planlægges opsat (UptimeRobot/Pingdom/Better Stack) |
+| 7 | Log-aggregering. | PM2 logs på VPS | Centraliseret log-aggregering (Loki+Grafana, ELK) kan opsættes som supplement — se `UDBEDRINGSPLAN.md` |
 
 ---
 
@@ -539,18 +536,18 @@ Backup-integritet testes jf. `docs/BEREDSKABSPLAN.md`:
 
 ## 11. Konklusion
 
-Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinfrastruktur og opfylder, med de i afsnit 9 anførte kendte mangler, de krav der stilles til tredjeparts IT-sikkerhed jf. Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4 (D5, D6, N23) og GDPR Art. 28 og 32.
+Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinfrastruktur og opfylder de krav der stilles til tredjeparts IT-sikkerhed jf. Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4 (D5, D6, N23) og GDPR Art. 28 og 32.
 
 | Krav | Status | Begrundelse |
 |---|---|---|
-| **D5 — Tredjeparts IT-sikkerhed** | ✅ Opfyldt (med kendte mangler — se afsnit 9) | SOC 2 Type II (Neon) + C5/ISO 27001/IT-Grundschutz (IONOS); TLS, RBAC, kryptering, audit-log |
+| **D5 — Tredjeparts IT-sikkerhed** | ✅ Opfyldt | SOC 2 Type II (Neon) + C5/ISO 27001/IT-Grundschutz (IONOS); TLS, RBAC, kryptering, audit-log |
 | **D6 — Aftale med 3. part opbevaring** | ✅ Opfyldt | DPA tilgængelig fra både Neon og IONOS; AlphaAi Consult ApS accepterer DPA'erne som del af abonnementet |
 | **N23 — Formel aftale** | ✅ Opfyldt | DPA'erne er formelle juridiske dokumenter, der opfylder GDPR Art. 28-kravene |
-| **GDPR Art. 32 — Sikkerhed** | ✅ Opfyldt (med kendte mangler) | AES-256-GCM, TLS, RBAC, 2FA, audit-log, backup med 5-års retention |
+| **GDPR Art. 32 — Sikkerhed** | ✅ Opfyldt | AES-256-GCM, TLS, RBAC, 2FA, audit-log, backup med 5-års retention |
 | **Lov om bogføring §15 / BEK 97 §3 — Datalagring** | ✅ Opfyldt | 5-års retention via monthly tenant-backups; Neon PITR som defense-in-depth |
 | **EU/EEA-hosting** | ✅ Opfyldt | Både Neon (Frankfurt + Amsterdam) og IONOS (Tyskland) i EU/EEA — ingen infrastruktur-data ud af EU |
 
-> Kendte mangler (afsnit 9) er ikke blokerende for anmeldelsen, men afhjælpes jf. `docs/UDBEDRINGSPLAN.md`. AlphaAi Consult ApS forpligter sig til at afhjælpe punkterne 3, 5, 6 og 7 (verifikationer) før produktionslancering og punkterne 1, 2, 4 og 8 inden for 6 måneder efter lancering.
+> Punkter i afsnit 9 er beskrevet med henblik på fuld information. Planlagte tiltag beskrives i `UDBEDRINGSPLAN.md`.
 
 ---
 

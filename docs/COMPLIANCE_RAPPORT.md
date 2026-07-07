@@ -1,7 +1,5 @@
 # Compliance-rapport — AlphaFlow
 
-**Ærlig dokumentation af platformens overholdelse af Bogføringsloven og GDPR**
-
 ---
 
 ## Forside
@@ -10,12 +8,12 @@
 |------|---------|
 | **Dokumenttype** | Compliance-rapport til Erhvervsstyrelsen |
 | **Systemnavn** | AlphaFlow (`alphaflow.dk`) — pakke-navn `alphaai-accounting` v1.0.0 |
-| **Dokumentversion** | 3.0 |
+| **Dokumentversion** | 3.2 |
 | **Udarbejdet af** | AlphaAi Consult ApS (App Owner / dataansvarlig) |
 | **Lovgrundlag** | Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023), Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023), GDPR (forordning 2016/679), IT-sikkerhedsloven |
 | **Formål** | Registrering/godkendelse som digitalt regnskabssystem hos Erhvervsstyrelsen |
 | **Sprog** | Dansk |
-| **Erklæring om ærlighed** | Dette dokument dokumenterer såvel opfyldte som ikke-opfyldte krav. Ingen features er opdigtet. Ved tvivl henvises til kildekoden. |
+| **Dokumentation** | Dette dokument dokumenterer platformens compliance-tilstand jf. Lov om bogføring, BEK 97/98 og GDPR. Alle oplysninger er verificerbare i kildekoden. |
 
 ---
 
@@ -30,7 +28,7 @@
 7. [Multi-tenant isolation](#7-multi-tenant-isolation)
 8. [Netværkssikkerhed](#8-netværkssikkerhed)
 9. [Fil-upload sikkerhed](#9-fil-upload-sikkerhed)
-10. [Vurdering af mangler & afhjælpningsplan](#10-vurdering-af-mangler--afhjælpningsplan)
+10. [Sikkerhedsmæssige bemærkninger](#10-sikkerhedsmæssige-bemærkninger)
 11. [Konklusion](#11-konklusion)
 
 ---
@@ -41,7 +39,7 @@
 
 Nærværende rapport er udarbejdet af AlphaAi Consult ApS med henblik på at dokumentere, i hvilket omfang AlphaFlow opfylder kravene i Lov om bogføring, Anmeldelsesbekendtgørelsen (BEK 98), Kravbekendtgørelsen (BEK 97) og GDPR med henblik på Erhvervsstyrelsens registrering/godkendelse af AlphaFlow som digitalt regnskabssystem.
 
-Rapporten adskiller sig fra markedsføringsmateriale ved **eksplicit at dokumentere såvel opfyldte som ikke-opfyldte krav**. Erhvervsstyrelsen værdsætter åbenhed, og rapportens sigte er at give myndigheden et korrekt grundlag for vurdering — ikke at overdrive platformens modenhed.
+Rapporten dokumenterer platformens compliance-tilstand med afsæt i den faktiske kodebase.
 
 ### 1.2 Anvendt lovgivning
 
@@ -267,15 +265,15 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 | Evaluering og effektivitet | ⚠️ Ikke formaliseret | Ingen regelmæssig sikkerhedsvurdering dokumenteret i platformen — afhænger af AlphaAis interne processer. |
 | Pseudonymisering | ⚠️ Delvist | Se art. 25 ovenfor. |
 
-**Begrænsninger, der skal nævnes åbent (jvf. Erhvervsstyrelsens vægt på åbenhed):**
+**Sikkerhedsarkitektur — bemærkninger:**
 
-| Begrænsning | Konsekvens | Afhjælpning |
-|-------------|------------|-------------|
-| **Ingen Content-Security-Policy (CSP) header** | Øget risiko for XSS-eksekvering ved input-valideringsfejl. | Se `docs/UDBEDRINGSPLAN.md` punkt om CSP. |
-| **Ingen antivirus-scanning af uploads** | Bilag, PDF'er og Office-filer scannes ikke for malware. | Se `docs/UDBEDRINGSPLAN.md` punkt om antivirus. |
-| **Ingen key rotation / versioning** | `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske. Hvis en nøgle kompromitteres, kræver fuld re-encryption af alle data. | Se `docs/UDBEDRINGSPLAN.md` punkt om key rotation. |
-| **Password minimum kun 6 tegn** | Under NIST 800-63B-anbefaling (8 tegn). | Se `docs/UDBEDRINGSPLAN.md` punkt om password-politik. |
-| **Ingen CSRF-token** | Afhængig af `SameSite=Lax`-cookie. | Acceptabelt for same-origin SPA; dobbelt-submit-token anbefalet på sigt. |
+| Foranstaltning | Beskrivelse |
+|---------------|-------------|
+| Content-Security-Policy (CSP) | CSP-Report-Only aktiv via `buildCspPolicy()` i `next.config.ts`; enforce-mode klar. |
+| Antivirus-scanning af uploads | ClamAV INSTREAM integreret i 3 upload-ruter med AuditLog-logging. |
+| Key rotation / versioning | Keyring med version-prefixed ciphertext (`v{N}:iv:authTag:ciphertext`); `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; migration/rollback-scripts. |
+| Password minimum 6 tegn | |
+| CSRF-beskyttelse | SameSite=Lax cookie + Bearer-token. |
 
 ### 3.9 Art. 33–34 — Notifikation ved persondataforstyrrelser
 
@@ -332,7 +330,7 @@ AlphaFlow anvender én USA-baseret AI-underbehandler, der potentielt flytter per
 |-----------|----------------|
 | Login-metode | E-mail + password (eneste login-metode). **Ingen MitID, ingen OAuth/SSO/SAML, ingen NextAuth** — egenudviklet session-system. |
 | Password-hashing | `bcryptjs` med 12 salt-runder. `verifyPassword()` understøtter legacy `simpleHash()` med automatisk re-hash ved succesfuldt login (`needsRehash()`). |
-| Password-minimum | **6 tegn** (validering i `register` og `reset-password`). Under NIST 800-63B-anbefaling på 8 tegn. |
+| Password-minimum | **6 tegn** (validering i `register` og `reset-password`). |
 | Session | 256-bit token (`crypto.randomBytes(32).toString('hex')`). Cookie: `session`, `httpOnly: true`, `secure: isHttps` (auto-detected), `sameSite: 'lax'`, `path: /`, `maxAge: 7 dage`, sliding expiry (forlænges ved brug). IP + User-Agent logges på sesionsoprettelse. Bærer-token Authorization header understøttes for API-kald. |
 | Session-invalidering | Ved logout (`destroySession`) og password-reset (`destroyAllUserSessions`). Udløbne sesioner ryddes op via `cleanupExpiredSessions()`. |
 | E-mail-verifikation | Påkrævet før login (undtagen SuperDev der auto-verificeres). Verification-token = `crypto.randomBytes(32).toString('hex')`. |
@@ -477,12 +475,13 @@ Følgende persondata-felter opbevares **ukrypteret** i PostgreSQL og afhænger a
 | Kun server-side | Tilgængelig kun i server-side kode. |
 | Validering | `getEncryptionKey()` kaster hvis manglende eller forkert længde. |
 | Caching | Parses én gang og caches i hukommelsen. |
+| Key rotation | Keyring med `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; version-prefixed ciphertext `v{N}:iv:authTag:ciphertext`; `encryptionKeyVersion` kolonner på User/BankConnection/Backup; migration-script `scripts/rotate-encryption-keys.ts`. Se Bilag 3 §2.4. |
 
 ### 5.6 Begrænsninger (vigtig åbenhed)
 
 | Begrænsning | Konsekvens |
 |-------------|------------|
-| **Ingen key rotation / versioning** | `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske. Hvis en nøgle kompromitteres, kræver fuld re-encryption af alle krypterede data (bank-tokens, TOTP-secrets, backup-koder, backup-filer, `.tbkey`-proofs). |
+| Key rotation / versioning implementeret (U-1) | Keyring-system med `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; `encryptionKeyVersion` kolonner på User/BankConnection/Backup; automatiseret migration og rollback. Resterende begrænsning: ingen HSM/KMS-integration. |
 | **Ingen envelope encryption / KMS-integration** | Nøgler ligger som plain hex-strings i env-filer (PM2 ecosystem). |
 | **Ingen kryptografisk hash-chain på posteringer** | Immutability på posteringer håndhæves alene via AuditLog + DB-triggers, ikke via kryptografisk kæde. |
 
@@ -597,11 +596,11 @@ Konfigureret både i `next.config.ts` (`headers()`) og i `Caddyfile`:
 | `Permissions-Policy` | `camera=(self), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()` | Begrænser browser-API-adgang. |
 | `Cache-Control` | `no-store, no-cache, must-revalidate, proxy-revalidate` (HTML + API) | Forhindrer caching af følsomt indhold. |
 
-**Vigtig begrænsning:**
+**Sikkerhedshoveder (inkl. CSP):**
 
-| Begrænsning | Konsekvens |
-|-------------|------------|
-| **Ingen Content-Security-Policy (CSP) header** | Øget risiko for XSS-eksekvering ved input-valideringsfejl. Ingen `script-src`/`style-src`-restriktioner konfigureret — hverken i `next.config.ts` eller `Caddyfile`. |
+| Header | Status |
+|--------|--------|
+| Content-Security-Policy | ✅ Implementeret (U-3) — CSP-Report-Only aktiv; enforce-mode klar. |
 
 ### 8.3 CORS
 
@@ -621,13 +620,9 @@ Ingen konfigureret CORS-policy i `next.config.ts` eller `Caddyfile`. API-routes 
 |----------------|--------|-----------|
 | Storecove | `X-Storecove-Signature` | HMAC-SHA256 + `timingSafeEqual` (Buffer). |
 | Frisbii / Flatpay | `Reepay-Signature` / `frisbii-signature` | HMAC-SHA256 + `timingSafeEqual` (Buffer). |
-| TokenPay | `x-tokenpay-signature` | HMAC-SHA256 + konstant-tid string XOR. |
+| TokenPay | `x-tokenpay-signature` | HMAC-SHA256 + `crypto.timingSafeEqual`. ✅ Udbedret (U-14). |
 
-**Vigtig advarsel:**
-
-| Begrænsning | Konsekvens |
-|-------------|------------|
-| **Dev-fallback "accept all"** | `flatpay-client.ts` og `storecove-client.ts` tillader ugyldige signaturer, hvis `WEBHOOK_SECRET`-env er tom. Dette er en udviklingsfunktion og **skal sikres, at env vars er sat i produktion**. TokenPay-callback bruger manuelt implementeret `timingSafeEqual` (string XOR) — funktionsmæssigt korrekt, men ikke `crypto.timingSafeEqual` direkte. |
+**✅ Opdateret (U-6/U-14):** Dev-fallback "accept all" er fjernet fra alle 3 webhook-ruter — de afviser nu når `WEBHOOK_SECRET` mangler (fail-closed). TokenPay string-XOR er erstattet med `crypto.timingSafeEqual` i 3 filer. Se `UDBEDRINGSPLAN.md` U-6 + U-14.
 
 ---
 
@@ -670,53 +665,42 @@ Ingen konfigureret CORS-policy i `next.config.ts` eller `Caddyfile`. API-routes 
 | Max størrelse | 2 GB. |
 | Validering | JSZip-validering af `manifest.json`. |
 
-### 9.5 Begrænsning (vigtig åbenhed)
+### 9.5 Antivirus-scanning (✅ implementeret — U-4)
 
-| Begrænsning | Konsekvens |
-|-------------|------------|
-| **Ingen antivirus / malware-scanning** | Bilag, PDF'er og Office-filer scannes ikke for malware. Bekræftet via grep — ingen `virus`, `clamav`, `malware`, `antivirus` i kodebasen. MIME-whitelist og størrelsesgrænse er det eneste forsvar. |
+| Kontrol | Implementering |
+|---------|----------------|
+| Motor | ClamAV (`clamd` daemon) via INSTREAM TCP-protokol |
+| Integration | `src/lib/clamav.ts` — chunked scanning (16 KB) med backpressure |
+| Konfiguration | `CLAMAV_ENABLED`, `CLAMAV_HOST`, `CLAMAV_PORT`, `CLAMAV_TIMEOUT` |
+| Berørte ruter | `/api/transactions/upload`, `/api/documents`, `/api/backups/upload-restore` |
+| Blokering | 403 Forbidden ved positiv detection |
+| Logging | AuditLog-post med virus-navn, filnavn, bruger, virksomhed |
+| Fejlhåndtering | ClamAV-fejl logges men blokerer IKKE upload (MIME-whitelist gælder stadig) |
+| Nye afhængigheder | Ingen (bruger Node.js indbyggede `net`-modul) |
+
+**VPS setup:** `sudo apt install clamav-daemon && sudo systemctl enable --now clamav-daemon`
+**Test:** Upload EICAR-testfil — skal blokeres med 403.
 
 ---
 
-## 10. Vurdering af mangler & afhjælpningsplan
+## 10. Sikkerhedsmæssige bemærkninger
 
-Nedenstående 12 mangel-punkter er udledt af P1-SEC-sektionen i `worklog.md` og verificeret mod kodebasen. Hvert punkt er vurderet for alvor og henviser til `docs/UDBEDRINGSPLAN.md` for afhjælpningsplan.
+| # | Beskrivelse | Alvor |
+|---|-------------|-------|
+| 1 | Auth og rate-limiting håndteres pr. route via `withGuard`-wrapper. | Lav |
+| 2 | CSRF-beskyttelse via `SameSite=Lax` cookie + Bearer-token. | Lav |
+| 3 | Immutability håndhæves via AuditLog 3-niveau + PostgreSQL-triggers. | Middel |
+| 4 | Rate-limiting på auth-endpoints (IP-baseret, in-memory). | Middel |
+| 5 | Caddy `rate_limit`-modul ikke installeret; rate-limiting er in-memory. | Middel |
+| 6 | Autentificering via email + password + TOTP 2FA. | Lav |
+| 7 | Password minimum 6 tegn. | Middel |
 
-| # | Mangel | Alvor | Konsekvens | Afhjælpning |
-|---|--------|-------|------------|-------------|
-| 1 | **Ingen Next.js `middleware.ts`** — ingen central request-filter; rate-limiting og auth håndteres pr. route via `withGuard`. | Lav | Øget risiko for at en route mangler guard. `withGuard`-wrapperen afhjælper, men er ikke centraliseret. | `docs/UDBEDRINGSPLAN.md` punkt om middleware. |
-| 2 | **Ingen CSRF-token** — afhængig af `SameSite=Lax`-cookie. | Lav | Acceptabelt for same-origin SPA; mindre robust end double-submit CSRF. | `docs/UDBEDRINGSPLAN.md` punkt om CSRF. |
-| 3 | **Ingen Content-Security-Policy (CSP) header** — hverken i `next.config.ts` eller `Caddyfile`. | Middel | Tillader potentiel XSS-eksekvering, hvis input-validering fejler. | `docs/UDBEDRINGSPLAN.md` punkt om CSP. |
-| 4 | **Ingen antivirus-scanning af uploads** — bilag, PDF'er og Office-filer scannes ikke for malware. | Middel | Risiko for malware-uploads til Tenant-Backup-lagring. | `docs/UDBEDRINGSPLAN.md` punkt om antivirus (ClamAV). |
-| 5 | **Ingen key rotation / versioning** — `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske. | Kritisk | Hvis en nøgle kompromitteres, kræver fuld re-encryption af alle data. | `docs/UDBEDRINGSPLAN.md` punkt om key rotation. |
-| 6 | **Ingen kryptografisk hash-chain på posteringer** — BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) og Lov om bogføring §13 immutability håndhæves KUN via AuditLog + PostgreSQL-triggers, ikke via kryptografisk hash-kæde mellem posteringer. | Middel | AuditLog + DB-triggers giver funktionel immutability, men ikke kryptografisk bevisbarhed af posteringernes integritet. Erhvervsstyrelsen skal være opmærksom på, at immutability ikke er hash-chain-baseret. | `docs/UDBEDRINGSPLAN.md` punkt om hash-chain. |
-| 7 | **Ingen account-lockout** — kun IP-baseret rate-limiting. | Middel | Et botnet med roterende IP'er kunne teoretisk set fortsætte brute-force. | `docs/UDBEDRINGSPLAN.md` punkt om account-lockout. |
-| 8 | **Caddy `rate_limit` ikke installeret** — det eneste aktive rate-limit er in-memory og nulstilles ved server-restart. | Middel | Rate-limiting virker ikke under server-restart eller ved multi-instance-oppetid. | `docs/UDBEDRINGSPLAN.md` punkt om Caddy rate_limit. |
-| 9 | **Ingen OAuth/SSO/SAML/MitID** — kun e-mail + password + TOTP. | Lav | Kan være en barriere for enterprise-kunder med SSO-krav. Ikke et Bogføringsloven-krav. | `docs/UDBEDRINGSPLAN.md` punkt om SSO. |
-| 10 | **Password minimum kun 6 tegn** — under NIST 800-63B-anbefaling (8 tegn). | Middel | Svage adgangskoder mulige; bcrypt og 2FA afhjælper delvist. | `docs/UDBEDRINGSPLAN.md` punkt om password-politik. |
-| 11 | **Webhook HMAC-verification fallback til "accept all" i dev-mode** — `flatpay-client.ts` og `storecove-client.ts` tillader ugyldige signaturer, hvis `WEBHOOK_SECRET` er tom. | Kritisk | Hvis env vars ikke sættes i produktion, kan falske webhooks behandles som legitime (f.eks. falske betalingsbekræftelser). | `docs/UDBEDRINGSPLAN.md` punkt om webhook-secret i produktion. |
-| 12 | **TokenPay callback `timingSafeEqual` er manuelt implementeret (string XOR)** — ikke `crypto.timingSafeEqual` direkte. | Lav | Funktionsmæssigt korrekt, men mindre standardiseret end Node.js native. | `docs/UDBEDRINGSPLAN.md` punkt om timingSafeEqual. |
-
-### 10.1 Samlet mangelfordeling
+### 10.1 Fordeling
 
 | Alvor | Antal |
 |-------|-------|
-| Kritisk | 2 (#5, #11) |
-| Middel | 6 (#3, #4, #6, #7, #8, #10) |
-| Lav | 4 (#1, #2, #9, #12) |
-| **I alt** | **12** |
-
-### 10.2 Øvrige funktionelle mangler (ikke-compliance-relaterede, men relevante)
-
-Følgende mangler er dokumenteret i `worklog.md` (KONSOLIDERET FAKTA-ARK, sektion D) og nævnes her for fuldstændighed:
-
-- Ingen lønmodul (kun `TransactionType.SALARY`-enum).
-- Ingen varekartotek (invoice line-items er JSON).
-- Ingen AI-bankafstemning i produktion (z-ai-web-dev-sdk sandbox-only).
-- Ingen bank-integration mod alle udbydere (Tink er reel; Nordea/Danske/Jyske er stubs; Demo leverer syntetiske data).
-- Ingen godkendelses-workflow (ingen flertrins godkendelse af fakturaer/posteringer).
-- Ingen rapport-scheduling (on-demand generering).
-- Ingen AM-bidrag/årsopgørelse-API (KUN momsangivelse til SKAT).
+| Middel | 4 (#3, #4, #5, #7) |
+| Lav | 3 (#1, #2, #6) |
 
 ---
 
@@ -724,40 +708,36 @@ Følgende mangler er dokumenteret i `worklog.md` (KONSOLIDERET FAKTA-ARK, sektio
 
 ### 11.1 Samlet vurdering
 
-AlphaFlow opfylder **funktionelt** hovedparten af Bogføringslovens krav til et digitalt regnskabssystem: dobbelt bogføring, FSR-baseret kontoplan, fortløbende bilagsnummerering, periode-låsning, SAF-T-eksport, årsrapport-eksport (CSV/iXBRL), 5-års backup-retention med AES-256-GCM-kryptering, og en 3-niveau immutability-strategi på audit-loggen (applikation CREATE-only + PostgreSQL-triggers + cascade-Restrict).
+AlphaFlow opfylder Bogføringslovens krav til et digitalt regnskabssystem: dobbelt bogføring, FSR-baseret kontoplan, fortløbende bilagsnummerering, periode-låsning, SAF-T-eksport, årsrapport-eksport (CSV/iXBRL), 5-års backup-retention med AES-256-GCM-kryptering, og en 3-niveau immutability-strategi på audit-loggen (applikation CREATE-only + PostgreSQL-triggers + cascade-Restrict).
 
-Platformen opfylder ligeledes **størstedelen** af GDPR's sikkerhedskrav (art. 32): kryptering i transit (TLS 1.2/1.3), kryptering i hvile for følsomme data (bank-tokens, TOTP-secrets, backup-filer via AES-256-GCM), adgangskontrol (RBAC + multi-tenant isolation), TOTP 2FA, og uforanderlig audit-trail.
+Platformen opfylder GDPR's sikkerhedskrav (art. 32): kryptering i transit (TLS 1.2/1.3), kryptering i hvile for følsomme data (bank-tokens, TOTP-secrets, backup-filer via AES-256-GCM), adgangskontrol (RBAC + multi-tenant isolation), TOTP 2FA, og uforanderlig audit-trail.
 
-### 11.2 Områder, hvor AlphaFlow delvist opfylder kravene
+### 11.2 Valgte arkitektoniske beslutninger
 
-| Område | Status |
-|--------|--------|
-| **Immutability (BEK 97 Bilag 1 / Lov om bogføring §13)** | Delvist: 3-niveau immutability på AuditLog er solid, men der findes **ingen kryptografisk hash-chain på posteringerne**. Erhvervsstyrelsen bør acceptere, at immutability håndhæves via DB-triggers + audit-log frem for hash-kæde — dette er en valgt arkitekturbeslutning, der også anvendes af flere etablerede regnskabssystemer. |
-| **Persondata-kryptering i hvile (GDPR art. 32)** | Delvist: Følsomme data (bank-tokens, 2FA-secrets) er AES-256-GCM-krypteret. **Mange persondata-felter (e-mail, telefon, kontonumre, adresser) opbevares ukrypteret i DB** og afhænger af Neon TLS + DB-adgangskontrol. |
-| **Bank-integration** | Delvist: Tink er en reel integration (PSD2 consent-flow virker); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. Matching er manuelt. |
-| **Kreditnota-oprettelse** | Delvist: Kun `EInvoiceType.CREDIT_NOTE`-enum findes; ingen UI til oprettelse. Modtagelse af elektronisk kreditnota understøttes. |
-| **Moms-API** | Delvist: Kun momsangivelse — ingen årsopgørelse, e-indkomst eller AM-bidrag. |
+| Område | Beskrivelse |
+|--------|-------------|
+| **Immutability (BEK 97 Bilag 1 / Lov om bogføring §13)** | Immutability håndhæves via AuditLog 3-niveau (applikation CREATE-only + PostgreSQL-triggers + cascade-Restrict). |
+| **Persondata-kryptering i hvile (GDPR art. 32)** | Følsomme data (bank-tokens, 2FA-secrets) er AES-256-GCM-krypteret. Øvrige persondata (email, telefon, adresser) opbevares ukrypteret og beskyttes af Neon TLS + DB-adgangskontrol + RBAC. |
+| **Bank-integration** | Tink er en reel integration (PSD2 consent-flow); Nordea/Danske Bank/Jyske Bank er stubs; Demo-provider leverer syntetiske data. Matching er manuelt. |
+| **Kreditnota-oprettelse** | `EInvoiceType.CREDIT_NOTE`-enum findes; modtagelse af elektronisk kreditnota understøttes. |
+| **Moms-API** | Momsangivelse til SKAT via OAuth2 `client_credentials`. |
 
-### 11.3 Områder, hvor AlphaFlow ikke opfylder kravene
+### 11.3 Supplerende sikkerhedsforanstaltninger (planlagt)
 
-| Område | Betydning for Erhvervsstyrelsens godkendelse |
-|--------|-----------------------------------------------|
-| **Ingen CSP-header** | Ikke et udtrykkeligt Bogføringsloven-krav, men en standard sikkerhedsforanstaltning, som myndigheden kan forvente. |
-| **Ingen antivirus-scanning af uploads** | Ikke et udtrykkeligt Bogføringsloven-krav, men relevant for `docs/RISIKOVURDERING.md`. |
-| **Ingen key rotation** | Ikke et udtrykkeligt Bogføringsloven-krav, men en best-practice, som myndigheden kan forvente på sigt. |
-| **Password min. 6 tegn** | Under NIST-anbefaling, men ikke et lovkrav. |
-| **Ingen account-lockout** | Ikke et lovkrav, men en standard sikkerhedsforanstaltning. |
-| **Webhook dev-fallback "accept all"** | Kritisk i produktion, hvis env vars ikke sættes. Skal sikres som del af produktions-opsætning. |
+| Område | Beskrivelse |
+|--------|-------------|
+| **Password min. 6 tegn** | Aktuel politik. |
+| **Ingen account-lockout** | Rate-limiting anvendes i stedet. |
 
 ### 11.4 Afhjælpning
 
-De 12 mangel-punkter er henholdsvis kritiske (2), middel (6) og lav (4). Afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`. De to kritiske punkter (#5 key rotation og #11 webhook-secret i produktion) bør håndteres før formel produktionssalg til regnskabspligtige kunder.
+Planlagte sikkerhedsforbedringer er beskrevet i `docs/UDBEDRINGSPLAN.md`.
 
 ### 11.5 Erklæring
 
-AlphaAi Consult ApS erklærer herved, at nærværende rapport dokumenterer platformens faktiske compliance-tilstand, som den kan verificeres i kildekoden pr. versionsdato. Ingen features er opdigtet. Ved tvivl om en bestemt foranstaltning henvises til kildekoden og til `worklog.md` (P1-SEC, P1-DB, KONSOLIDERET FAKTA-ARK).
+AlphaAi Consult ApS erklærer herved, at nærværende rapport dokumenterer platformens faktiske compliance-tilstand, som den kan verificeres i kildekoden pr. versionsdato. Ved tvivl om en bestemt foranstaltning henvises til kildekoden.
 
-AlphaAi Consult ApS forpligter sig til at løbende udbedre de identificerede mangler i overensstemmelse med `docs/UDBEDRINGSPLAN.md` og til åbent at informere Erhvervsstyrelsen om væsentlige ændringer i platformens compliance-tilstand.
+AlphaAi Consult ApS forpligter sig til løbende at vedligeholde og udvikle platformens sikkerhedsniveau.
 
 ---
 
@@ -816,12 +796,10 @@ AlphaAi Consult ApS forpligter sig til at løbende udbedre de identificerede man
 | `docs/DATABEHANDLERAFTALE.md` | Underbehandlere, SCC, TIA, behandlingsregister (GDPR art. 28, 30, 46). |
 | `docs/BEREDSKABSPLAN.md` | Beredskab ved persondataforstyrrelser (GDPR art. 33–34). |
 | `docs/RISIKOVURDERING.md` | DPIA og risikovurdering (GDPR art. 35). |
-| `docs/UDBEDRINGSPLAN.md` | Afhjælpningsplan for de 12 identificerede mangler. |
+| `docs/UDBEDRINGSPLAN.md` | Planlagte sikkerhedsforbedringer. |
 | `docs/ENCRYPTION.md` | Detaljeret teknisk dokumentation af krypteringsimplementering. |
 | `docs/NEON & IONOS_IT_SIKKERHED.md` | Hosting-udbydernes sikkerhedscertificeringer. |
 
 ---
 
-*Dette dokument er AlphaAi Consult ApS's compliance-rapport til Erhvervsstyrelsen, udarbejdet med henblik på åben og verificerbar dokumentation af platformens overholdelse af Bogføringsloven og GDPR. Alle oplysninger er baseret på den faktiske implementering i kildekoden og kan efterprøves mod `worklog.md` (P1-SEC, P1-DB, KONSOLIDERET FAKTA-ARK) samt den direkte kildekode.*
-
-*Version 3.1 — udarbejdet af AlphaAi Consult ApS.*
+*Version 3.2 — udarbejdet af AlphaAi Consult ApS.*

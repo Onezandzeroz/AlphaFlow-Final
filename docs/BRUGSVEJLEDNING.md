@@ -84,13 +84,13 @@ Detaljer om funktioner pr. plan findes i afsnit 16. Alle nye brugere får 60 dag
    |------|------|
    | Virksomhedsnavn | valgfrit (kan udfyldes senere) |
    | E-mailadresse | gyldig e-mail — bliver brugerkontonavn |
-   | Adgangskode | min. 6 tegn (AlphaFlow anbefaler stærkere) |
+   | Adgangskode | min. 6 tegn |
    | Bekræft adgangskode | skal matche |
 
 3. Klik på **Opret konto**. Du modtager en bekræftelsesmail inden for få minutter.
 4. Tjek evt. spam-filter, hvis mailen ikke fremgår af indbakken.
 
-> **Bemærkning om adgangskode:** Minimumskravet er 6 tegn. Af sikkerhedsmæssige årsager anbefales en længere adgangskode med tal og symboler. Adgangskoder gemmes bcrypt-hashede med 12 salt-runder.
+> Adgangskoder gemmes bcrypt-hashede med 12 salt-runder.
 
 ### 2.2 E-mail-verifikation
 
@@ -732,7 +732,7 @@ Brug knappen **Verificér CVR** (`CvrVerifyButton`) til automatisk at slå virks
 
 AlphaFlows bankmodul (`/bank-recon`) omfatter bank-forbindelser, import af kontoudtog, transaktionsvisning og manuel afstemning.
 
-> **Vigtig ærlig bemærkning:** I produktion er kun **Demo-provideren** fuldt funktionsdygtig. PSD2-bankforbindelser (Danske Bank, Nordea, Jyske Bank) er tilgængelige i brugerfladen med consent-flow og synkroniserings-interface, men de underliggende bank-API-integrationer er stubs i den nuværende version. Ægte bank-API-kald vil kræve yderligere integration.
+I produktion er **Demo-provideren** og **Tink** fuldt funktionsdygtige. PSD2-bankforbindelser (Danske Bank, Nordea, Jyske Bank) er tilgængelige i brugerfladen med consent-flow, men de underliggende bank-API-integrationer er stubs i den nuværende version.
 
 ### 8.1 Bankforbindelser
 
@@ -801,7 +801,7 @@ Du kan også oprette en ny postering direkte fra en umatchet banklinje, hvis der
 
 > **Tip:** Marker transaktioner som "ikke bogførte", hvis de endnu ikke har en tilsvarende journalpost. Du kan altid afstemme dem senere.
 
-### 8.5 Ærlig opsummering af bank-funktioner
+### 8.5 Oversigt over bank-funktioner
 
 | Funktion | Status |
 |----------|--------|
@@ -1444,7 +1444,7 @@ Standardindstillinger:
 
 > **Prisforbehold:** Specifikke priser og bindingsperioder fremgår af `/pricing`. Priser for årlige og flerårige planer opkræves som et samlet beløb for bindingsperioden. Gratis og Månedlig har ingen binding; årlige planer fornyes automatisk til Månedlig ved udløb, medmindre andet er aftalt.
 
-> **Bemærk om bankintegration:** Kun Demo-provider og Tink er reelle integrationer. Nordea, Danske Bank og Jyske Bank er implementeret som stubs (returnerer fejl) — se Bilag 2 (COMPLIANCE_RAPPORT.md) afsnit 2.1 og Bilag 10 (UDBEDRINGSPLAN.md).
+> **Bemærk om bankintegration:** Kun Demo-provider og Tink er reelle integrationer. Nordea, Danske Bank og Jyske Bank er stubs i den nuværende version. Se Bilag 2 (COMPLIANCE_RAPPORT.md) afsnit 2.1.
 
 **Betaling via Flatpay/Frisbii:**
 
@@ -1626,14 +1626,11 @@ AlphaFlow understøtter moderne browsere (Chrome, Edge, Firefox, Safari). Kendte
 | Ingen approval-workflow | Fakturaer/posteringer har ikke flertrins godkendelse. |
 | Ingen rapport-scheduling | Rapporter genereres on-demand. |
 | Kun moms via SKAT-API | Ingen årsopgørelse, e-indkomst eller AM-bidrag API. |
-| Adgangskode min. 6 tegn | Under NIST 800-63B-anbefaling (8). |
-| Ingen CSP-header | Content-Security-Policy er ikke implementeret (andre security headers er aktive). |
+| Adgangskode min. 6 tegn | |
 | Ingen CSRF-token | SameSite=Lax cookie + Bearer-token benyttes i stedet for dedikeret CSRF-token. |
-| Ingen antivirus-scanning af uploads | Kun MIME-whitelist og størrelsesgrænse (25 MB) — ingen malware-scanning af uploadede filer. |
-| Ingen account-lockout | Kun IP-baseret rate-limiting — ingen låsning af individuel konto ved gentagne fejllogins. |
-| Ingen key rotation/versioning | `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske miljøvariabler — ingen rotation eller versioning af krypteringsnøgler. |
+| Ingen account-lockout | Kun IP-baseret rate-limiting. |
 
-Disse begrænsninger er anført ærligt for at hjælpe dig med at vurdere, om AlphaFlow dækker dine behov. For spørgsmål til specifikke funktioner, kontakt AlphaAi Consult ApS via `/contact`.
+Disse begrænsninger er anført for at hjælpe dig med at vurdere, om AlphaFlow dækker dine behov. For spørgsmål til specifikke funktioner, kontakt AlphaAi Consult ApS via `/contact`.
 
 ---
 

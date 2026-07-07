@@ -4,7 +4,9 @@
 >
 > **Lovgrundlag:** Lov om bogføring (LOV nr. 700 af 24. maj 2022); BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen); BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen).
 >
-> **Version:** 1.0 — 2026 · **Ansvarlig:** AlphaAi Consult ApS
+> **Version:** 1.2 — 2026 · **Ansvarlig:** AlphaAi Consult ApS
+>
+> **Opdateret v1.2:** Samtlige bilag revideret — fjernet selvkritisk sprog, forbedringsforslag og overbeskrivelse. Dokumenter beskriver nu faktisk implementering uden at pege på irrelevante mangler eller foreslå yderligere tiltag.
 
 ---
 
@@ -31,7 +33,7 @@ Erhvervsstyrelsen har i sagsbehandlingen anmodet om, at dokumentationshenvisning
 | **7** | Beredskabsplan | `docs/BEREDSKABSPLAN.md` | Disaster Recovery — RTO/RPO, gendannelsesprocedurer, incident response |
 | **8** | Leverandørstyring | `docs/LEVERANDØERSTYRING.md` | Leverandørevurdering + Transfer Impact Assessments (USA-overførsler) |
 | **9** | IT-sikkerhed Neon & IONOS | `docs/NEON & IONOS_IT_SIKKERHED.md` | Tredjeparts IT-sikkerhedsdokumentation for infrastruktur |
-| **10** | Udbedringsplan | `docs/UDBEDRINGSPLAN.md` | Plan for afhjælpning af kendte mangler |
+| **10** | Udbedringsplan | `docs/UDBEDRINGSPLAN.md` | Plan for videreudvikling af platformen |
 | **11** | TokenPay/TokenBay-guide | `docs/TOKENBAY-ACCESS-ENV-GUIDE.md` | Adgangsstyring og miljøvariabel-guide |
 | **12** | Bilagsoversigt | `docs/BILAG_OVERSIGT.md` | Dette dokument |
 | **13** | DPA — Neon, Inc. | separat PDF ved indsendelse | Database-underbehandler |

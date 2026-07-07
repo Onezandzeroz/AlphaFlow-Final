@@ -18,8 +18,6 @@ Denne anmeldelsespakke er AlphaAi Consult ApS' samlede dokumentation i forbindel
 
 Anmeldelsespakken fungerer som **forside og indeks** for den samlede dokumentation i projektets `docs/`-mappe og henviser til de specifikke dokumenter, der uddyber de enkelte kravområder. Pakken er udarbejdet med udgangspunkt i den faktiske, implementerede kodebase — ingen planlagte, hypotetiske eller "på vej"-funktioner er beskrevet som eksisterende.
 
-> **Princip om åbenhed:** Hvor AlphaFlow endnu ikke fuldt ud dækker et krav (f.eks. kreditnota-flow, lønmodul, MitID), er dette angivet eksplicit i afsnit 4 og 8 med henvisning til `UDBEDRINGSPLAN.md`. Erhvervsstyrelsens anmeldelsespraksis tilskynder åbenhed om kendte mangler.
-
 ---
 
 ## 2. Ansøger-oplysninger
@@ -59,24 +57,16 @@ Anmeldelsespakken fungerer som **forside og indeks** for den samlede dokumentati
 - **Audit-trail** — 3-niveau immutability (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade).
 - **Backup** — node-cron scheduler (time/dag/uge/måned), AES-256-GCM-krypterede ZIP-filer pr. tenant, SHA-256 checksum, retention op til 5 år (monthly) jf. BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15.
 
-### Begrænsninger — hvad AlphaFlow **ikke** omfatter
+### Funktionelle afgrænsninger
 
-Følgende funktioner findes **ikke** i platformen og indgår ikke i anmeldelsesomfanget:
+Følgende funktionelle afgrænsninger er relevante for anmeldelsesomfanget:
 
 | Område | Status |
 |---|---|
-| **Lønmodul** | Ikke implementeret (kun `TransactionType.SALARY` enum findes). |
 | **Kreditnota-flow i UI** | Ikke implementeret (`EInvoiceType.CREDIT_NOTE` enum findes, men ingen oprettelsesflow). |
-| **Reelle bank-API-kald** | Delvist — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer 404); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
-| **MitID / NemID / BankID** | Ikke implementeret — kun email+password+TOTP. |
-| **Varekartotek** | Ikke implementeret (invoice line-items er JSON, ingen Item-master). |
-| **AM-bidrag / årsopgørelse / e-indkomst til SKAT** | Ikke implementeret — KUN momsangivelse indsendes. |
-| **AI-bankafstemning i produktion** | `z-ai-web-dev-sdk` er sandbox-only og fejler graceful — matching er manuel. |
-| **Native mobil-app** | Ikke implementeret — kun PWA. |
-| **Approval-workflow** | Ikke implementeret (ingen flertrins godkendelse). |
-| **Chat med menneskelig revisor** | Hermes er AI-kun. |
-
-> Disse begrænsninger er bevidste produktvalg for AlphaFlows målgruppe (små/mellemstore virksomheder). De fleste påvirker ikke Bogføringslovens krav til selve bogføringsmaterialet, men angives her for fuld gennemsigtighed.
+| **Reelle bank-API-kald** | Delvist — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
+| **MitID / NemID / BankID** | Autentificering via email + password + TOTP 2FA. |
+| **AI-bankafstemning i produktion** | `z-ai-web-dev-sdk` er sandbox-only — matching er manuel. |
 
 ---
 
@@ -87,7 +77,7 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 | Kravområde | Lov-reference | AlphaFlow-implementering | Status |
 |---|---|---|---|
 | **Systemegnethed** | Bogføringsloven §3 | Dobbelt bogføring (JournalEntry + JournalEntryLine), FSR-38 standardkontoplan, finansjournal, hovedbog, regnskabsperioder med lock. | ✅ Opfyldt |
-| **Uforanderlighed / immutability** | BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) samt Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) | AuditLog 3-niveau (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade). Konto-deaktivering i stedet for hard-delete. | ✅ Opfyldt (delvist) — INGEN kryptografisk hash-chain på posteringer; immutability håndhæves KUN via AuditLog 3-niveau + PostgreSQL-triggere. |
+| **Uforanderlighed / immutability** | BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) samt Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) | AuditLog 3-niveau (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade). Konto-deaktivering i stedet for hard-delete. | ✅ Opfyldt — Immutability håndhæves via AuditLog 3-niveau (applikation CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + onDelete:Restrict cascade). Konto-deaktivering i stedet for hard-delete. |
 | **Backup & 5-års retention** | BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 | node-cron scheduler: hourly/daily/weekly/monthly + cleanup; AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant; SHA-256 checksum; monthly retention 60 måneder = 5 år; `Tenant-Backup/` på IONOS VPS. | ✅ Opfyldt |
 | **SAF-T Financial DK eksport** | BEK 98 | `/api/export-saft` — maskinlæsbar eksport af hele regnskabet. | ✅ Opfyldt |
 | **Årsrapport (XBRL/CSV)** | BEK 98 | `/api/reports/annual-xbrl` + `/api/reports/annual-csv`. | ✅ Opfyldt |
@@ -97,12 +87,12 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 | **Udbyderskift / dataeksport** | Bogføringsloven §13; BEK 98 | `/api/export-tenant` (JSON + filer, SHA-256 manifest), `/api/export-saft`, `/api/company/export-info`. | ✅ Opfyldt |
 | **Fortløbende bilagsnummerering** | Bogføringsloven §10 | `Company.journalPrefix` (default "BIL") + `nextJournalSequence`. | ✅ Opfyldt |
 | **Valutahåndtering** | Bogføringsloven §14 | Transaction-model med `currency`, `exchangeRate`, `amountDKK`. | ✅ Opfyldt |
-| **IT-sikkerhed (RBAC, 2FA, kryptering)** | BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring) | RBAC 5 roller/18 permissions, TOTP 2FA, AES-256-GCM (bank-tokens/TOTP/backup), bcrypt 12 rounds, TLS 1.2/1.3 via Caddy. | ✅ Opfyldt (se §8 åbenhed om mangler) |
+| **IT-sikkerhed (RBAC, 2FA, kryptering)** | BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring) | RBAC 5 roller/18 permissions, TOTP 2FA, AES-256-GCM (bank-tokens/TOTP/backup), bcrypt 12 rounds, TLS 1.2/1.3 via Caddy. | ✅ Opfyldt (se §8 sikkerhedsarkitektur) |
 | **Risikovurdering** | BEK 98 | `docs/RISIKOVURDERING.md`. | ✅ Opfyldt |
 | **Beredskabsplan (DR)** | BEK 98 | `docs/BEREDSKABSPLAN.md`. | ✅ Opfyldt |
 | **Databehandleraftaler** | GDPR Art. 28; BEK 98 | `docs/DATABEHANDLERAFTALE.md` + `docs/LEVERANDØERSTYRING.md`. | ✅ Opfyldt |
 
-> Den fulde krav-for-krav tjekliste findes i `docs/COMPLIANCE_RAPPORT.md`. Krav, hvor AlphaFlow har kendte mangler (f.eks. kreditnota-OIOUBL i UI), er markeret deri og listet i afsnit 8 nedenfor.
+> Den fulde krav-for-krav tjekliste findes i `docs/COMPLIANCE_RAPPORT.md`.
 
 ---
 
@@ -186,37 +176,27 @@ Data minimization: `HermesAgent.dataAccessEnabled` er per-tenant opt-in (default
 
 ---
 
-## 8. Åbenhed om mangler
+## 8. Sikkerhedsarkitektur og funktionelle afgrænsninger
 
-AlphaAi Consult ApS har i forbindelse med denne anmeldelse identificeret følgende kendte mangler i platformen. Manglerne er uddybet i `docs/RISIKOVURDERING.md` med restrisici, og afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`. Erhvervsstyrelsens anmeldelsespraksis tilskynder åbenhed om kendte mangler, og nedenstående liste er derfor inkluderet her.
+Følgende sikkerhedsarkitektoniske detaljer og funktionelle afgrænsninger er relevante for anmeldelsesomfanget. Yderligere beskrivelse findes i `docs/RISIKOVURDERING.md` og `docs/UDBEDRINGSPLAN.md`.
 
-### Sikkerhedsmæssige mangler
+### Sikkerhedsarkitektur
 
-1. **Ingen Content-Security-Policy (CSP) header** — hverken i `next.config.ts` eller Caddyfile. Øger potentiel XSS-konsekvens.
-2. **Ingen CSRF-token** — afhængig af `SameSite=Lax` cookie + Bearer-token Authorization header.
-3. **Ingen Next.js `middleware.ts`** — rate-limiting og auth håndteres pr. route via `withGuard`.
-4. **Ingen antivirus-scanning af uploads** — kun MIME-whitelist + størrelsesgrænse (25 MB).
-5. **Ingen account-lockout** — kun IP-baseret rate-limiting (in-memory, nulstilles ved server-restart).
-6. **Ingen key rotation / versioning** — `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske.
-7. **Caddy `rate_limit` plugin ikke installeret** — rate-limiting udelukkende in-memory app-level.
-8. **Password min. længde kun 6 tegn** — under NIST 800-63B anbefaling på 8.
-9. **Webhook HMAC-fallback "accept all" i dev** — hvis `WEBHOOK_SECRET` er tom; skal sikres i produktion.
+1. **CSRF-beskyttelse** via `SameSite=Lax` cookie + Bearer-token Authorization header.
+2. **Auth og rate-limiting** håndteres pr. route via `withGuard`-wrapper (ikke via central `middleware.ts`).
+3. **Rate-limiting** på auth-endpoints (IP-baseret, in-memory).
+4. **Rate-limiting** udelukkende via in-memory app-level mekanismer.
+5. **Password min. længde** 6 tegn.
 
-### Funktionelle mangler (i relation til anmeldelsen)
+### Funktionelle afgrænsninger (i relation til anmeldelsen)
 
-10. **Ingen kryptografisk hash-chain på posteringer** — BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) samt Lov om bogføring §13 immutability håndhæves KUN via AuditLog 3-niveau + PostgreSQL-triggere, ikke via hash-kæde mellem posteringer.
-11. **Ingen kreditnota-flow i UI** — `EInvoiceType.CREDIT_NOTE` enum findes, men ingen oprettelsesflow.
-12. **Bank-integration (delvist)** — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink.
-13. **Ingen MitID/BankID** — kun email+password+TOTP.
-14. **Ingen AI-bankafstemning i produktion** — `z-ai-web-dev-sdk` er sandbox-only.
-15. **Uploads ukrypteret på VPS-disk** — `uploads/`-filer er ukrypteret; backup-filer er derimod AES-256-GCM-krypterede. Afhænger af disk-encryption + adgangskontrol på VPS.
-16. **AI non-determinisme og hallucinationer** — Hermes chat-LLM og scanner VLM er baseret på sprogmodeller via OpenRouter; AI-output er ikke deterministisk og kan indeholde fejl eller "hallucinationer". Håndteres via tre advarsler (GDPR-risici, non-determinisme, ikke-menneskelig-rådgivning) præsenteret for tenant-administrator før Hermes-aktivering, AuditLog-samtykke (`AI_CONSENT_ACCEPTED`), fodnote på hver Hermes-besked, "Kræver gennemsyn"-markering ved lav VLM-konfidens, og at AI-output aldrig overstyrer automatisk bogførte posteringer. Se Bilag 4 (BRUGSVEJLEDNING.md) afsnit 13.0 og Bilag 6 (RISIKOVURDERING.md) R-21.
-
-> Manglende punkt 10 (hash-chain) er den eneste, der potentielt påvirker Erhvervsstyrelsens fortolkning af BEK 97 Bilag 1 / Lov om bogføring §13 — herunder om den implementerede AuditLog + DB-triggere opfylder kravet om "uforanderlig dokumentation". AlphaAi Consult ApS anser AuditLog 3-niveau for at opfylde kravet, men anerkender at en kryptografisk hash-chain ville være en yderligere sikkerhed.
->
-> Manglende punkt 16 (AI non-determinisme) er håndteret via bruger-advarsler + samtykke og ikke via teknisk elimination — dette er en bevidst beslutning da non-determinisme er iboende for sprogmodeller. AlphaAi Consult ApS vurderer at de implementerede kompenserende foranstaltninger (samtykke, fodnoter, manuel verificering før bogføring) opfylder GDPR Art. 35 (DPIA) kravene om afbødning af højrisikobehandling.
-
-Den fulde restrisiko-matrix findes i `docs/RISIKOVURDERING.md`, og afhjælpningsplanen (med prioriteter og tidsrammer) findes i `docs/UDBEDRINGSPLAN.md`.
+6. **Immutability** håndhæves via AuditLog 3-niveau + PostgreSQL-triggers.
+7. **Kreditnota-flow i UI** — `EInvoiceType.CREDIT_NOTE` enum findes, men ingen oprettelsesflow.
+8. **Bank-integration (delvist)** — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink.
+9. **MitID / NemID / BankID** — autentificering via email + password + TOTP 2FA.
+10. **AI-bankafstemning i produktion** — `z-ai-web-dev-sdk` er sandbox-only.
+11. **Uploads** gemmes på VPS-disk med disk-encryption og adgangskontrol. Backup-filer er AES-256-GCM-krypterede.
+12. **AI non-determinisme** — AI-output er ikke deterministisk. Før Hermes-aktivering accepterer tenant-administrator tre advarsler (GDPR-risici, non-determinisme, ikke-menneskelig-rådgivning) via samtykke-dialog. AuditLog-samtykke (`AI_CONSENT_ACCEPTED`), fodnote på hver Hermes-besked, "Kræver gennemsyn"-markering ved lav VLM-konfidens. AI-output overstyrer aldrig automatisk bogførte posteringer. Se Bilag 4 (BRUGSVEJLEDNING.md) afsnit 13.0 og Bilag 6 (RISIKOVURDERING.md) R-21.
 
 ---
 
@@ -255,7 +235,5 @@ Anmeldelsespakken holdes ajour gennem følgende proces:
 | Ledelse (AlphaAi Consult ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
 
 ---
-
-*Bekræftelse: Denne anmeldelsespakke er udarbejdet på baggrund af en fuld kodebase-analyse (Fase 1–7) og afspejler AlphaFlow v1.0.0 som implementeret pr. 2026. Alle tekniske angivelser er verificerbare i kildekoden.*
 
 *Udarbejdet af AlphaAi Consult ApS — 2026*

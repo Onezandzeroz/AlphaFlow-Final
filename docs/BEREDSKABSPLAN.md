@@ -1,7 +1,7 @@
 # Beredskabsplan — AlphaFlow
 
 **AlphaAi Consult ApS** (CVR 46312058)
-**Dokumentversion:** 3.1
+**Dokumentversion:** 3.2
 **Dato:** 2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 **System:** AlphaFlow (`alphaai-accounting` v1.0.0) — alphaflow.dk
@@ -77,7 +77,7 @@ Denne plan dækker hele AlphaFlow-platformen:
 ### 1.5 Relaterede dokumenter
 
 - `RISIKOVURDERING.md` — DPIA / IT-risikovurdering (20 risici R-01..R-20).
-- `UDBEDRINGSPLAN.md` — planlagte afhjælpninger for identificerede mangler.
+- `UDBEDRINGSPLAN.md` — planlagte udviklingstiltag.
 - `ENCRYPTION.md` — krypteringsnøgler, algoritmer, key management.
 - `LEVERANDØERSTYRING.md` — underbehandler-oversigt + DPA-status.
 - `DATABEHANDLERAFTALE.md` — DPA-skabeloner pr. underbehandler.
@@ -246,7 +246,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
 - **Algoritme:** AES-256-GCM (12-byte IV, 16-byte auth-tag, 32-byte nøgle).
 - **Nøgle:** `ENCRYPTION_KEY` (64-hex env var, genereres med `openssl rand -hex 32`).
 - **Adskilt fra PROOF_ENCRYPTION_KEY** (som kun bruges til `.tbkey` proof-filer).
-- **Ingen key rotation** (se `RISIKOVURDERING.md` R-03 + `UDBEDRINGSPLAN.md`).
+- **Key rotation implementeret** (U-1) — keyring med `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; migration-script og rollback-script. Se `RISIKOVURDERING.md` R-03 + `UDBEDRINGSPLAN.md` U-1 + Bilag 3 §2.4.
 - **Bemærkning:** Hvis `ENCRYPTION_KEY` kompromitteres, kan alle backup-ZIPs dekrypteres. Se genopretningsprocedure afsnit 5.5.
 
 ---
@@ -411,32 +411,56 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
 
 **Scenarie:** `ENCRYPTION_KEY` (eller `PROOF_ENCRYPTION_KEY`) er kompromitteret — f.eks. via `.env`-lækage, tidligere medarbejder, log-fejl, GitHub-push.
 
-> ⚠️ **Bemærk:** Key rotation er **ikke implementeret** i nuværende version — jf. Bilag 6 (RISIKOVURDERING.md) R-03 (restrisiko Høj) og Bilag 10 (UDBEDRINGSPLAN.md). Følgende procedure er manuel og kræver betydelig nedetid.
+> ✅ **Opdateret (U-1):** Key rotation er nu implementeret med automatiseret migration-script. Se `scripts/rotate-encryption-keys.ts` og `scripts/rollback-encryption-keys.ts`.
 
 **Procedure (KRITISK — eskalér til Niveau 3 straks):**
 
 1. **Isolér systemet** — sæt AlphaFlow i maintenance mode (Caddy-konfiguration eller `pm2 stop alphaflow`).
-2. **Generér nye nøgler:**
+2. **Generér ny nøgle:**
    ```bash
-   openssl rand -hex 32  # ny ENCRYPTION_KEY
-   openssl rand -hex 32  # ny PROOF_ENCRYPTION_KEY
+   openssl rand -hex 32  # ny ENCRYPTION_KEY (64 hex tegn)
    ```
-3. **Re-krypter alle data med nye nøgler** (MANUELE TRIN — script ikke implementeret endnu):
-   - Bank-tokens (`BankConnection.accessToken/refreshToken`) — dekryptér med gammel nøgle, re-kryptér med ny.
-   - TOTP-secrets (`User.twoFactorSecret`).
-   - 2FA backup-koder (`User.twoFactorBackupCodes`).
-   - Backup-ZIP-filer i `Tenant-Backup/` — dekryptér og re-kryptér.
-   - `.tbkey` proof-filer i `mini-services/tokenpay-access-service/data/proofs/` — med `PROOF_ENCRYPTION_KEY`.
-4. **Opdater `.env` + `ecosystem.config.js`** med nye nøgler.
-5. **Genstart alle PM2-apps:**
+3. **Opdater environment variables** i produktions-`.env` og `ecosystem.config.js`:
+   ```
+   ENCRYPTION_KEY_PREVIOUS=$ENCRYPTION_KEY   # gem gamle nøgle
+   ENCRYPTION_KEY=<ny_nøgle>                  # sæt nye nøgle
+   CURRENT_KEY_VERSION=2                       # forøg version
+   ```
+4. **Push DB-schema** (hvis ikke allerede gjort — tilføjer `encryptionKeyVersion` kolonner):
+   ```bash
+   bun run db:push
+   ```
+5. **Genstart applikation:**
    ```bash
    pm2 restart all
    ```
-6. **Verificér** — test login + 2FA + bank-forbindelse + backup-restore på én tenant før fuld godkendelse.
-7. **Roter alle andre secrets** (inter-service API-nøgler, eksterne API-keys).
-8. **Foretag sikkerhedsgennemgang** — AuditLog-gennemgang for mistænkelig aktivitet i perioden mellem kompromittering og rotation.
-9. **Underret berørte registrerede** (GDPR Art. 34 hvis høj risiko) — se afsnit 6.5 + 8.
-10. **Dokumentér hændelsen** — post-incident review (se afsnit 6.6) + tilføj til `UDBEDRINGSPLAN.md` som læring.
+6. **Kør migration (dry-run først):**
+   ```bash
+   bun run scripts/rotate-encryption-keys.ts              # dry-run — verificer output
+   bun run scripts/rotate-encryption-keys.ts --execute     # udfør re-encryption
+   ```
+   Scriptet migrerer automatisk:
+   - `BankConnection.accessToken/refreshToken`
+   - `User.twoFactorSecret/twoFactorBackupCodes`
+   - Backup ZIP-filer (`.zip.enc`)
+7. **Verificér** — test login + 2FA + bank-forbindelse + backup-restore på én tenant.
+8. **Kør scriptet igen** — skal rapportere 0 poster.
+9. **Fjern forrige nøgle:**
+   ```
+   # Fjern ENCRYPTION_KEY_PREVIOUS fra .env og ecosystem.config.js
+   pm2 restart all
+   ```
+10. **Hvis PROOF_ENCRYPTION_KEY er kompromitteret** — koordiner med TokenBay-ZIPProof for version `0x02` (version byte eksisterer allerede i `.tbkey`-formatet).
+11. **Roter alle andre secrets** (inter-service API-nøgler, eksterne API-keys).
+12. **Foretag sikkerhedsgennemgang** — AuditLog-gennemgang for mistænkelig aktivitet mellem kompromittering og rotation.
+13. **Underret berørte registrerede** (GDPR Art. 34 hvis høj risiko) — se afsnit 6.5 + 8.
+14. **Dokumentér hændelsen** — post-incident review (se afsnit 6.6).
+
+**Rollback** (hvis migration fejler):
+```bash
+bun run scripts/rollback-encryption-keys.ts --execute
+# Derefter swap env vars, sæt CURRENT_KEY_VERSION=1, pm2 restart all
+```
 
 ### 5.6 Ransomware / malware på VPS
 
@@ -798,7 +822,7 @@ AlphaAi Consult ApS
 5. **Neon dashboard** — DB-health, forbindelses-antal, langsomme queries.
 6. **IONOS VPS-ressourceforbrug** — CPU/RAM/disk.
 7. **Certifikat-status** — verificér at TLS-certifikat ikke udløber inden for 30 dage.
-8. **Opdatering af `UDBEDRINGSPLAN.md`** — status på planlagte afhjælpninger fra `RISIKOVURDERING.md`.
+8. **Opdatering af `UDBEDRINGSPLAN.md`** — status på planlagte tiltag.
 
 ### 9.3 Ved infrastruktur-ændringer
 
@@ -910,5 +934,5 @@ pm2 list                                       # tabelleret status
 | 1.0 | 2025 | Første version (generisk beredskabsplan). | AlphaAi Consult ApS |
 | 2.0 | 2025-06 | Tilføjede PM2-kommandoer, RTO/RPO-mål. | AlphaAi Consult ApS |
 | 2.4 | 2026-06 | Mindre opdateringer. | AlphaAi Consult ApS |
-| **3.0** | **2026** | **Fuld omskrivning baseret på faktisk infrastruktur (P1-INT/P1-SVC-b/P1-SVC-a). Tilføjede: 6 PM2-apps detaljeret, backup-strategi med Lag 1-4, 8 genopretningsprocedurer (DB-tab/VPS-fejl/App-crash/Mini-service-crash/ENCRYPTION_KEY-kompromitteret/Ransomware/SQLite-tab/Caddy-fejl), 6-trins incident response-procedure, kontaktliste med underbehandlere, kommunikationsplan med skabeloner, årlig DR-test + kvartalsvis review.** | **AlphaAi Consult ApS — Doc-updater D5** |
+| **3.0** | **2026** | **Fuld omskrivning baseret på faktisk infrastruktur. Tilføjede: 6 PM2-apps detaljeret, backup-strategi med Lag 1-4, 8 genopretningsprocedurer (DB-tab/VPS-fejl/App-crash/Mini-service-crash/ENCRYPTION_KEY-kompromitteret/Ransomware/SQLite-tab/Caddy-fejl), 6-trins incident response-procedure, kontaktliste med underbehandlere, kommunikationsplan med skabeloner, årlig DR-test + kvartalsvis review.** | **AlphaAi Consult ApS** |
 | **3.1** | **2026** | **AI-konsolidering (Task C3): Verificeret at OpenRouter er AlphaFlows eneste AI-underbehandler (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). Antal eksterne integrationer opdateret fra 15 til 13. Bilag 17 (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM) reference verificeret i §7.4.** | **AlphaAi Consult ApS — Task C3** |

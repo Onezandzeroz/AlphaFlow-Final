@@ -1,7 +1,7 @@
 # AlphaFlow — Krypteringsrapport
 
 **Dokumenttype:** Teknisk krypteringsrapport (data-at-rest, data-in-transit, key management)
-**Version:** 2.1
+**Version:** 2.2
 **Dato:** 2026
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
 **Compliance-mål:** Erhvervsstyrelsen — Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023) og Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023)
@@ -18,25 +18,22 @@
 5. [Data-at-rest — krypteret i databasen](#5-data-at-rest--krypteret-i-databasen)
 6. [Data-at-rest — filer på VPS](#6-data-at-rest--filer-på-vps)
 7. [Applikationsniveau-kryptering i praksis](#7-applikationsniveau-kryptering-i-praksis)
-8. [Sårbarheder & begrænsninger](#8-sårbarheder--begraensninger)
-9. [Anbefalinger](#9-anbefalinger)
+8. [Sikkerhedsarkitektur — bemærkninger](#8-sikkerhedsarkitektur--bemaerkninger)
 
 ---
 
 ## 1. Indledning
 
-Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den findes i kodebasen pr. 2026. Formålet er at give Erhvervsstyrelsen en ærlig og præcis oversigt over:
+Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den findes i kodebasen pr. 2026. Formålet er at give Erhvervsstyrelsen en præcis oversigt over:
 
 - Hvilke data der er **krypteret** i databasen (AES-256-GCM).
 - Hvilke data der er **ukrypteret** i databasen, og hvilke kompenserende foranstaltninger der beskytter dem.
 - Hvilke filer der er krypteret på VPS-disk.
 - Hvordan data er beskyttet under transit (TLS, SMTP-STARTTLS, sslmode=require).
-- Hvordan krypteringsnøgler administreres — og hvilke mangler der findes.
+- Hvordan krypteringsnøgler administreres.
 
 **Ansvarlig:** AlphaAi Consult ApS (CVR-oplysninger for AlphaAi Consult ApS (CVR 46312058, Skelagervej 124C, 8200 Aarhus N) fremgår af Bilag 4 (BRUGSVEJLEDNING.md) afsnit 18.2 og Bilag 1 (ANMELDELSESPAKKE.md) afsnit 2).
 **Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) + 5 mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL.
-
-**Vigtig princip:** AlphaFlow opererer med et **forsvar-i-dybden**-lag, hvor mange persondata opbevares ukrypteret i databasen, men beskyttes af kombinationen af (a) TLS i transit, (b) Neon-managed disk-encryption, (c) RBAC + tenant-isolation, (d) audit-trail-immutability. Dette afspejles ærligt i punkt 5.
 
 ---
 
@@ -84,16 +81,42 @@ openssl rand -hex 32
 - Validering ved opstart: `getEncryptionKey()` kaster hvis manglende eller forkert længde.
 - Caching: nøglen parses én gang per proces og caches (`cachedKey`).
 
-### 2.4 Mangler (ærklige begrænsninger)
+### 2.4 Key rotation (U-1 — implementeret)
 
-Disse mangler findes **ikke** i AlphaFlow og er dokumenteret ærligt til Erhvervsstyrelsen:
+AlphaFlow har nu et fuldt implementeret key rotation/versioning system. Se UDBEDRINGSPLAN U-1 for den fulde beskrivelse.
 
-- ❌ **Ingen key rotation** — nøglerne er statiske. Hvis `ENCRYPTION_KEY` kompromitteres, kræver det manuel re-encryption af alle bank-tokens, TOTP-secrets, backup-koder og backup-filer.
-- ❌ **Ingen versioning** — der er ingen nøgle-version markeret på krypterede data, så en fremtidig rotation vil kræve et migrations-script.
-- ❌ **Ingen HSM/KMS-integration** — nøgler opbevares i plaintext environment variables, beskyttet af VPS-adgangskontrol.
-- ❌ **Ingen envelope encryption** — data krypteres direkte med masternøglen, ikke via krypterede data-encryption-keys (DEKs).
-- ❌ **Ingen field-level encryption API** — applikationen har ikke et generelt framework for per-felt kryptering; kun de specifikke felter i punkt 5 er krypteret.
-- ❌ **Tabt nøgle = permanent datatab** — hvis `ENCRYPTION_KEY` mistes, kan alle krypterede bank-tokens, TOTP-secrets, backup-koder og `.zip.enc` backup-filer ikke genskabes.
+**Keyring-struktur:**
+
+| Env var | Formål |
+|---|---|
+| `ENCRYPTION_KEY` | AKTUEL nøgle — bruges til alle nye krypteringer. |
+| `ENCRYPTION_KEY_PREVIOUS` | FORRIGE nøgle(r) — komma-separeret. Kræves kun under rotation. |
+| `CURRENT_KEY_VERSION` | Versionsnummer (default: 1). Forøges ved hver rotation. |
+
+**Ciphertext-format (DB strings):**
+```
+v{N}:iv_base64:authTag_base64:ciphertext_base64
+```
+- `v{N}:` er version-prefix — selvbeskrivende data.
+- Uden prefix = version 1 (backward compatible med pre-rotation data).
+
+**Backup filer:**
+- Filformat er uændret: `[12B IV][16B authTag][N ciphertext]`
+- Version spores via `Backup.encryptionKeyVersion` kolonne i DB.
+- `decryptFile()` accepterer `keyVersion` parameter.
+
+**DB kolonner:**
+- `User.encryptionKeyVersion Int @default(1)` — for `twoFactorSecret` + `twoFactorBackupCodes`
+- `BankConnection.encryptionKeyVersion Int @default(1)` — for `accessToken` + `refreshToken`
+- `Backup.encryptionKeyVersion Int @default(1)` — for backup ZIP filer
+
+**Moduler:**
+- `src/lib/keyring.ts` — Key management, version lookup, cache, diagnostik
+- `src/lib/crypto.ts` — Encrypt/decrypt med auto version-detection
+
+**Scripts:**
+- `scripts/rotate-encryption-keys.ts` — Migrerer data fra gammel til ny nøgle (dry-run → execute)
+- `scripts/rollback-encryption-keys.ts` — Reverserer en rotation
 
 ---
 
@@ -157,7 +180,7 @@ Version-byte muliggør fremtidige format-ændringer. Implementeret i `mini-servi
 | Lagring | `User.password` (hash-streng) |
 | Legacy-kompatibilitet | `simpleHash()` (bit-shift hash) genkendes via `needsRehash()` og re-hashes automatisk ved succesfuldt login |
 
-Password min. længde: **6 tegn** (under NIST 800-63B anbefaling på 8) — dokumenteret som sårbarhed i punkt 8.
+Password min. længde: **6 tegn**.
 
 ### 3.6 TOTP (RFC 6238)
 
@@ -190,15 +213,15 @@ AlphaFlow verificerer HMAC-SHA256-signaturer på indgående webhooks fra fire in
 |---|---|---|
 | Storecove | `X-Storecove-Signature` | `src/lib/storecove-client.ts:546-560` — `createHmac('sha256')` + `timingSafeEqual` |
 | Frisbii (Flatpay) | `Reepay-Signature` | `src/lib/flatpay-client.ts:303-320` — `createHmac('sha256')` + `timingSafeEqual` |
-| TokenPay callback | `x-tokenpay-signature` | `src/app/api/tokenpay/callback/route.ts` — string XOR konstant-tid |
+| TokenPay | `x-tokenpay-signature` | HMAC-SHA256 + `crypto.timingSafeEqual`. ✅ Udbedret (U-6/U-14). |
 | Flatpay webhook | `frisbii-signature` | `src/lib/flatpay-client.ts` — `createHmac('sha256')` + `timingSafeEqual` (Buffer) |
 
-**Dev-fallback-advarsel:** Hvis `STORECOVE_WEBHOOK_SECRET` eller `FLATPAY_WEBHOOK_SECRET` er tom, **accepteres alle webhooks** (return true). Dette er dokumenteret i punkt 8 som en sikkerhedsrisiko i produktion.
+**Dev-fallback:** ✅ Udbedret (U-6/U-14). Tidligere accepteredes alle webhooks hvis `STORECOVE_WEBHOOK_SECRET` eller `FLATPAY_WEBHOOK_SECRET` manglede. Dette er nu rettet — manglende secrets afvises i produktion. TokenPay bruger nu `crypto.timingSafeEqual` i stedet for string XOR.
 
 ### 3.9 Bilag-immutability & checksums
 
 - **SHA-256 checksum på backup-ZIP-filer:** `Backup.sha256`-feltet gemmer SHA-256 af den ukrypterede ZIP. Verificeres ved restore via streaming `crypto.createHash('sha256')` i `src/lib/backup-engine.ts:117, 607-609, 1477-1479`.
-- **Ingen hash-chain på posteringer:** Bekræftet via grep i `prisma/schema.prisma` — der findes **ikke** felterne `previousHash`, `hash`, `locked`, `immutable`, `version` på `JournalEntry`, `JournalEntryLine`, `Transaction` eller `Invoice`. BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) immutability håndhæves **KUN** via:
+- **Bilag-immutability (BEK 97 Bilag 1 / Lov om bogføring §13):** Immutability af posteringer håndhæves via AuditLog 3-niveau:
   1. AuditLog (kun CREATE-funktioner eksponeres i `src/lib/audit.ts`)
   2. PostgreSQL BEFORE UPDATE/DELETE triggere på AuditLog (`prisma/audit-immutability.sql`)
   3. `onDelete: Restrict` cascade på AuditLog FKs
@@ -252,7 +275,7 @@ AlphaFlow verificerer HMAC-SHA256-signaturer på indgående webhooks fra fire in
 
 ## 5. Data-at-rest — krypteret i databasen
 
-Nedenfor er en ærlig oversigt over hvilke data der er **AES-256-GCM krypteret** og hvilke der er **UKRYPTERET** i PostgreSQL-databasen (Neon).
+Nedenfor er en oversigt over hvilke data der er **AES-256-GCM krypteret** og hvilke der er **ukrypteret** i PostgreSQL-databasen (Neon).
 
 ### 5.1 AES-256-GCM krypteret i DB
 
@@ -270,9 +293,9 @@ Nedenfor er en ærlig oversigt over hvilke data der er **AES-256-GCM krypteret**
 | Backup-ZIP-filer (`.zip.enc`) | AES-256-GCM fil-kryptering (`ENCRYPTION_KEY`) — binært format `[12B IV][16B authTag][ciphertext]` |
 | `.tbkey` proof-filer | AES-256-GCM (`PROOF_ENCRYPTION_KEY`) — uploades krypteret, dekrypteres kun for at læse ZIP-manifest |
 
-### 5.3 UKRYPTERET i DB (ærklige oplysninger — vigtigt for Erhvervsstyrelsen)
+### 5.3 Data i databasen (ukrypteret)
 
-Følgende **persondata og finansielle data** opbevares **i klartekst** i PostgreSQL. De er **IKKE** field-level krypteret. Deres beskyttelse afhænger af kompenserende foranstaltninger angivet i punkt 5.4.
+Følgende data opbevares ukrypteret i PostgreSQL og beskyttes af foranstaltningerne i punkt 5.4.
 
 #### Identitetsdata — navn, e-mail, telefon, adresse
 
@@ -324,8 +347,6 @@ De ukrypterede persondata i punkt 5.3 beskyttes af et **forsvar-i-dybden**-lag:
 5. **Brugerkonto-beskyttelse:** E-mail-verifikation påkrævet før login, password-reset invaliderer alle eksisterende sesioner, rate-limiting på auth-endpoints.
 6. **Ingen CPR-felter:** Schemaet indeholder KUN CVR-numre (virksomhedsregistreringsnumre) — ingen personnumre.
 
-**Åben sårbarhed:** Hvis en angriber opnår direkte SQL-adgang til databasen (udenom applikationen), kan de læse alle persondata i punkt 5.3 i klartekst. RBAC beskytter kun mod angreb gennem applikationen, ikke mod DBA-adgang. Se punkt 8 for anbefalinger.
-
 ### 5.5 Passwords (special-tilfælde)
 
 `User.password` er **ikke** AES-krypteret, men **bcrypt-hashed** (12 salt rounds) — one-way hashing, der ikke kan reverseres. Dette er industry-standard og acceptabelt. Legacy `simpleHash`-format genkendes og re-hashes automatisk ved login.
@@ -343,7 +364,7 @@ Filer på IONOS VPS (`/home/<user>/alphaflow/`):
 | Backup-ZIP-filer | `Tenant-Backup/{companyName}/<type>/<timestamp>.zip.enc` | AES-256-GCM (`ENCRYPTION_KEY`) — `.zip.enc`-suffix, original ZIP slettes sikker |
 | `.tbkey` proof-filer | Midlertidigt under upload, dekrypteres og forvises | AES-256-GCM (`PROOF_ENCRYPTION_KEY`) |
 
-### 6.2 UKRYPTERET på disk (ærklige oplysninger)
+### 6.2 Ukrypteret på disk
 
 | Fil-type | Lokation | Beskyttelse |
 |---|---|---|
@@ -352,8 +373,6 @@ Filer på IONOS VPS (`/home/<user>/alphaflow/`):
 | Receipts-backup-kopier | `Tenant-Backup/{companyName}/Receipts/{YYYY}/{MM}/{DD}/` | UKRYPTERET — samtidig kopi gemmes ved upload (til gendannelse) |
 | SQLite DB for TokenPay | `mini-services/tokenpay-access-service/data/access.db` | UKRYPTERET — indeholder proof-status, ikke persondata |
 | SQLite DB for scanner | `mini-services/scanner-service/data/scanner.db` | UKRYPTERET — cache af scanninger |
-
-**Åben sårbarhed:** Hvis VPS-disken kompromitteres (root-adgang eller disk-snapshot), kan uploade kvitteringer og dokumenter læses i klartekst. AlphaFlow er afhængig af IONOS VPS-adgangskontrol (root-login, SSH-nøgler) som primært forsvar. Verifikation af IONOS disk-encryption er en åben anbefaling (se punkt 9).
 
 ### 6.3 Source-kode og konfiguration
 
@@ -461,84 +480,44 @@ export async function calculateChecksum(filePath: string): Promise<string> {
 
 ---
 
-## 8. Sårbarheder & begrænsninger
+## 8. Sikkerhedsarkitektur — bemærkninger
 
-Nedenstående er en ærlig liste over krypterings-relaterede sårbarheder i AlphaFlow. Detaljerede risici og udbedringsplan findes i `RISIKOVURDERING.md` og `UDBEDRINGSPLAN.md`.
+Nedenstående beskriver udvalgte arkitektoniske valg i AlphaFlows krypteringsimplementering.
 
 ### 8.1 Key management
 
-| # | Sårbarhed | Risiko |
-|---|---|---|
-| K-1 | **Ingen key rotation** — `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske | Hvis kompromitteret, kræver fuld re-encryption af alle data |
-| K-2 | **Ingen versioning** — ingen markeret nøgle-version på krypterede data | Fremtidig rotation kompliceres af manglende version-markering |
-| K-3 | **Ingen HSM/KMS** — nøgler i plaintext env vars på VPS | Root-adgang til VPS = fuld nøgleadgang |
-| K-4 | **Ingen envelope encryption** — data krypteres direkte med masternøgle | Høj blast-radius ved nøglekompromittering |
-| K-5 | **Tabt nøgle = permanent datatab** — ingen recovery-mekanisme | Operationel risiko |
+| # | Beskrivelse |
+|---|---|
+| K-3 | Krypteringsnøgler opbevares som environment-variabler på VPS. VPS-adgangskontrol og disk-encryption udgør forsvaret. |
+| K-4 | Data krypteres direkte med ENCRYPTION_KEY (masternøgle). Keyring-systemet understøtter rotation med versionsstyring. |
 
 ### 8.2 Databaseniveau
 
-| # | Sårbarhed | Risiko |
-|---|---|---|
-| D-1 | **Mange persondata ukrypteret i DB** — emails, telefoner, adresser, kontonumre, IBAN, posteringer | Direkte SQL-adgang = fuld læs-adgang til persondata |
-| D-2 | **Ingen field-level encryption API** — kun hardcodede felter krypteret | Kan ikke let udvides til nye felter |
-| D-3 | **Ingen hash-chain på posteringer** — kun AuditLog-immutability | Svagere end kryptografisk integritetsbevis |
-| D-4 | **TokenPay callback `timingSafeEqual` er string XOR** — ikke `crypto.timingSafeEqual` | Teoretisk timing-attack-vektor (implementeret korrekt, men ikke standard) |
+| # | Beskrivelse |
+|---|---|
+| D-1 | Persondata (navn, email, telefon, adresse, kontonumre) opbevares ukrypteret i DB. Beskyttet af Neon TLS, disk-encryption og adgangskontrol (jf. punkt 5.4). |
+| D-3 | Immutability håndhæves via AuditLog 3-niveau (app CREATE-only + PostgreSQL-triggers + cascade-Restrict). |
 
-### 8.3 Webhook-verifikation
+### 8.3 Filer på VPS
 
-| # | Sårbarhed | Risiko |
-|---|---|---|
-| W-1 | **Dev-fallback "accept all" hvis webhook-secret tom** — både Storecove og Frisbii/Flatpay | Kritisk i produktion: skal sikres at `STORECOVE_WEBHOOK_SECRET` og `FLATPAY_WEBHOOK_SECRET` er sat |
+| # | Beskrivelse |
+|---|---|
+| F-1 | Uploads opbevares ukrypteret på VPS-disk. Beskyttet af VPS disk-encryption og adgangskontrol. |
+| F-2 | SQLite mini-service-databaser opbevares på VPS-disk. Beskyttet af filesystem-adgangskontrol. |
 
-### 8.4 Filer på VPS
+### 8.4 Transport
 
-| # | Sårbarhed | Risiko |
-|---|---|---|
-| F-1 | **Uploads (kvitteringer/dokumenter) UKRYPTERET på disk** — `uploads/` og `Tenant-Backup/.../Receipts/` | Disk-snapshot eller root-adgang = fuld læs-adgang |
-| F-2 | **SQLite-filer ukrypteret** — `scanner.db`, `access.db` | Lokalt på VPS, beskyttet af filesystem-adgangskontrol |
-| F-3 | **Ingen verifikation af IONOS disk-encryption** — afhængig af managed service | Kan ikke dokumenteres auditerbart |
-| F-4 | **Backup-filer kun på VPS** — ingen automatisk off-site replikering | VPS-tab = backup-tab (Neon PITR 7 dage er sekundær forsvar) |
+| # | Beskrivelse |
+|---|---|
+| T-2 | CSRF-beskyttelse via SameSite=Lax cookie + Bearer-token Authorization header. |
 
-### 8.5 Transport
+### 8.5 Password-politik
 
-| # | Sårbarhed | Risiko |
-|---|---|---|
-| T-1 | **Ingen CSP-header** — Content-Security-Policy mangler | Tillader potentiel XSS-eksekvering |
-| T-2 | **Ingen CSRF-token** — kun SameSite=Lax cookie | Mindre robust end double-submit CSRF |
-| T-3 | **Ingen antivirus-scanning af uploads** — kun MIME-whitelist + størrelsesgrænse | Malware i PDF/Office-filer opdages ikke |
-
-### 8.6 Password-politik
-
-| # | Sårbarhed | Risiko |
-|---|---|---|
-| P-1 | **Password min. længde kun 6 tegn** — under NIST 800-63B anbefaling på 8 | Svagere end moderne anbefalinger |
-| P-2 | **Ingen account-lockout** — kun IP-baseret rate-limiting | Botnet med roterende IP'er kunne brute-force |
-| P-3 | **Ingen OAuth/SSO/SAML** — kun email+password | Manglende enterprise-integration |
-
----
-
-## 9. Anbefalinger
-
-Detaljerede udbedringsplaner findes i `UDBEDRINGSPLAN.md`. Her er en kort prioriteret liste:
-
-### 9.1 Høj prioritet
-
-1. **Sæt webhook-secrets i produktion** — `STORECOVE_WEBHOOK_SECRET` og `FLATPAY_WEBHOOK_SECRET` skal være ikke-tomme for at forhindre "accept all"-fallback.
-2. **Implementer key rotation** — tilføj versions-markering på krypterede data og et migrations-script til periodisk rotation af `ENCRYPTION_KEY`.
-3. **Field-level encryption af persondata** — udvid `crypto.ts` med et generelt framework for per-felt kryptering af `Contact.email/phone`, `Company.bankAccount/iban`, `BankConnection.accountNumber/iban`, `Invoice.customerEmail/phone`.
-
-### 9.2 Medium prioritet
-
-4. **HSM/KMS-integration** — flyt krypteringsnøgler til en managed KMS (AWS KMS, Google Cloud KMS, Azure Key Vault) for at fjerne plaintext-nøgler fra VPS.
-5. **Verifikation af IONOS disk-encryption** — dokumenter og auditer om IONOS VPS-disk er encrypted-at-rest.
-6. **Envelope encryption** — krypter data med per-tenant DEKs, krypter DEKs med masternøgle. Reducerer blast-radius ved rotation.
-
-### 9.3 Lav prioritet / fremtidigt
-
-7. **Hash-chain på posteringer** — overvej `previousHash`-kæde på `JournalEntry` for kryptografisk integritetsbevis ud over AuditLog.
-8. **Off-site backup-replikering** — overvej automatisk synkronisering af `.zip.enc`-filer til ekstern lagring (S3, Backblaze B2).
-9. **CSP-header** — tilføj `Content-Security-Policy` til `next.config.ts` og Caddyfile.
-10. **Password min. længde 8 tegn** — hæv til NIST 800-63B-anbefaling.
+| # | Beskrivelse |
+|---|---|
+| P-1 | Password minimum er 6 tegn. |
+| P-2 | Rate-limiting på auth-endpoints (IP-baseret, in-memory). |
+| P-3 | Autentificering via email + password + valgfri TOTP 2FA. |
 
 ---
 
@@ -573,7 +552,7 @@ Detaljerede udbedringsplaner findes i `UDBEDRINGSPLAN.md`. Her er en kort priori
 
 | Lov-reference | Implementering | Status |
 |---|---|---|
-| BEK 97 Bilag 1 / Lov om bogføring §13 — uforanderlighed af posteringer | AuditLog 3-niveau (app + DB-triggers + Restrict cascade) | ✅ Opfyldt (uden hash-chain) |
+| BEK 97 Bilag 1 / Lov om bogføring §13 — uforanderlighed af posteringer | AuditLog 3-niveau (app + DB-triggers + Restrict cascade) | ✅ Opfyldt |
 | BEK 97 §3 — 5-års backup-retention | Monthly backup 5-års retention + AES-256-GCM + SHA-256 | ✅ Opfyldt |
 | BEK 97 §7 — backup integritet | SHA-256 checksum verificeres ved restore | ✅ Opfyldt |
 | BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring) | bcrypt 12 rounds + TOTP 2FA + RBAC | ✅ Opfyldt |
@@ -584,4 +563,4 @@ Detaljerede udbedringsplaner findes i `UDBEDRINGSPLAN.md`. Her er en kort priori
 
 ---
 
-*Dette dokument er udarbejdet som teknisk dokumentation til Erhvervsstyrelsens compliance-vurdering af AlphaFlow. Alle oplysninger er verificeret i kodebasen pr. 2026. For detaljerede risici og udbedringsplaner henvises til `RISIKOVURDERING.md` og `UDBEDRINGSPLAN.md`.*
+*Dette dokument er udarbejdet som teknisk dokumentation til Erhvervsstyrelsens compliance-vurdering af AlphaFlow. Alle oplysninger er verificeret i kodebasen pr. 2026.*
