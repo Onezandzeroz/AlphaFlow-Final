@@ -1,11 +1,11 @@
 # AlphaFlow — Krypteringsrapport
 
 **Dokumenttype:** Teknisk krypteringsrapport (data-at-rest, data-in-transit, key management)
-**Version:** 2.0
+**Version:** 2.1
 **Dato:** 2026
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
-**Compliance-mål:** Erhvervsstyrelsen — Bogføringsloven (LBK nr. 1316 af 14/08/2023) og Digitaliseringsbekendtgørelsen
-**Dataansvarlig:** AlphaAi ApS (App Owner)
+**Compliance-mål:** Erhvervsstyrelsen — Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023) og Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023)
+**Dataansvarlig:** AlphaAi Consult ApS (App Owner)
 
 ---
 
@@ -33,7 +33,7 @@ Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den f
 - Hvordan data er beskyttet under transit (TLS, SMTP-STARTTLS, sslmode=require).
 - Hvordan krypteringsnøgler administreres — og hvilke mangler der findes.
 
-**Ansvarlig:** AlphaAi ApS (CVR-oplysninger følger i COMPANY.md).
+**Ansvarlig:** AlphaAi Consult ApS (CVR-oplysninger for AlphaAi Consult ApS (CVR 46312058, Skelagervej 124C, 8200 Aarhus N) fremgår af Bilag 4 (BRUGSVEJLEDNING.md) afsnit 18.2 og Bilag 1 (ANMELDELSESPAKKE.md) afsnit 2).
 **Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) + 5 mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL.
 
 **Vigtig princip:** AlphaFlow opererer med et **forsvar-i-dybden**-lag, hvor mange persondata opbevares ukrypteret i databasen, men beskyttes af kombinationen af (a) TLS i transit, (b) Neon-managed disk-encryption, (c) RBAC + tenant-isolation, (d) audit-trail-immutability. Dette afspejles ærligt i punkt 5.
@@ -198,7 +198,7 @@ AlphaFlow verificerer HMAC-SHA256-signaturer på indgående webhooks fra fire in
 ### 3.9 Bilag-immutability & checksums
 
 - **SHA-256 checksum på backup-ZIP-filer:** `Backup.sha256`-feltet gemmer SHA-256 af den ukrypterede ZIP. Verificeres ved restore via streaming `crypto.createHash('sha256')` i `src/lib/backup-engine.ts:117, 607-609, 1477-1479`.
-- **Ingen hash-chain på posteringer:** Bekræftet via grep i `prisma/schema.prisma` — der findes **ikke** felterne `previousHash`, `hash`, `locked`, `immutable`, `version` på `JournalEntry`, `JournalEntryLine`, `Transaction` eller `Invoice`. Bogføringslovens §10-12 immutability håndhæves **KUN** via:
+- **Ingen hash-chain på posteringer:** Bekræftet via grep i `prisma/schema.prisma` — der findes **ikke** felterne `previousHash`, `hash`, `locked`, `immutable`, `version` på `JournalEntry`, `JournalEntryLine`, `Transaction` eller `Invoice`. BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) immutability håndhæves **KUN** via:
   1. AuditLog (kun CREATE-funktioner eksponeres i `src/lib/audit.ts`)
   2. PostgreSQL BEFORE UPDATE/DELETE triggere på AuditLog (`prisma/audit-immutability.sql`)
   3. `onDelete: Restrict` cascade på AuditLog FKs
@@ -241,7 +241,7 @@ AlphaFlow verificerer HMAC-SHA256-signaturer på indgående webhooks fra fire in
   - `/api/hermes/*` → hermes-agent :3004 (Bearer `HERMES_ADMIN_KEY`)
   - `/api/knowledge/*` → knowledge-service :3006 (Bearer `HERMES_ADMIN_KEY`)
 - **Real-time WebSocket:** Socket.IO via Caddy reverse proxy med `?XTransformPort=<port>`-routing — TLS-termineret af Caddy.
-- **Eksterne API-kald:** alle over HTTPS (SKAT, Storecove, Frisbii, CVR, OpenRouter, OpenAI, Anthropic).
+- **Eksterne API-kald:** alle over HTTPS (SKAT, Storecove, Frisbii, CVR, OpenRouter). AI-kald (chat-LLM, embeddings, VLM) er konsolideret via OpenRouter — se Bilag 17 (konsolideret AI-DPA).
 
 ### 4.5 Browser-side
 
@@ -363,7 +363,7 @@ Filer på IONOS VPS (`/home/<user>/alphaflow/`):
 
 ### 6.4 Backup-retention & SHA-256 checksum
 
-- **Retention:** Hourly 24/25t, Daily 30/31d, Weekly 52/53d, Monthly 60/**5 år** (Bogføringsloven §15), Manual 999/90d.
+- **Retention:** Hourly 24/25t, Daily 30/31d, Weekly 52/53d, Monthly 60/**5 år** (BEK 97 §3 — udstedt i medfør af Lov om bogføring §15), Manual 999/90d.
 - **Checksum:** SHA-256 af den ukrypterede ZIP gemmes i `Backup.sha256`. Ved restore genberegnes checksum og sammenlignes — afviser hvis mismatch.
 - **Format:** `[ZIP-indhold]` → SHA-256 beregnes → AES-256-GCM encrypt → original ZIP slettes.
 - **Lokation:** `Tenant-Backup/{companyName}/` på IONOS VPS — ikke automatisk off-site.
@@ -569,14 +569,14 @@ Detaljerede udbedringsplaner findes i `UDBEDRINGSPLAN.md`. Her er en kort priori
 
 ---
 
-## Appendiks B — Compliance-matrix (Bogføringsloven)
+## Appendiks B — Compliance-matrix (Lov om bogføring + BEK 97)
 
-| Bogføringsloven-krav | Implementering | Status |
+| Lov-reference | Implementering | Status |
 |---|---|---|
-| §10-12 immutability af posteringer | AuditLog 3-niveau (app + DB-triggers + Restrict cascade) | ✅ Opfyldt (uden hash-chain) |
-| §15 backup retention 5 år | Monthly backup 5-års retention + AES-256-GCM + SHA-256 | ✅ Opfyldt |
-| §15 backup integritet | SHA-256 checksum verificeres ved restore | ✅ Opfyldt |
-| Sikkerhedskrav til adgangskontrol | bcrypt 12 rounds + TOTP 2FA + RBAC | ✅ Opfyldt |
+| BEK 97 Bilag 1 / Lov om bogføring §13 — uforanderlighed af posteringer | AuditLog 3-niveau (app + DB-triggers + Restrict cascade) | ✅ Opfyldt (uden hash-chain) |
+| BEK 97 §3 — 5-års backup-retention | Monthly backup 5-års retention + AES-256-GCM + SHA-256 | ✅ Opfyldt |
+| BEK 97 §7 — backup integritet | SHA-256 checksum verificeres ved restore | ✅ Opfyldt |
+| BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring) | bcrypt 12 rounds + TOTP 2FA + RBAC | ✅ Opfyldt |
 | Fortløbende bilagsnummerering | `Company.journalPrefix` + `nextJournalSequence` | ✅ Opfyldt |
 | Regnskabsperiode-lås | `FiscalPeriod.lockedAt/lockedBy` | ✅ Opfyldt |
 | SAF-T eksport | `/api/export-saft` | ✅ Opfyldt |

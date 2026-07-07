@@ -1,10 +1,10 @@
 # AlphaFlow — TokenPay Access & Miljøvariabler-guide
 
 **Dokumenttype:** Operationsguide for TokenPay-adgangssystemet + komplet miljøvariabel-reference
-**Version:** 2.0
+**Version:** 2.1
 **Dato:** 2026
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
-**Målgruppe:** DevOps / systemadministrator (AlphaAi ApS)
+**Målgruppe:** DevOps / systemadministrator (AlphaAi Consult ApS)
 
 ---
 
@@ -90,15 +90,17 @@ Komplet tabel over alle environment variables fra `.env.example`, kategoriseret.
 
 ### 2.3 AI-integrationer
 
+> **Konsolideret AI-integration:** Alle AI-funktioner (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service VLM) går via OpenRouter som AlphaFlows eneste AI-databehandler. OpenRouter videresender til model-udbydere (Anthropic, Meta, OpenAI m.fl.) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. Der indgås IKKE separate DPA'er med OpenAI eller Anthropic. Se Bilag 17 (konsolideret AI-DPA).
+
 | Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
 |---|---|---|---|---|
-| `OPENROUTER_API_KEY` | OpenRouter LLM-API (Hermes chat). | **JA for Hermes** | (tom) | Data ud af EU (USA). Sættes også i `hermes-agent` PM2-env. |
+| `OPENROUTER_API_KEY` | OpenRouter API-nøgle — konsolideret AI-integration (Hermes chat-LLM + knowledge-RAG embeddings + scanner VLM). Sættes i både `hermes-agent`, `knowledge-service` og `scanner-service` PM2-env. | **JA for AI-funktioner** | (tom) | Data ud af EU (USA). Kræver SCC + TIA — se Bilag 17. |
 | `OPENROUTER_BASE_URL` | API base URL. | Nej | `https://openrouter.ai/api/v1` | — |
-| `OPENROUTER_MODEL` | LLM-model. | Nej | `anthropic/claude-sonnet-4.5` | — |
+| `OPENROUTER_MODEL` | LLM-model (chat). | Nej | `anthropic/claude-sonnet-4.5` | Konfigurerbar model via OpenRouter. |
 | `OPENROUTER_APP_NAME` | HTTP-Referer header. | Nej | `AlphaFlow` | — |
 | `OPENROUTER_APP_URL` | X-Title header. | Nej | `https://alphaflow.dk` | — |
-| `OPENAI_API_KEY` | OpenAI embeddings (text-embedding-3-small) til knowledge-service RAG. | Nej (alternativ til OPENROUTER) | (tom) | Data ud af EU (USA). $0.02/M tokens. |
-| `ANTHROPIC_API_KEY` | Anthropic Claude VLM (scanner-service). Sættes i `scanner-service` PM2-env. | **JA for scanner** | (tom) | Data ud af EU (USA). Billeder af kvitteringer sendes til Anthropic. |
+
+> **Note:** Tidligere versioner af dette dokument nævnte separate `OPENAI_API_KEY` og `ANTHROPIC_API_KEY` env-vars. Disse er fjernet som separate integrationer — alt AI-data går via OpenRouter (Bilag 17, konsolideret AI-DPA per GDPR Art. 28(4)).
 
 ### 2.4 Inter-service API-nøgler
 
@@ -164,7 +166,7 @@ Disse sættes i `ecosystem.config.js` under hver mini-services `env:`-blok, **ik
 | `HOST_CALLBACK_URL` | tokenpay-access, scanner-service | Webhook-URL til host-app (f.eks. `https://alphaflow.dk/api/tokenpay/callback`). |
 | `DATABASE_PATH` | tokenpay-access (`./data/access.db`), scanner-service (`./data/scanner.db`) | SQLite-fil-placering. |
 | `PROOF_ENCRYPTION_KEY` | tokenpay-access | Skal matche root `PROOF_ENCRYPTION_KEY`. |
-| `ANTHROPIC_MODEL` | scanner-service | Default: `claude-sonnet-4-20250514`. |
+| `ANTHROPIC_MODEL` | scanner-service | Default: `claude-sonnet-4-20250514`. Model-identifier for VLM — kaldes via OpenRouter (ikke direkte Anthropic-API). |
 | `VLM_MAX_TOKENS` | scanner-service | Default: `4096`. |
 | `MAX_FILE_SIZE_MB` | scanner-service | Default: `10`. |
 | `MAX_PAGES` | scanner-service | Default: `10`. |
@@ -214,9 +216,8 @@ PROOF_ENCRYPTION_KEY=<generated-64-hex>
 # DB
 DATABASE_URL=postgresql://...?sslmode=require
 
-# AI
+# AI (konsolideret via OpenRouter)
 OPENROUTER_API_KEY=<key>
-OPENAI_API_KEY=<key>  # hvis knowledge-service skal bruge OpenAI
 
 # Inter-service
 TOKENPAY_API_KEY=<generated-64-hex>
@@ -299,8 +300,8 @@ env: {
   NODE_ENV: 'production',
   PORT: '3005',
   API_SHARED_KEY: '<samme-som-SCANNER_API_KEY>',
-  ANTHROPIC_API_KEY: '<key>',
-  ANTHROPIC_MODEL: 'claude-sonnet-4-20250514',
+  OPENROUTER_API_KEY: '<key>',  // VLM via OpenRouter (konsolideret AI-DPA — Bilag 17)
+  ANTHROPIC_MODEL: 'claude-sonnet-4-20250514',  // model-identifier videresendt via OpenRouter
   VLM_MAX_TOKENS: '4096',
   DATABASE_PATH: './data/scanner.db',
   HOST_CALLBACK_URL: '',
@@ -359,7 +360,7 @@ AlphaFlow kører 6 PM2-apps på IONOS VPS. Caddy router trafik via `?XTransformP
 | 2 | `notification-ws` | 3001 | Bun (Socket.IO) | Real-time notifikationer | `?XTransformPort=3001` |
 | 3 | `hermes-agent` | 3004 | Bun (Socket.IO) | Hermes AI-chat-assistent | `?XTransformPort=3004` |
 | 4 | `scanner-service` | 3005 | Python (FastAPI) | OCR + VLM-ekstraktion fra kvitteringer/fakturaer | `?XTransformPort=3005` |
-| 5 | `knowledge-service` | 3006 | Bun (HTTP + pgvector) | RAG-videnbase med OpenAI/OpenRouter embeddings | Intern (ikke direkte Caddy-routet) |
+| 5 | `knowledge-service` | 3006 | Bun (HTTP + pgvector) | RAG-videnbase med embeddings via OpenRouter | Intern (ikke direkte Caddy-routet) |
 | 6 | `tokenpay-access` | 3100 | Bun (Hono) | TokenPay adgangsstyring + `.tbkey` dekryptering | `?XTransformPort=3100` |
 
 ### 4.2 Caddy reverse proxy
@@ -425,9 +426,7 @@ Brug denne checklist ved produktionssætning og periodisk audit.
 
 ### 5.5 Eksterne integrationer
 
-- [ ] `OPENROUTER_API_KEY` er sat (ellers svarer Hermes ikke).
-- [ ] `OPENAI_API_KEY` ELLER `OPENROUTER_API_KEY` er sat i knowledge-service (ellers fejler RAG-embedding).
-- [ ] `ANTHROPIC_API_KEY` er sat i scanner-service (ellers fejler VLM-ekstraktion).
+- [ ] `OPENROUTER_API_KEY` er sat i `hermes-agent`, `knowledge-service` og `scanner-service` PM2-env (konsolideret AI-integration — ellers fejler chat-LLM, RAG-embeddings og VLM-ekstraktion).
 - [ ] `NEMHANDEL_SIMULATION_MODE=false` hvis rigtige e-fakturaer skal sendes.
 - [ ] `CVR_SIMULATION_MODE=false` hvis rigtige CVR-opslag skal foretages.
 - [ ] `SKAT_CLIENT_ID` + `SKAT_CLIENT_SECRET` sat hvis rigtige momsangivelser skal indsendes.
@@ -514,6 +513,8 @@ pm2 restart tokenpay-access
 
 **Løsning:** Sæt `OPENROUTER_API_KEY` eksplicit i `hermes-agent` env-blok i `ecosystem.config.js`. Genstart.
 
+> **Konsolideret AI-integration:** Den samme `OPENROUTER_API_KEY` bruges nu til alle AI-tjenester (chat-LLM, RAG-embeddings, VLM). Tidligere separate `OPENAI_API_KEY` og `ANTHROPIC_API_KEY` er fjernet — alt AI går via OpenRouter per GDPR Art. 28(4) (se Bilag 17).
+
 ---
 
-*Dette dokument er udarbejdet som operationsdokumentation for AlphaAi ApS. For tekniske krypteringsdetaljer henvises til `ENCRYPTION.md`. For sikkerhedsvurdering og udbedringsplaner henvises til `RISIKOVURDERING.md` og `UDBEDRINGSPLAN.md`.*
+*Dette dokument er udarbejdet som operationsdokumentation for AlphaAi Consult ApS. For tekniske krypteringsdetaljer henvises til `ENCRYPTION.md`. For sikkerhedsvurdering og udbedringsplaner henvises til `RISIKOVURDERING.md` og `UDBEDRINGSPLAN.md`.*

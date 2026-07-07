@@ -2,19 +2,19 @@
 
 > **Anmeldelsespakke til Erhvervsstyrelsen — Registering/godkendelse af elektronisk bogføringssystem**
 >
-> **Bekendtgørelse:** Bekendtgørelse om elektroniske bogføringssystemer (BEK nr. 98 af 13. februar 2024)
+> **Bekendtgørelse:** Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023) — Bekendtgørelse om anmeldelse og registrering af digitale standard bogføringssystemer; suppleret af Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) — Bekendtgørelse om krav til digitale standard bogføringssystemer.
 >
-> **Lovgrundlag:** Bogføringsloven (LBK nr. 1457 af 13. december 2019)
+> **Lovgrundlag:** Lov om bogføring (LOV nr. 700 af 24. maj 2022)
 >
 > **Pakke-version:** 1.0 — revideret 2026
 >
-> **Ansvarlig:** AlphaAi ApS
+> **Ansvarlig:** AlphaAi Consult ApS
 
 ---
 
 ## 1. Indledning
 
-Denne anmeldelsespakke er AlphaAi ApS' samlede dokumentation i forbindelse med ansøgning til Erhvervsstyrelsen om **registering/godkendelse af AlphaFlow som elektronisk bogføringssystem** jf. Bogføringsloven og Erhvervsstyrelsens bekendtgørelse om elektroniske bogføringssystemer.
+Denne anmeldelsespakke er AlphaAi Consult ApS' samlede dokumentation i forbindelse med ansøgning til Erhvervsstyrelsen om **registering/godkendelse af AlphaFlow som elektronisk bogføringssystem** jf. Bogføringsloven og Erhvervsstyrelsens bekendtgørelse om elektroniske bogføringssystemer.
 
 Anmeldelsespakken fungerer som **forside og indeks** for den samlede dokumentation i projektets `docs/`-mappe og henviser til de specifikke dokumenter, der uddyber de enkelte kravområder. Pakken er udarbejdet med udgangspunkt i den faktiske, implementerede kodebase — ingen planlagte, hypotetiske eller "på vej"-funktioner er beskrevet som eksisterende.
 
@@ -26,17 +26,17 @@ Anmeldelsespakken fungerer som **forside og indeks** for den samlede dokumentati
 
 | Feltpost | Værdi |
 |---|---|
-| **Selskab** | AlphaAi ApS |
+| **Selskab** | AlphaAi Consult ApS |
 | **CVR-nummer** | _[skabelon: indtast CVR — anvendes ved indsendelse via virk.dk]_ |
-| **Kontaktperson** | _[skabelon: navn, e-mail, telefon]_ |
+| **Kontaktperson** | Jess Martin Christoffersen, alphaaiconsult@gmail.com, 61 73 60 76 |
 | **Produkt-navn** | AlphaFlow |
 | **Produkt-version** | 1.0.0 (pakke-navn: `alphaai-accounting`) |
 | **Domæne** | `alphaflow.dk` (`www.alphaflow.dk`) |
 | **Produkt-type** | Cloud-baseret SaaS — multi-tenant dansk bogføringsplatform |
 | **Lanceringsdato** | _[skabelon: indtast produktions-lanceringsdato]_ |
-| **Dataansvarlig** | AlphaAi ApS (App Owner) |
+| **Dataansvarlig** | AlphaAi Consult ApS (App Owner) |
 | **Hosting-udbydere** | Neon, Inc. (database) + IONOS SE (VPS-hosting + backup-lagring) — begge EU-baserede |
-| **Anmeldelsesansvarlig** | _[skabelon: navn, titel]_ |
+| **Anmeldelsesansvarlig** | Jess Martin Christoffersen, Direktør |
 
 > Alle felter markeret "_[skabelon: …]_" udfyldes ved den endelige indsendelse via [virk.dk](https://www.virk.dk).
 
@@ -51,13 +51,13 @@ Anmeldelsespakken fungerer som **forside og indeks** for den samlede dokumentati
 - **E-fakturering** — OIOUBL (NemHandel) + Peppol BIS Billing 3.0; modtagelse af e-fakturaer i indbakke med godkend/afvis-workflow.
 - **Momsangivelse** — indsendelse direkte til Skattestyrelsens Moms-API (OAuth2 `client_credentials`).
 - **Bank-integration** (scaffolding) — bank-forbindelser med AES-256-GCM-krypterede tokens; manuel afstemning ( ingen AI-bankafstemning i produktion).
-- **AI-assistent Hermes** — Socket.IO chat med OpenRouter LLM, per-tenant opt-in (`dataAccessEnabled`), knowledge-RAG via OpenAI-embeddings, proaktive påmindelser.
-- **Dokument-OCR** — Tesseract + Anthropic Claude VLM, returnerer struktureret faktura/kvitteringsdata og FSR-konto-forslag.
+- **AI-assistent Hermes** — Socket.IO chat via OpenRouter (konfigurerbar LLM-model), per-tenant opt-in (`dataAccessEnabled`), knowledge-RAG via OpenRouter (embedding-modeller), proaktive påmindelser. **Før aktivering skal tenant-administrator aktivt acceptere tre advarsler (GDPR-risici ved USA-overførsel, non-deterministiske processer, ikke-menneskelig-rådgivning) via samtykke-dialog** — se Bilag 4 (BRUGSVEJLEDNING.md) afsnit 13.0.
+- **Dokument-OCR** — Tesseract + VLM via OpenRouter (vision-language model), returnerer struktureret faktura/kvitteringsdata og FSR-konto-forslag.
 - **PWA** — installerbar, offline-understøttelse, kamera-adgang til kvitteringsfotos.
 - **Multi-tenant isolation** — `Company` som tenant-grænse, RBAC med 5 roller (OWNER/ADMIN/ACCOUNTANT/VIEWER/AUDITOR) og 18 permissions, SuperDev oversight-mode (read-only cross-tenant).
 - **Auth** — email+password (bcrypt, 12 rounds) + TOTP 2FA (RFC 6238) + 10 backup-koder + email-verifikation.
 - **Audit-trail** — 3-niveau immutability (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade).
-- **Backup** — node-cron scheduler (time/dag/uge/måned), AES-256-GCM-krypterede ZIP-filer pr. tenant, SHA-256 checksum, retention op til 5 år (monthly) jf. Bogføringsloven §15.
+- **Backup** — node-cron scheduler (time/dag/uge/måned), AES-256-GCM-krypterede ZIP-filer pr. tenant, SHA-256 checksum, retention op til 5 år (monthly) jf. BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15.
 
 ### Begrænsninger — hvad AlphaFlow **ikke** omfatter
 
@@ -67,7 +67,7 @@ Følgende funktioner findes **ikke** i platformen og indgår ikke i anmeldelseso
 |---|---|
 | **Lønmodul** | Ikke implementeret (kun `TransactionType.SALARY` enum findes). |
 | **Kreditnota-flow i UI** | Ikke implementeret (`EInvoiceType.CREDIT_NOTE` enum findes, men ingen oprettelsesflow). |
-| **Reelle bank-API-kald** | Ikke implementeret — Tink/Nordea/Danske Bank/Jyske Bank er stubs; kun Demo-provider returnerer data. |
+| **Reelle bank-API-kald** | Delvist — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer 404); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
 | **MitID / NemID / BankID** | Ikke implementeret — kun email+password+TOTP. |
 | **Varekartotek** | Ikke implementeret (invoice line-items er JSON, ingen Item-master). |
 | **AM-bidrag / årsopgørelse / e-indkomst til SKAT** | Ikke implementeret — KUN momsangivelse indsendes. |
@@ -87,8 +87,8 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 | Kravområde | Lov-reference | AlphaFlow-implementering | Status |
 |---|---|---|---|
 | **Systemegnethed** | Bogføringsloven §3 | Dobbelt bogføring (JournalEntry + JournalEntryLine), FSR-38 standardkontoplan, finansjournal, hovedbog, regnskabsperioder med lock. | ✅ Opfyldt |
-| **Uforanderlighed / immutability** | Bogføringsloven §10–12 | AuditLog 3-niveau (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade). Konto-deaktivering i stedet for hard-delete. | ✅ Opfyldt (delvist) — ingen kryptografisk hash-chain mellem posteringer; immutability håndhæves via DB-triggere + audit-log. |
-| **Backup & 5-års retention** | Bogføringsloven §15 | node-cron scheduler: hourly/daily/weekly/monthly + cleanup; AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant; SHA-256 checksum; monthly retention 60 måneder = 5 år; `Tenant-Backup/` på IONOS VPS. | ✅ Opfyldt |
+| **Uforanderlighed / immutability** | BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) samt Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) | AuditLog 3-niveau (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade). Konto-deaktivering i stedet for hard-delete. | ✅ Opfyldt (delvist) — INGEN kryptografisk hash-chain på posteringer; immutability håndhæves KUN via AuditLog 3-niveau + PostgreSQL-triggere. |
+| **Backup & 5-års retention** | BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 | node-cron scheduler: hourly/daily/weekly/monthly + cleanup; AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant; SHA-256 checksum; monthly retention 60 måneder = 5 år; `Tenant-Backup/` på IONOS VPS. | ✅ Opfyldt |
 | **SAF-T Financial DK eksport** | BEK 98 | `/api/export-saft` — maskinlæsbar eksport af hele regnskabet. | ✅ Opfyldt |
 | **Årsrapport (XBRL/CSV)** | BEK 98 | `/api/reports/annual-xbrl` + `/api/reports/annual-csv`. | ✅ Opfyldt |
 | **E-fakturering (NemHandel/Peppol)** | BEK 98 | Send/modtag via Storecove som Peppol Access Point. OIOUBL + Peppol BIS Billing 3.0. E-faktura-indbakke med godkend/afvis. | ✅ Opfyldt |
@@ -97,7 +97,7 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 | **Udbyderskift / dataeksport** | Bogføringsloven §13; BEK 98 | `/api/export-tenant` (JSON + filer, SHA-256 manifest), `/api/export-saft`, `/api/company/export-info`. | ✅ Opfyldt |
 | **Fortløbende bilagsnummerering** | Bogføringsloven §10 | `Company.journalPrefix` (default "BIL") + `nextJournalSequence`. | ✅ Opfyldt |
 | **Valutahåndtering** | Bogføringsloven §14 | Transaction-model med `currency`, `exchangeRate`, `amountDKK`. | ✅ Opfyldt |
-| **IT-sikkerhed (RBAC, 2FA, kryptering)** | BEK 98 (Hovedkrav 2) | RBAC 5 roller/18 permissions, TOTP 2FA, AES-256-GCM (bank-tokens/TOTP/backup), bcrypt 12 rounds, TLS 1.2/1.3 via Caddy. | ✅ Opfyldt (se §8 åbenhed om mangler) |
+| **IT-sikkerhed (RBAC, 2FA, kryptering)** | BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring) | RBAC 5 roller/18 permissions, TOTP 2FA, AES-256-GCM (bank-tokens/TOTP/backup), bcrypt 12 rounds, TLS 1.2/1.3 via Caddy. | ✅ Opfyldt (se §8 åbenhed om mangler) |
 | **Risikovurdering** | BEK 98 | `docs/RISIKOVURDERING.md`. | ✅ Opfyldt |
 | **Beredskabsplan (DR)** | BEK 98 | `docs/BEREDSKABSPLAN.md`. | ✅ Opfyldt |
 | **Databehandleraftaler** | GDPR Art. 28; BEK 98 | `docs/DATABEHANDLERAFTALE.md` + `docs/LEVERANDØERSTYRING.md`. | ✅ Opfyldt |
@@ -118,9 +118,9 @@ AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 5 
 | **Proces-manager** | PM2 (fork-mode, 6 processer) | Autorestart (max 10 restarts, 5s delay), separate log-filer i `./logs/`. |
 | **Hosting** | IONOS VPS (EU/Tyskland, IONOS SE) | Applikationsserver + lokal backup-lagring (`Tenant-Backup/`) + uploads (`uploads/`). |
 | **Mini-service: hermes-agent** | Bun + Socket.IO + Prisma (port 3004) | AI-chat-assistent, OpenRouter LLM, reminders. Deler Neon DB. |
-| **Mini-service: knowledge-service** | Bun + rå HTTP + Prisma + pgvector (port 3006) | RAG-knowledge base, OpenAI-embeddings (1536-dim). Deler Neon DB. |
+| **Mini-service: knowledge-service** | Bun + rå HTTP + Prisma + pgvector (port 3006) | RAG-knowledge base, embeddings via OpenRouter. Deler Neon DB. |
 | **Mini-service: notification-ws** | Bun + Socket.IO (port 3001) | Real-time notifikationer, in-memory. |
-| **Mini-service: scanner-service** | Python + FastAPI + SQLite (port 3005) | OCR (Tesseract) + Anthropic Claude VLM. |
+| **Mini-service: scanner-service** | Python + FastAPI + SQLite (port 3005) | OCR (Tesseract) + VLM via OpenRouter. |
 | **Mini-service: tokenpay-access** | Bun + Hono + SQLite (port 3100) | `.tbkey` proof-verifikation, adgangsstyring. |
 
 **Multi-tenant isolation:** `Company` er tenant-grænse, `companyId` på tværs af 24 Prisma-modeller, RBAC-isolation via `tenantFilter(ctx)`. SuperDev oversight-mode tillader read-only cross-tenant adgang for AlphaAi-admin.
@@ -133,26 +133,27 @@ AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 5 
 
 ## 6. Dokumentindeks
 
-Nedenstående tabel indekserer **alle 14 dokumenter** i AlphaFlows `docs/`-mappe. 10 dokumenter er revideret i denne anmeldelsesrunde (2026); 4 dokumenter er udenfor scope for denne revision, og den eksisterende version gælder.
+Nedenstående tabel indekserer de **13 dokumenter** i AlphaFlows `docs/`-mappe, der udgør anmeldelsespakken til Erhvervsstyrelsen (med tilknyttede bilagsnumre jf. CANON-SPEC Bilagsliste). 12 dokumenter er revideret i denne anmeldelsesrunde (2026); 1 dokument (`SUBMISSION_CHECKLIST.md`) er supersederet. Dokumenter uden relevans for registreringen er flyttet til `docs/udenfor-scope/` (se note under tabellen).
 
-| # | Dokument | Formål | Status |
+| # | Dokument (bilag) | Formål | Status |
 |---|---|---|---|
-| 1 | `ANMELDELSESPAKKE.md` | Dette dokument — forside og indeks for anmeldelsen til Erhvervsstyrelsen. | Revideret 2026 |
-| 2 | `COMPLIANCE_RAPPORT.md` | Krav-for-krav kortlægning af Bogføringsloven + BEK 98 med tekniske implementeringsreferencer. | Revideret 2026 |
-| 3 | `BRUGSVEJLEDNING.md` | Brugermanual for alle funktioner i AlphaFlow (bogføring, fakturering, moms, bank, 2FA, e-faktura, årsregnskab m.m.). | Revideret 2026 |
-| 4 | `ENCRYPTION.md` | Detaljeret kryptografisk dokumentation (AES-256-GCM, bcrypt, SHA-256, TLS, nøglehåndtering). | Revideret 2026 |
-| 5 | `DATABEHANDLERAFTALE.md` | Standard databehandleraftale (GDPR Art. 28) mellem AlphaAi ApS og AlphaFlow-brugere, med referencer til underbehandlere. | Revideret 2026 |
-| 6 | `RISIKOVURDERING.md` | IT-risikovurdering — trusselsidentifikation, risikomatrix, eksisterende kontroller, restrisici. | Revideret 2026 |
-| 7 | `LEVERANDØERSTYRING.md` | Evaluering og styring af tekniske leverandører (Neon, IONOS, Storecove, OpenAI/OpenRouter/Anthropic, SKAT, Frisbii). | Revideret 2026 |
-| 8 | `BEREDSKABSPLAN.md` | Disaster Recovery-plan — RTO/RPO, gendannelsesprocedurer, backup-strategi, kontaktliste. | Revideret 2026 |
-| 9 | `NEON & IONOS_IT_SIKKERHED.md` | Tredjeparts IT-sikkerhedsdokumentation for de to primære infrastruktur-udbydere (Neon DB + IONOS VPS). | Revideret 2026 |
-| 10 | `TOKENBAY-ACCESS-ENV-GUIDE.md` | Miljø- og opsætningsguide for TokenPay/TokenBay-adgangssystemet (`.tbkey` proofs, trial, free tier). | Revideret 2026 |
-| 11 | `UDBEDRINGSPLAN.md` | Plan for afhjælpning af kendte mangler (fra P1-SEC-analyse). | Udenfor scope for denne revision — eksisterende version gælder. |
-| 12 | `SUBMISSION_CHECKLIST.md` | Tjekliste for selve indsendelsen til Erhvervsstyrelsen via virk.dk. | Udenfor scope for denne revision — eksisterende version gælder. |
-| 13 | `PROJECTS_IMPLEMENTATION.md` | Implementeringsnoter for valgfrit projekt-modul. | Udenfor scope for denne revision — eksisterende version gælder. |
-| 14 | `MULTI_TENANT_PLAN.md` | Designnoter for multi-tenant-arkitektur. | Udenfor scope for denne revision — eksisterende version gælder. |
+| 1 | `ANMELDELSESPAKKE.md` (Bilag 1) | Dette dokument — forside og indeks for anmeldelsen til Erhvervsstyrelsen. | Revideret 2026 |
+| 2 | `COMPLIANCE_RAPPORT.md` (Bilag 2) | Krav-for-krav kortlægning af Lov om bogføring + BEK 97/98 med tekniske implementeringsreferencer. | Revideret 2026 |
+| 3 | `BRUGSVEJLEDNING.md` (Bilag 4) | Brugermanual for alle funktioner i AlphaFlow (bogføring, fakturering, moms, bank, 2FA, e-faktura, årsregnskab m.m.). | Revideret 2026 |
+| 4 | `ENCRYPTION.md` (Bilag 3) | Detaljeret kryptografisk dokumentation (AES-256-GCM, bcrypt, SHA-256, TLS, nøglehåndtering). | Revideret 2026 |
+| 5 | `DATABEHANDLERAFTALE.md` (Bilag 5) | Standard databehandleraftale (GDPR Art. 28) mellem AlphaAi Consult ApS og AlphaFlow-brugere, med referencer til underbehandlere. | Revideret 2026 |
+| 6 | `RISIKOVURDERING.md` (Bilag 6) | IT-risikovurdering — trusselsidentifikation, risikomatrix, eksisterende kontroller, restrisici. | Revideret 2026 |
+| 7 | `LEVERANDØERSTYRING.md` (Bilag 8) | Evaluering og styring af tekniske leverandører (Neon, IONOS, Storecove, OpenRouter, SKAT, Frisbii). | Revideret 2026 |
+| 8 | `BEREDSKABSPLAN.md` (Bilag 7) | Disaster Recovery-plan — RTO/RPO, gendannelsesprocedurer, backup-strategi, kontaktliste. | Revideret 2026 |
+| 9 | `NEON & IONOS_IT_SIKKERHED.md` (Bilag 9) | Tredjeparts IT-sikkerhedsdokumentation for de to primære infrastruktur-udbydere (Neon DB + IONOS VPS). | Revideret 2026 |
+| 10 | `TOKENBAY-ACCESS-ENV-GUIDE.md` (Bilag 11) | Miljø- og opsætningsguide for TokenPay/TokenBay-adgangssystemet (`.tbkey` proofs, trial, free tier). | Revideret 2026 |
+| 11 | `UDBEDRINGSPLAN.md` (Bilag 10) | Tidssvarende plan for afhjælpning af kendte mangler før indsendelse — dækker alle 20 risici (R-01…R-20) fra Bilag 6 + 5 oprindelige 2025-mangler, klassificeret i Kategori A/B/C. | Revideret 2026 (v3.0) |
+| 12 | `BILAG_OVERSIGT.md` (Bilag 12) | Samlet bilagsliste + oversigt over underbehandler-DPA'er. | NY — revideret 2026 |
+| 13 | `SUBMISSION_CHECKLIST.md` | Tidligere indsendelsesguide — nu supersederet og omdirigerer til Bilag 1, 12 og 19. | Supersederet — eksisterende version gælder som omdirigering. |
 
-> Dokumenterne 1–10 udgør den ajourførte anmeldelsespakke for 2026-revisionen. Dokument 11 (UDBEDRINGSPLAN) refereres fra afsnit 8 nedenfor og opretholdes som separat løbende dokument.
+> Dokumenterne 1–10 samt Bilag 12 (`BILAG_OVERSIGT.md`) udgør den ajourførte anmeldelsespakke for 2026-revisionen. Dokument 10 (UDBEDRINGSPLAN, Bilag 10) refereres fra afsnit 8 nedenfor og opretholdes som separat løbende dokument. **Bilag 13–18 (underbehandler-DPA'er for Neon, IONOS, Storecove, Frisbii/Flatpay, OpenRouter og Simply/Brevo) vedhæftes anmeldelsen som separate PDF'er** — se `BILAG_OVERSIGT.md` (Bilag 12) for fuld oversigt. Bilag 19 udgøres af tjeklisten (`AlphaFlow_Endelig-Tjek og Mangleliste.xlsx`).
+>
+> **Dokumenter udenfor scope:** `MULTI_TENANT_PLAN.md` (designnoter for multi-tenant-arkitektur) og `PROJECTS_IMPLEMENTATION.md` (implementeringsnoter for valgfrit projekt-modul) er interne udviklingsdokumenter uden relevans for Erhvervsstyrelsen-registreringen og er flyttet til `docs/udenfor-scope/`. Se `docs/udenfor-scope/README.md` for begrundelse.
 
 ---
 
@@ -162,25 +163,24 @@ Nedenstående tabel henviser til de specifikke dokumenter, der uddyber hvert com
 
 | Compliance-område | Lov-reference | Hoveddokument | Supplerende dokumenter |
 |---|---|---|---|
-| **Bogføringsloven-overholdelse** | LBK 1457/2019 (§3, §10–12, §13, §14, §15) | `COMPLIANCE_RAPPORT.md` | `BRUGSVEJLEDNING.md`, `ENCRYPTION.md` |
-| **BEK 98 — elektroniske bogføringssystemer** | BEK 98 af 13. feb. 2024 | `COMPLIANCE_RAPPORT.md` | `BEREDSKABSPLAN.md`, `RISIKOVURDERING.md` |
-| **GDPR — persondata** | EU 2016/679 (Art. 5, 25, 28, 32, 33, 34) | `DATABEHANDLERAFTALE.md` | `COMPLIANCE_RAPPORT.md`, `LEVERANDØERSTYRING.md` |
-| **IT-sikkerhed** | BEK 98 (Hovedkrav 2); GDPR Art. 32 | `NEON & IONOS_IT_SIKKERHED.md` | `ENCRYPTION.md`, `RISIKOVURDERING.md` |
-| **Risikovurdering** | BEK 98 | `RISIKOVURDERING.md` | `UDBEDRINGSPLAN.md` |
-| **Beredskab / Disaster Recovery** | BEK 98 | `BEREDSKABSPLAN.md` | `NEON & IONOS_IT_SIKKERHED.md` |
-| **Leverandørstyring** | GDPR Art. 28; BEK 98 | `LEVERANDØERSTYRING.md` | `DATABEHANDLERAFTALE.md`, `NEON & IONOS_IT_SIKKERHED.md` |
-| **Databehandleraftaler** | GDPR Art. 28 | `DATABEHANDLERAFTALE.md` | `LEVERANDØERSTYRING.md` |
-| **Kryptografisk sikkerhed** | GDPR Art. 32; BEK 98 | `ENCRYPTION.md` | `NEON & IONOS_IT_SIKKERHED.md` |
-| **Adgangsstyring (RBAC + 2FA)** | BEK 98 | `COMPLIANCE_RAPPORT.md` | `BRUGSVEJLEDNING.md` |
-| **Backup & retention (5 år)** | Bogføringsloven §15 | `COMPLIANCE_RAPPORT.md` | `BEREDSKABSPLAN.md`, `NEON & IONOS_IT_SIKKERHED.md` |
+| **Bogføringsloven-overholdelse** | Lov om bogføring (LOV nr. 700 af 24. maj 2022) (§3, §13, §14, §15) | `COMPLIANCE_RAPPORT.md` (Bilag 2) | `BRUGSVEJLEDNING.md` (Bilag 4), `ENCRYPTION.md` (Bilag 3) |
+| **BEK 98 — anmeldelse/registrering** | Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023) | `COMPLIANCE_RAPPORT.md` (Bilag 2) | `BEREDSKABSPLAN.md` (Bilag 7), `RISIKOVURDERING.md` (Bilag 6) |
+| **BEK 97 — krav til digitale bogføringssystemer** | Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) | `COMPLIANCE_RAPPORT.md` (Bilag 2) | `ENCRYPTION.md` (Bilag 3), `NEON & IONOS_IT_SIKKERHED.md` (Bilag 9) |
+| **GDPR — persondata** | EU 2016/679 (Art. 5, 25, 28, 32, 33, 34) | `DATABEHANDLERAFTALE.md` (Bilag 5) | `COMPLIANCE_RAPPORT.md` (Bilag 2), `LEVERANDØERSTYRING.md` (Bilag 8) |
+| **IT-sikkerhed** | BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring); GDPR Art. 32 | `NEON & IONOS_IT_SIKKERHED.md` (Bilag 9) | `ENCRYPTION.md` (Bilag 3), `RISIKOVURDERING.md` (Bilag 6) |
+| **Risikovurdering** | BEK 97 §8 stk. 4 (Hovedkrav 5 — logning); BEK 98 §13 | `RISIKOVURDERING.md` (Bilag 6) | `UDBEDRINGSPLAN.md` (Bilag 10) |
+| **Beredskab / Disaster Recovery** | BEK 97 §8 stk. 4 (Hovedkrav 6 — beredskab og reetablering); BEK 98 §13 | `BEREDSKABSPLAN.md` (Bilag 7) | `NEON & IONOS_IT_SIKKERHED.md` (Bilag 9) |
+| **Leverandørstyring** | GDPR Art. 28; BEK 97 §8 stk. 4 (Hovedkrav 3 — leverandørstyring) | `LEVERANDØERSTYRING.md` (Bilag 8) | `DATABEHANDLERAFTALE.md` (Bilag 5), `NEON & IONOS_IT_SIKKERHED.md` (Bilag 9) |
+| **Databehandleraftaler** | GDPR Art. 28 | `DATABEHANDLERAFTALE.md` (Bilag 5) | `LEVERANDØERSTYRING.md` (Bilag 8) |
+| **Kryptografisk sikkerhed** | GDPR Art. 32; BEK 97 §8 stk. 4 (Hovedkrav 7 — databeskyttelse) | `ENCRYPTION.md` (Bilag 3) | `NEON & IONOS_IT_SIKKERHED.md` (Bilag 9) |
+| **Adgangsstyring (RBAC + 2FA)** | BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring) | `COMPLIANCE_RAPPORT.md` (Bilag 2) | `BRUGSVEJLEDNING.md` (Bilag 4) |
+| **Backup & retention (5 år)** | BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 | `COMPLIANCE_RAPPORT.md` (Bilag 2) | `BEREDSKABSPLAN.md` (Bilag 7), `NEON & IONOS_IT_SIKKERHED.md` (Bilag 9) |
 
 ### Dataflow ud af EU/EEA
 
-Tre underbehandlere flytter persondata til USA (SCC + TIA påkrævet — se `DATABEHANDLERAFTALE.md` og `LEVERANDØERSTYRING.md`):
+Én AI-underbehandler flytter persondata til USA (SCC + TIA påkrævet — se `DATABEHANDLERAFTALE.md` og `LEVERANDØERSTYRING.md`):
 
-1. **OpenAI, Inc.** (USA) — embeddings til Hermes Knowledge RAG.
-2. **OpenRouter, Inc.** (USA) — Hermes chat-LLM (videresender til Anthropic/Meta).
-3. **Anthropic PBC** (USA) — scanner VLM (billeder af kvitteringer/fakturaer).
+1. **OpenRouter, Inc.** (USA) — AlphaFlows eneste AI-databehandler. Dækker alle AI-funktioner: Hermes chat-LLM, knowledge-RAG embeddings og scanner VLM (vision-language model). OpenRouter videresender til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'.
 
 Data minimization: `HermesAgent.dataAccessEnabled` er per-tenant opt-in (default false) — uden opt-in sendes KUN spørgsmål + statisk system-prompt, ikke tenant-specifikke finansielle data.
 
@@ -188,7 +188,7 @@ Data minimization: `HermesAgent.dataAccessEnabled` er per-tenant opt-in (default
 
 ## 8. Åbenhed om mangler
 
-AlphaAi ApS har i forbindelse med denne anmeldelse identificeret følgende kendte mangler i platformen. Manglerne er uddybet i `docs/RISIKOVURDERING.md` med restrisici, og afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`. Erhvervsstyrelsens anmeldelsespraksis tilskynder åbenhed om kendte mangler, og nedenstående liste er derfor inkluderet her.
+AlphaAi Consult ApS har i forbindelse med denne anmeldelse identificeret følgende kendte mangler i platformen. Manglerne er uddybet i `docs/RISIKOVURDERING.md` med restrisici, og afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`. Erhvervsstyrelsens anmeldelsespraksis tilskynder åbenhed om kendte mangler, og nedenstående liste er derfor inkluderet her.
 
 ### Sikkerhedsmæssige mangler
 
@@ -204,14 +204,17 @@ AlphaAi ApS har i forbindelse med denne anmeldelse identificeret følgende kendt
 
 ### Funktionelle mangler (i relation til anmeldelsen)
 
-10. **Ingen kryptografisk hash-chain på posteringer** — Bogføringsloven §10–12 immutability håndhæves KUN via AuditLog 3-niveau + PostgreSQL-triggere, ikke via hash-kæde mellem posteringer.
+10. **Ingen kryptografisk hash-chain på posteringer** — BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) samt Lov om bogføring §13 immutability håndhæves KUN via AuditLog 3-niveau + PostgreSQL-triggere, ikke via hash-kæde mellem posteringer.
 11. **Ingen kreditnota-flow i UI** — `EInvoiceType.CREDIT_NOTE` enum findes, men ingen oprettelsesflow.
-12. **Ingen reelle bank-API-kald** — Tink/Nordea/Danske/Jyske er stubs; kun Demo-provider virker.
+12. **Bank-integration (delvist)** — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink.
 13. **Ingen MitID/BankID** — kun email+password+TOTP.
 14. **Ingen AI-bankafstemning i produktion** — `z-ai-web-dev-sdk` er sandbox-only.
 15. **Uploads ukrypteret på VPS-disk** — `uploads/`-filer er ukrypteret; backup-filer er derimod AES-256-GCM-krypterede. Afhænger af disk-encryption + adgangskontrol på VPS.
+16. **AI non-determinisme og hallucinationer** — Hermes chat-LLM og scanner VLM er baseret på sprogmodeller via OpenRouter; AI-output er ikke deterministisk og kan indeholde fejl eller "hallucinationer". Håndteres via tre advarsler (GDPR-risici, non-determinisme, ikke-menneskelig-rådgivning) præsenteret for tenant-administrator før Hermes-aktivering, AuditLog-samtykke (`AI_CONSENT_ACCEPTED`), fodnote på hver Hermes-besked, "Kræver gennemsyn"-markering ved lav VLM-konfidens, og at AI-output aldrig overstyrer automatisk bogførte posteringer. Se Bilag 4 (BRUGSVEJLEDNING.md) afsnit 13.0 og Bilag 6 (RISIKOVURDERING.md) R-21.
 
-> Manglende punkt 10 (hash-chain) er den eneste, der potentielt påvirker Erhvervsstyrelsens fortolkning af §10–12 — herunder om den implementerede AuditLog + DB-triggere opfylder kravet om "uforanderlig dokumentation". AlphaAi ApS anser AuditLog 3-niveau for at opfylde kravet, men anerkender at en kryptografisk hash-chain ville være en yderligere sikkerhed.
+> Manglende punkt 10 (hash-chain) er den eneste, der potentielt påvirker Erhvervsstyrelsens fortolkning af BEK 97 Bilag 1 / Lov om bogføring §13 — herunder om den implementerede AuditLog + DB-triggere opfylder kravet om "uforanderlig dokumentation". AlphaAi Consult ApS anser AuditLog 3-niveau for at opfylde kravet, men anerkender at en kryptografisk hash-chain ville være en yderligere sikkerhed.
+>
+> Manglende punkt 16 (AI non-determinisme) er håndteret via bruger-advarsler + samtykke og ikke via teknisk elimination — dette er en bevidst beslutning da non-determinisme er iboende for sprogmodeller. AlphaAi Consult ApS vurderer at de implementerede kompenserende foranstaltninger (samtykke, fodnoter, manuel verificering før bogføring) opfylder GDPR Art. 35 (DPIA) kravene om afbødning af højrisikobehandling.
 
 Den fulde restrisiko-matrix findes i `docs/RISIKOVURDERING.md`, og afhjælpningsplanen (med prioriteter og tidsrammer) findes i `docs/UDBEDRINGSPLAN.md`.
 
@@ -231,10 +234,10 @@ Anmeldelsespakken holdes ajour gennem følgende proces:
 
 | Type | Frekvens | Ansvarlig |
 |---|---|---|
-| **Årlig review** | Hvert år (Q1) | AlphaAi ApS — teknisk ansvarlig |
-| **Ved væsentlig produktændring** | Efter behov | AlphaAi ApS — teknisk ansvarlig |
-| **Ved udbyder-ændring** (f.eks. ny sub-processor hos Neon) | Ved modtagelse af underretnings-e-mail | AlphaAi ApS — DPO / dataansvarlig |
-| **Ved ny regulering** (f.eks. opdatering af BEK 98) | Ved ikrafttrædelse | AlphaAi ApS — compliance-ansvarlig |
+| **Årlig review** | Hvert år (Q1) | AlphaAi Consult ApS — teknisk ansvarlig |
+| **Ved væsentlig produktændring** | Efter behov | AlphaAi Consult ApS — teknisk ansvarlig |
+| **Ved udbyder-ændring** (f.eks. ny sub-processor hos Neon) | Ved modtagelse af underretnings-e-mail | AlphaAi Consult ApS — DPO / dataansvarlig |
+| **Ved ny regulering** (f.eks. opdatering af BEK 98) | Ved ikrafttrædelse | AlphaAi Consult ApS — compliance-ansvarlig |
 
 ### Knyttning til anmeldelsen
 
@@ -247,12 +250,12 @@ Anmeldelsespakken holdes ajour gennem følgende proces:
 
 | Rolle | Navn | Dato | Underskrift |
 |---|---|---|---|
-| Anmeldelsesansvarlig (teknisk) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| Anmeldelsesansvarlig (teknisk) | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
 | DPO / dataansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
-| Ledelse (AlphaAi ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| Ledelse (AlphaAi Consult ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
 
 ---
 
 *Bekræftelse: Denne anmeldelsespakke er udarbejdet på baggrund af en fuld kodebase-analyse (Fase 1–7) og afspejler AlphaFlow v1.0.0 som implementeret pr. 2026. Alle tekniske angivelser er verificerbare i kildekoden.*
 
-*Udarbejdet af AlphaAi ApS — 2026*
+*Udarbejdet af AlphaAi Consult ApS — 2026*

@@ -11,8 +11,8 @@
 | **Dokumenttype** | Compliance-rapport til Erhvervsstyrelsen |
 | **Systemnavn** | AlphaFlow (`alphaflow.dk`) — pakke-navn `alphaai-accounting` v1.0.0 |
 | **Dokumentversion** | 3.0 |
-| **Udarbejdet af** | AlphaAi ApS (App Owner / dataansvarlig) |
-| **Lovgrundlag** | Bogføringsloven (LBK nr. 1316 af 14/08/2023), Digitaliseringsbekendtgørelsen (BEK nr. 98 af 24/01/2023), GDPR (forordning 2016/679), IT-sikkerhedsloven |
+| **Udarbejdet af** | AlphaAi Consult ApS (App Owner / dataansvarlig) |
+| **Lovgrundlag** | Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023), Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023), GDPR (forordning 2016/679), IT-sikkerhedsloven |
 | **Formål** | Registrering/godkendelse som digitalt regnskabssystem hos Erhvervsstyrelsen |
 | **Sprog** | Dansk |
 | **Erklæring om ærlighed** | Dette dokument dokumenterer såvel opfyldte som ikke-opfyldte krav. Ingen features er opdigtet. Ved tvivl henvises til kildekoden. |
@@ -39,7 +39,7 @@
 
 ### 1.1 Formål
 
-Nærværende rapport er udarbejdet af AlphaAi ApS med henblik på at dokumentere, i hvilket omfang AlphaFlow opfylder kravene i Bogføringsloven, Digitaliseringsbekendtgørelsen og GDPR med henblik på Erhvervsstyrelsens registrering/godkendelse af AlphaFlow som digitalt regnskabssystem.
+Nærværende rapport er udarbejdet af AlphaAi Consult ApS med henblik på at dokumentere, i hvilket omfang AlphaFlow opfylder kravene i Lov om bogføring, Anmeldelsesbekendtgørelsen (BEK 98), Kravbekendtgørelsen (BEK 97) og GDPR med henblik på Erhvervsstyrelsens registrering/godkendelse af AlphaFlow som digitalt regnskabssystem.
 
 Rapporten adskiller sig fra markedsføringsmateriale ved **eksplicit at dokumentere såvel opfyldte som ikke-opfyldte krav**. Erhvervsstyrelsen værdsætter åbenhed, og rapportens sigte er at give myndigheden et korrekt grundlag for vurdering — ikke at overdrive platformens modenhed.
 
@@ -47,8 +47,9 @@ Rapporten adskiller sig fra markedsføringsmateriale ved **eksplicit at dokument
 
 | Lov / bekendtgørelse | Relevans for AlphaFlow |
 |----------------------|------------------------|
-| **Bogføringsloven** (LBK nr. 1316 af 14/08/2023) | Primær lovgivning for regnskabspligtige virksomheder — særligt § 3 (systemets egnethed), § 4 (uforkortethed), § 10–12 (uforanderlighed/opbevaring), § 15 (backup og opbevaringstid). |
-| **Digitaliseringsbekendtgørelsen** (BEK nr. 98 af 24/01/2023) | Krav til elektronisk regnskabsmateriale, tilgængelighed og sikkerhed. |
+| **Lov om bogføring** (LOV nr. 700 af 24. maj 2022) | Primær lovgivning for regnskabspligtige virksomheder — særligt § 3 (systemets egnethed), § 13 (sikring mod ødelæggelse/forvanskning), § 15 (krav til digitale bogføringssystemer). |
+| **Anmeldelsesbekendtgørelsen** (BEK nr. 98 af 26. januar 2023) | Anmeldelse og registrering af digitale standard bogføringssystemer — herunder §8 (anmeldelseskrav) og §13 (it-sikkerhedsniveau). |
+| **Kravbekendtgørelsen** (BEK nr. 97 af 26. januar 2023) | Krav til digitale standard bogføringssystemer — §3 (5-års opbevaring), §7 (backup), §8 stk. 4 (7 IT-sikkerhedshovedkrav: 1 netværkssikkerhed, 2 adgangsstyring, 3 leverandørstyring, 4 backup, 5 logning, 6 beredskab/reetablering, 7 databeskyttelse), Bilag 1 (bogføringskrav — herunder pkt 2.e uforanderlighed), Bilag 2 (automatiseringskrav). |
 | **GDPR** (forordning 2016/679) | Personoplysningers sikkerhed og lovgrundlag for behandling — særligt art. 5, 6, 9, 17, 25, 30, 32, 33–35 og kapitel V (dataoverførsel til tredjelande). |
 | **IT-sikkerhedsloven** (LBK nr. 603 af 30/05/2018) | Generelle krav til digital infrastruktur hos den dataansvarlige. |
 | **SAF-T Financial DK v1.0** | Standardformat for udlevering af regnskabsdata til skattemyndigheder. |
@@ -58,10 +59,10 @@ Rapporten adskiller sig fra markedsføringsmateriale ved **eksplicit at dokument
 
 | Rolle | Ansvarlig | Bemærkning |
 |------|-----------|------------|
-| **Dataansvarlig** (controller) | AlphaAi ApS | Definerer formål og midler for behandling af lejernes data. |
-| **Databehandler** (processor) | AlphaAi ApS (drift) | Drifter AlphaFlow på IONOS VPS (Tyskland/EU). |
-| **Underbehandlere** | Neon (DB, USA-virksomhed, EU-datacentre), OpenAI/OpenRouter/Anthropic (USA — se kapitel V), Storecove (Holland), Frisbii/Flatpay (Tyskland), SKAT/Virk (DK), CVR-registeret (DK). | Fulde fortegnelser i `DATABEHANDLERAFTALE.md`. |
-| **Systemansvarlig** | AlphaAi ApS | Teknisk drift, sikkerhed, backup, vedligeholdelse. |
+| **Dataansvarlig** (controller) | AlphaAi Consult ApS | Definerer formål og midler for behandling af lejernes data. |
+| **Databehandler** (processor) | AlphaAi Consult ApS (drift) | Drifter AlphaFlow på IONOS VPS (Tyskland/EU). |
+| **Underbehandlere** | Neon (DB, USA-virksomhed, EU-datacentre), OpenRouter (USA — se kapitel V), Storecove (Holland), Frisbii/Flatpay (Tyskland), SKAT/Virk (DK), CVR-registeret (DK). | Fulde fortegnelser i `DATABEHANDLERAFTALE.md`. |
+| **Systemansvarlig** | AlphaAi Consult ApS | Teknisk drift, sikkerhed, backup, vedligeholdelse. |
 | **Revisor-tilgang** | Lejerens revisor via `AUDITOR`-rolle | Eksport af SAF-T, rapporter og audit-log. |
 
 ### 1.4 Platformens omfang
@@ -76,7 +77,7 @@ Teknisk stack: Next.js 16 (App Router), TypeScript 5, PostgreSQL på Neon (EU), 
 
 ### 2.1 § 3 — Systemets egnethed
 
-Bogføringsloven § 3 stiller krav om, at regnskabssystemet skal være egnet til at sikre, at bogføringen kan ske i overensstemmelse med loven.
+Lov om bogføring § 3 stiller krav om, at regnskabssystemet skal være egnet til at sikre, at bogføringen kan ske i overensstemmelse med loven.
 
 | Krav | Status | Implementering |
 |------|--------|----------------|
@@ -87,7 +88,7 @@ Bogføringsloven § 3 stiller krav om, at regnskabssystemet skal være egnet til
 | Regnskabsperioder | ✅ Opfyldt | `FiscalPeriod`-model med `PeriodStatus` (OPEN/CLOSED) og låsning (`lockedAt`/`lockedBy`). |
 | Fakturering | ✅ Opfyldt (med begrænsning) | `Invoice`-model med DRAFT/SENT/PAID/CANCELLED. PDF-generering. **Bemærk:** Der findes ingen selvstændig UI til kreditnota-oprettelse — kun `EInvoiceType.CREDIT_NOTE`-enum-værdien findes, og elektronisk kreditnota kan modtages (ikke oprettes fra UI). |
 | Momsangivelse til SKAT | ✅ Opfyldt (med begrænsning) | `src/lib/vat-submit.ts` med OAuth2 `client_credentials`. **Kun momsangivelse** — ingen årsopgørelse, e-indkomst eller AM-bidrag. |
-| Bank-integration | ⚠️ Delvist | `BankConnection`-model med krypterede tokens. **Kun Demo-provider** returnerer reelle data uden credentials; Tink/Nordea/Danske/Jyske er stubs (scaffolding). Matching mellem bank-transaktioner og journalposter er **manuelt** — z-ai-web-dev-sdk-bankafstemning er sandbox-only og fejler graceful. |
+| Bank-integration | ⚠️ Delvist | `BankConnection`-model med krypterede tokens. **Tink er en reel integration** (PSD2 consent-flow virker); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. Matching mellem bank-transaktioner og journalposter er **manuelt** — z-ai-web-dev-sdk-bankafstemning er sandbox-only og fejler graceful. |
 | Fremmedvaluta | ✅ Opfyldt | Frankfurter API (ECB reference rates) i `src/lib/currency-utils.ts`. 1-times in-memory cache med stale fallback. DKK, EUR, USD, GBP, SEK, NOK. |
 
 ### 2.2 § 4 — Uforkortethed og beskyttelse mod uberettiget ændring
@@ -97,12 +98,12 @@ Bogføringsloven § 3 stiller krav om, at regnskabssystemet skal være egnet til
 | Krav | Status | Implementering |
 |------|--------|----------------|
 | Komplet bogføring | ✅ Opfyldt | Alle erhvervsmæssige transaktioner bogføres via journalposter med linjer, bilagsreference, dato og konti. |
-| Beskyttelse mod ændring | ✅ Opfyldt (med begrænsning) | Se § 10–12 nedenfor for 3-niveau immutability på audit-log. **Vigtig begrænsning:** ingen kryptografisk hash-chain på selve posteringerne (ingen `previousHash`/`hash`-felter på `JournalEntry` eller `Transaction`). Immutability håndhæves via AuditLog + PostgreSQL-triggers, **ikke** via kryptografisk kæde mellem posteringer. |
+| Beskyttelse mod ændring | ✅ Opfyldt (med begrænsning) | Se BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) nedenfor for 3-niveau immutability på audit-log. **Vigtig begrænsning:** ingen kryptografisk hash-chain på selve posteringerne (ingen `previousHash`/`hash`-felter på `JournalEntry` eller `Transaction`). Immutability håndhæves via AuditLog + PostgreSQL-triggers, **ikke** via kryptografisk kæde mellem posteringer. |
 | Sporing af ændringer | ✅ Opfyldt | AuditLog med before/after-changes, IP, User-Agent, tidsstempel. |
 
-### 2.3 § 10–12 — Uændringshed / immunitet (5-års opbevaring)
+### 2.3 BEK 97 Bilag 1 / Lov om bogføring §13 — Uforanderlighed / uforkortethed (5-års opbevaring)
 
-§§ 10–12 stiller krav om, at regnskabsmaterialet kan dokumenteres som fuldstændigt, ægte og pålideligt, og at det ikke kan ændres eller slettes i opbevaringsperioden (5 år).
+BEK 97 Bilag 1 (bogføringskrav — herunder pkt 2.e: "bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes") og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) stiller krav om, at regnskabsmaterialet kan dokumenteres som fuldstændigt, ægte og pålideligt, og at det ikke kan ændres eller slettes i opbevaringsperioden (5 år — jf. BEK 97 §3).
 
 AlphaFlow implementerer en **3-niveau immutability-strategi** på AuditLog-tabellen:
 
@@ -112,13 +113,13 @@ AlphaFlow implementerer en **3-niveau immutability-strategi** på AuditLog-tabel
 | **2. Databaseniveau** | PostgreSQL `BEFORE UPDATE` og `BEFORE DELETE` triggers på `AuditLog`-tabellen forhindrer mutation direkte i DB — selv af DBA. | `prisma/audit-immutability.sql` (triggere `prevent_audit_update`, `prevent_audit_delete`). Installerer via `scripts/apply-audit-immutability.ts` (idempotent). |
 | **3. Cascade-beskyttelse** | Fremmednøgler fra `AuditLog` til `User` og `Company` bruger `onDelete: Restrict` — en bruger/virksomhed kan ikke slettes, så længe der findes AuditLog-poster. | `prisma/schema.prisma` |
 
-**Soft-delete frem for hard-delete (Bogføringsloven § 10–12 vs. GDPR art. 17):**
+**Soft-delete frem for hard-delete (BEK 97 Bilag 1 / Lov om bogføring §13 vs. GDPR art. 17):**
 
 | Entitet | Sletningsmekanisme | Lovlig grund |
 |---------|---------------------|--------------|
-| **Brugerkonto** | Deaktivering via `/api/auth/delete-account` — sætter `User.deactivatedAt` og blokerer login. Data og audit-logs bevares. | Bogføringsloven § 10–12 5-års opbevaringspligt > GDPR art. 17(3)(c) undtagelse (retten til sletning gælder ikke, når behandling er nødvendig for at overholde en retlig forpligtelse). |
+| **Brugerkonto** | Deaktivering via `/api/auth/delete-account` — sætter `User.deactivatedAt` og blokerer login. Data og audit-logs bevares. | BEK 97 §3 (5-års opbevaring) + Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) > GDPR art. 17(3)(c) undtagelse (retten til sletning gælder ikke, når behandling er nødvendig for at overholde en retlig forpligtelse). |
 | **Konto (Account)** | Deaktivering, ikke sletning. | Kontoen kan refereres fra eksisterende posteringer og kan ikke fjernes. |
-| **Journalposter (POSTED)** | Annulleres med modpostering + årsagsangivelse (status `CANCELLED`). Original post bevares. | Soft-delete via modpostering opfylder Bogføringslovens princip om uændringshed. |
+| **Journalposter (POSTED)** | Annulleres med modpostering + årsagsangivelse (status `CANCELLED`). Original post bevares. | Soft-delete via modpostering opfylder BEK 97 Bilag 1s princip om uforanderlighed. |
 | **Fakturaer** | Annulleres med status `CANCELLED`, slettes ikke. | Samme princip. |
 
 **Hvad der IKKE findes (vigtig åbenhed):**
@@ -126,15 +127,15 @@ AlphaFlow implementerer en **3-niveau immutability-strategi** på AuditLog-tabel
 - **Ingen kryptografisk hash-chain** på `JournalEntry` eller `Transaction` — ingen `previousHash`, `hash`, `locked`, `immutable` eller `version`-felter på disse modeller. Immunitet håndhæves alene via AuditLog + DB-triggers, ikke via kryptografisk sammenkædning af posteringer.
 - **Ingen separate `deletedAt`/`retentionUntil`-felter** på regnskabsmodeller — soft-delete markeres via status-felter (`CANCELLED`, `deactivatedAt`).
 
-### 2.4 § 15 — Backup og opbevaring (5 år)
+### 2.4 BEK 97 §3 + §7 — Backup og opbevaring (5 år) (udstedt i medfør af Lov om bogføring §15)
 
-§ 15 kræver, at regnskabsmaterialet opbevares i mindst 5 år og kan reproduceres i læsbar form.
+BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 — stiller krav om, at regnskabsmaterialet opbevares i mindst 5 år og kan reproduceres i læsbar form.
 
 | Komponent | Implementering | Fil / objekt |
 |-----------|----------------|--------------|
 | **Scheduler** | `node-cron` (process-intern, tidszone `Europe/Copenhagen`). **Bemærk:** backup-scheduleren kører i Next.js-processen — der er intet PM2-cron, crontab eller systemd-timer-lag. | `src/lib/backup-scheduler.ts` |
 | **Cron-udtryk** | Hourly `5 * * * *`, Daily `15 2 * * *`, Weekly `30 3 * * 1`, Monthly `0 4 1 * *`, Cleanup `0 3 * * *`. | `src/lib/backup-scheduler.ts` |
-| **Retention** | Hourly 24/25 timer, Daily 30/31 dage, Weekly 52/53 dage, Monthly 60 måneder (**5 år — opfylder § 15**), Manuel 999/90 dage. | `src/lib/backup-engine.ts` |
+| **Retention** | Hourly 24/25 timer, Daily 30/31 dage, Weekly 52/53 dage, Monthly 60 måneder (**5 år — opfylder BEK 97 §3**), Manuel 999/90 dage. | `src/lib/backup-engine.ts` |
 | **Backup-indhold** | ZIP pr. tenant + `manifest.json` v2 + SHA-256 checksum + AES-256-GCM `.zip.enc`. JSON-filer for: company, accounts, contacts, transactions, invoices, journal-entries, fiscal-periods, budgets, recurring-entries, bank-statements, bank-connections (uden tokens), received-invoices (inkl. rå XML), vat-submissions, einvoice-sendings, members. | `src/lib/backup-engine.ts` |
 | **Integritet** | SHA-256 checksum beregnet streaming via `crypto.createHash('sha256')`, gemmes i `Backup.sha256`, verificeres ved restore. | `src/lib/backup-engine.ts`, `Backup`-model. |
 | **Kryptering** | AES-256-GCM (`ENCRYPTION_KEY` 32 byte). Original ZIP slettes sikkert (`rmSync({force: true})`) efter kryptering. | `src/lib/crypto.ts` |
@@ -219,11 +220,11 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 
 | Behandling | Lovgrundlag | Dokumentation |
 |------------|-------------|---------------|
-| Bogføring af lejerens regnskab | **Art. 6(1)(b)** — kontrakt | Lejer indgår SaaS-aftale med AlphaAi ApS. |
+| Bogføring af lejerens regnskab | **Art. 6(1)(b)** — kontrakt | Lejer indgår SaaS-aftale med AlphaAi Consult ApS. |
 | Momsangivelse til SKAT | **Art. 6(1)(c)** — retlig forpligtelse | Bogføringsloven og momsloven. |
 | Audit-logning og sikkerhed | **Art. 6(1)(f)** — legitime interesser | AlphaAis berettigede interesse i at sikre systemets integritet og opdage misbrug. |
-| AI-assistent (Hermes) — chat med LLM | **Art. 6(1)(a)** — samtykke | Per-tenant opt-in via `HermesAgent.dataAccessEnabled` (default `false`). |
-| AI-scanning af kvitteringer (OCR/VLM) | **Art. 6(1)(b)** — kontrakt (nødvendig for at levere tjenesten) | Billeder af kvitteringer sendes til Anthropic Claude VLM for struktureret udtræk. |
+| AI-assistent (Hermes) — chat med LLM | **Art. 6(1)(a)** — samtykke | Per-tenant opt-in via tenant-administrator-samtykke (se afsnit 3.10). Samtykket dækker (a) selve AI-brugen, (b) GDPR-risici ved USA-overførsel via OpenRouter, (c) non-deterministiske processer. `HermesAgent.dataAccessEnabled` er et særskilt per-tenant opt-in (default `false`) for data-adgang ud over selve AI-brugssamtykket. |
+| AI-scanning af kvitteringer (OCR/VLM) | **Art. 6(1)(b)** — kontrakt (nødvendig for at levere tjenesten) | Billeder af kvitteringer sendes via OpenRouter til VLM (vision-language model) for struktureret udtræk. VLM-output er non-deterministisk og efterprøves af brugeren før bogføring (jf. BRUGSVEJLEDNING.md §11.3). |
 
 ### 3.4 Art. 9 — Særlige kategorier
 
@@ -236,7 +237,7 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 | Krav | Status | Implementering |
 |------|--------|----------------|
 | Ret til sletning | ⚠️ Delvist opfyldt | Sletning af brugerkonto implementeret som **deaktivering** (`User.deactivatedAt`) — ikke hard-delete. |
-| Undtagelse art. 17(3)(c) (retlig forpligtelse) | ✅ Aktiveret | Bogføringslovens 5-års opbevaringspligt (§ 10–12, § 15) har forrang over GDPR art. 17. AlphaFlow har derfor valgt deaktivering frem for sletning. |
+| Undtagelse art. 17(3)(c) (retlig forpligtelse) | ✅ Aktiveret | BEK 97 §3 (5-års opbevaring) + Lov om bogføring §13 (sikring mod ødelæggelse) har forrang over GDPR art. 17. AlphaFlow har derfor valgt deaktivering frem for sletning. |
 | Soft-delete af regnskabsposter | ✅ Opfyldt | Via modpostering (`JournalEntry.status = CANCELLED`). Original post bevares. |
 
 ### 3.6 Art. 25 — Privacy by design
@@ -288,19 +289,28 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 
 | Krav | Status | Implementering |
 |------|--------|----------------|
-| DPIA for højrisikobehandling | ✅ Henviser til eksternt dokument | Se `docs/RISIKOVURDERING.md` for DPIA inkl. AI-behandling (Hermes/OCR) og internationale dataoverførsler. |
+| DPIA for højrisikobehandling | ✅ Henviser til eksternt dokument | Se `docs/RISIKOVURDERING.md` for DPIA inkl. AI-behandling (Hermes/OCR/VLM) og internationale dataoverførsler. |
+
+**AI-specifikke risici i DPIA:**
+
+AlphaFlows AI-funktioner (Hermes chat-LLM, knowledge-RAG embeddings, scanner VLM) udgør en højrisikobehandling jf. GDPR Art. 35(3)(b) (systematisk omfattende evaluering af personlige aspekter) og Art. 35(3)(d) (kombination af datasæt). Følgende AI-specifikke risici er identificeret og håndteres:
+
+1. **GDPR-risici ved USA-overførsel** — Persondata sendes til OpenRouter, Inc. (USA) per GDPR kapitel V. Håndteres via DPA + SCC (Modul 2) + TIA (Bilag 17; TIA i Bilag 8 afsnit 5.1). Restrisiko: Mellem (amerikanske myndigheder kan kræve adgang per FISA 702/EO 12333/CLOUD Act).
+2. **Non-deterministiske processer** — AI-output (chat-svar, kontoforslag, VLM-udtræk) er ikke deterministisk og kan indeholde fejl, unøjagtigheder eller "hallucinationer". Håndteres via: (a) bruger-advarsel og samtykke før Hermes-aktivering (Bilag 4 BRUGSVEJLEDNING.md §13.0), (b) kompakt fodnote på hver Hermes-besked, (c) VLM-output markeres "Kræver gennemsyn" ved lav konfidens (Bilag 4 §11.3), (d) AI-output overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid.
+3. **Uautoriseret rådgivning** — AI kan give rådgivning der overskrider AlphaFlows formål (bogføringsassistent). Håndteres via system-prompt der begrænser Hermes til dansk bogføring/moms/skat, og advarsel om at Hermes ikke er professionel revisor (Bilag 4 §13.0 Advarsel 3).
+4. **Samtykke-krav** — Tenant-administrator (OWNER/ADMIN) skal aktivt acceptere tre advarsler (GDPR-risici, non-determinisme, ikke-menneskelig-rådgivning) via samtykke-dialog før Hermes aktiveres. Samtykke logges i AuditLog (`action: AI_CONSENT_ACCEPTED`). Kan tilbagekaldes ved deaktivering. Særskilt `dataAccessEnabled`-opt-in (default false) for data-adgang ud over selve AI-brugssamtykket.
+
+Se også `docs/RISIKOVURDERING.md` R-21 (AI non-determinisme) og R-13 (USA-dataoverførsel).
 
 ### 3.11 Kapitel V — Overførsel til tredjelande
 
-AlphaFlow anvender tre underbehandlere i USA, der potentielt flytter persondata ud af EU:
+AlphaFlow anvender én USA-baseret AI-underbehandler, der potentielt flytter persondata ud af EU:
 
 | Underbehandler | Land | Formål | Data sendt | Lovgrundlag for overførsel |
 |----------------|------|--------|------------|---------------------------|
-| **OpenAI, Inc.** | USA | Embeddings (`text-embedding-3-small`) til Hermes Knowledge RAG | Tekstuddrag fra lejeres dokumenter (kun hvis `HermesAgent.dataAccessEnabled = true`). | Standardkontraktbestemmelser (SCC) + Transfer Impact Assessment (TIA). |
-| **OpenRouter, Inc.** | USA | Hermes chat LLM (videresender til Anthropic/Meta m.fl.) | Brugerens spørgsmål + (ved opt-in) tenant-specifikke finansielle data. | SCC + TIA. |
-| **Anthropic PBC** | USA | Scanner VLM ( billedanalyse af kvitteringer/fakturaer) | Billeder af kvitteringer/fakturaer uploadet af brugeren. | SCC + TIA. |
+| **OpenRouter, Inc.** | USA | Konsolideret AI-underbehandler — Hermes chat LLM, knowledge-service RAG-embeddings og scanner-service VLM (vision-language model) via én API-aftale. OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. | (a) Brugerens spørgsmål + (ved opt-in) tenant-specifikke finansielle data (Hermes chat); (b) tekstuddrag fra lejeres dokumenter (kun hvis `HermesAgent.dataAccessEnabled = true` — embeddings); (c) billeder af kvitteringer/fakturaer uploadet af brugeren (scanner VLM). | Standardkontraktbestemmelser (SCC) + Transfer Impact Assessment (TIA). |
 
-**Dokumentation:** Se `docs/DATABEHANDLERAFTALE.md` for indgåede databehandleraftaler, SCC og TIA.
+**Dokumentation:** Se `docs/DATABEHANDLERAFTALE.md` for indgåede databehandleraftaler, SCC og TIA (Bilag 17 — konsolideret AI-DPA).
 
 **Data minimization:** `HermesAgent.dataAccessEnabled` er per-tenant opt-in (default `false`). Uden opt-in sendes KUN brugerens spørgsmål + statisk system-prompt til LLM, **ikke** tenant-specifikke finansielle data.
 
@@ -679,7 +689,7 @@ Nedenstående 12 mangel-punkter er udledt af P1-SEC-sektionen i `worklog.md` og 
 | 3 | **Ingen Content-Security-Policy (CSP) header** — hverken i `next.config.ts` eller `Caddyfile`. | Middel | Tillader potentiel XSS-eksekvering, hvis input-validering fejler. | `docs/UDBEDRINGSPLAN.md` punkt om CSP. |
 | 4 | **Ingen antivirus-scanning af uploads** — bilag, PDF'er og Office-filer scannes ikke for malware. | Middel | Risiko for malware-uploads til Tenant-Backup-lagring. | `docs/UDBEDRINGSPLAN.md` punkt om antivirus (ClamAV). |
 | 5 | **Ingen key rotation / versioning** — `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske. | Kritisk | Hvis en nøgle kompromitteres, kræver fuld re-encryption af alle data. | `docs/UDBEDRINGSPLAN.md` punkt om key rotation. |
-| 6 | **Ingen kryptografisk hash-chain på posteringer** — Bogføringsloven § 10–12 immutability håndhæves KUN via AuditLog + PostgreSQL-triggers, ikke via kryptografisk hash-kæde mellem posteringer. | Middel | AuditLog + DB-triggers giver funktionel immutability, men ikke kryptografisk bevisbarhed af posteringernes integritet. Erhvervsstyrelsen skal være opmærksom på, at immutability ikke er hash-chain-baseret. | `docs/UDBEDRINGSPLAN.md` punkt om hash-chain. |
+| 6 | **Ingen kryptografisk hash-chain på posteringer** — BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) og Lov om bogføring §13 immutability håndhæves KUN via AuditLog + PostgreSQL-triggers, ikke via kryptografisk hash-kæde mellem posteringer. | Middel | AuditLog + DB-triggers giver funktionel immutability, men ikke kryptografisk bevisbarhed af posteringernes integritet. Erhvervsstyrelsen skal være opmærksom på, at immutability ikke er hash-chain-baseret. | `docs/UDBEDRINGSPLAN.md` punkt om hash-chain. |
 | 7 | **Ingen account-lockout** — kun IP-baseret rate-limiting. | Middel | Et botnet med roterende IP'er kunne teoretisk set fortsætte brute-force. | `docs/UDBEDRINGSPLAN.md` punkt om account-lockout. |
 | 8 | **Caddy `rate_limit` ikke installeret** — det eneste aktive rate-limit er in-memory og nulstilles ved server-restart. | Middel | Rate-limiting virker ikke under server-restart eller ved multi-instance-oppetid. | `docs/UDBEDRINGSPLAN.md` punkt om Caddy rate_limit. |
 | 9 | **Ingen OAuth/SSO/SAML/MitID** — kun e-mail + password + TOTP. | Lav | Kan være en barriere for enterprise-kunder med SSO-krav. Ikke et Bogføringsloven-krav. | `docs/UDBEDRINGSPLAN.md` punkt om SSO. |
@@ -703,7 +713,7 @@ Følgende mangler er dokumenteret i `worklog.md` (KONSOLIDERET FAKTA-ARK, sektio
 - Ingen lønmodul (kun `TransactionType.SALARY`-enum).
 - Ingen varekartotek (invoice line-items er JSON).
 - Ingen AI-bankafstemning i produktion (z-ai-web-dev-sdk sandbox-only).
-- Ingen reelle bank-API-kald (Tink/Nordea/Danske/Jyske er stubs; kun Demo-provider).
+- Ingen bank-integration mod alle udbydere (Tink er reel; Nordea/Danske/Jyske er stubs; Demo leverer syntetiske data).
 - Ingen godkendelses-workflow (ingen flertrins godkendelse af fakturaer/posteringer).
 - Ingen rapport-scheduling (on-demand generering).
 - Ingen AM-bidrag/årsopgørelse-API (KUN momsangivelse til SKAT).
@@ -722,9 +732,9 @@ Platformen opfylder ligeledes **størstedelen** af GDPR's sikkerhedskrav (art. 3
 
 | Område | Status |
 |--------|--------|
-| **Immutability (Bogføringsloven § 10–12)** | Delvist: 3-niveau immutability på AuditLog er solid, men der findes **ingen kryptografisk hash-chain på posteringerne**. Erhvervsstyrelsen bør acceptere, at immutability håndhæves via DB-triggers + audit-log frem for hash-kæde — dette er en valgt arkitekturbeslutning, der også anvendes af flere etablerede regnskabssystemer. |
+| **Immutability (BEK 97 Bilag 1 / Lov om bogføring §13)** | Delvist: 3-niveau immutability på AuditLog er solid, men der findes **ingen kryptografisk hash-chain på posteringerne**. Erhvervsstyrelsen bør acceptere, at immutability håndhæves via DB-triggers + audit-log frem for hash-kæde — dette er en valgt arkitekturbeslutning, der også anvendes af flere etablerede regnskabssystemer. |
 | **Persondata-kryptering i hvile (GDPR art. 32)** | Delvist: Følsomme data (bank-tokens, 2FA-secrets) er AES-256-GCM-krypteret. **Mange persondata-felter (e-mail, telefon, kontonumre, adresser) opbevares ukrypteret i DB** og afhænger af Neon TLS + DB-adgangskontrol. |
-| **Bank-integration** | Delvist: Kun Demo-provider returnerer reelle data. Tink/Nordea/Danske/Jyske er stubs. Matching er manuelt. |
+| **Bank-integration** | Delvist: Tink er en reel integration (PSD2 consent-flow virker); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. Matching er manuelt. |
 | **Kreditnota-oprettelse** | Delvist: Kun `EInvoiceType.CREDIT_NOTE`-enum findes; ingen UI til oprettelse. Modtagelse af elektronisk kreditnota understøttes. |
 | **Moms-API** | Delvist: Kun momsangivelse — ingen årsopgørelse, e-indkomst eller AM-bidrag. |
 
@@ -745,9 +755,9 @@ De 12 mangel-punkter er henholdsvis kritiske (2), middel (6) og lav (4). Afhjæl
 
 ### 11.5 Erklæring
 
-AlphaAi ApS erklærer herved, at nærværende rapport dokumenterer platformens faktiske compliance-tilstand, som den kan verificeres i kildekoden pr. versionsdato. Ingen features er opdigtet. Ved tvivl om en bestemt foranstaltning henvises til kildekoden og til `worklog.md` (P1-SEC, P1-DB, KONSOLIDERET FAKTA-ARK).
+AlphaAi Consult ApS erklærer herved, at nærværende rapport dokumenterer platformens faktiske compliance-tilstand, som den kan verificeres i kildekoden pr. versionsdato. Ingen features er opdigtet. Ved tvivl om en bestemt foranstaltning henvises til kildekoden og til `worklog.md` (P1-SEC, P1-DB, KONSOLIDERET FAKTA-ARK).
 
-AlphaAi ApS forpligter sig til at løbende udbedre de identificerede mangler i overensstemmelse med `docs/UDBEDRINGSPLAN.md` og til åbent at informere Erhvervsstyrelsen om væsentlige ændringer i platformens compliance-tilstand.
+AlphaAi Consult ApS forpligter sig til at løbende udbedre de identificerede mangler i overensstemmelse med `docs/UDBEDRINGSPLAN.md` og til åbent at informere Erhvervsstyrelsen om væsentlige ændringer i platformens compliance-tilstand.
 
 ---
 
@@ -812,6 +822,6 @@ AlphaAi ApS forpligter sig til at løbende udbedre de identificerede mangler i o
 
 ---
 
-*Dette dokument er AlphaAi ApS's compliance-rapport til Erhvervsstyrelsen, udarbejdet med henblik på åben og verificerbar dokumentation af platformens overholdelse af Bogføringsloven og GDPR. Alle oplysninger er baseret på den faktiske implementering i kildekoden og kan efterprøves mod `worklog.md` (P1-SEC, P1-DB, KONSOLIDERET FAKTA-ARK) samt den direkte kildekode.*
+*Dette dokument er AlphaAi Consult ApS's compliance-rapport til Erhvervsstyrelsen, udarbejdet med henblik på åben og verificerbar dokumentation af platformens overholdelse af Bogføringsloven og GDPR. Alle oplysninger er baseret på den faktiske implementering i kildekoden og kan efterprøves mod `worklog.md` (P1-SEC, P1-DB, KONSOLIDERET FAKTA-ARK) samt den direkte kildekode.*
 
-*Version 3.0 — udarbejdet af AlphaAi ApS.*
+*Version 3.1 — udarbejdet af AlphaAi Consult ApS.*

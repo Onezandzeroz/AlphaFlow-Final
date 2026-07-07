@@ -1,7 +1,7 @@
 # Beredskabsplan — AlphaFlow
 
-**AlphaAi ApS** (CVR 46312058)
-**Dokumentversion:** 3.0
+**AlphaAi Consult ApS** (CVR 46312058)
+**Dokumentversion:** 3.1
 **Dato:** 2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 **System:** AlphaFlow (`alphaai-accounting` v1.0.0) — alphaflow.dk
@@ -31,7 +31,7 @@ Denne beredskabsplan beskriver AlphaFlows procedurer for forebyggelse, registrer
 
 Planen sikrer at:
 
-- **Bogføringsdata altid kan gendannes** i overensstemmelse med Bogføringslovens §10-12 (immutability) og §15 (5-års backup-retention).
+- **Bogføringsdata altid kan gendannes** i overensstemmelse med BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13 — og BEK 97 §3 (5-års opbevaring) + §7 (backup), udstedt i medfør af Lov om bogføring §15.
 - **Persondata ikke gå tabt eller kompromitteres** uden at Datatilsynet og berørte registrerede underrettes (GDPR Art. 33-34).
 - **Systemets tilgængelighed genetableres** inden for definerede RTO-mål (Recovery Time Objective).
 - **Alle hændelser dokumenteres** i uforanderlig audit-trail (`src/lib/audit.ts`), beskyttet mod ændring/sletning på databaseniveau af PostgreSQL-triggere (`prisma/audit-immutability.sql`).
@@ -48,13 +48,13 @@ Denne plan dækker hele AlphaFlow-platformen:
 - Upload-lagring (`uploads/`).
 - Caddy reverse proxy / TLS.
 - PM2 proces-manager (6 processer).
-- 15 eksterne integrationer (se `LEVERANDØRSTYRING.md`).
+- 13 eksterne integrationer (se `LEVERANDØERSTYRING.md`).
 
 ### 1.3 Ansvarlig
 
 | Rolle | Navn / Enhed |
 |---|---|
-| Dataansvarlig | AlphaAi ApS (CVR 46312058) |
+| Dataansvarlig | AlphaAi Consult ApS (CVR 46312058) |
 | Teknisk ansvarlig (App Owner) | _[Udfyldes — telefon, e-mail]_ |
 | System administrator | _[Udfyldes — telefon, e-mail]_ |
 | Compliance Officer / DPO | _[Udfyldes — telefon, e-mail]_ |
@@ -64,20 +64,22 @@ Denne plan dækker hele AlphaFlow-platformen:
 
 | Lovkrav | Reference | Krav |
 |---|---|---|
-| Bogføringsloven § 10 | Elektronisk bogføringssystem skal sikre mod hændelig tilintetgørelse | Beredskab, backup, restore |
-| Bogføringsloven § 12 | Bilag skal opbevares i 5 år | Backup retention: monthly 5 år |
-| Bogføringsloven § 15 | Elektronisk bogføring skal sikres | AES-256-GCM backup-kryptering |
-| BEK 98 — Hovedkrav nr. 2 | It-sikkerhed: Beredskab og reetablering (krav D4) | Denne plan |
+| BEK 97 §8 stk. 2 (CIA-triaden) | Sikring mod hændelig tilintetgørelse af bogføringsdata | Beredskab, backup, restore |
+| BEK 97 §3 (5-års opbevaring) | Bogføringsdata skal opbevares i 5 år | Backup retention: monthly 5 år |
+| BEK 97 §7 (backup) | Backup af elektronisk bogføring | AES-256-GCM backup-kryptering |
+| BEK 97 §8 stk. 4 (hovedkrav 6 / krav D4) | It-sikkerhed: Beredskab og reetablering | Denne plan |
 | GDPR Art. 32 | Sikkerhed i behandling af personoplysninger | Tekniske og organisatoriske foranstaltninger |
 | GDPR Art. 33 | Underretning af Datatilsynet inden for 72 timer ved data breach | Afsnit 6.5 |
 | GDPR Art. 34 | Underretning af berørte registrerede ved høj risiko | Afsnit 6.5 + 8 |
+
+> Samtlige krav i BEK 97 (Kravbekendtgørelsen, BEK nr. 97 af 26. januar 2023) er udstedt i medfør af Lov om bogføring (LOV nr. 700 af 24. maj 2022) — herunder §13 og §15.
 
 ### 1.5 Relaterede dokumenter
 
 - `RISIKOVURDERING.md` — DPIA / IT-risikovurdering (20 risici R-01..R-20).
 - `UDBEDRINGSPLAN.md` — planlagte afhjælpninger for identificerede mangler.
 - `ENCRYPTION.md` — krypteringsnøgler, algoritmer, key management.
-- `LEVERANDØRSTYRING.md` — underbehandler-oversigt + DPA-status.
+- `LEVERANDØERSTYRING.md` — underbehandler-oversigt + DPA-status.
 - `DATABEHANDLERAFTALE.md` — DPA-skabeloner pr. underbehandler.
 - `NEON & IONOS_IT_SIKKERHED.md` — hosting-udbydere sikkerhedscertificeringer.
 - `COMPLIANCE_RAPPORT.md` — samlet compliance-status.
@@ -94,10 +96,10 @@ Følgende komponenter skal kunne genoprettes ved en hændelse:
 |---|---|---|---|---|
 | `alphaflow` | 3000 | Next.js 16 (Node) | Host-app — alle API-routes, UI, backup-scheduler (node-cron) | 1500M |
 | `hermes-agent` | 3004 | Bun + Socket.IO + Prisma | AI-chat-assistent (OpenRouter LLM) | 512M |
-| `knowledge-service` | 3006 | Bun + rå HTTP + Prisma + pgvector | RAG knowledge base (OpenAI embeddings) | 256M |
+| `knowledge-service` | 3006 | Bun + rå HTTP + Prisma + pgvector | RAG knowledge base (embeddings via OpenRouter) | 256M |
 | `tokenpay-access` | 3100 | Bun + Hono + SQLite (bun:sqlite) | TokenPay adgangskontrol (.tbkey proofs) | 256M |
 | `notification-ws` | 3001 | Bun + Socket.IO | Real-time notifikationer (broadcast) | 128M |
-| `scanner-service` | 3005 | Python + FastAPI + SQLite (aiosqlite) | OCR + VLM (Tesseract + Anthropic Claude) | 512M |
+| `scanner-service` | 3005 | Python + FastAPI + SQLite (aiosqlite) | OCR + VLM (Tesseract + VLM via OpenRouter) | 512M |
 
 Konfiguration: `ecosystem.config.example.js` (fork-mode, `autorestart:true`, `max_restarts:10`, `restart_delay:5000`, separate log-filer i `./logs/`).
 
@@ -127,7 +129,7 @@ Konfiguration: `ecosystem.config.example.js` (fork-mode, `autorestart:true`, `ma
 | TLS-certifikater | Let's Encrypt (automatisk via Caddy) | Caddy fornyer automatisk 30 dage før udløb |
 | DNS | IONOS / ekstern DNS-udbyder | _[Udfyldes]_ |
 | Neon DB | Neon, Inc. | Neon har indbygget HA (multi-AZ i region); PITR 7 dage |
-| OpenRouter / OpenAI / Anthropic | USA | Graceful degradation: Hermes-knowledge-base fallback, scanner OCR-only mode |
+| OpenRouter (AI — chat, embeddings, VLM) | USA | Graceful degradation: Hermes-knowledge-base fallback, scanner OCR-only mode |
 
 ---
 
@@ -172,8 +174,8 @@ RTO/RPO-målene kan justeres ved:
 | Lag | Metode | Hyppighed | Retention | Ansvarlig |
 |---|---|---|---|---|
 | **Lag 1** | Neon managed PITR (Point-In-Time Recovery) | Kontinuerlig (WAL) | 7 dage | Neon, Inc. (managed) |
-| **Lag 2** | AlphaFlow ZIP-backups (`Tenant-Backup/`) | Hourly/Daily/Weekly/Monthly | 25t–5 år | AlphaAi ApS (process-intern `node-cron`) |
-| **Lag 3** | VPS-disk-snapshot (IONOS) | Manuel / planlagt | Efter IONOS-policy | IONOS / AlphaAi ApS |
+| **Lag 2** | AlphaFlow ZIP-backups (`Tenant-Backup/`) | Hourly/Daily/Weekly/Monthly | 25t–5 år | AlphaAi Consult ApS (process-intern `node-cron`) |
+| **Lag 3** | VPS-disk-snapshot (IONOS) | Manuel / planlagt | Efter IONOS-policy | IONOS / AlphaAi Consult ApS |
 | **Lag 4** | Manuelle backups via `/api/backups` UI | On-demand | 90 dage (Manual retention) | Bruger (OWNER/ADMIN) |
 
 ### 4.2 AlphaFlow ZIP-backup-format (Lag 2 — verificeret)
@@ -201,7 +203,7 @@ RTO/RPO-målene kan justeres ved:
 | `5 * * * *` | Hourly | Hver time, minut 5 | 24 | 25 timer |
 | `15 2 * * *` | Daily | Daglig kl. 02:15 | 30 | 31 dage |
 | `30 3 * * 1` | Weekly | Mandag kl. 03:30 | 52 | 53 dage |
-| `0 4 1 * *` | Monthly | 1. i måneden kl. 04:00 | 60 | **5 år** (Bogføringsloven §12) |
+| `0 4 1 * *` | Monthly | 1. i måneden kl. 04:00 | 60 | **5 år** (BEK 97 §3 — 5-års opbevaring, udstedt i medfør af Lov om bogføring §15) |
 | `0 3 * * *` | Cleanup | Daglig kl. 03:00 — sletter udløbne backups | — | — |
 | On-demand | Manual | Via UI `/api/backups` eller `/api/backups/upload-restore` | 999 | 90 dage |
 
@@ -307,7 +309,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
    ```
 6. **Udfyld `.env` og `ecosystem.config.js`:**
    - Kopiér fra sikker backup (`.env.backup`, `ecosystem.config.backup.js`) eller genskab manuelt.
-   - **KRITISK:** Sæt `ENCRYPTION_KEY`, `PROOF_ENCRYPTION_KEY`, `DATABASE_URL`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, inter-service API-nøgler.
+   - **KRITISK:** Sæt `ENCRYPTION_KEY`, `PROOF_ENCRYPTION_KEY`, `DATABASE_URL`, `OPENROUTER_API_KEY` (AI-integrationer — chat, embeddings, VLM — samlet via OpenRouter), inter-service API-nøgler.
    - Erstat dev-defaults (`tokenpay-dev-key-2026`, `scanner-dev-key-2026`) med `openssl rand -hex 32`.
 7. **Start PM2:**
    ```bash
@@ -409,7 +411,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
 
 **Scenarie:** `ENCRYPTION_KEY` (eller `PROOF_ENCRYPTION_KEY`) er kompromitteret — f.eks. via `.env`-lækage, tidligere medarbejder, log-fejl, GitHub-push.
 
-> ⚠️ **Bemærk:** Key rotation er **ikke implementeret** i nuværende version (se `RISIKOVURDERING.md` R-03 + `UDBEDRINGSPLAN.md`). Følgende procedure er manuel og kræver betydelig nedetid.
+> ⚠️ **Bemærk:** Key rotation er **ikke implementeret** i nuværende version — jf. Bilag 6 (RISIKOVURDERING.md) R-03 (restrisiko Høj) og Bilag 10 (UDBEDRINGSPLAN.md). Følgende procedure er manuel og kræver betydelig nedetid.
 
 **Procedure (KRITISK — eskalér til Niveau 3 straks):**
 
@@ -459,7 +461,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
 7. **Auditér AuditLog** — gennemgå `LOGIN_FAILED`, `DELETE_ATTEMPT`, `OVERSIGHT`, `BACKUP_RESTORE` poster i perioden før hændelsen for at identificere angrebsvektor.
 8. **Underret myndigheder:**
    - **Datatilsynet** inden 72 timer (GDPR Art. 33) — se afsnit 6.5.
-   - **Erhvervsstyrelsen** — ved bogføringsdata-tab eller kompromittering (Bogføringsloven §10-12).
+   - **Erhvervsstyrelsen** — ved bogføringsdata-tab eller kompromittering (BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13).
    - **Politi (Rigspolitiet, Center for Cyberkriminalitet)** — `www.politi.dk/NC3` eller telefon _[Udfyldes]_.
 9. **Kundekommunikation** — se afsnit 8.
 10. **Post-incident review** (se afsnit 6.6).
@@ -525,7 +527,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
 **Triage-spørgsmål:**
 
 1. Er persondata berørt? (GDPR-relevant → Niveau 3).
-2. Er bogføringsdata berørt? (Bogføringsloven-relevant → Niveau 3).
+2. Er bogføringsdata berørt? (BEK 97 / Lov om bogføring-relevant → Niveau 3).
 3. Er systemet utilgængeligt? (RTO-tæller starter).
 4. Er kompromitteret kilde identificeret?
 5. Er hændelsen begrænset til én tenant eller platform-bred?
@@ -568,7 +570,7 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 | **Berørte registrerede** (GDPR Art. 34) | Uden unødig forsinkelse | Ved "høj risiko" for borgernes rettigheder og friheder (f.eks. krypterede persondata, finansielle data, identitetstyveri-risiko) | E-mail via `/api/notifications/owner` eller manuel udsendelse |
 | **Erhvervsstyrelsen** | Straks | Ved bogføringsdata-tab, mistænkt manipulation, eller kompromittering af bogføringssystem | _[Udfyldes — telefon / e-mail]_ |
 | **Politi (NC3)** | Efter behov | Ved cyberangreb, ransomware, data breach | `www.politi.dk/NC3` eller _[Udfyldes — telefon]_ |
-| **Underbehandlere** | Straks | Hvis underbehandler-komponent berørt (OpenAI/OpenRouter/Anthropic/Storecove/Frisbii/Neon/IONOS) | Se kontaktliste afsnit 7 |
+| **Underbehandlere** | Straks | Hvis underbehandler-komponent berørt (OpenRouter/Storecove/Frisbii/Neon/IONOS) | Se kontaktliste afsnit 7 |
 | **Kunder (tenants)** | Uden unødig forsinkelse | Ved data breach der berører deres tenant-data | E-mail + in-app notifikation |
 | **Offentlighed / medier** | Ved behov | Ved store hændelser med offentlig interesse | Se kommunikationsplan afsnit 8 |
 
@@ -578,7 +580,7 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 2. Omfang (antal berørte registrerede, antal poster).
 3. Sandsynlig konsekvens.
 4. Foranstaltninger truffet eller planlagt (inkl. afhjælpning).
-5. Kontaktperson hos AlphaAi ApS (DPO).
+5. Kontaktperson hos AlphaAi Consult ApS (DPO).
 6. Hvis ikke alle oplysninger kendes — foreløbig indberetning med løfte om opfølgning.
 
 ### 6.6 Trin 6 — Post-incident review
@@ -598,7 +600,7 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 
 > **VIGTIGT:** Felter markeret med _[Udfyldes]_ skal udfyldes før dokumentet tages i brug. Opbevar kontaktlisten også i offline-format (udprintet) i tilfælde af system-nedetid.
 
-### 7.1 AlphaAi ApS — interne kontakter
+### 7.1 AlphaAi Consult ApS — interne kontakter
 
 | Rolle | Navn | Telefon (24/7) | E-mail | Backup-kontakt |
 |---|---|---|---|---|
@@ -620,16 +622,14 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 | Myndighed | Formål | Telefon | E-mail / URL | Frist |
 |---|---|---|---|---|
 | **Datatilsynet** | GDPR Art. 33 underretning ved data breach | +45 33 17 33 33 | `www.datatilsynet.dk/indbrud` | ≤ 72 timer |
-| **Erhvervsstyrelsen** | Bogføringsloven §10-12 underretning | +45 35 29 10 00 | _[Udfyldes — Erhvervsstyrelsen kontakt]_ | Straks |
+| **Erhvervsstyrelsen** | BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13 — underretning | +45 35 29 10 00 | _[Udfyldes — Erhvervsstyrelsen kontakt]_ | Straks |
 | **Politi (NC3)** | Cyberkriminalitet | +45 45 86 14 48 | `www.politi.dk/NC3` | Efter behov |
 
 ### 7.4 Underbehandlere (med data ud af EU)
 
 | Underbehandler | Formål | Lokation | Support-e-mail | DPA-status |
 |---|---|---|---|---|
-| **OpenAI, Inc.** | Embeddings (text-embedding-3-small) | USA | `support@openai.com` / `privacy@openai.com` | _[SCC+TIA påkrævet — se UDBEDRINGSPLAN]_ |
-| **OpenRouter, Inc.** | Hermes chat LLM | USA | `support@openrouter.ai` | _[SCC+TIA påkrævet]_ |
-| **Anthropic PBC** | Scanner VLM | USA | `privacy@anthropic.com` / `support@anthropic.com` | _[SCC+TIA påkrævet]_ |
+| **OpenRouter, Inc.** | AI-tjenester — Hermes chat LLM, embeddings (RAG), scanner VLM. OpenRouter videresender til relevante model-udbydere (OpenAI, Anthropic, Meta m.fl.) per GDPR Art. 28(4). | USA | `support@openrouter.ai` | _[SCC+TIA påkrævet — se Bilag 17 (DPA — OpenRouter) og Bilag 12 (BILAG_OVERSIGT.md) afsnit 3]_ |
 
 ### 7.5 Underbehandlere (EU-baserede)
 
@@ -676,7 +676,7 @@ Næste opdatering: [HH:MM]
 
 ```
 TIL: [tenant owner e-mail]
-FRA: AlphaAi ApS <[support-email]>
+FRA: AlphaAi Consult ApS <[support-email]>
 EMNE: Sikkerhedshændelse vedrørende din AlphaFlow-konto
 
 Kære [Brugernavn],
@@ -708,7 +708,7 @@ Vi beklager ulejligheden og arbejder på at forhindre gentagelse.
 
 Med venlig hilsen,
 [Navn], [Titel]
-AlphaAi ApS
+AlphaAi Consult ApS
 [support-email] | [telefon]
 ```
 
@@ -719,8 +719,8 @@ AlphaAi ApS
 **Skabelon — Datatilsynet-indberetning:**
 
 ```
-1. Dataansvarlig: AlphaAi ApS, CVR 46312058
-2. Kontaktperson: [DPO-navn, telefon, e-mail]
+1. Dataansvarlig: AlphaAi Consult ApS, CVR 46312058
+2. Kontaktperson: Jess Martin Christoffersen, 61 73 60 76, alphaaiconsult@gmail.com
 3. Dato for hændelse: [YYYY-MM-DD HH:MM]
 4. Dato for opdagelse: [YYYY-MM-DD HH:MM]
 5. Beskrivelse af hændelsen:
@@ -740,7 +740,7 @@ AlphaAi ApS
 13. Er berørte registrerede underrettet (Art. 34): [JA/NEJ — begrundelse]
 ```
 
-### 8.4 Eksterne meddelelser — Erhvervsstyrelsen (Bogføringsloven)
+### 8.4 Eksterne meddelelser — Erhvervsstyrelsen (BEK 97 / Lov om bogføring)
 
 **Kanal:** Telefon + e-mail (se kontaktliste afsnit 7.3).
 
@@ -749,11 +749,11 @@ AlphaAi ApS
 - Hvilke bogføringsdata berørt (posteringer, journalposter, fakturaer, momsangivelser).
 - Backup-status og gendannelsesplan.
 - Immutability-status (AuditLog-integritet).
-- Plan for at sikre Bogføringsloven §10-12 overholdelse fremadrettet.
+- Plan for at sikre BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13 — overholdelse fremadrettet.
 
 ### 8.5 Eksterne meddelelser — offentlighed / medier
 
-**Kanal:** Pressemeddelelse via AlphaAi ApS hjemmeside + evt. presse-kontakt.
+**Kanal:** Pressemeddelelse via AlphaAi Consult ApS hjemmeside + evt. presse-kontakt.
 
 **Principper:**
 
@@ -907,7 +907,8 @@ pm2 list                                       # tabelleret status
 
 | Version | Dato | Ændring | Ansvarlig |
 |---|---|---|---|
-| 1.0 | 2025 | Første version (generisk beredskabsplan). | AlphaAi ApS |
-| 2.0 | 2025-06 | Tilføjede PM2-kommandoer, RTO/RPO-mål. | AlphaAi ApS |
-| 2.4 | 2026-06 | Mindre opdateringer. | AlphaAi ApS |
-| **3.0** | **2026** | **Fuld omskrivning baseret på faktisk infrastruktur (P1-INT/P1-SVC-b/P1-SVC-a). Tilføjede: 6 PM2-apps detaljeret, backup-strategi med Lag 1-4, 8 genopretningsprocedurer (DB-tab/VPS-fejl/App-crash/Mini-service-crash/ENCRYPTION_KEY-kompromitteret/Ransomware/SQLite-tab/Caddy-fejl), 6-trins incident response-procedure, kontaktliste med underbehandlere, kommunikationsplan med skabeloner, årlig DR-test + kvartalsvis review.** | **AlphaAi ApS — Doc-updater D5** |
+| 1.0 | 2025 | Første version (generisk beredskabsplan). | AlphaAi Consult ApS |
+| 2.0 | 2025-06 | Tilføjede PM2-kommandoer, RTO/RPO-mål. | AlphaAi Consult ApS |
+| 2.4 | 2026-06 | Mindre opdateringer. | AlphaAi Consult ApS |
+| **3.0** | **2026** | **Fuld omskrivning baseret på faktisk infrastruktur (P1-INT/P1-SVC-b/P1-SVC-a). Tilføjede: 6 PM2-apps detaljeret, backup-strategi med Lag 1-4, 8 genopretningsprocedurer (DB-tab/VPS-fejl/App-crash/Mini-service-crash/ENCRYPTION_KEY-kompromitteret/Ransomware/SQLite-tab/Caddy-fejl), 6-trins incident response-procedure, kontaktliste med underbehandlere, kommunikationsplan med skabeloner, årlig DR-test + kvartalsvis review.** | **AlphaAi Consult ApS — Doc-updater D5** |
+| **3.1** | **2026** | **AI-konsolidering (Task C3): Verificeret at OpenRouter er AlphaFlows eneste AI-underbehandler (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). Antal eksterne integrationer opdateret fra 15 til 13. Bilag 17 (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM) reference verificeret i §7.4.** | **AlphaAi Consult ApS — Task C3** |

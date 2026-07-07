@@ -1,6 +1,6 @@
 # DATABEHANDLERAFTALE (DPA)
 
-**Mellem AlphaAi ApS (Databehandler) og kundens virksomhed (Dataansvarlig)**
+**Mellem AlphaAi Consult ApS (Databehandler) og kundens virksomhed (Dataansvarlig)**
 
 ---
 
@@ -11,13 +11,13 @@
 | **Dokumenttype** | Databehandleraftale (DPA) jf. GDPR artikel 28 |
 | **Version** | 3.0 |
 | **Dato** | 08.06.2026 |
-| **Gældende lov** | Europa-Parlamentets og Rådets forordning (EU) 2016/679 (GDPR); dansk databeskyttelseslovgivning (LBK nr. 775 af 25. juni 2021); Bogføringsloven (LBK nr. 949 af 18. juni 2024); BEK nr. 98 af 15. februar 2023 |
-| **Parter** | **Dataansvarlig:** Kundens virksomhed (kunde hos AlphaFlow) — **Databehandler:** AlphaAi ApS, CVR 46312058 |
+| **Gældende lov** | Europa-Parlamentets og Rådets forordning (EU) 2016/679 (GDPR); dansk databeskyttelseslovgivning (LBK nr. 775 af 25. juni 2021); Lov om bogføring (LOV nr. 700 af 24. maj 2022); BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen); BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen) |
+| **Parter** | **Dataansvarlig:** Kundens virksomhed (kunde hos AlphaFlow) — **Databehandler:** AlphaAi Consult ApS, CVR 46312058 |
 | **Sprog** | Dansk |
 | **Klassifikation** | Fortroligt — Compliance-dokumentation |
-| **Udarbejdet af** | AlphaAi ApS Compliance |
+| **Udarbejdet af** | AlphaAi Consult ApS Compliance |
 
-Denne databehandleraftale indgås som led i AlphaFlows anmeldelse til Erhvervsstyrelsen som standardiseret bogføringssystem jf. BEK nr. 98 af 15. februar 2023, og dokumenterer forpligtelser, sikkerhedsforanstaltninger og rettigheder i relation til AlphaAi ApS' behandling af personoplysninger og bogføringsdata på vegne af kunden. Aftalen dækker samtlige underbehandlere, der anvendes i AlphaFlow-platformen (jf. afsnit 5).
+Denne databehandleraftale indgås som led i AlphaFlows anmeldelse til Erhvervsstyrelsen som standardiseret bogføringssystem jf. BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen), der henviser til BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen), og dokumenterer forpligtelser, sikkerhedsforanstaltninger og rettigheder i relation til AlphaAi Consult ApS' behandling af personoplysninger og bogføringsdata på vegne af kunden. Aftalen dækker samtlige underbehandlere, der anvendes i AlphaFlow-platformen (jf. afsnit 5).
 
 ---
 
@@ -36,32 +36,32 @@ Denne databehandleraftale indgås som led i AlphaFlows anmeldelse til Erhvervsst
 
 Kunden er dataansvarlig for de personoplysninger og bogføringsdata, der behandles i AlphaFlow. Kunden afgør formål og midler for behandlingen, herunder hvilke medarbejdere, kontakter og fakturamodtagere der registreres i systemet.
 
-### 1.2 Databehandler (AlphaAi ApS)
+### 1.2 Databehandler (AlphaAi Consult ApS)
 
 | Felt | Oplysninger |
 |------|-------------|
-| **Virksomhedsnavn** | AlphaAi ApS |
+| **Virksomhedsnavn** | AlphaAi Consult ApS |
 | **CVR-nummer** | 46312058 |
 | **Adresse** | [Indsættes ved anmeldelse] |
-| **Direktør / kontaktperson** | Jess Christoffersen |
+| **Direktør / kontaktperson** | Jess Martin Christoffersen |
 | **E-mail** | alphaaiconsult@gmail.com |
 | **Telefon** | 61 73 60 76 |
 
-AlphaAi ApS er indehaver og driftsansvarlig for AlphaFlow — en cloud-baseret dansk bogføringsplatform (SaaS) — og fungerer som databehandler for kunden i forbindelse med levering af bogførings-, fakturerings-, momsangivelses-, e-fakturerings- og AI-assistent-ydelser.
+AlphaAi Consult ApS er indehaver og driftsansvarlig for AlphaFlow — en cloud-baseret dansk bogføringsplatform (SaaS) — og fungerer som databehandler for kunden i forbindelse med levering af bogførings-, fakturerings-, momsangivelses-, e-fakturerings- og AI-assistent-ydelser.
 
 ### 1.3 Formål
 
-AlphaAi ApS behandler udelukkende personoplysninger og bogføringsdata på vegne af og i overensstemmelse med kundens skriftlige instrukser, som afgives gennem kundens brug af AlphaFlow-platformen. Behandlingen omfatter:
+AlphaAi Consult ApS behandler udelukkende personoplysninger og bogføringsdata på vegne af og i overensstemmelse med kundens skriftlige instrukser, som afgives gennem kundens brug af AlphaFlow-platformen. Behandlingen omfatter:
 
 - Dobbelt bogføring (JournalEntry + JournalEntryLine), kontoplan FSR-38, finansjournal, hovedbog.
 - Fakturering (salgsfakturaer, PDF-generering, e-mail-afsendelse, e-fakturering via Peppol/NemHandel/Storecove).
 - Momsrapportering og -indberetning til SKAT (momsangivelse).
 - Bank-forbindelser (scaffolding; ingen reelle PSD2-kald i produktion pr. dags dato).
 - AI-assistent (Hermes) med valgfri tenant-dataadgang (per-tenant opt-in).
-- Dokument-OCR/scanning (Tesseract + Anthropic Claude VLM).
+- Dokument-OCR/scanning (Tesseract + VLM via OpenRouter).
 - Multi-tenant adgangskontrol, audit-log, backup og gendannelse.
 
-AlphaAi ApS behandler ikke data til egne kommercielle formål uden forudgående skriftligt samtykke fra kunden.
+AlphaAi Consult ApS behandler ikke data til egne kommercielle formål uden forudgående skriftligt samtykke fra kunden.
 
 ---
 
@@ -86,7 +86,7 @@ Aftalen gælder for kundens abonnementsperiode (jvf. AlphaFlows generelle vilkå
 
 ### 2.3 Behandlingens art
 
-Behandlingen er begrænset til det i § 2.1 anførte. Behandlingen sker udelukkende på grundlag af kundens instrukser afgivet gennem platformens brugergrænseflade, undtagen hvor dansk lovgivning (særligt Bogføringsloven) pålægger AlphaAi ApS at udføre specifikke handlinger (f.eks. opretholdelse af immutabel audit-log og 5-års backup-retention).
+Behandlingen er begrænset til det i § 2.1 anførte. Behandlingen sker udelukkende på grundlag af kundens instrukser afgivet gennem platformens brugergrænseflade, undtagen hvor dansk lovgivning (særligt Bogføringsloven) pålægger AlphaAi Consult ApS at udføre specifikke handlinger (f.eks. opretholdelse af immutabel audit-log og 5-års backup-retention).
 
 ---
 
@@ -180,7 +180,7 @@ Følgende kategorier af fysiske personer kan have personoplysninger behandlet i 
 
 ## § 5 Underbehandlere (data processors)
 
-AlphaAi ApS anvender underbehandlere til at levere specifikke dele af AlphaFlow-tjenesten. Nedenstående tabel er den **komplette liste** over eksterne integrationer identificeret i AlphaFlows kodebase (verificeret i P1-INT-analysen, 15 integrationer). Listen udgør Bilag A.
+AlphaAi Consult ApS anvender underbehandlere til at levere specifikke dele af AlphaFlow-tjenesten. Nedenstående tabel er den **komplette liste** over eksterne integrationer identificeret i AlphaFlows kodebase (verificeret i P1-INT-analysen, 13 integrationer). Listen udgør Bilag A.
 
 ### 5.1 Klassifikation
 
@@ -200,21 +200,19 @@ Underbehandlerne er grupperet efter funktion:
 | 3 | **Storecove** | Storecove B.V. | Holland (EU) | Peppol Access Point — afsendelse/modtagelse af e-fakturaer (OIOUBL + Peppol BIS Billing 3.0, NemHandel eDelivery) | OIOUBL/Peppol XML: afsender-CVR, modtager-CVR/EAN, fakturanummer, dato, linjer (beskrivelse, antal, pris, momssats), total, betalingsbetingelser, IBAN. B2B — typisk kun firmanavne, CVR, beløb. Ingen CPR. | Art. 28(2) — DPA | Nej (Holland) |
 | 4 | **Frisbii / Flatpay** | Billwerk+ Reepay Group / Frisbii GmbH | Tyskland (EU) | Hosted checkout til AlphaFlows egne abonnementsbetalinger (Månedlig/Pro/Business/Business Extended). **Ikke** betalingsprocessor for kundens fakturaer. | Brugerens e-mail, virksomhedsnavn (brugt som customer first/last name), beløb i DKK øre, betalings-status, callback-URL'er | Art. 28(2) — DPA | Nej (Tyskland) |
 
-#### 5.1.C — AI-underbehandlere (USA — SCC påkrævet)
+#### 5.1.C — AI-underbehandler (USA — SCC påkrævet)
 
 | # | Underbehandler | Juridisk enhed | Lokation | Formål i AlphaFlow | Data sendt | Retsgrundlag | Tredjeland |
 |---|----------------|----------------|----------|---------------------|------------|--------------|------------|
-| 5 | **OpenAI, Inc.** | OpenAI, Inc. | USA | Embeddings (text-embedding-3-small, 1536 dims) til knowledge-service RAG | Dokument-tekst chunks (~500 tokens) fra danske regnskabsregler, branchekoder, kontoplan-beskrivelser. Potentielt tenant-specifikke dokumenter hvis `dataAccessEnabled=true`. Ingen adgangskoder, ingen CPR. | Art. 28(2) + Art. 46(2)(c) — DPA + SCC (modul 2) + TIA | **JA (USA)** |
-| 6 | **OpenRouter, Inc.** | OpenRouter, Inc. | USA | LLM chat-completions for Hermes AI-assistent | System-prompt (statisk dansk regnskabsviden), brugerens spørgsmål, samtalehistorik (sidste 20 beskeder), tenant-kontekst **KUN hvis `dataAccessEnabled=true`** (virksomhedsnavn, CVR, branche, regnskabssummer, medlemsliste, påmindelser). Ingen individuelle posteringer, ingen CPR. | Art. 28(2) + Art. 46(2)(c) — DPA + SCC (modul 2) + TIA | **JA (USA)** |
-| 7 | **Anthropic PBC** | Anthropic PBC | USA | VLM-ekstraktion i scanner-service (kvitteringer/fakturaer) | Base64-PNG-billeder af dokumentets sider + ekstraktions-prompt. Billederne kan indeholde leverandørnavn, CVR, beløb, momssats, dato, linjebeskrivelser, kunde-oplysninger. Anthropic gemmer ikke billederne (per API terms), men data transiterer USA. | Art. 28(2) + Art. 46(2)(c) — DPA + SCC (modul 2) + TIA | **JA (USA)** |
+| 5 | **OpenRouter, Inc.** | OpenRouter, Inc. | USA | AlphaFlows eneste AI-databehandler. Dækker alle AI-funktioner: (a) LLM chat-completions for Hermes AI-assistent, (b) embedding-generering til knowledge-service RAG, (c) vision-language model (VLM) i scanner-service (OCR-fallback). | (a) *Hermes chat:* System-prompt (statisk dansk regnskabsviden), brugerens spørgsmål, samtalehistorik (sidste 20 beskeder), tenant-kontekst **KUN hvis `dataAccessEnabled=true`** (virksomhedsnavn, CVR, branche, regnskabssummer, medlemsliste, påmindelser). Ingen individuelle posteringer, ingen CPR. (b) *Knowledge-RAG:* Dokument-tekst chunks (~500 tokens) fra danske regnskabsregler, branchekoder, kontoplan-beskrivelser. Potentielt tenant-specifikke dokumenter hvis `dataAccessEnabled=true`. Ingen adgangskoder, ingen CPR. (c) *Scanner VLM:* Base64-PNG-billeder af dokumentets sider + ekstraktions-prompt. Billederne kan indeholde leverandørnavn, CVR, beløb, momssats, dato, linjebeskrivelser, kunde-oplysninger. | Art. 28(2) + Art. 46(2)(c) — DPA + SCC (modul 2) + TIA | **JA (USA)** |
 
-**Note vedr. upstream-modeller:** OpenRouter videresender anmodninger til upstream-udbydere. Standardmodellen i AlphaFlow er `anthropic/claude-sonnet-4.5` (videresendes til Anthropic). Fallback for free-tier er `meta-llama/llama-3.3-70b-instruct:free` (videresendes til Meta). Begge er USA-baserede og omfattes af SCC.
+**Note vedr. upstream-modeller:** OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. Standardmodellen i AlphaFlow er `anthropic/claude-sonnet-4.5` (videresendes til Anthropic). Fallback for free-tier er `meta-llama/llama-3.3-70b-instruct:free` (videresendes til Meta). Begge er USA-baserede og omfattes af OpenRouter's SCC.
 
 #### 5.1.D — Email (EU)
 
 | # | Underbehandler | Juridisk enhed | Lokation | Formål i AlphaFlow | Data sendt | Retsgrundlag | Tredjeland |
 |---|----------------|----------------|----------|---------------------|------------|--------------|------------|
-| 8 | **Simply / Brevo (SMTP)** | Simply A/S eller Brevo SAS | DK / FR (EU) | Transaktions-emails: email-verifikation, password-reset, team-invitations, owner-notifikationer, faktura-emails med PDF-vedhæftning | Modtager-email, brugernavn/firmanavn, verification/reset-tokens, invitation-rolle, faktura-PDF (indeholder typisk beløb, CVR, modtager-oplysninger) | Art. 28(2) — DPA | Nej (EU) |
+| 6 | **Simply / Brevo (SMTP)** | Simply A/S eller Brevo SAS | DK / FR (EU) | Transaktions-emails: email-verifikation, password-reset, team-invitations, owner-notifikationer, faktura-emails med PDF-vedhæftning | Modtager-email, brugernavn/firmanavn, verification/reset-tokens, invitation-rolle, faktura-PDF (indeholder typisk beløb, CVR, modtager-oplysninger) | Art. 28(2) — DPA | Nej (EU) |
 
 #### 5.1.E — Myndigheder (ikke underbehandlere, men modtagere)
 
@@ -222,8 +220,8 @@ Følgende er ikke underbehandlere efter GDPR Art. 28, da de er offentlige myndig
 
 | # | Modtager | Formål i AlphaFlow | Data sendt | Retsgrundlag |
 |---|----------|---------------------|------------|--------------|
-| 9 | **Skattestyrelsen (SKAT)** — Moms-API | Indsendelse af momsangivelse (kvartalsvis/årligt). KUN moms — ingen årsopgørelse eller e-indkomst. | CVR-nummer, periode, momsbeløb (output/input/net), breakdown. Ingen personnavne eller CPR. | Bogføringsloven + Momsloven + SKAT's egne vilkår |
-| 10 | **Erhvervsstyrelsen (VIRK/CVR-register)** | CVR-opslag til validering og auto-udfyldning af firmanavn, adresse, postnummer, virksomhedsform | CVR-nummer som term-query (HTTP Basic Auth over `http://distribution.virk.dk`). Ingen persondata. | Offentlig tilgængeligt register |
+| 7 | **Skattestyrelsen (SKAT)** — Moms-API | Indsendelse af momsangivelse (kvartalsvis/årligt). KUN moms — ingen årsopgørelse eller e-indkomst. | CVR-nummer, periode, momsbeløb (output/input/net), breakdown. Ingen personnavne eller CPR. | Bogføringsloven + Momsloven + SKAT's egne vilkår |
+| 8 | **Erhvervsstyrelsen (VIRK/CVR-register)** | CVR-opslag til validering og auto-udfyldning af firmanavn, adresse, postnummer, virksomhedsform | CVR-nummer som term-query (HTTP Basic Auth over `http://distribution.virk.dk`). Ingen persondata. | Offentlig tilgængeligt register |
 
 #### 5.1.F — Interne sub-systemer (ikke selvstændige underbehandlere)
 
@@ -231,11 +229,11 @@ Følgende komponenter er **integrerede dele af AlphaFlow** og kører på AlphaAi
 
 | # | Sub-system | Port | Formål | Lokation |
 |---|-----------|------|--------|----------|
-| 11 | **tokenpay-access-service** | 3100 | Token-baseret adgangskontrol via `.tbkey` proof-filer (AES-256-GCM dekrypteret med PROOF_ENCRYPTION_KEY), trial-administration, free-tier håndtering, owner-bypass. Lokal SQLite. | IONOS VPS (EU) |
-| 12 | **scanner-service** | 3005 | Python/FastAPI — dokument-OCR (Tesseract + Anthropic VLM fallback). Lokal SQLite. Anthropic kaldes kun ved VLM-fallback. | IONOS VPS (EU) |
-| 13 | **notification-ws-service** | 3001 | Socket.IO real-time notifikationer og `DATA_CHANGED`-invalidering pr. company-rum. In-memory only, ingen database. | IONOS VPS (EU) |
-| 14 | **knowledge-service** | 3006 | RAG knowledge base (pgvector) — semantisk søgning via OpenAI embeddings. | IONOS VPS (EU), embeddings hos OpenAI (USA) |
-| 15 | **hermes-agent** | 3004 | Socket.IO AI chat-assistent — kalder OpenRouter (USA). | IONOS VPS (EU), LLM hos OpenRouter (USA) |
+| 9 | **tokenpay-access-service** | 3100 | Token-baseret adgangskontrol via `.tbkey` proof-filer (AES-256-GCM dekrypteret med PROOF_ENCRYPTION_KEY), trial-administration, free-tier håndtering, owner-bypass. Lokal SQLite. | IONOS VPS (EU) |
+| 10 | **scanner-service** | 3005 | Python/FastAPI — dokument-OCR (Tesseract + VLM via OpenRouter fallback). Lokal SQLite. VLM kaldes kun ved OCR-fallback. | IONOS VPS (EU) |
+| 11 | **notification-ws-service** | 3001 | Socket.IO real-time notifikationer og `DATA_CHANGED`-invalidering pr. company-rum. In-memory only, ingen database. | IONOS VPS (EU) |
+| 12 | **knowledge-service** | 3006 | RAG knowledge base (pgvector) — semantisk søgning via embeddings fra OpenRouter. | IONOS VPS (EU), embeddings via OpenRouter (USA) |
+| 13 | **hermes-agent** | 3004 | Socket.IO AI chat-assistent — kalder OpenRouter (USA). | IONOS VPS (EU), LLM hos OpenRouter (USA) |
 
 Disse sub-systemer behandler data på AlphaAi's vegne og er underlagt samme sikkerhedsforanstaltninger som hovedapplikationen.
 
@@ -258,12 +256,10 @@ Hvis disse integrationer aktiveres i fremtiden, vil de blive tilføjet til Bilag
 | IONOS VPS | Nej | Nej | Nej |
 | Storecove | Nej | Nej | Nej |
 | Frisbii / Flatpay | Nej | Nej | Nej |
-| **OpenAI** | **Ja** | **Ja** | **Ja** |
 | **OpenRouter** | **Ja** | **Ja** | **Ja** |
-| **Anthropic** | **Ja** | **Ja** | **Ja** |
 | Simply / Brevo | Nej | Nej | Nej |
 
-Detaljeret Transfer Impact Assessment for de tre USA-baserede AI-underbehandlere findes i `docs/LEVERANDØRSTYRING.md` afsnit 5.
+Detaljeret Transfer Impact Assessment for den USA-baserede AI-underbehandler (OpenRouter) findes i `docs/LEVERANDØERSTYRING.md` afsnit 5.
 
 ---
 
@@ -273,7 +269,9 @@ AlphaFlow implementerer følgende data-minimization-foranstaltninger i henhold t
 
 ### 6.1 HermesAgent.dataAccessEnabled (per-tenant opt-in, default false)
 
-Dette er den primære minimization-foranstaltning for AI-underbehandlerne. Standard er `false` — dvs. uden udtrykkelig opt-in fra tenant-ejer (OWNER) sendes **KUN**:
+> **Samtykke før AI-brug (forud for data-adgang):** Før Hermes AI-assistenten kan aktiveres overhovedet, skal tenant-administratoren (OWNER/ADMIN) aktivt acceptere tre advarsler via en samtykke-dialog i appen: (1) GDPR-relaterede risici ved persondata-overførsel til USA via OpenRouter, (2) non-deterministiske processer (AI-output kan variere, indeholde fejl eller hallucinationer), (3) at Hermes ikke er menneskelig revisor-rådgivning. Samtykket logges i AuditLog (`action: AI_CONSENT_ACCEPTED`) og kan tilbagekaldes ved deaktivering. Dette AI-brugssamtykke er adskilt fra `dataAccessEnabled` (nedenfor) som er et særskilt opt-in for om Hermes må læse tenant-specifikke finansielle data. Se Bilag 4 (BRUGSVEJLEDNING.md) afsnit 13.0 for de fulde advarselstekster.
+
+Dette er den primære minimization-foranstaltning for AI-underbehandleren (OpenRouter). Standard er `false` — dvs. uden udtrykkelig opt-in fra tenant-ejer (OWNER) sendes **KUN**:
 
 - Brugerens spørgsmål (naturligt sprog)
 - Statisk dansk regnskabs-system-prompt (`knowledge-base.ts`, 454 LOC — lovtekst, moms-satser, frister, virksomhedsklasser)
@@ -291,12 +289,12 @@ Når `dataAccessEnabled=true` aktiveres af tenant-ejer, sendes desuden ovenståe
 
 ### 6.2 Scanner-service — billed-niveau minimization
 
-Scanner-service sender **kun** billedet af det dokument, brugeren har valgt at scanne — ikke hele tenant-datasættet. Anthropic kaldes kun som fallback når:
+Scanner-service sender **kun** billedet af det dokument, brugeren har valgt at scanne — ikke hele tenant-datasættet. VLM (via OpenRouter) kaldes kun som fallback når:
 
-1. PDF uden tekstlag → PNG-rendering → Anthropic VLM
+1. PDF uden tekstlag → PNG-rendering → VLM via OpenRouter
 2. Billede (JPEG/PNG/WebP) med OCR-confidence < 60 → VLM fallback
 
-PDF'er med tekstlag håndteres udelukkende lokalt (PyMuPDF + Tesseract) uden kald til Anthropic.
+PDF'er med tekstlag håndteres udelukkende lokalt (PyMuPDF + Tesseract) uden kald til VLM (via OpenRouter).
 
 ### 6.3 Knowledge-service — dokument-niveau
 
@@ -374,7 +372,7 @@ AlphaFlow implementerer følgende tekniske og organisatoriske sikkerhedsforansta
 
 ### 7.6 Åbne / kendte sikkerhedsmangler
 
-AlphaAi ApS er forpligtet til at informere kunden om følgende kendte sikkerhedsmangler, som er dokumenteret i `docs/RISIKOVURDERING.md`:
+AlphaAi Consult ApS er forpligtet til at informere kunden om følgende kendte sikkerhedsmangler, som er dokumenteret i `docs/RISIKOVURDERING.md`:
 
 1. **Ingen Content-Security-Policy (CSP) header** implementeret.
 2. **Ingen CSRF-token** (kun SameSite=Lax cookie).
@@ -464,26 +462,24 @@ Kunden kan anmode om hard-delete af data, der ikke længere er under Bogførings
 
 ### 9.1 USA-overførsler
 
-Følgende underbehandlere overfører personoplysninger til USA:
+Følgende underbehandler overfører personoplysninger til USA:
 
 | Underbehandler | Data sendt | Minimization |
 |----------------|------------|---------------|
-| **OpenAI, Inc.** | Dokument-tekst chunks (RAG-embeddings) | Kun dokumenter tenant-admin har uploadet |
-| **OpenRouter, Inc.** | Brugerens spørgsmål + system-prompt + (hvis opt-in) tenant-kontekst | `dataAccessEnabled` per-tenant opt-in (default false) |
-| **Anthropic PBC** | Base64-PNG-billeder af dokumenter (kun ved VLM fallback) | Kun ved low OCR-confidence |
+| **OpenRouter, Inc.** | (a) Hermes chat: Brugerens spørgsmål + system-prompt + (hvis opt-in) tenant-kontekst; (b) Knowledge-RAG: dokument-tekst chunks (embeddings); (c) Scanner VLM: Base64-PNG-billeder af dokumenter (kun ved VLM fallback) | (a) `dataAccessEnabled` per-tenant opt-in (default false); (b) Kun dokumenter tenant-admin har uploadet; (c) Kun ved low OCR-confidence |
+
+OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'.
 
 ### 9.2 nødvendige sikkerhedsforanstaltninger
 
 For hver USA-overførsel gælder:
 
 1. **Standard Contractual Clauses (SCC)** — Kommissionens gennemførelsesafgørelse (EU) 2021/914 af 25. november 2021:
-   - **Modul 2** (Controller-to-Processor) anvendes primært for OpenAI og OpenRouter (da data returneres til kunden som dataansvarlig).
-   - **Modul 3** (Processor-to-Processor) anvendes for Anthropic (da Anthropic er underbehandler for AlphaAi som databehandler).
-2. **Transfer Impact Assessment (TIA)** — Vurdering af det amerikanske retsmiljø, herunder FISA 702, EO 12333 og CLOUD Act. Udføres før ibrugtagning og årligt efterfølgende. Detaljeret TIA findes i `docs/LEVERANDØRSTYRING.md` afsnit 5.
+   - **Modul 2** (Controller-to-Processor) anvendes for OpenRouter (da data returneres til kunden som dataansvarlig).
+2. **Transfer Impact Assessment (TIA)** — Vurdering af det amerikanske retsmiljø, herunder FISA 702, EO 12333 og CLOUD Act. Udføres før ibrugtagning og årligt efterfølgende. Detaljeret TIA findes i `docs/LEVERANDØERSTYRING.md` afsnit 5.
 3. **Supplerende foranstaltninger:**
-   - `HermesAgent.dataAccessEnabled` opt-in (default false) — primær minimization for OpenRouter.
-   - Anthropic API terms — zero-retention for enterprise (skal verificeres årligt).
-   - OpenRouter — kort log-retention ifølge deres DPA (skal verificeres).
+   - `HermesAgent.dataAccessEnabled` opt-in (default false) — primær minimization for Hermes chat (via OpenRouter).
+   - OpenRouter — kort log-retention ifølge deres DPA (skal verificeres); OpenRouter forpligter sig til zero-retention for enterprise/API-aftaler (skal verificeres årligt).
 
 ### 9.3 Neon admin-adgang fra USA
 
@@ -501,7 +497,7 @@ Ingen andre underbehandlere overfører data til tredjelande. Storecove (Holland)
 
 Hver underbehandler forpligter sig til at:
 
-1. **Kun behandle personoplysninger** på dokumenteret instruks fra AlphaAi ApS (som igen handler på kundens vegne).
+1. **Kun behandle personoplysninger** på dokumenteret instruks fra AlphaAi Consult ApS (som igen handler på kundens vegne).
 2. **Ikke behandle data** til egne formål (herunder marketing, model-træning etc.) uden forudgående skriftligt samtykke.
 3. **Sikre fortrolighed** — alt personale med adgang er underlagt fortrolighedsforpligtelse.
 4. **Implementere passende sikkerhedsforanstaltninger** jf. GDPR art. 32.
@@ -514,12 +510,12 @@ Hver underbehandler forpligter sig til at:
 
 ### 10.2 AI-underbehandlerers specifikke forpligtelser
 
-For OpenAI, OpenRouter og Anthropic gælder udover de generelle forpligtelser:
+For OpenRouter (AlphaFlows eneste AI-underbehandler) gælder udover de generelle forpligtelser:
 
 1. **Ingen model-træning** på kundedata. AlphaAi indgår enterprise-/API-aftaler der garanterer zero-retention.
 2. **Kort log-retention** — input/output data slettes efter teknisk nødvendig periode (typisk 30-90 dage for abuse-monitoring).
 3. **SCC + TIA** opretholdes løbende.
-4. **Transparens om upstream-udbydere** — OpenRouter skal oplyse hvilken model der faktisk anvendes og dens lokation.
+4. **Transparens om upstream-udbydere** — OpenRouter skal oplyse hvilken model der faktisk anvendes og dens lokation. OpenRouter's underbehandlere (f.eks. Anthropic, Meta, OpenAI) er omfattet af GDPR Art. 28(4) og indgås ikke separate DPA'er med AlphaAi Consult ApS.
 
 ### 10.3 Myndigheders forpligtelser
 
@@ -528,7 +524,7 @@ SKAT og Erhvervsstyrelsen er ikke underbehandlere, men AlphaFlow transmitterer d
 - SKAT: Momsloven + SKAT's API-vilkår.
 - Erhvervsstyrelsen: CVR-loven.
 
-Kunden bærer ansvaret for korrektheden af indberetningsgrundlaget; AlphaAi ApS leverer kun den tekniske transmittering.
+Kunden bærer ansvaret for korrektheden af indberetningsgrundlaget; AlphaAi Consult ApS leverer kun den tekniske transmittering.
 
 ---
 
@@ -536,7 +532,7 @@ Kunden bærer ansvaret for korrektheden af indberetningsgrundlaget; AlphaAi ApS 
 
 ### 11.1 DSAR (Data Subject Access Requests)
 
-Registrerede personer udøver deres rettigheder (art. 15-22) over for kunden som dataansvarlig. AlphaAi ApS yder teknisk bistand via følgende API-endpoints:
+Registrerede personer udøver deres rettigheder (art. 15-22) over for kunden som dataansvarlig. AlphaAi Consult ApS yder teknisk bistand via følgende API-endpoints:
 
 | Rettighed | Endpoint / Funktion | Beskrivelse |
 |-----------|---------------------|-------------|
@@ -565,7 +561,7 @@ Sletningsanmodninger afvejes mod Bogføringslovens 5-års opbevaringspligt (jf. 
 
 ### 11.3 Support-kanaler
 
-Kunden kan rette DSAR-henvendelser til AlphaAi ApS via:
+Kunden kan rette DSAR-henvendelser til AlphaAi Consult ApS via:
 
 - **E-mail:** alphaaiconsult@gmail.com
 - **Telefon:** 61 73 60 76
@@ -602,7 +598,7 @@ Ved et mistænkt persondata-brud følges proceduren i `docs/BEREDSKABSPLAN.md`. 
 
 ### 12.3 Underbehandler-underretning
 
-Hver underbehandler forpligter sig til at underrette AlphaAi ApS om ethvert persondata-brud uden unødig forsinkelse og senest **24 timer** efter at bruddet er opdaget. Underretningen skal indeholde:
+Hver underbehandler forpligter sig til at underrette AlphaAi Consult ApS om ethvert persondata-brud uden unødig forsinkelse og senest **24 timer** efter at bruddet er opdaget. Underretningen skal indeholde:
 
 1. Beskrivelse af bruddets art
 2. Kategorier og antal berørte registrerede
@@ -621,17 +617,17 @@ Alle hændelser i AlphaFlow logges i den ufornderlige audit trail (jf. § 7.4), 
 
 ### 13.1 Kundens revisionsret
 
-Kunden har ret til at revidere AlphaAi ApS' databehandling, jf. GDPR art. 28(3)(h). Revisionen kan udføres af kunden selv eller af en uafhængig tredjepart underlagt fortrolighedsforpligtelse.
+Kunden har ret til at revidere AlphaAi Consult ApS' databehandling, jf. GDPR art. 28(3)(h). Revisionen kan udføres af kunden selv eller af en uafhængig tredjepart underlagt fortrolighedsforpligtelse.
 
 ### 13.2 AlphaAis dokumentationsleverancer
 
-AlphaAi ApS stiller følgende dokumentation til rådighed for kundens revision:
+AlphaAi Consult ApS stiller følgende dokumentation til rådighed for kundens revision:
 
 | Dokument | Sti | Indhold |
 |----------|-----|---------|
 | Compliance-rapport | `docs/COMPLIANCE_RAPPORT.md` | Intern kontrol, sikkerhedsforanstaltninger, compliance-matrix |
 | Krypteringsdokumentation | `docs/ENCRYPTION.md` | AES-256-GCM, TLS, nøglehåndtering |
-| Leverandørstyring | `docs/LEVERANDØRSTYRING.md` | Due diligence, TIA, sub-processor-lister |
+| Leverandørstyring | `docs/LEVERANDØERSTYRING.md` | Due diligence, TIA, sub-processor-lister |
 | Risikovurdering | `docs/RISIKOVURDERING.md` | IT-risikovurdering |
 | Beredskabsplan | `docs/BEREDSKABSPLAN.md` | Incident response, kontaktliste |
 | Audit-log | AuditLog-tabellen i Neon DB | Trækkes via `/api/audit` (OWNER/ADMIN) eller `/api/export-tenant` |
@@ -658,7 +654,7 @@ AlphaAi ApS stiller følgende dokumentation til rådighed for kundens revision:
 
 ### 14.1 Underretningsforpligtelse
 
-AlphaAi ApS forpligter sig til at underrette kunden om enhver planlagt ændring i underbehandlerlisten (Bilag A):
+AlphaAi Consult ApS forpligter sig til at underrette kunden om enhver planlagt ændring i underbehandlerlisten (Bilag A):
 
 | Ændringstype | Varsel | Kanal |
 |--------------|-------|-------|
@@ -675,13 +671,13 @@ Kunden kan gøre indsigelse mod tilføjelse eller udskiftning af en underbehandl
 
 Hvis parterne ikke kan opnå enighed:
 
-1. AlphaAi ApS udarbejder en alternativ handlingsplan.
+1. AlphaAi Consult ApS udarbejder en alternativ handlingsplan.
 2. Kunden kan opsige DPA'en uden varsel, forudsat at årsagen er dokumenteret.
 3. Data returneres eller slettes jf. § 8.
 
 ### 14.4 Nødtilfælde
 
-Ved akut sikkerhedshændelse (f.eks. underbehandler-brud der kræver øjeblikkelig afløsning) kan AlphaAi ApS foretage midlertidig udskiftning uden forudgående varsel, men underretter kunden **straks** efterfølgende.
+Ved akut sikkerhedshændelse (f.eks. underbehandler-brud der kræver øjeblikkelig afløsning) kan AlphaAi Consult ApS foretage midlertidig udskiftning uden forudgående varsel, men underretter kunden **straks** efterfølgende.
 
 ---
 
@@ -689,13 +685,13 @@ Ved akut sikkerhedshændelse (f.eks. underbehandler-brud der kræver øjeblikkel
 
 Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i AlphaFlow-systemet (ved oprettelse af virksomhed) eller ved underskrift nedenfor.
 
-### 15.1 Databehandler — AlphaAi ApS
+### 15.1 Databehandler — AlphaAi Consult ApS
 
 | Felt | Underskrift |
 |------|-------------|
-| **Virksomhedsnavn** | AlphaAi ApS |
+| **Virksomhedsnavn** | AlphaAi Consult ApS |
 | **CVR-nummer** | 46312058 |
-| **Underskrevet af** | Jess Christoffersen |
+| **Underskrevet af** | Jess Martin Christoffersen |
 | **Funktion** | Direktør |
 | **Dato og sted** | 08.06.2026, [By] |
 | **Underskrift** | _________________________________ |
@@ -721,17 +717,20 @@ Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i
 | 2 | IONOS VPS | IONOS SE | Tyskland (EU) | Applikationsserver + backup-lagring | AES-256-GCM-krypterede backup-ZIPs, runtime-data | Databehandler | Nej | Nej | Indgået |
 | 3 | Storecove | Storecove B.V. | Holland (EU) | Peppol Access Point — e-fakturering | OIOUBL/Peppol XML (CVR, faktura, linjer, IBAN) | Databehandler | Nej | Nej | Påkræret |
 | 4 | Frisbii / Flatpay | Billwerk+ Reepay Group | Tyskland (EU) | Abonnementsbetalinger | Bruger-email, virksomhedsnavn, beløb, callback-URL'er | Databehandler | Nej | Nej | Påkræret |
-| 5 | OpenAI | OpenAI, Inc. | USA | Embeddings (RAG) | Dokument-tekst chunks (~500 tokens) | Databehandler | **Ja** | **Ja** (Modul 2) | Påkræret + TIA |
-| 6 | OpenRouter | OpenRouter, Inc. | USA | LLM chat (Hermes) | Spørgsmål + system-prompt + (opt-in) tenant-kontekst | Databehandler | **Ja** | **Ja** (Modul 2) | Påkræret + TIA |
-| 7 | Anthropic | Anthropic PBC | USA | VLM (scanner-service) | Base64-PNG-billeder af dokumenter | Databehandler | **Ja** | **Ja** (Modul 3) | Påkræret + TIA |
-| 8 | Simply / Brevo (SMTP) | Simply A/S / Brevo SAS | DK / FR (EU) | Transaktions-emails | Modtager-email, brugernavn, faktura-PDF, tokens | Databehandler | Nej | Nej | Påkræret |
-| 9 | SKAT (Moms-API) | Skattestyrelsen | DK (EU) | Momsangivelse-indberetning | CVR, periode, momsbeløb | Myndighed | Nej | Nej | N/A |
-| 10 | Erhvervsstyrelsen (VIRK/CVR) | Erhvervsstyrelsen | DK (EU) | CVR-opslag | CVR-nummer (term-query) | Myndighed | Nej | Nej | N/A |
-| 11 | tokenpay-access-service | AlphaAi ApS (intern) | IONOS VPS (EU) | Adgangskontrol via .tbkey proofs | Bruger-ID, email, navn, proof-manifest, access-log | Intern sub-system | Nej | Nej | N/A (intern) |
-| 12 | scanner-service | AlphaAi ApS (intern) | IONOS VPS (EU) | Dokument-OCR + VLM-ekstraktion | Dokument-billeder, OCR-resultater | Intern sub-system | Nej | Nej | N/A (intern) |
-| 13 | notification-ws-service | AlphaAi ApS (intern) | IONOS VPS (EU) | Real-time notifikationer | userId, readIds, companyId (in-memory) | Intern sub-system | Nej | Nej | N/A (intern) |
-| 14 | knowledge-service | AlphaAi ApS (intern) | IONOS VPS (EU) | RAG knowledge base | Dokument-tekst, embeddings (pgvector) | Intern sub-system | Nej | Nej | N/A (intern) |
-| 15 | hermes-agent | AlphaAi ApS (intern) | IONOS VPS (EU) | AI chat-assistent | Socket.IO-events, samtalehistorik | Intern sub-system | Nej | Nej | N/A (intern) |
+| 5 | OpenRouter | OpenRouter, Inc. | USA | AI-databehandler — Hermes chat-LLM, knowledge-RAG embeddings og scanner VLM | Spørgsmål + system-prompt + (opt-in) tenant-kontekst; dokument-tekst chunks; base64-PNG-billeder | Databehandler | **Ja** | **Ja** (Modul 2) | Påkræret + TIA |
+| 6 | Simply / Brevo (SMTP) | Simply A/S / Brevo SAS | DK / FR (EU) | Transaktions-emails | Modtager-email, brugernavn, faktura-PDF, tokens | Databehandler | Nej | Nej | Påkræret |
+| 7 | SKAT (Moms-API) | Skattestyrelsen | DK (EU) | Momsangivelse-indberetning | CVR, periode, momsbeløb | Myndighed | Nej | Nej | N/A |
+| 8 | Erhvervsstyrelsen (VIRK/CVR) | Erhvervsstyrelsen | DK (EU) | CVR-opslag | CVR-nummer (term-query) | Myndighed | Nej | Nej | N/A |
+| 9 | tokenpay-access-service | AlphaAi Consult ApS (intern) | IONOS VPS (EU) | Adgangskontrol via .tbkey proofs | Bruger-ID, email, navn, proof-manifest, access-log | Intern sub-system | Nej | Nej | N/A (intern) |
+| 10 | scanner-service | AlphaAi Consult ApS (intern) | IONOS VPS (EU) | Dokument-OCR + VLM-ekstraktion | Dokument-billeder, OCR-resultater | Intern sub-system | Nej | Nej | N/A (intern) |
+| 11 | notification-ws-service | AlphaAi Consult ApS (intern) | IONOS VPS (EU) | Real-time notifikationer | userId, readIds, companyId (in-memory) | Intern sub-system | Nej | Nej | N/A (intern) |
+| 12 | knowledge-service | AlphaAi Consult ApS (intern) | IONOS VPS (EU) | RAG knowledge base | Dokument-tekst, embeddings (pgvector) | Intern sub-system | Nej | Nej | N/A (intern) |
+| 13 | hermes-agent | AlphaAi Consult ApS (intern) | IONOS VPS (EU) | AI chat-assistent | Socket.IO-events, samtalehistorik | Intern sub-system | Nej | Nej | N/A (intern) |
+| 14 | NemHandel / Nets (Access Point) | Nets A/S | DK (EU) | NemHandel e-fakturering (OIOUBL) via direkte Nets Access Point-integration (reserveret; aktiveres kun hvis Storecove ikke anvendes som AP) | OIOUBL XML: afsender-CVR, modtager-CVR/EAN, fakturanummer, dato, linjer, total, IBAN (samme indhold som Storecove) | Databehandler (potentiel) | Nej (DK) | Nej | Ved aktivering — se Bilag 15 (Storecove) hvis Storecove anvendes som AP, ellers separat DPA med Nets |
+
+**Note vedr. OpenRouter's underbehandlere:** OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4). Disse model-udbydere er OpenRouter's underbehandlere — ikke AlphaAi Consult ApS' — og indgås derfor ikke separate DPA'er med AlphaAi. AlphaAi's DPA og SCC med OpenRouter (Bilag 17) dækker alle AI-funktioner i AlphaFlow: Hermes chat-LLM, knowledge-RAG embeddings og scanner VLM.
+
+**Note vedr. Peppol/NemHandel Access Point:** AlphaFlow anvender **Storecove B.V. (Holland)** som både Peppol og NemHandel Access Point (se Bilag 15 — separat DPA-PDF ved indsendelse) i den nuværende konfiguration. Miljøvariablerne `NEMHANDEL_API_KEY`, `NEMHANDEL_API_URL` (https://nemhandel.nets.dk/api/v2) og `PEPPOL_AP_URL` (jf. Bilag 11 — TOKENBAY-ACCESS-ENV-GUIDE.md) er reserveret til en fremtidig direkte Nets-integration, men er **ikke aktive i produktion**. Hvis direkte Nets-integration aktiveres i fremtiden, vil Nets blive tilføjet som selvstændig underbehandler med separat DPA (jf. § 14).
 
 ### Bilag A.2 — Implementerede men IKKE aktive integrationer
 
@@ -797,9 +796,10 @@ Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
 | 1.0 | 2025 | Første udkast |
 | 2.0 | 1. januar 2025 | Komplet revidering med tekniske referencer |
 | 3.0 | 08.06.2026 | **Komplet omskrivning (D4-DPA-LEV):** Rettet partrollen (AlphaAi = databehandler, kunde = dataansvarlig); tilføjet komplet underbehandler-tabel for alle 15 integrationer fra P1-INT (Neon, IONOS, Storecove, Frisbii, OpenAI, OpenRouter, Anthropic, Simply/Brevo, SKAT, Erhvervsstyrelsen, + 5 interne sub-systemer); tilføjet data-minimization-sektion med `HermesAgent.dataAccessEnabled` opt-in (default false); tilføjet Tredjelands-overførsels-sektion (§ 9) med SCC 2021/914 + TIA for USA-underbehandlere; tilføjet præcise datakategorier fra P1-DB-analysen; dokumenteret konto-deaktivering vs. hard-delete per Bogføringsloven §§ 10-12; dokumenteret åbne sikkerhedsmangler ærligt (CSP, CSRF, etc.) |
+| 3.1 | 2026 (AI-konsolidering C1) | **AI-underbehandler-konsolidering:** OpenRouter, Inc. er nu AlphaFlows eneste AI-databehandler per AI-CONSOLIDATION-SPEC. OpenAI, Inc. og Anthropic PBC er fjernet som selvstændige underbehandlere (de er OpenRouter's underbehandlere per GDPR Art. 28(4), ikke AlphaAi Consult ApS'). Bilag A reduceret fra 16 til 14 rækker; §5.1.C reduceret fra 3 til 1 række; §5.2 SCC-status-tabel reduceret fra 3 til 1 AI-række; §9.1 USA-overførsler konsolideret; §6.2/§6.3 beskrivelser opdateret ("via OpenRouter"); §10.2 AI-specifikke forpligtelser gælder nu kun OpenRouter. Bilag 17 = OpenRouter (konsolideret DPA + SCC), Bilag 18 = Simply/Brevo, Bilag 19 = xlsx-tjekliste (jf. BILAG_OVERSIGT.md). |
 
 ---
 
-*Udarbejdet af AlphaAi ApS Compliance som del af anmeldelsen til Erhvervsstyrelsen af AlphaFlow som standardiseret bogføringssystem (BEK 98).*
+*Udarbejdet af AlphaAi Consult ApS Compliance som del af anmeldelsen til Erhvervsstyrelsen af AlphaFlow som standardiseret bogføringssystem (BEK 98).*
 
 *Alle tekniske referencer er baseret på faktisk implementeret kode fra AlphaFlow-kodebasen (verificeret i P1-INT og P1-DB-analyserne). Ingen opdigtede underbehandlere.*

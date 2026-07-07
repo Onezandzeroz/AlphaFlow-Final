@@ -1,6 +1,8 @@
 # AlphaFlow — Brugsvejledning
 
-> Komplet brugermanual for AlphaFlow, den danskudviklede cloud-baserede bogføringsplatform til små og mellemstore virksomheder. Udviklet af AlphaAi ApS til overholdelse af Bogføringsloven, BEK 98 og GDPR.
+**Version 3.1 — 2026**
+
+> Komplet brugermanual for AlphaFlow, den danskudviklede cloud-baserede bogføringsplatform til små og mellemstore virksomheder. Udviklet af AlphaAi Consult ApS til overholdelse af Lov om bogføring (LOV nr. 700 af 24. maj 2022), BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen), BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen) og GDPR.
 
 Denne brugsvejledning beskriver **kun** funktioner, der faktisk findes i AlphaFlows kodebase. Hvor en funktion er begrænset eller ikke tilgængelig, markeres det eksplicit.
 
@@ -62,7 +64,7 @@ AlphaFlow er **multi-tenant**: din virksomheds data er fuldt adskilt fra andre k
 | Plan | Pris | Binding | Sæder | Nøglefunktioner |
 |------|------|---------|-------|-----------------|
 | Gratis | 0 kr./md. | Ingen | 1 | Basisbogføring, manuel OIOUBL, demo-bank |
-| Månedlig | 199 kr./md. | Ingen | 3 | Ægte bank (demo i produktion), avancerede rapporter, dataeksport, iXBRL |
+| Månedlig | 199 kr./md. | Ingen | 3 | Bankintegration (Demo + Tink), avancerede rapporter, dataeksport, iXBRL |
 | Pro (årlig) | 169 kr./md. | 12 md. | 5 | Alt i Månedlig + Hermes AI |
 | Business (2-årig) | 149 kr./md. | 24 md. | Ubegrænset | Alt i Pro + auto e-faktura |
 | Business Extended (3-årig) | 145 kr./md. | 36 md. | Ubegrænset | Alt i Business + projektregnskab |
@@ -94,7 +96,7 @@ Detaljer om funktioner pr. plan findes i afsnit 16. Alle nye brugere får 60 dag
 
 Du skal bekræfte din e-mailadresse, før du kan logge ind:
 
-1. Åbn bekræftelsesmailen fra AlphaAi ApS.
+1. Åbn bekræftelsesmailen fra AlphaAi Consult ApS.
 2. Klik på bekræftelseslinket. Linket har formen `?verify=TOKEN`.
 3. Browseren åbner AlphaFlow og viser en bekræftelsesskærm.
 4. Du kan nu logge ind.
@@ -987,7 +989,7 @@ Tilgås fra **Moms & Årsregnskab → Årsrapport**-tabben. Klik på **Download 
 
 ## 11. Dokument-OCR & scanning
 
-AlphaFlow har en indbygget dokumentscanner via `scanner-service` (Python/FastAPI, port 3005), der kombinerer Tesseract OCR og Anthropic Claude VLM (Vision Language Model) til at udtrække data fra kvitteringer og fakturaer.
+AlphaFlow har en indbygget dokumentscanner via `scanner-service` (Python/FastAPI, port 3005), der kombinerer Tesseract OCR og VLM via OpenRouter (Vision Language Model) til at udtrække data fra kvitteringer og fakturaer.
 
 ### 11.1 Upload kvittering/faktura
 
@@ -1024,9 +1026,9 @@ Når et dokument er scannet, udfylder systemet automatisk:
 
 ### 11.4 Begrænsninger
 
-- Den integrerede Tesseract.js-klient i `ReceiptScanner`-komponenten kan bruges offline i browseren, mens den fulde VLM-pipeline (Anthropic Claude) kræver internetforbindelse og aktiv `ANTHROPIC_API_KEY` på serveren.
+- Den integrerede Tesseract.js-klient i `ReceiptScanner`-komponenten kan bruges offline i browseren, mens den fulde VLM-pipeline (via OpenRouter) kræver internetforbindelse og aktiv `OPENROUTER_API_KEY` på serveren.
 - Scanner-servicen er hosted separat og rutes gennem AlphaFlows API-proxy.
-- Billeder af kvitteringer sendes til Anthropic (USA) til VLM-analyse — se afsnit 13 og GDPR-dokumentationen for detaljer om databehandling.
+- Billeder af kvitteringer sendes til USA via OpenRouter til VLM-analyse (SCC+TIA påkrævet — se Bilag 17) — se afsnit 13 og GDPR-dokumentationen for detaljer om databehandling.
 
 ---
 
@@ -1087,14 +1089,32 @@ Når du "går ind i" et projekt (via `ProjectSelector` eller detalje-siden), ski
 
 Hermes er AlphaFlows indbyggete AI-assistent — en chat-baseret hjælperekspert, der kan svare på spørgsmål om dansk regnskab, moms, skat og bogføringsregler.
 
-> **Vigtigt:** Hermes er en **AI-assistent**, ikke en menneskelig rådgiver. Svar er genereret af en sprogmodel (LLM via OpenRouter) og bør altid efterprøves ved vigtige beslutninger. Brug din revisor til endelig rådgivning.
+### 13.0 Vigtige advarsler og samtykke — læs før aktivering
+
+Før du aktiverer Hermes, skal du som tenant-administrator (OWNER/ADMIN) være opmærksom på følgende og aktivt acceptere dem via samtykke-dialogen i **Indstillinger → Hermes AI**:
+
+> ⚠️ **Advarsel 1 — GDPR-relaterede risici (persondata til USA):**
+> Når Hermes er aktiveret, sendes dit spørgsmål og — hvis du tilmelder dig data-adgang (se afsnit 13.3) — kontekst om din virksomheds regnskab til AlphaFlows AI-underbehandler **OpenRouter, Inc. (USA)**. OpenRouter videresender til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4).
+>
+> Dette indebærer **overførsel af persondata til et tredjeland (USA)**. AlphaAi Consult ApS har indgået DPA + EU-Standard Contractual Clauses (SCC) + Transfer Impact Assessment (TIA) med OpenRouter (Bilag 17) for at beskytte dine data, men der er en tilbageværende risiko for at amerikanske myndigheder (FISA 702, EO 12333, CLOUD Act) kan kræve adgang. Du accepterer denne risiko ved aktivering.
+
+> ⚠️ **Advarsel 2 — Non-deterministiske processer (usikkerhed ved AI-output):**
+> Hermes er baseret på en sprogmodel (LLM). AI-genereret rådgivning er **ikke deterministisk** — det samme spørgsmål kan give forskellige svar, og svar kan indeholde **fejl, unøjagtigheder eller "hallucinationer"** (det vil sige tilsyneladende plausible men forkerte oplysninger). AI-output er **ikke** professionel regnskabsrådgivning og erstatter ikke en revisor eller bogholder.
+>
+> Du skal **altid** efterprøve Hermes' svar mod gældende lovgivning, SKAT-vejledninger og din egen bogføringspraksis før du agerer på dem. AlphaAi Consult ApS påtager sig **intet ansvar** for økonomiske tab der opstår som følge af at følge Hermes' rådgivning uden uafhængig verificering.
+
+> ⚠️ **Advarsel 3 — Ikke menneskelig rådgivning:**
+> Hermes er AI-kun. Der er ingen menneskelig revisor bag Hermes-chat. For endelig rådgivning ved vigtige beslutninger (årsafslutning, komplekse skattespørgsmål, tvivl om kontering) skal du kontakte en autoriseret revisor eller bogholder.
+
+**Samtykke:** Ved aktivering af Hermes (§13.1) skal tenant-administratoren aktivt afkrydse/acceptere ovenstående tre advarsler via en samtykke-dialog i appen. Samtykket logges i AuditLog (`action: AI_CONSENT_ACCEPTED`) og kan tilbagekaldes ved deaktivering, hvorefter Hermes skjules for alle brugere i tenanten. Hver chat-meddelelse fra Hermes vises med en kompakt fodnote der minder om non-determinisme og USA-overførsel.
 
 ### 13.1 Aktivering
 
 1. Gå til **Indstillinger → Hermes AI** (`HermesSettings`).
-2. Aktivér **Hermes AI-assistent** for din virksomhed (kræver `HERMES`-feature — Pro+).
-3. Vælg om Hermes må læse dine virksomhedsdata (data-adgang, se afsnit 13.3).
-4. Gem.
+2. Læs og accepter de tre advarsler i samtykke-dialogen (se afsnit 13.0).
+3. Aktivér **Hermes AI-assistent** for din virksomhed (kræver `HERMES`-feature — Pro+).
+4. Vælg om Hermes må læse dine virksomhedsdata (data-adgang, se afsnit 13.3).
+5. Gem.
 
 Når Hermes er aktiveret, vises en animeret ugle-FAB (svævende knap) i nederste højre hjørne af appen. Klik på ugle-ikonet for at åbne chat-panelet.
 
@@ -1119,7 +1139,7 @@ AlphaFlow har et per-tenant `dataAccessEnabled`-flag, der styrer, hvor meget dat
 
 Dataadgang er frivillig og kan altid deaktiveres i **Indstillinger → Hermes AI**.
 
-> **GDPR-bemærkning:** Når Hermes er aktiveret, sendes dit spørgsmål (og evt. virksomhedsdata ved opt-in) til OpenRouter (USA), som videresender til underliggende LLM-udbydere (bl.a. Anthropic). Dette er omfattet af Standard Contractual Clauses og Data Processing Agreement — se GDPR-dokumentationen for detaljer.
+> **GDPR-bemærkning:** Når Hermes er aktiveret, sendes dit spørgsmål (og evt. virksomhedsdata ved opt-in) til OpenRouter (USA), som videresender til underliggende LLM-udbydere per GDPR Art. 28(4). Dette er omfattet af Standard Contractual Clauses og Data Processing Agreement — se GDPR-dokumentationen for detaljer. De fulde GDPR-risici, non-determinisme-advarsler og samtykke-krav er beskrevet i afsnit 13.0 ovenfor.
 
 ### 13.4 Hermes' kapaciteter
 
@@ -1158,7 +1178,7 @@ Typiske påmindelser: momsfrister, årsregnskabsfrister, forfaldne fakturaer.
 
 ### 13.7 Videnbase (Knowledge RAG)
 
-Hermes bruger en RAG-videnbase (Retrieval-Augmented Generation) med semantisk søgning via `knowledge-service` (port 3006) og OpenAI-embeddings (pgvector):
+Hermes bruger en RAG-videnbase (Retrieval-Augmented Generation) med semantisk søgning via `knowledge-service` (port 3006) og embeddings via OpenRouter (pgvector):
 
 - Indeholder bl.a. dansk regnskabslovgivning, momsregler og Bogføringslovens krav.
 - App Ejer (SuperDev) kan administrere videnbasen via `HermesKnowledgeAdmin`: tilføje, redigere, slette dokumenter (title, kategori, indhold, tenant scope).
@@ -1310,7 +1330,7 @@ AlphaFlow overholder GDPR via:
 - Audit-log over alle mutationer (se afsnit 17).
 - Dataportabilitet via export-tenant.
 - Konto-deaktivering frem for permanent sletning.
-- Underbehandler-aftaler (SCC + TIA) med OpenAI, OpenRouter og Anthropic (data sendes til USA — se afsnit 13 for Hermes-dataadgang).
+- Underbehandler-aftaler (SCC + TIA) med OpenRouter (data sendes til USA — se afsnit 13 for Hermes-dataadgang). OpenRouter er AlphaFlows eneste AI-underbehandler; model-udbydere (Anthropic, Meta, OpenAI m.fl.) er OpenRouter's underbehandlere per GDPR Art. 28(4).
 - Ingen CPR-data registreres (kun CVR).
 
 ---
@@ -1413,7 +1433,7 @@ Standardindstillinger:
 | Funktion | Gratis | Månedlig | Pro | Business | Business Ext. |
 |----------|--------|----------|-----|----------|---------------|
 | Manuel e-faktura (OIOUBL) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Ægte bankintegration (PSD2) | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Bankintegration (Demo + Tink) | ✅ Gratis (Demo) | ✅ Månedlig+ | ✅ Pro+ | ✅ Business+ | ✅ Business Ext.+ |
 | Avancerede rapporter | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Data eksport (CSV/PDF/SAF-T) | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Årsrapport iXBRL | ❌ | ✅ | ✅ | ✅ | ✅ |
@@ -1423,6 +1443,8 @@ Standardindstillinger:
 | Projektregnskab | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 > **Prisforbehold:** Specifikke priser og bindingsperioder fremgår af `/pricing`. Priser for årlige og flerårige planer opkræves som et samlet beløb for bindingsperioden. Gratis og Månedlig har ingen binding; årlige planer fornyes automatisk til Månedlig ved udløb, medmindre andet er aftalt.
+
+> **Bemærk om bankintegration:** Kun Demo-provider og Tink er reelle integrationer. Nordea, Danske Bank og Jyske Bank er implementeret som stubs (returnerer fejl) — se Bilag 2 (COMPLIANCE_RAPPORT.md) afsnit 2.1 og Bilag 10 (UDBEDRINGSPLAN.md).
 
 **Betaling via Flatpay/Frisbii:**
 
@@ -1539,15 +1561,15 @@ AlphaFlows offentlige FAQ-side findes på `/faq` med 12 spørgsmål i accordion-
 
 ### 18.2 Kontakt
 
-Brug kontaktsiden på `/contact` til at sende en besked til AlphaAi ApS:
+Brug kontaktsiden på `/contact` til at sende en besked til AlphaAi Consult ApS:
 
 1. Udfyld kontaktsformularen (navn, e-mail, emne, besked) med zod-validering.
 2. Beskeden sendes via `/api/contact`.
 3. Du modtager svar pr. e-mail.
 
-Alternativt kan du kontakte AlphaAi ApS direkte:
+Alternativt kan du kontakte AlphaAi Consult ApS direkte:
 
-- **Adresse:** Skelagervej 124, 8200 Aarhus N
+- **Adresse:** Skelagervej 124C, 8200 Aarhus N
 - **CVR:** 46312058
 - **E-mail/telefon:** se `/contact`-siden for aktuelle kontaktoplysninger.
 
@@ -1606,9 +1628,13 @@ AlphaFlow understøtter moderne browsere (Chrome, Edge, Firefox, Safari). Kendte
 | Kun moms via SKAT-API | Ingen årsopgørelse, e-indkomst eller AM-bidrag API. |
 | Adgangskode min. 6 tegn | Under NIST 800-63B-anbefaling (8). |
 | Ingen CSP-header | Content-Security-Policy er ikke implementeret (andre security headers er aktive). |
+| Ingen CSRF-token | SameSite=Lax cookie + Bearer-token benyttes i stedet for dedikeret CSRF-token. |
+| Ingen antivirus-scanning af uploads | Kun MIME-whitelist og størrelsesgrænse (25 MB) — ingen malware-scanning af uploadede filer. |
+| Ingen account-lockout | Kun IP-baseret rate-limiting — ingen låsning af individuel konto ved gentagne fejllogins. |
+| Ingen key rotation/versioning | `ENCRYPTION_KEY` og `PROOF_ENCRYPTION_KEY` er statiske miljøvariabler — ingen rotation eller versioning af krypteringsnøgler. |
 
-Disse begrænsninger er anført ærligt for at hjælpe dig med at vurdere, om AlphaFlow dækker dine behov. For spørgsmål til specifikke funktioner, kontakt AlphaAi ApS via `/contact`.
+Disse begrænsninger er anført ærligt for at hjælpe dig med at vurdere, om AlphaFlow dækker dine behov. For spørgsmål til specifikke funktioner, kontakt AlphaAi Consult ApS via `/contact`.
 
 ---
 
-*AlphaFlow er udviklet af AlphaAi ApS med fokus på dansk compliance, brugervenlighed og sikkerhed. Alle funktioner er designet til at overholde gældende dansk lovgivning, herunder Bogføringsloven, BEK 98 og GDPR. Denne brugsvejledning opdateres løbende i takt med nye versioner af platformen.*
+*AlphaFlow er udviklet af AlphaAi Consult ApS med fokus på dansk compliance, brugervenlighed og sikkerhed. Alle funktioner er designet til at overholde gældende dansk lovgivning, herunder Lov om bogføring (LOV nr. 700 af 24. maj 2022), BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen), BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen) og GDPR. Denne brugsvejledning opdateres løbende i takt med nye versioner af platformen.*

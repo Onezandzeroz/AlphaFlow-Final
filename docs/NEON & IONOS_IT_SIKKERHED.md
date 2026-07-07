@@ -2,11 +2,11 @@
 
 > **Tredjeparts IT-sikkerhedsdokumentation for AlphaFlows to primære infrastruktur-udbydere**
 >
-> **Lovgrundlag:** Bogføringsloven §15; BEK nr. 98 af 13. februar 2024 — krav D5 (tredjeparts IT-sikkerhed), D6 (aftale med 3. part opbevaring), N23 (formel aftalegrundlag); GDPR Art. 28 og 32.
+> **Lovgrundlag:** Lov om bogføring (LOV nr. 700 af 24. maj 2022) §15; Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4 — krav D5 (tredjeparts IT-sikkerhed), D6 (aftale med 3. part opbevaring), N23 (formel aftalegrundlag); GDPR Art. 28 og 32.
 >
-> **Dokument-version:** 2.0 — revideret 2026
+> **Dokument-version:** 2.1 — revideret 2026
 >
-> **Ansvarlig:** AlphaAi ApS
+> **Ansvarlig:** AlphaAi Consult ApS
 
 ---
 
@@ -19,11 +19,11 @@ Dette dokument beskriver **IT-sikkerheden for AlphaFlows infrastruktur-komponent
 1. **Neon, Inc.** — leverandør af serverless PostgreSQL (primært datalager for alle tenant-data).
 2. **IONOS SE** — leverandør af VPS-hosting (applikationsserver + lokal backup-lagring).
 
-Dokumentet adresserer Erhvervsstyrelsens krav om dokumentation af tredjeparts IT-sikkerhed (D5), aftale med 3. part opbevaring (D6) og formel aftalegrundlag (N23) jf. BEK 98, samt GDPR Art. 28 (databehandleraftale) og Art. 32 (sikkerhedsforanstaltninger).
+Dokumentet adresserer Erhvervsstyrelsens krav om dokumentation af tredjeparts IT-sikkerhed (D5), aftale med 3. part opbevaring (D6) og formel aftalegrundlag (N23) jf. Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4, samt GDPR Art. 28 (databehandleraftale) og Art. 32 (sikkerhedsforanstaltninger).
 
 ### 1.2 Ansvarlig
 
-AlphaAi ApS er dataansvarlig (App Owner) for AlphaFlow-platformen. AlphaAi ApS bærer det overordnede ansvar for, at databehandlere og underbehandlere opretholder et tilstrækkeligt sikkerhedsniveau.
+AlphaAi Consult ApS er dataansvarlig (App Owner) for AlphaFlow-platformen. AlphaAi Consult ApS bærer det overordnede ansvar for, at databehandlere og underbehandlere opretholder et tilstrækkeligt sikkerhedsniveau.
 
 ### 1.3 Anvendelsesområde
 
@@ -32,7 +32,7 @@ Dokumentet omfatter:
 - **Neon PostgreSQL** — primært datalager for alle bogføringsdata, brugere, fakturaer, audit-log, bank-tokens (AES-256-GCM-krypteret), TOTP-secrets (AES-256-GCM-krypteret), Hermes-konversationer, knowledge-base.
 - **IONOS VPS** — applikationsserver (Next.js + 5 mini-services + Caddy + PM2) + lokal backup-lagring (`Tenant-Backup/`) + fil-uploads (`uploads/`).
 
-> Dokumentet dækker **ikke** de AI-underbehandlere (OpenAI, OpenRouter, Anthropic) — disse er dokumenteret i `docs/DATABEHANDLERAFTALE.md` og `docs/LEVERANDØERSTYRING.md`. Se afsnit 7 for en kort note om fysisk sikkerhed, der gælder på tværs.
+> Dokumentet dækker **ikke** de AI-underbehandlere (OpenRouter — AlphaFlows eneste AI-databehandler) — disse er dokumenteret i `docs/DATABEHANDLERAFTALE.md` og `docs/LEVERANDØERSTYRING.md`. Se afsnit 7 for en kort note om fysisk sikkerhed, der gælder på tværs.
 
 ---
 
@@ -47,7 +47,7 @@ Dokumentet omfatter:
 | **Caddy** (reverse proxy / TLS) | Self-hosted på IONOS VPS | EU (Tyskland) | Eneste eksterne entry-point (port 443/80). TLS 1.2/1.3, Let's Encrypt, security headers, routing til mini-services. |
 | **PM2** (proces-manager) | Open-source — self-hosted | EU (Tyskland) | Proces-manager med autorestart (max 10, 5s delay), separate log-filer. |
 
-> **Data lokation:** Alle data, der behandles i ovenstående komponenter, forbliver inden for EU/EEA. De eneste dataflow ud af EU/EEA er til AI-underbehandlere (OpenAI, OpenRouter, Anthropic) — dokumenteret i `DATABEHANDLERAFTALE.md`.
+> **Data lokation:** Alle data, der behandles i ovenstående komponenter, forbliver inden for EU/EEA. De eneste dataflow ud af EU/EEA er til AI-underbehandleren (OpenRouter) — dokumenteret i `DATABEHANDLERAFTALE.md`.
 
 ---
 
@@ -93,7 +93,7 @@ TLS via `sslmode=require` (se afsnit 3.4). Al kommunikation mellem Next.js-appli
 
 ### 3.7 Kryptering at-rest
 
-Neon leverer managed disk-encryption per Neons officielle dokumentation. AlphaAi ApS har ikke uafhængigt verificeret krypteringsstatus for den specifikke produktionsinstans.
+Neon leverer managed disk-encryption per Neons officielle dokumentation. AlphaAi Consult ApS har ikke uafhængigt verificeret krypteringsstatus for den specifikke produktionsinstans.
 
 > _[skabelon: verificér at disk-encryption er aktiveret for produktions-Neon-projektet — dokumentér verifikationsmetode og dato]_
 
@@ -104,7 +104,7 @@ Neon leverer managed **Point-in-Time Recovery** med op til **7 dages retention**
 | Backup-lag | Ansvarlig | Formål | Retention |
 |---|---|---|---|
 | **Lag 1** — Neon PITR (managed) | Neon, Inc. | Defense-in-depth — gendannelse af databasen til ethvert tidspunkt inden for PITR-vinduet | 7 dage |
-| **Lag 2** — AlphaFlow tenant-backups | AlphaAi ApS | Per-tenant ZIP-backups (AES-256-GCM + SHA-256), lagret på IONOS VPS i `Tenant-Backup/` | 25 timer (hourly) / 31 dage (daily) / 53 dage (weekly) / **5 år** (monthly) |
+| **Lag 2** — AlphaFlow tenant-backups | AlphaAi Consult ApS | Per-tenant ZIP-backups (AES-256-GCM + SHA-256), lagret på IONOS VPS i `Tenant-Backup/` | 25 timer (hourly) / 31 dage (daily) / 53 dage (weekly) / **5 år** (monthly) |
 
 > AlphaFlow kalder ikke Neons backup-API — lag 1 er udelukkende en managed service fra Neon, der fungerer som supplement til AlphaFlows egne tenant-backups. Den fulde backup-strategi er dokumenteret i `docs/BEREDSKABSPLAN.md` og `docs/COMPLIANCE_RAPPORT.md`.
 
@@ -114,7 +114,7 @@ Neons serverless-arkitektur tilbyder auto-suspend ved inaktivitet (scale-to-zero
 
 - **`neonConnectionRetry`-extension** i PrismaClient (`src/lib/db.ts`) — automatisk retry (3 forsøg) ved Neon-specifikke fejlkoder P1001, P1002, P1008 og P1017.
 
-> Neon tilbyder desuden auto-scaling og storage-autoscaling per Neons dokumentation — disse er managed features, der ikke konfigureres af AlphaAi ApS.
+> Neon tilbyder desuden auto-scaling og storage-autoscaling per Neons dokumentation — disse er managed features, der ikke konfigureres af AlphaAi Consult ApS.
 
 ### 3.10 Network isolation
 
@@ -125,12 +125,12 @@ Neon tillader **IP-whitelist** på projektniveau (kun specificerede IP-adresser 
 | Certificering / standard | Status | Kilde |
 |---|---|---|
 | **SOC 2 Type II** | Opnået per Neons dokumentation | Neon, Inc. — offentlig compliance-side |
-| **DPA (Data Processing Agreement)** | Tilgængelig — opfylder GDPR Art. 28 | Neon, Inc. — https://neon.com/DPA (sidst tjekket: 2026) |
+| **DPA (Data Processing Agreement)** | Tilgængelig — opfylder GDPR Art. 28 | Neon, Inc. — Neon DPA (https://neon.com/DPA); faktisk DPA vedhæftes som Bilag 13 (separat PDF) (sidst tjekket: 2026) |
 | **EU/EEA-hosting** | Bekræftet — Frankfurt + Amsterdam datacentre | Neon, Inc. — officiel dokumentation |
 
 ### 3.12 Sub-processors
 
-Neon offentliggør en liste over underbehandlere på https://neon.com/subprocessors. AlphaAi ApS overvåger listen ved årlig review (se afsnit 10).
+Neon offentliggør en liste over underbehandlere på https://neon.com/subprocessors. AlphaAi Consult ApS overvåger listen ved årlig review (se afsnit 10).
 
 ### 3.13 Ansvarsfordeling — Neon
 
@@ -141,10 +141,10 @@ Neon offentliggør en liste over underbehandlere på https://neon.com/subprocess
 | PITR-backup-infrastruktur | Neon |
 | Netværksisolering af datacenter | Neon |
 | DPA + sub-processor-liste | Neon |
-| Applikationskode (queries, RBAC) | AlphaAi ApS |
-| Kryptering af specifikke felter (bank-tokens, TOTP-secrets) | AlphaAi ApS (AES-256-GCM via `src/lib/crypto.ts`) |
-| Tenant-backups (lag 2) | AlphaAi ApS (`src/lib/backup-engine.ts`) |
-| Audit-log immutability (PostgreSQL-triggere) | AlphaAi ApS (`prisma/audit-immutability.sql`) |
+| Applikationskode (queries, RBAC) | AlphaAi Consult ApS |
+| Kryptering af specifikke felter (bank-tokens, TOTP-secrets) | AlphaAi Consult ApS (AES-256-GCM via `src/lib/crypto.ts`) |
+| Tenant-backups (lag 2) | AlphaAi Consult ApS (`src/lib/backup-engine.ts`) |
+| Audit-log immutability (PostgreSQL-triggere) | AlphaAi Consult ApS (`prisma/audit-immutability.sql`) |
 
 ---
 
@@ -191,7 +191,7 @@ IONOS SE har opnået følgende certificeringer (verificerbare på IONOS' hjemmes
 
 ### 4.6 Disk-encryption
 
-IONOS tilbyder disk-encryption på VPS-niveau. AlphaAi ApS har ikke uafhængigt verificeret, om disk-encryption er aktiveret på den specifikke produktions-VPS-instans.
+IONOS tilbyder disk-encryption på VPS-niveau. AlphaAi Consult ApS har ikke uafhængigt verificeret, om disk-encryption er aktiveret på den specifikke produktions-VPS-instans.
 
 > _[skabelon: verificér om disk-encryption er aktiveret på produktions-VPS — hvis ikke, vurder om det skal aktiveres før lancering. Vigtigt i relation til ukrypterede `uploads/`-filer — se afsnit 9.]_
 
@@ -400,9 +400,11 @@ Nedenstående tekst-diagram beskriver trafik-flowet i AlphaFlows produktionsmilj
         └──────────────────────────────────────────────────────────┘
 
   Eksterne AI-kald (HTTPS) fra IONOS VPS:
-    • Next.js → OpenAI (embeddings, USA) — knowledge-RAG
     • hermes-agent → OpenRouter (chat-LLM, USA)
-    • scanner-service → Anthropic (VLM, USA)
+    • knowledge-service → OpenRouter (embeddings, USA) — knowledge-RAG
+    • scanner-service → OpenRouter (VLM, USA)
+
+  (OpenRouter videresender til model-udbydere Anthropic/Meta/OpenAI m.fl. per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'.)
 
   Indgående webhooks (HTTPS) → Caddy → Next.js API:
     • Storecove (Peppol/NemHandel e-faktura status) — HMAC-SHA256
@@ -426,8 +428,8 @@ Nedenstående tekst-diagram beskriver trafik-flowet i AlphaFlows produktionsmilj
 | Next.js → scanner-service | localhost:3005 | ingen (intern) | OCR/VLM-scanning |
 | Next.js → tokenpay-access | localhost:3100 | ingen (intern) | Adgangsstjek |
 | hermes-agent → OpenRouter | IONOS VPS → openrouter.ai | HTTPS | Chat-LLM (USA) |
-| knowledge-service → OpenAI | IONOS VPS → api.openai.com | HTTPS | Embeddings (USA) |
-| scanner-service → Anthropic | IONOS VPS → api.anthropic.com | HTTPS | VLM (USA) |
+| knowledge-service → OpenRouter | IONOS VPS → openrouter.ai | HTTPS | Embeddings (USA) |
+| scanner-service → OpenRouter | IONOS VPS → openrouter.ai | HTTPS | VLM (USA) |
 | Storecove → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
 | Frisbii → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
 | TokenPay → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
@@ -443,13 +445,13 @@ Fysisk sikkerhed af datacentre håndteres af udbyderne (Neon og IONOS) og er dæ
 | **Neon, Inc.** | SOC 2 Type II | Ja — SOC 2 omfatter fysisk adgangskontrol til datacentre |
 | **IONOS SE** | C5 (BSI) + ISO 27001 + IT-Grundschutz | Ja — alle tre certificeringer omfatter fysisk sikkerhed |
 
-> AlphaAi ApS verificerer ved årlig review (se afsnit 10), at udbydernes compliance-attester er gyldige og dækker de datacentre, der reelt anvendes til AlphaFlow-produktion.
+> AlphaAi Consult ApS verificerer ved årlig review (se afsnit 10), at udbydernes compliance-attester er gyldige og dækker de datacentre, der reelt anvendes til AlphaFlow-produktion.
 
 ---
 
 ## 8. Ansvarsfordeling (shared responsibility)
 
-| Ansvarsområde | Neon | IONOS | AlphaAi ApS |
+| Ansvarsområde | Neon | IONOS | AlphaAi Consult ApS |
 |---|---|---|---|
 | **DB-infrastruktur** (compute, storage, network) | ✅ | — | — |
 | **Disk-encryption på DB-niveau** (managed) | ✅ | — | — |
@@ -476,7 +478,7 @@ Fysisk sikkerhed af datacentre håndteres af udbyderne (Neon og IONOS) og er dæ
 
 ## 9. Åbenhed om mangler
 
-AlphaAi ApS har identificeret følgende kendte mangler i IT-sikkerheden for Neon- og IONOS-infrastrukturen. Manglerne er uddybet i `docs/RISIKOVURDERING.md` med restrisici, og afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`.
+AlphaAi Consult ApS har identificeret følgende kendte mangler i IT-sikkerheden for Neon- og IONOS-infrastrukturen. Manglerne er uddybet i `docs/RISIKOVURDERING.md` med restrisici, og afhjælpningsplan findes i `docs/UDBEDRINGSPLAN.md`.
 
 | # | Mangel | Konsekvens | Afhjælpning |
 |---|---|---|---|
@@ -497,20 +499,20 @@ AlphaAi ApS har identificeret følgende kendte mangler i IT-sikkerheden for Neon
 
 ### 10.1 Årlig review
 
-AlphaAi ApS udfører en årlig review af IT-sikkerhedsdokumentationen for Neon og IONOS med følgende checkliste:
+AlphaAi Consult ApS udfører en årlig review af IT-sikkerhedsdokumentationen for Neon og IONOS med følgende checkliste:
 
 | Review-punkt | Frekvens | Ansvarlig |
 |---|---|---|
-| Verificer at Neons SOC 2 Type II-attest er gyldig og opdateret | Årlig | AlphaAi ApS — DPO |
-| Verificer at IONOS' C5 + ISO 27001 + IT-Grundschutz-attester er gyldige | Årlig | AlphaAi ApS — DPO |
-| Verificer at Neons DPA + sub-processor-liste er ajourførte | Årlig | AlphaAi ApS — DPO |
-| Verificer at IONOS' DPA er ajourført | Årlig | AlphaAi ApS — DPO |
-| Gennemgå Neons sub-processor-liste for nye underbehandlere | Årlig + ved underretning | AlphaAi ApS — DPO |
-| Verificer MFA-status på Neon-admin-konto | Årlig | AlphaAi ApS — teknisk ansvarlig |
-| Verificer IP-whitelist-konfiguration i Neon-produktionsprojekt | Årlig | AlphaAi ApS — teknisk ansvarlig |
-| Verificer disk-encryption-status på IONOS VPS | Årlig | AlphaAi ApS — teknisk ansvarlig |
-| Verificer SSH-nøgle-login + root-login deaktiveret på VPS | Årlig | AlphaAi ApS — teknisk ansvarlig |
-| Gennemgå Caddy-log for usædvanlige adgangsmønstre | Årlig (eller hyppigere) | AlphaAi ApS — teknisk ansvarlig |
+| Verificer at Neons SOC 2 Type II-attest er gyldig og opdateret | Årlig | AlphaAi Consult ApS — DPO |
+| Verificer at IONOS' C5 + ISO 27001 + IT-Grundschutz-attester er gyldige | Årlig | AlphaAi Consult ApS — DPO |
+| Verificer at Neons DPA + sub-processor-liste er ajourførte | Årlig | AlphaAi Consult ApS — DPO |
+| Verificer at IONOS' DPA er ajourført | Årlig | AlphaAi Consult ApS — DPO |
+| Gennemgå Neons sub-processor-liste for nye underbehandlere | Årlig + ved underretning | AlphaAi Consult ApS — DPO |
+| Verificer MFA-status på Neon-admin-konto | Årlig | AlphaAi Consult ApS — teknisk ansvarlig |
+| Verificer IP-whitelist-konfiguration i Neon-produktionsprojekt | Årlig | AlphaAi Consult ApS — teknisk ansvarlig |
+| Verificer disk-encryption-status på IONOS VPS | Årlig | AlphaAi Consult ApS — teknisk ansvarlig |
+| Verificer SSH-nøgle-login + root-login deaktiveret på VPS | Årlig | AlphaAi Consult ApS — teknisk ansvarlig |
+| Gennemgå Caddy-log for usædvanlige adgangsmønstre | Årlig (eller hyppigere) | AlphaAi Consult ApS — teknisk ansvarlig |
 
 ### 10.2 Patch-cadence
 
@@ -537,18 +539,18 @@ Backup-integritet testes jf. `docs/BEREDSKABSPLAN.md`:
 
 ## 11. Konklusion
 
-Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinfrastruktur og opfylder, med de i afsnit 9 anførte kendte mangler, de krav der stilles til tredjeparts IT-sikkerhed jf. BEK 98 (D5, D6, N23) og GDPR Art. 28 og 32.
+Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinfrastruktur og opfylder, med de i afsnit 9 anførte kendte mangler, de krav der stilles til tredjeparts IT-sikkerhed jf. Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4 (D5, D6, N23) og GDPR Art. 28 og 32.
 
 | Krav | Status | Begrundelse |
 |---|---|---|
 | **D5 — Tredjeparts IT-sikkerhed** | ✅ Opfyldt (med kendte mangler — se afsnit 9) | SOC 2 Type II (Neon) + C5/ISO 27001/IT-Grundschutz (IONOS); TLS, RBAC, kryptering, audit-log |
-| **D6 — Aftale med 3. part opbevaring** | ✅ Opfyldt | DPA tilgængelig fra både Neon og IONOS; AlphaAi ApS accepterer DPA'erne som del af abonnementet |
+| **D6 — Aftale med 3. part opbevaring** | ✅ Opfyldt | DPA tilgængelig fra både Neon og IONOS; AlphaAi Consult ApS accepterer DPA'erne som del af abonnementet |
 | **N23 — Formel aftale** | ✅ Opfyldt | DPA'erne er formelle juridiske dokumenter, der opfylder GDPR Art. 28-kravene |
 | **GDPR Art. 32 — Sikkerhed** | ✅ Opfyldt (med kendte mangler) | AES-256-GCM, TLS, RBAC, 2FA, audit-log, backup med 5-års retention |
-| **Bogføringsloven §15 — Datalagring** | ✅ Opfyldt | 5-års retention via monthly tenant-backups; Neon PITR som defense-in-depth |
+| **Lov om bogføring §15 / BEK 97 §3 — Datalagring** | ✅ Opfyldt | 5-års retention via monthly tenant-backups; Neon PITR som defense-in-depth |
 | **EU/EEA-hosting** | ✅ Opfyldt | Både Neon (Frankfurt + Amsterdam) og IONOS (Tyskland) i EU/EEA — ingen infrastruktur-data ud af EU |
 
-> Kendte mangler (afsnit 9) er ikke blokerende for anmeldelsen, men afhjælpes jf. `docs/UDBEDRINGSPLAN.md`. AlphaAi ApS forpligter sig til at afhjælpe punkterne 3, 5, 6 og 7 (verifikationer) før produktionslancering og punkterne 1, 2, 4 og 8 inden for 6 måneder efter lancering.
+> Kendte mangler (afsnit 9) er ikke blokerende for anmeldelsen, men afhjælpes jf. `docs/UDBEDRINGSPLAN.md`. AlphaAi Consult ApS forpligter sig til at afhjælpe punkterne 3, 5, 6 og 7 (verifikationer) før produktionslancering og punkterne 1, 2, 4 og 8 inden for 6 måneder efter lancering.
 
 ---
 
@@ -558,7 +560,7 @@ Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinf
 |---|---|---|---|
 | Teknisk ansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
 | DPO / dataansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
-| Ledelse (AlphaAi ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| Ledelse (AlphaAi Consult ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
 
 ---
 
