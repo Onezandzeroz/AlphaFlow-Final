@@ -54,9 +54,9 @@ export function useHermesSocket(options: {
     socket.on('connect', () => {
       console.log('[Hermes UI] Connected to Hermes Agent');
       setIsConnected(true);
+      // SECURITY (U-5): Only send display-name hint. Server derives userId
+      // and tenantId from the validated session cookie (HttpOnly).
       socket.emit('join', {
-        tenantId,
-        userId,
         userName,
       });
     });

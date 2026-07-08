@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 import { getProvider, getAvailableBanks } from '@/lib/bank-providers';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
-import { encryptOrNull, decryptOrNull } from '@/lib/crypto';
+import { encryptOrNull, decryptOrNull, getCurrentKeyVersion } from '@/lib/crypto';
 import { notifyDataChange } from '@/lib/notify-data-change';
 
 // GET - List bank connections or available banks
@@ -175,6 +175,7 @@ export const POST = withGuard(
         data: {
           status: isActiveConsent ? 'ACTIVE' : 'PENDING',
           accessToken: consentResult.consentId ? encryptOrNull(consentResult.consentId) : null,
+          encryptionKeyVersion: getCurrentKeyVersion(),
           nextSyncAt: effectiveNextSyncAt,
         },
       });
@@ -297,7 +298,7 @@ async function performSync(connectionId: string, userId: string) {
             // Store the fresh token
             await db.bankConnection.update({
               where: { id: connectionId },
-              data: { accessToken: encryptOrNull(newToken.access_token) },
+              data: { accessToken: encryptOrNull(newToken.access_token), encryptionKeyVersion: getCurrentKeyVersion() },
             });
 
             logger.info('Tink token re-authorized successfully', { connectionId });

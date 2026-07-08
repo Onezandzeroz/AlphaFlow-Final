@@ -390,10 +390,12 @@ model User {
   // Two-Factor Authentication (TOTP)
   // twoFactorSecret: AES-256-GCM encrypted TOTP secret (base32-encoded)
   // twoFactorBackupCodes: AES-256-GCM encrypted JSON array of hashed backup codes
-  twoFactorSecret      String?
-  twoFactorBackupCodes String? // Encrypted JSON: [hashedCode1, hashedCode2, ...]
-  twoFactorEnabled     Boolean   @default(false)
-  twoFactorEnabledAt   DateTime?
+  // encryptionKeyVersion: tracks which key version encrypted the 2FA fields
+  twoFactorSecret       String?
+  twoFactorBackupCodes  String? // Encrypted JSON: [hashedCode1, hashedCode2, ...]
+  twoFactorEnabled      Boolean   @default(false)
+  twoFactorEnabledAt    DateTime?
+  encryptionKeyVersion  Int       @default(1) // Key version for twoFactorSecret + twoFactorBackupCodes
 
   // Account deactivation — replaces hard deletion to preserve audit trail
   // per Bogføringsloven §10-12 (5-year retention obligation takes precedence
@@ -593,6 +595,7 @@ model Backup {
   fileSize     Int
   sha256       String?
   encrypted    Boolean  @default(false) // true = AES-256-GCM encrypted .zip.enc file
+  encryptionKeyVersion Int @default(1) // Key version used to encrypt the backup file
   status       String   @default("completed")
   errorMessage String?
   expiresAt    DateTime
@@ -984,6 +987,7 @@ model BankConnection {
   consentExpiresAt   DateTime?
   accessToken        String?
   refreshToken       String?
+  encryptionKeyVersion Int                @default(1) // Key version for accessToken + refreshToken
   retryCount         Int                  @default(0)
   lastError          String?
   createdAt          DateTime             @default(now())

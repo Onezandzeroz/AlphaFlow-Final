@@ -544,9 +544,13 @@ export class StorecoveClient {
    * @returns true if the signature is valid
    */
   verifyWebhookSignature(payload: string, signature: string): boolean {
+    // SECURITY (U-6): Fail-closed — reject ALL webhooks when no secret is
+    // configured. The old "accept all" fallback allowed unauthenticated
+    // webhook forgery in production if STORECOVE_WEBHOOK_SECRET was missing.
     if (!this.webhookSecret) {
-      logger.warn('[STORECOVE] No webhook secret configured — skipping verification');
-      return true; // Allow in development
+      logger.error('[STORECOVE] WEBHOOK REJECTED: STORECOVE_WEBHOOK_SECRET is not configured. ' +
+        'Set it in production .env.');
+      return false;
     }
 
     try {

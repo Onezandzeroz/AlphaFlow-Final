@@ -92,10 +92,9 @@ export function DataSyncProvider({ children }: { children: React.ReactNode }) {
         const socket = io({
           // Route through Caddy to the WS service on port 3001.
           query: { XTransformPort: WS_PORT },
-          // Auth carries both userId and companyId so the server can map the
-          // socket to the user (for notification broadcasts) and join it to
-          // the company room (for data-changed broadcasts).
-          auth: { userId, companyId },
+          // SECURITY (U-5): No auth payload needed. The HttpOnly session
+          // cookie is sent automatically by the browser. The server
+          // validates it and derives userId/companyId from the session.
           transports: ['polling', 'websocket'],
           reconnection: true,
           reconnectionAttempts: Infinity,

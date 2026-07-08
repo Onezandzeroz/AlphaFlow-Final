@@ -4,6 +4,8 @@ import { Permission } from '@/lib/rbac';
 import { saveReceiptFile, validateReceiptFile } from '@/lib/file-service';
 import { logger } from '@/lib/logger';
 import { notifyDataChanges } from '@/lib/notify-data-change';
+import { scanBuffer } from '@/lib/clamav';
+import { auditLog } from '@/lib/audit';
 
 /**
  * POST /api/transactions/upload
@@ -50,6 +52,34 @@ export const POST = withGuard({
     // Read file into buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+
+    // SECURITY (U-4): Antivirus scan via ClamAV
+    const scanResult = await scanBuffer(buffer, file.name);
+    if (!scanResult.clean && scanResult.virusName) {
+      logger.warn(`[RECEIPT-UPLOAD] MALWARE BLOCKED: ${file.name} — ${scanResult.virusName}, user: ${ctx.id}, company: ${ctx.activeCompanyId}`);
+      await auditLog({
+        action: 'DELETE_ATTEMPT',
+        entityType: 'Transaction',
+        entityId: 'upload',
+        userId: ctx.id,
+        companyId: ctx.activeCompanyId,
+        metadata: {
+          reason: 'Malware detected by ClamAV',
+          virusName: scanResult.virusName,
+          fileName: file.name,
+          fileSize: buffer.length,
+          source: 'receipt-upload',
+        },
+      }).catch(() => {});
+      return NextResponse.json(
+        { error: 'File rejected: malware detected. The upload has been logged.' },
+        { status: 403 }
+      );
+    }
+    if (scanResult.error) {
+      logger.error(`[RECEIPT-UPLOAD] ClamAV scan error for ${file.name}: ${scanResult.error}`);
+      // Don't block on scan errors — log and continue (MIME whitelist still applies)
+    }
 
     // Save to both storage locations
     const companyName = ctx.activeCompanyName || 'unknown-company';

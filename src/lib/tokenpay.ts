@@ -260,14 +260,17 @@ export async function verifyWebhookSignature(
   signature: string,
   secret: string
 ): Promise<boolean> {
-  const { createHmac } = await import('crypto');
-  const expected = createHmac('sha256', secret).update(body).digest('hex');
-  if (signature.length !== expected.length) return false;
-  let result = 0;
-  for (let i = 0; i < signature.length; i++) {
-    result |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
+  // SECURITY (U-6): Fail-closed when secret is missing
+  if (!secret) {
+    throw new Error('verifyWebhookSignature: secret is required (fail-closed)');
   }
-  return result === 0;
+  const { createHmac, timingSafeEqual } = await import('crypto');
+  const expected = createHmac('sha256', secret).update(body).digest('hex');
+  // SECURITY (U-14): Use crypto.timingSafeEqual instead of manual string XOR
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 // ═══════════════════════════════════════════════════════════════

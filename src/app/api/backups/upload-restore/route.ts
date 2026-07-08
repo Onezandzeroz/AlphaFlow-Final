@@ -4,6 +4,8 @@ import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import JSZip from 'jszip';
+import { scanBuffer } from '@/lib/clamav';
+import { auditLog } from '@/lib/audit';
 
 /**
  * POST /api/backups/upload-restore — Restore from an uploaded backup ZIP file
@@ -35,6 +37,35 @@ export const POST = withGuard(
 
       // Read file into buffer
       const buffer = Buffer.from(await file.arrayBuffer());
+
+      // SECURITY (U-4): Antivirus scan via ClamAV
+      // Backup ZIPs can be large (up to 2GB). ClamAV handles streaming,
+      // but we log a warning for very large files.
+      const scanResult = await scanBuffer(buffer, file.name);
+      if (!scanResult.clean && scanResult.virusName) {
+        logger.warn(`[UPLOAD-RESTORE] MALWARE BLOCKED: ${file.name} — ${scanResult.virusName}, user: ${userId}, company: ${companyId}`);
+        await auditLog({
+          action: 'DELETE_ATTEMPT',
+          entityType: 'Backup',
+          entityId: 'upload-restore',
+          userId,
+          companyId,
+          metadata: {
+            reason: 'Malware detected by ClamAV in backup file',
+            virusName: scanResult.virusName,
+            fileName: file.name,
+            fileSize: buffer.length,
+            source: 'backup-restore',
+          },
+        }).catch(() => {});
+        return NextResponse.json(
+          { error: 'Backup file rejected: malware detected. The attempt has been logged.' },
+          { status: 403 }
+        );
+      }
+      if (scanResult.error) {
+        logger.error(`[UPLOAD-RESTORE] ClamAV scan error for ${file.name}: ${scanResult.error}`);
+      }
 
       // ─── Detect backup type and check permissions ────────────────────
       let zip: InstanceType<typeof JSZip>;

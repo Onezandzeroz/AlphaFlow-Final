@@ -8,6 +8,7 @@ import {
   encryptSecret,
   generateQRCodeDataURL,
 } from '@/lib/two-factor';
+import { getCurrentKeyVersion } from '@/lib/crypto';
 import { withGuard } from '@/lib/route-guard';
 
 /**
@@ -59,6 +60,7 @@ export const POST = withGuard({ auth: true }, async (request, ctx) => {
       where: { id: ctx.id },
       data: {
         twoFactorSecret: encryptedSecret,
+        encryptionKeyVersion: getCurrentKeyVersion(),
       },
     });
 

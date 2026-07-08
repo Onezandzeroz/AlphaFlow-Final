@@ -1,89 +1,78 @@
 /**
- * AlphaFlow — AES-256-GCM Encryption Module
+ * AlphaFlow — AES-256-GCM Encryption Module (with Key Rotation Support)
  *
  * Server-side only. Used to encrypt sensitive data at rest, specifically
- * bank access tokens and refresh tokens stored in the BankConnection model.
+ * bank access tokens and refresh tokens stored in the BankConnection model,
+ * TOTP 2FA secrets, and backup files.
  *
- * Design decisions:
+ * DESIGN:
  * - Algorithm: AES-256-GCM (authenticated encryption with associated data)
  * - IV: 12 bytes (96 bits) — NIST recommended for GCM mode
  * - Auth tag: 16 bytes (128 bits) — standard GCM tag length
- * - Key: 32 bytes (256 bits) — hex-encoded in ENCRYPTION_KEY env var
- * - Storage format: `iv_base64:authTag_base64:ciphertext_base64`
+ * - Key: 32 bytes (256 bits) — managed via keyring.ts
+ *
+ * KEY ROTATION (U-1):
+ * - All new encryptions use the CURRENT key (from keyring)
+ * - Ciphertext is self-describing: `v{N}:iv:authTag:ciphertext`
+ * - Decryption auto-detects version and uses the correct key
+ * - No version prefix = version 1 (backward compatible with pre-rotation data)
+ * - Keyring supports multiple versions for seamless rotation
+ *
+ * STRING FORMAT:
+ *   `v{N}:iv_base64:authTag_base64:ciphertext_base64`
+ *   N = key version number (1, 2, 3, ...)
+ *   No prefix = version 1 (legacy pre-rotation data)
+ *
+ * FILE FORMAT (backups):
+ *   [12 bytes IV] [16 bytes authTag] [N bytes ciphertext]
+ *   Version tracked via Backup.encryptionKeyVersion column in DB
+ *   decryptFile() accepts optional keyVersion parameter
  *
  * Security properties:
  * - Each encryption uses a unique random IV (no IV reuse)
  * - GCM provides both confidentiality AND integrity verification
  * - Tampered ciphertext is rejected during decryption
- * - Key is never stored in the database — only in environment variable
+ * - Keys are never stored in the database — only in environment variables
  *
- * Backward compatibility:
- * - isEncrypted() can detect legacy base64-encoded tokens (no colons)
- * - migrateBase64Token() re-encrypts old tokens to AES-256-GCM format
+ * @module crypto
  */
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import fs from 'fs';
 import { rmSync } from 'fs';
+import {
+  getCurrentKey,
+  getKeyForVersion,
+  getCurrentKeyVersion,
+  extractVersion,
+  isVersioned,
+  generateEncryptionKey,
+} from './keyring';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;        // 96 bits — NIST SP 800-38D recommended
 const AUTH_TAG_LENGTH = 16;  // 128 bits — standard GCM authentication tag
-const KEY_LENGTH = 32;       // 256 bits — AES-256
 
-// Cache the parsed key to avoid re-parsing on every call
-let cachedKey: Buffer | null = null;
-
-// ─── Key Management ─────────────────────────────────────────────────────────
+// ─── Encrypt / Decrypt (DB Strings) ─────────────────────────────────────────
 
 /**
- * Get the encryption key from the ENCRYPTION_KEY environment variable.
- * The key must be a 64-character hex string (32 bytes / 256 bits).
- * Key is cached after first parse for performance.
+ * Encrypt a plaintext string using AES-256-GCM with the CURRENT key.
  *
- * @throws Error if ENCRYPTION_KEY is not set or has wrong length
- */
-function getEncryptionKey(): Buffer {
-  if (cachedKey) return cachedKey;
-
-  const keyHex = process.env.ENCRYPTION_KEY;
-  if (!keyHex) {
-    throw new Error(
-      'CRITICAL: ENCRYPTION_KEY environment variable is not set. ' +
-      'Bank tokens cannot be encrypted. Generate a key with: ' +
-      'node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
-    );
-  }
-
-  const key = Buffer.from(keyHex, 'hex');
-  if (key.length !== KEY_LENGTH) {
-    throw new Error(
-      `ENCRYPTION_KEY must be exactly ${KEY_LENGTH} bytes (${KEY_LENGTH * 2} hex characters). ` +
-      `Got ${key.length} bytes. Generate a valid key with: ` +
-      `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
-    );
-  }
-
-  cachedKey = key;
-  return key;
-}
-
-// ─── Encrypt / Decrypt ──────────────────────────────────────────────────────
-
-/**
- * Encrypt a plaintext string using AES-256-GCM.
+ * Output format: `v{N}:iv:authTag:ciphertext` (all base64, colon-separated)
+ * where N is the current key version from the keyring.
  *
  * @param plaintext - The string to encrypt (e.g., an OAuth access token)
- * @returns A string in format `iv:authTag:ciphertext` (all base64-encoded, colon-separated)
+ * @returns A versioned encrypted string
  *
  * @example
  * const encrypted = encrypt('my-secret-token');
- * // => "dGhpcyBpcyAxMic=:aWV3OW1WY1R6R0c=:eW91cl9lbmNyeXB0ZWRfZGF0YQ=="
+ * // => "v1:dGhpcyBpcyAxMic=:aWV3OW1WY1R6R0c=:eW91cl9lbmNyeXB0ZWRfZGF0YQ=="
  */
 export function encrypt(plaintext: string): string {
-  const key = getEncryptionKey();
+  const key = getCurrentKey();
+  const version = getCurrentKeyVersion();
   const iv = randomBytes(IV_LENGTH);
 
   const cipher = createCipheriv(ALGORITHM, key, iv, {
@@ -96,25 +85,34 @@ export function encrypt(plaintext: string): string {
   ]);
   const authTag = cipher.getAuthTag();
 
-  // Format: iv:authTag:ciphertext (all base64)
-  return `${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`;
+  // Format: v{N}:iv:authTag:ciphertext (all base64)
+  return `v${version}:${iv.toString('base64')}:${authTag.toString('base64')}:${encrypted.toString('base64')}`;
 }
 
 /**
  * Decrypt an AES-256-GCM encrypted string.
  *
- * @param encrypted - The encrypted string in format `iv:authTag:ciphertext`
- * @returns The original plaintext string
- * @throws Error if decryption fails (wrong key, tampered data, invalid format)
+ * Automatically detects the key version from the ciphertext prefix
+ * and uses the correct key from the keyring.
  *
- * @example
- * const plaintext = decrypt(encrypted);
- * // => "my-secret-token"
+ * - `v{N}:iv:authTag:ciphertext` → decrypts with key version N
+ * - `iv:authTag:ciphertext` (no prefix) → decrypts with version 1 (backward compat)
+ *
+ * @param encrypted - The encrypted string
+ * @returns The original plaintext string
+ * @throws Error if decryption fails (wrong key, tampered data, invalid format, or key version missing)
  */
 export function decrypt(encrypted: string): string {
-  const key = getEncryptionKey();
+  // Extract version and strip prefix
+  const version = extractVersion(encrypted);
+  const key = getKeyForVersion(version);
 
-  const parts = encrypted.split(':');
+  // Strip version prefix if present
+  const payload = isVersioned(encrypted)
+    ? encrypted.slice(encrypted.indexOf(':') + 1)
+    : encrypted;
+
+  const parts = payload.split(':');
   if (parts.length !== 3) {
     throw new Error(
       'Invalid encrypted data format. Expected "iv:authTag:ciphertext" with 3 colon-separated base64 parts.'
@@ -151,6 +149,7 @@ export function decrypt(encrypted: string): string {
 
 /**
  * Encrypt a nullable value. Returns null if input is null/undefined.
+ * Uses the current key from the keyring.
  */
 export function encryptOrNull(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -160,6 +159,7 @@ export function encryptOrNull(value: string | null | undefined): string | null {
 /**
  * Decrypt a nullable value. Returns null if input is null/undefined.
  * Returns empty string if decryption yields empty result.
+ * Auto-detects key version from ciphertext prefix.
  */
 export function decryptOrNull(value: string | null | undefined): string {
   if (!value) return '';
@@ -169,9 +169,12 @@ export function decryptOrNull(value: string | null | undefined): string {
 /**
  * Check if a stored value looks like it was encrypted with AES-256-GCM.
  *
- * Encrypted values have the format `base64:base64:base64` (3 colon-separated
- * base64 strings). Legacy base64-encoded tokens do NOT contain colons, so
- * this simple check is reliable for distinguishing the two formats.
+ * Detects both formats:
+ * - Versioned: `v{N}:base64:base64:base64` (4 colon-separated parts)
+ * - Legacy:    `base64:base64:base64` (3 colon-separated parts)
+ *
+ * Legacy base64-encoded tokens do NOT contain colons, so this check
+ * reliably distinguishes encrypted from unencrypted data.
  *
  * @param value - The stored value to check
  * @returns true if the value appears to be AES-256-GCM encrypted
@@ -179,29 +182,22 @@ export function decryptOrNull(value: string | null | undefined): string {
 export function isEncrypted(value: string | null | undefined): boolean {
   if (!value) return false;
   const parts = value.split(':');
-  if (parts.length !== 3) return false;
-  // Quick sanity check: all 3 parts should be non-empty
-  return parts.every(p => p.length > 0);
+  // Versioned format: v{N}:iv:authTag:ciphertext → 4 parts
+  // Legacy format: iv:authTag:ciphertext → 3 parts
+  if (parts.length === 4 && /^v\d+$/.test(parts[0])) return true;
+  if (parts.length === 3) return parts.every(p => p.length > 0);
+  return false;
 }
 
 /**
  * Migrate a legacy base64-encoded token to AES-256-GCM encrypted format.
- * If the value is already encrypted, returns it unchanged.
- * If the value is null/empty, returns null.
+ * If the value is already encrypted (with or without version prefix),
+ * returns it unchanged. If the value is null/empty, returns null.
  *
  * Use this to upgrade existing bank tokens in the database.
  *
  * @param value - The stored value (may be base64 or already encrypted)
- * @returns The AES-256-GCM encrypted value, or null
- *
- * @example
- * const migrated = migrateBase64Token(storedToken);
- * if (migrated !== storedToken) {
- *   await db.bankConnection.update({
- *     where: { id: connectionId },
- *     data: { accessToken: migrated },
- *   });
- * }
+ * @returns The AES-256-GCM encrypted value (with version prefix), or null
  */
 export function migrateBase64Token(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -218,36 +214,38 @@ export function migrateBase64Token(value: string | null | undefined): string | n
 }
 
 /**
- * Generate a new random encryption key.
- * Useful for initial setup — call this to generate a key for ENCRYPTION_KEY env var.
- *
+ * Generate a new random encryption key (re-exported from keyring).
  * @returns A 64-character hex string (32 bytes / 256 bits)
  */
-export function generateEncryptionKey(): string {
-  return randomBytes(KEY_LENGTH).toString('hex');
-}
+export { generateEncryptionKey };
+
+/**
+ * Re-export keyring functions for caller convenience.
+ * Callers that need to set encryptionKeyVersion on DB records
+ * should use getCurrentKeyVersion().
+ */
+export { getCurrentKeyVersion, getKeyringInfo } from './keyring';
 
 // ─── File Encryption (Backup Files) ─────────────────────────────────────────
 
 /**
- * Encrypt a file using AES-256-GCM.
+ * Encrypt a file using AES-256-GCM with the CURRENT key.
  *
- * Reads the file, encrypts its contents with the same ENCRYPTION_KEY used
- * for bank tokens, and writes the encrypted version to a new file with
- * a `.enc` suffix. The original unencrypted file is securely deleted.
- *
- * Encrypted file format (binary):
+ * File format (binary, NO version byte — version tracked via DB column):
  *   [12 bytes IV] [16 bytes authTag] [N bytes ciphertext]
  *
  * The IV and authTag are prepended as raw bytes (not base64) for efficient
  * streaming during decryption.
+ *
+ * IMPORTANT: The caller MUST set `encryptionKeyVersion: getCurrentKeyVersion()`
+ * on the corresponding Backup record in the database.
  *
  * @param inputPath - Path to the unencrypted file (e.g., backup.zip)
  * @returns Path to the encrypted file (e.g., backup.zip.enc)
  * @throws Error if ENCRYPTION_KEY is not set or file operations fail
  */
 export function encryptFile(inputPath: string): string {
-  const key = getEncryptionKey();
+  const key = getCurrentKey();
   const iv = randomBytes(IV_LENGTH);
 
   const inputBuffer = fs.readFileSync(inputPath);
@@ -259,6 +257,7 @@ export function encryptFile(inputPath: string): string {
   const authTag = cipher.getAuthTag();
 
   // Format: IV (12 bytes) + authTag (16 bytes) + ciphertext
+  // NOTE: No version byte in file — version tracked via Backup.encryptionKeyVersion column
   const outputBuffer = Buffer.concat([iv, authTag, encrypted]);
 
   const encPath = inputPath + '.enc';
@@ -273,18 +272,18 @@ export function encryptFile(inputPath: string): string {
 /**
  * Decrypt a backup file that was encrypted with AES-256-GCM.
  *
- * Reads the encrypted file, parses the binary format, and writes
- * the decrypted contents to a temporary file for processing.
- *
- * IMPORTANT: The caller is responsible for deleting the temporary
- * decrypted file after use (security best practice).
+ * IMPORTANT: The caller should pass the `encryptionKeyVersion` from the
+ * Backup record in the database. If not provided, defaults to the current key.
  *
  * @param encPath - Path to the encrypted file (e.g., backup.zip.enc)
+ * @param keyVersion - Key version used to encrypt this file (from Backup.encryptionKeyVersion)
  * @returns Path to a temporary decrypted file (e.g., backup.zip.tmp)
- * @throws Error if ENCRYPTION_KEY is not set, decryption fails, or file is tampered
+ * @throws Error if key is not available, decryption fails, or file is tampered
  */
-export function decryptFile(encPath: string): string {
-  const key = getEncryptionKey();
+export function decryptFile(encPath: string, keyVersion?: number): string {
+  // Use provided version, or fall back to current version for backward compat
+  const version = keyVersion ?? getCurrentKeyVersion();
+  const key = getKeyForVersion(version);
   const encBuffer = fs.readFileSync(encPath);
 
   // Minimum size: IV (12) + authTag (16) + at least 1 byte ciphertext

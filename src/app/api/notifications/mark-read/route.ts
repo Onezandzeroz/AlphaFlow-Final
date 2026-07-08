@@ -85,7 +85,11 @@ async function broadcastReadStateChange(userId: string, newReadIds: string[]): P
 
     const res = await fetch(`http://localhost:${WS_SERVICE_PORT}/broadcast`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        // SECURITY (U-5): /broadcast endpoint requires HERMES_ADMIN_KEY auth
+        'Authorization': `Bearer ${process.env.HERMES_ADMIN_KEY || process.env.OPENROUTER_API_KEY || ''}`,
+      },
       body: JSON.stringify({
         userId,
         readIds: allReadIds,

@@ -49,7 +49,7 @@ import { createWriteStream, createReadStream, mkdirSync, rmSync } from 'fs';
 import archiver from 'archiver';
 import JSZip from 'jszip';
 import { logger } from '@/lib/logger';
-import { encryptFile, decryptFile } from '@/lib/crypto';
+import { encryptFile, decryptFile, getCurrentKeyVersion } from '@/lib/crypto';
 
 // Transaction client type from Prisma
 type PrismaTransactionClient = Parameters<Parameters<typeof db.$transaction>[0]>[0];
@@ -502,6 +502,7 @@ export async function createBackup(
         fileSize: encStats.size,
         sha256,
         encrypted: true,
+        encryptionKeyVersion: getCurrentKeyVersion(),
         status: 'completed',
         expiresAt,
       },
@@ -595,7 +596,7 @@ export async function restoreBackup(
 
   if (backup.encrypted) {
     try {
-      tempDecryptedPath = decryptFile(backup.filePath);
+      tempDecryptedPath = decryptFile(backup.filePath, backup.encryptionKeyVersion);
       zipPath = tempDecryptedPath;
     } catch (decErr) {
       logger.error('[BACKUP] Failed to decrypt backup file:', decErr);

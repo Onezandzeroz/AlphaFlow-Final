@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { tokenpay, type WebhookPayload } from '@/lib/tokenpay';
 import { auditLog } from '@/lib/audit';
 import { db } from '@/lib/db';
 import { isAlphaAiOwner, ensureOwnerAccess } from '@/lib/access-guard';
 import { withGuard } from '@/lib/route-guard';
 
-const WEBHOOK_SECRET = process.env.TOKENPAY_API_KEY || 'tokenpay-dev-key-2026';
+// SECURITY (U-6): No hardcoded fallback — TOKENPAY_API_KEY MUST be set in production.
+// Rejects all webhooks if the secret is missing (fail-closed).
+const WEBHOOK_SECRET = process.env.TOKENPAY_API_KEY;
 
 /**
  * POST /api/tokenpay/callback
@@ -19,11 +21,20 @@ export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
     const eventType = request.headers.get('x-tokenpay-event') || '';
 
     // 2. Verify HMAC-SHA256 signature
+    // SECURITY (U-6): Fail-closed when secret is missing.
+    if (!WEBHOOK_SECRET) {
+      console.error('[TokenPay Callback] WEBHOOK REJECTED: TOKENPAY_API_KEY is not configured.');
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
+    }
+
     const expectedSignature = createHmac('sha256', WEBHOOK_SECRET)
       .update(rawBody)
       .digest('hex');
 
-    if (!timingSafeEqual(signature, expectedSignature)) {
+    // SECURITY (U-14): Use crypto.timingSafeEqual instead of manual string XOR
+    const a = Buffer.from(expectedSignature);
+    const b = Buffer.from(signature);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
       console.warn('[TokenPay Callback] Invalid signature — rejecting');
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
@@ -164,14 +175,4 @@ async function handleWebhookEvent(payload: WebhookPayload): Promise<void> {
   }
 }
 
-/**
- * Timing-safe string comparison to prevent timing attacks.
- */
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return result === 0;
-}
+// timingSafeEqual removed — U-14: now uses crypto.timingSafeEqual (see above).

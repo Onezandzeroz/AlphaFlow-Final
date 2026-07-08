@@ -20,7 +20,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { encryptOrNull } from '@/lib/crypto';
+import { encryptOrNull, getCurrentKeyVersion } from '@/lib/crypto';
 import { auditUpdate, requestMetadata } from '@/lib/audit';
 import {
   getTinkConfig,
@@ -115,6 +115,7 @@ export async function GET(request: Request) {
       data: {
         accessToken: encryptOrNull(tokenResponse.access_token),
         refreshToken: encryptOrNull(primaryCredentialsId),
+        encryptionKeyVersion: getCurrentKeyVersion(),
         // Don't change status yet — user must select an account first
       },
     });

@@ -74,9 +74,14 @@ export interface DataChangePayload {
  */
 export async function notifyDataChange(payload: DataChangePayload): Promise<void> {
   try {
+    // SECURITY (U-5): /broadcast endpoint requires HERMES_ADMIN_KEY auth
+    const adminKey = process.env.HERMES_ADMIN_KEY || process.env.OPENROUTER_API_KEY || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (adminKey) headers['Authorization'] = `Bearer ${adminKey}`;
+
     const res = await fetch(`http://localhost:${WS_SERVICE_PORT}/broadcast`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         type: 'DATA_CHANGED',
         companyId: payload.companyId,

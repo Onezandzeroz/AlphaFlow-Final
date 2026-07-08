@@ -302,8 +302,14 @@ export function verifyWebhookSignature(
   rawBody: string,
   signatureHeader: string | null
 ): boolean {
-  // In mock mode (no key configured), accept all webhooks
-  if (!FRISBII_WEBHOOK_SECRET) return true;
+  // SECURITY (U-6): Fail-closed — reject ALL webhooks when no secret is
+  // configured. The old "accept all" fallback allowed unauthenticated
+  // webhook forgery in production if the env var was missing.
+  if (!FRISBII_WEBHOOK_SECRET) {
+    logger.error('[FRISBII] WEBHOOK REJECTED: FLATPAY_WEBHOOK_SECRET is not configured. ' +
+      'Set FLATPAY_WEBHOOK_SECRET (or FLATPAY_API_KEY) in production .env.');
+    return false;
+  }
   if (!signatureHeader) return false;
 
   const expected = createHmac('sha256', FRISBII_WEBHOOK_SECRET)

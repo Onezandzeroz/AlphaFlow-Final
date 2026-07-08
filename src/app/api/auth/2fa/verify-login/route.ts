@@ -15,6 +15,7 @@ import {
   isValidTOTPFormat,
   isValidBackupCodeFormat,
 } from '@/lib/two-factor';
+import { getCurrentKeyVersion } from '@/lib/crypto';
 import { withGuard } from '@/lib/route-guard';
 
 /**
@@ -125,6 +126,7 @@ export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
               twoFactorBackupCodes: remainingCodes.length > 0
                 ? encryptBackupCodes(remainingCodes)
                 : null,
+              encryptionKeyVersion: getCurrentKeyVersion(),
             },
           });
         }

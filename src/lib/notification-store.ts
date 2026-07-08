@@ -89,8 +89,9 @@ async function connectSocketIO(userId: string): Promise<void> {
       // Socket.IO uses default path '/socket.io/' so the WS service's
       // HTTP endpoints (/health, /broadcast, /stats) remain accessible.
       query: { XTransformPort: WS_PORT },
-      // Auth with userId so the WS service can map connections
-      auth: { userId },
+      // SECURITY (U-5): No auth payload needed. The HttpOnly session cookie
+      // is sent automatically by the browser. The server validates it
+      // against the database and derives userId from the session.
       transports: ['polling', 'websocket'],
       // Reconnection settings
       reconnection: true,

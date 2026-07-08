@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { auditCreate, auditCancel, requestMetadata } from '@/lib/audit';
+import { auditCreate, auditCancel, requestMetadata, auditLog } from '@/lib/audit';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { notifyDataChange } from '@/lib/notify-data-change';
+import { scanBuffer } from '@/lib/clamav';
 
 // Allowed file types for document attachments
 const ALLOWED_TYPES = [
@@ -133,6 +134,34 @@ export const POST = withGuard(
 
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
+
+      // SECURITY (U-4): Antivirus scan via ClamAV
+      const scanResult = await scanBuffer(buffer, file.name);
+      if (!scanResult.clean && scanResult.virusName) {
+        logger.warn(`[DOC-UPLOAD] MALWARE BLOCKED: ${file.name} — ${scanResult.virusName}, user: ${ctx.id}, company: ${ctx.activeCompanyId}`);
+        await auditLog({
+          action: 'DELETE_ATTEMPT',
+          entityType: 'Document',
+          entityId: 'upload',
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId,
+          metadata: {
+            reason: 'Malware detected by ClamAV',
+            virusName: scanResult.virusName,
+            fileName: file.name,
+            fileSize: buffer.length,
+            source: 'document-upload',
+          },
+        }).catch(() => {});
+        return NextResponse.json(
+          { error: 'File rejected: malware detected. The upload has been logged.' },
+          { status: 403 }
+        );
+      }
+      if (scanResult.error) {
+        logger.error(`[DOC-UPLOAD] ClamAV scan error for ${file.name}: ${scanResult.error}`);
+      }
+
       await writeFile(filePath, buffer);
 
       const relativePath = `documents/${ctx.id}/${filename}`;

@@ -38,7 +38,7 @@ export const GET = withGuard(
 
       if (backup.encrypted) {
         try {
-          tempDecryptedPath = decryptFile(backup.filePath);
+          tempDecryptedPath = decryptFile(backup.filePath, backup.encryptionKeyVersion);
           servePath = tempDecryptedPath;
         } catch (decErr) {
           logger.error(`[API /backups/download/${id}] Failed to decrypt backup:`, decErr);

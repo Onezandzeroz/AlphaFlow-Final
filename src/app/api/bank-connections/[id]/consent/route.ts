@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 import { getProvider } from '@/lib/bank-providers';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
-import { encryptOrNull } from '@/lib/crypto';
+import { encryptOrNull, getCurrentKeyVersion } from '@/lib/crypto';
 
 // GET - Check consent status for a bank connection
 export const GET = withGuard(
@@ -88,6 +88,7 @@ export const POST = withGuard(
           consentId: consentResult.consentId,
           status: consentResult.status === 'active' ? 'ACTIVE' : 'PENDING',
           accessToken: consentResult.consentId ? encryptOrNull(consentResult.consentId) : null,
+          encryptionKeyVersion: getCurrentKeyVersion(),
           consentExpiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
           retryCount: 0,
           lastError: null,
