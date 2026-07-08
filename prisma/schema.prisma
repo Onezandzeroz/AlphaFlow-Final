@@ -233,6 +233,12 @@ model Company {
   nextInvoiceSequence  Int     @default(1)
   currentYear          Int     @default(2026)
 
+  // Credit note settings — separate numbering sequence so credit notes get
+  // their own series (e.g. KRE-2026-0001), distinct from invoices (INV-…).
+  // Mirrors the invoice numbering scheme used in POST /api/invoices.
+  creditNotePrefix       String @default("KRE")
+  nextCreditNoteSequence Int    @default(1)
+
   // Journal entry numbering (Bogføringsloven — fortløbende bilagsnummer)
   journalPrefix       String @default("BIL") // Prefix for bilagsnumre
   nextJournalSequence Int    @default(1) // Næste fortløbende nummer
@@ -481,6 +487,16 @@ model Transaction {
   cancelled    Boolean         @default(false)
   cancelReason String?
   originalId   String?
+  // Document sub-type — distinguishes a purchase credit note (PURCHASE_CREDIT_NOTE)
+  // received from a supplier from a regular PURCHASE. Kept as a free-form string
+  // (not an enum) so we don't have to migrate the TransactionType enum that's
+  // used heavily across the app. Null/empty = regular document of `type`.
+  documentType       String?
+  // For purchase credit notes that reference an original purchase: FK to the
+  // credited Transaction. Null = freestanding purchase credit note.
+  originalTransactionId String?
+  originalTransaction   Transaction? @relation("PurchaseCreditNoteOriginal", fields: [originalTransactionId], references: [id], onDelete: SetNull)
+  creditNotes           Transaction[] @relation("PurchaseCreditNoteOriginal")
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   userId       String?
@@ -493,6 +509,7 @@ model Transaction {
 
   @@index([companyId, date])
   @@index([companyId, type, date])
+  @@index([companyId, documentType])
   @@index([userId])
   @@index([accountId])
   @@index([projectId])
@@ -503,6 +520,18 @@ model Transaction {
 model Invoice {
   id               String            @id @default(cuid())
   invoiceNumber    String
+  // Document type distinguishes commercial invoices (INVOICE) from credit
+  // notes (CREDIT_NOTE). Defaults to INVOICE so all existing rows + the
+  // normal "Opret faktura" flow keep working unchanged. Credit notes reuse
+  // the same model/flow but get their own numbering (creditNotePrefix) and
+  // mirrored bookkeeping (debit/credit swapped) — see PUT /api/invoices/[id].
+  documentType     EInvoiceType      @default(INVOICE)
+  // For credit notes that reference (credit) an existing invoice: the FK to
+  // the original Invoice. Null = freestanding credit note (no original).
+  // Surfaced in the OIOUBL BillingReference (cbc:ID) for e-invoicing.
+  originalInvoiceId String?
+  originalInvoice   Invoice?          @relation("CreditNoteOriginal", fields: [originalInvoiceId], references: [id], onDelete: SetNull)
+  creditNotes       Invoice[]         @relation("CreditNoteOriginal")
   customerName     String
   customerAddress  String?
   customerEmail    String?
@@ -536,8 +565,10 @@ model Invoice {
 
   @@unique([companyId, invoiceNumber])
   @@index([companyId, status, issueDate])
+  @@index([companyId, documentType])
   @@index([userId])
   @@index([projectId])
+  @@index([originalInvoiceId])
 }
 
 // ─── AUDIT LOG ────────────────────────────────────────────────────

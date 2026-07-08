@@ -64,6 +64,7 @@ import {
   Trash2,
   Eye,
   FileText,
+  FileMinus,
   Loader2,
   Filter,
   X,
@@ -96,6 +97,8 @@ interface Transaction {
   project?: { id: string; name: string; color: string | null; code: string | null } | null;
   cancelled?: boolean;
   cancelReason?: string | null;
+  documentType?: string | null;
+  originalTransactionId?: string | null;
   // Journal-entry-derived VAT (authoritative) — from double-entry journal.
   // null when no journal entry exists.
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
@@ -844,6 +847,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                                 {language === 'da' ? 'Faktura' : 'Invoice'}
                               </Badge>
                             )}
+                            {transaction.documentType === 'PURCHASE_CREDIT_NOTE' && (
+                              <Badge className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 border-0 gap-1">
+                                <FileMinus className="h-2.5 w-2.5" />
+                                {language === 'da' ? 'Købskreditnota' : 'Credit'}
+                              </Badge>
+                            )}
                             {transaction.project && (
                               <Badge
                                 className="text-[10px] px-1.5 py-0 border-0 gap-1"
@@ -1121,6 +1130,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       <TableCell className="max-w-[150px] lg:max-w-[250px] truncate">
                         <div className="flex items-center gap-1.5">
                           <span className={cn("truncate", isCancelled ? "text-gray-400 dark:text-gray-500" : "")}>{transaction.description}</span>
+                          {transaction.documentType === 'PURCHASE_CREDIT_NOTE' && (
+                            <Badge className="shrink-0 text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 border-0 gap-1">
+                              <FileMinus className="h-2.5 w-2.5" />
+                              {language === 'da' ? 'Købskreditnota' : 'Credit'}
+                            </Badge>
+                          )}
                           {transaction.project && (
                             <Badge
                               className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1"

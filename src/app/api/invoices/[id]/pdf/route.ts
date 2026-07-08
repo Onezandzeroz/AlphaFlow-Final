@@ -30,10 +30,23 @@ export const GET = withGuard(
         ? await db.company.findUnique({ where: { id: ctx.activeCompanyId } })
         : null;
 
+      // For credit notes that reference an original invoice, look up its
+      // invoice number so the PDF can show "Krediterer: <original>".
+      let originalInvoiceNumber: string | null = null;
+      if (invoice.originalInvoiceId) {
+        const original = await db.invoice.findFirst({
+          where: { id: invoice.originalInvoiceId, ...tenantFilter(ctx) },
+          select: { invoiceNumber: true },
+        });
+        originalInvoiceNumber = original?.invoiceNumber ?? null;
+      }
+
       // Build the InvoiceWithDetails object
       const invoiceWithDetails = {
         id: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
+        documentType: invoice.documentType,
+        originalInvoiceNumber,
         customerName: invoice.customerName,
         customerAddress: invoice.customerAddress,
         customerEmail: invoice.customerEmail,

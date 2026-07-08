@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Receipt, RefreshCw, Plus, Inbox } from 'lucide-react';
+import { Receipt, RefreshCw, Plus, Inbox, FileMinus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 
@@ -37,6 +37,9 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   const [activeTab, setActiveTab] = useState<'transactions' | 'recurring' | 'einvoice'>(defaultTab);
   const [currentView, setCurrentView] = useState<PageView>('list');
   const [isMobileDialogOpen, setIsMobileDialogOpen] = useState(false);
+  // Create mode: 'purchase' (default) or 'credit-note' (supplier credit note).
+  // Mirrors the Salg & Faktura createMode — both flows reuse the same form.
+  const [createMode, setCreateMode] = useState<'purchase' | 'credit-note'>('purchase');
   // ── Viewport detection (lg = 1024px) ──
   const subscribeToMedia = useCallback((cb: () => void) => {
     const mql = window.matchMedia('(min-width: 1024px)');
@@ -115,12 +118,14 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
     setCurrentView('list');
     setIsMobileDialogOpen(false);
     setPreloadedFile(null);
+    setCreateMode('purchase');
   }, []);
 
   const handleCancel = useCallback(() => {
     setCurrentView('list');
     setIsMobileDialogOpen(false);
     setPreloadedFile(null);
+    setCreateMode('purchase');
   }, []);
 
   // Mobile Dialog handlers (prevent close when scanner is active)
@@ -146,15 +151,24 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   }, []);
 
   // Unified open handler: desktop → full page, mobile → dialog
-  const handleAddClick = useCallback(() => {
-    guardWriteAccess(isDa ? 'Tilføj køb' : 'Add Purchase', () => {
-      setCurrentView('create');
-      // Only open dialog on mobile (not desktop)
-      if (!isDesktop) {
-        setIsMobileDialogOpen(true);
+  const openCreate = useCallback((mode: 'purchase' | 'credit-note' = 'purchase') => {
+    guardWriteAccess(
+      mode === 'credit-note'
+        ? (isDa ? 'Opret købskreditnota' : 'Create purchase credit note')
+        : (isDa ? 'Tilføj køb' : 'Add Purchase'),
+      () => {
+        setCreateMode(mode);
+        setCurrentView('create');
+        // Only open dialog on mobile (not desktop)
+        if (!isDesktop) {
+          setIsMobileDialogOpen(true);
+        }
       }
-    });
+    );
   }, [guardWriteAccess, isDa, isDesktop]);
+
+  const handleAddClick = useCallback(() => openCreate('purchase'), [openCreate]);
+  const handleAddCreditNoteClick = useCallback(() => openCreate('credit-note'), [openCreate]);
 
   const tabs = [
     { id: 'transactions' as const, labelDa: 'Alle posteringer', labelEn: 'All Transactions', icon: Receipt },
@@ -166,10 +180,14 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   const renderCreatePage = () => (
     <div className="p-3 lg:p-6 space-y-4 lg:space-y-6">
       <PageHeader
-        title={isDa ? 'Tilføj køb' : 'Add Purchase'}
-        description={isDa
-          ? 'Vælg en omkostningskonto og bogfør købet i dobbelt-posteringsregnskabet'
-          : 'Select an expense account and record the purchase in the double-entry ledger'}
+        title={createMode === 'credit-note'
+          ? (isDa ? 'Opret købskreditnota' : 'Create Purchase Credit Note')
+          : (isDa ? 'Tilføj køb' : 'Add Purchase')}
+        description={createMode === 'credit-note'
+          ? (isDa ? 'Registrer en kreditnota modtaget fra en leverandør' : 'Record a credit note received from a supplier')
+          : (isDa
+            ? 'Vælg en omkostningskonto og bogfør købet i dobbelt-posteringsregnskabet'
+            : 'Select an expense account and record the purchase in the double-entry ledger')}
         action={
           <Button variant="outline" onClick={handleCancel} className="bg-gray-200 hover:bg-gray-300 text-gray-700 border border-gray-300 lg:bg-white/10 lg:hover:bg-white/20 lg:text-white lg:border-white/20 gap-2">
             {t('cancel')}
@@ -179,6 +197,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
       <div>
         <AddTransactionForm
           layout="cards"
+          mode={createMode}
           onSuccess={handleSuccess}
           preloadedReceiptFile={preloadedFile}
           onPreloadedFileConsumed={handlePreloadedFileConsumed}
@@ -196,15 +215,22 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
       >
         <DialogHeader>
           <DialogTitle className="dark:text-white flex items-center gap-2">
-            <Plus className="h-5 w-5 text-[#2dd4bf]" />
-            {isDa ? 'Tilføj køb' : 'Add Purchase'}
+            {createMode === 'credit-note'
+              ? <FileMinus className="h-5 w-5 text-amber-500" />
+              : <Plus className="h-5 w-5 text-[#2dd4bf]" />}
+            {createMode === 'credit-note'
+              ? (isDa ? 'Opret købskreditnota' : 'Create Purchase Credit Note')
+              : (isDa ? 'Tilføj køb' : 'Add Purchase')}
           </DialogTitle>
-          <DialogDescription className="dark:text-gray-400">{isDa
-            ? 'Vælg en omkostningskonto og bogfør købet i dobbelt-posteringsregnskabet'
-            : 'Select an expense account and record the purchase in the double-entry ledger'}
+          <DialogDescription className="dark:text-gray-400">{createMode === 'credit-note'
+            ? (isDa ? 'Registrer en kreditnota modtaget fra en leverandør' : 'Record a credit note received from a supplier')
+            : (isDa
+              ? 'Vælg en omkostningskonto og bogfør købet i dobbelt-posteringsregnskabet'
+              : 'Select an expense account and record the purchase in the double-entry ledger')}
           </DialogDescription>
         </DialogHeader>
         <AddTransactionForm
+          mode={createMode}
           onSuccess={handleSuccess}
           preloadedReceiptFile={preloadedFile}
           onPreloadedFileConsumed={handlePreloadedFileConsumed}
@@ -247,13 +273,22 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
               ? 'Registrer køb, vedhæft kvitteringer og modtag e-fakturaer'
               : 'Record purchases, attach receipts and receive e-invoices'}
             action={(
-              <Button
-                onClick={handleAddClick}
-                className="bg-[#0d9488] hover:bg-[#0f766e] text-white border border-[#0d9488] gap-2 lg:bg-white/20 lg:hover:bg-white/30 lg:border-white/30 lg:backdrop-blur-sm text-sm font-medium transition-all"
-              >
-                <Plus className="h-4 w-4" />
-                {isDa ? 'Tilføj køb' : 'Add Purchase'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleAddClick}
+                  className="bg-[#0d9488] hover:bg-[#0f766e] text-white border border-[#0d9488] gap-2 lg:bg-white/20 lg:hover:bg-white/30 lg:border-white/30 lg:backdrop-blur-sm text-sm font-medium transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  {isDa ? 'Tilføj køb' : 'Add Purchase'}
+                </Button>
+                <Button
+                  onClick={handleAddCreditNoteClick}
+                  className="bg-white hover:bg-gray-50 text-[#0d9488] border border-[#0d9488]/40 dark:bg-white/10 dark:hover:bg-white/20 dark:text-[#2dd4bf] dark:border-[#2dd4bf]/30 gap-2 text-sm font-medium transition-all"
+                >
+                  <FileMinus className="h-4 w-4" />
+                  {isDa ? 'Opret købskreditnota' : 'Create Purchase Credit Note'}
+                </Button>
+              </div>
             )}
           />
         </div>

@@ -11,6 +11,9 @@ export interface OIOUBLInvoiceData {
   issueDate: string; // YYYY-MM-DD
   dueDate?: string; // YYYY-MM-DD
   invoiceTypeCode?: '380' | '381' | '384' | '389'; // Invoice type: 380=Commercial, 381=Credit note, 384=Corrected, 389=Self-billed
+  // For credit notes (381): the original invoice number being credited.
+  // Surfaced in cac:BillingReference. Falls back to the credit note's own ID.
+  originalInvoiceNumber?: string;
   
   // Supplier/Seller information
   supplier: {
@@ -148,11 +151,13 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       // Optional due date (not applicable for credit notes)
       ...(data.dueDate && data.invoiceTypeCode !== '381' && { 'cbc:DueDate': data.dueDate }),
 
-      // Credit note: include original invoice reference
+      // Credit note: include original invoice reference (BillingReference).
+      // Uses the credited invoice's number when known; falls back to the
+      // credit note's own ID for freestanding credit notes.
       ...(data.invoiceTypeCode === '381' && {
         'cac:BillingReference': {
           'cbc:InvoiceDocumentReference': {
-            'cbc:ID': data.invoiceId,
+            'cbc:ID': data.originalInvoiceNumber || data.invoiceId,
           },
         },
       }),

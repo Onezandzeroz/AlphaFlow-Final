@@ -25,6 +25,8 @@ import {
   ScanSearch,
   CalendarDays,
   Repeat,
+  FileMinus,
+  ChevronDown,
 } from 'lucide-react';
 import {
   Select,
@@ -47,6 +49,20 @@ import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { ClearFormButton } from '@/components/ui/clear-form-button';
 import { VATCodeSelect } from '@/components/shared/vat-code-select';
 import { VAT_RATE_MAP } from '@/lib/vat-codes';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Badge } from '@/components/ui/badge';
 
 const CURRENCIES = ['DKK', 'EUR', 'USD', 'GBP', 'SEK', 'NOK'] as const;
 
@@ -80,6 +96,23 @@ interface AddTransactionFormProps {
   onPreloadedFileConsumed?: () => void;
   /** Layout mode: 'compact' for dialogs, 'cards' for full-page desktop view */
   layout?: 'compact' | 'cards';
+  /** Document mode: 'purchase' (default) or 'credit-note'. A purchase credit
+   *  note is a supplier credit note received by the tenant — it reuses this
+   *  form with negative amounts + a PURCHASE_CREDIT_NOTE documentType tag.
+   *  Mirrors the Salg & Faktura credit-note flow for consistency. */
+  mode?: 'purchase' | 'credit-note';
+}
+
+// A lightweight purchase record for the optional "original purchase" selector
+// shown in credit-note mode (mirrors the original-invoice selector in Salg).
+interface CreditablePurchase {
+  id: string;
+  description: string;
+  amount: number;
+  date: string;
+  vatPercent: number;
+  accountId?: string | null;
+  receiptImage?: string | null;
 }
 
 // Account category groupings for the Danish chart of accounts
@@ -134,9 +167,10 @@ const EMPTY_LINE_ITEM: PurchaseLineItem = {
   accountId: '',
 };
 
-export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloadedFileConsumed, layout = 'compact' }: AddTransactionFormProps) {
+export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloadedFileConsumed, layout = 'compact', mode = 'purchase' }: AddTransactionFormProps) {
   const { t, tc, language } = useTranslation();
   const isDa = language === 'da';
+  const isCreditNote = mode === 'credit-note';
   const { handleMutationError } = useAccessErrorHandler();
   const activeCompanyId = useAuthStore((s) => s.user?.activeCompanyId);
   // ── Project Mode (FASE 4) ──
@@ -224,6 +258,66 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
   }, []);
 
   // ─── Purchase line items (for OCR + manual entry) ───
+  // ── Purchase credit note: optional original purchase being credited ──
+  const [creditablePurchases, setCreditablePurchases] = useState<CreditablePurchase[]>([]);
+  const [originalPurchaseId, setOriginalPurchaseId] = useState<string | null>(null);
+  const [originalPurchaseSearchOpen, setOriginalPurchaseSearchOpen] = useState(false);
+
+  // Fetch creditable purchases (non-cancelled PURCHASE, not already a credit note)
+  // only when in credit-note mode. Powers the optional "original purchase" selector.
+  useEffect(() => {
+    if (!isCreditNote) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/transactions?type=PURCHASE');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const all = (data.transactions || []) as Array<any>;
+        const eligible = all.filter(
+          (tx) => tx.type === 'PURCHASE' && !tx.cancelled && tx.documentType !== 'PURCHASE_CREDIT_NOTE'
+        );
+        setCreditablePurchases(eligible.map((tx) => ({
+          id: tx.id,
+          description: tx.description || '',
+          amount: Number(tx.amount),
+          date: tx.date,
+          vatPercent: Number(tx.vatPercent),
+          accountId: tx.accountId,
+          receiptImage: tx.receiptImage,
+        })));
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isCreditNote]);
+
+  // Credit note: autofill from the chosen original purchase. Amounts are made
+  // negative so the existing backend bookkeeping mirrors debit↔credit and the
+  // journal entry correctly reverses the original purchase.
+  const handleSelectOriginalPurchase = useCallback((p: CreditablePurchase) => {
+    setOriginalPurchaseId(p.id);
+    setOriginalPurchaseSearchOpen(false);
+    const negAmount = -Math.abs(p.amount);
+    setAmount(String(negAmount));
+    setCurrency('DKK');
+    setIncludesVAT(false); // backend expects net for lineItems; amount stored as net metadata
+    setDescription(isDa ? `Kreditnota – ${p.description}` : `Credit note – ${p.description}`);
+    setVatPercent(String(p.vatPercent));
+    setVatCode(p.vatPercent === 25 ? 'K25' : p.vatPercent === 12 ? 'K12' : 'K0');
+    if (p.accountId) setSelectedAccountId(p.accountId);
+    // Mirror into purchase lines as a single negative line for Solution B.
+    setPurchaseLines([{
+      description: p.description || '',
+      quantity: 1,
+      unitPrice: negAmount,
+      vatPercent: p.vatPercent,
+      vatCode: p.vatPercent === 25 ? 'K25' : p.vatPercent === 12 ? 'K12' : 'K0',
+      accountId: p.accountId || '',
+    }]);
+    toast.success(t('purchaseCreditNoteAutofilled'));
+  }, [isDa, t]);
+
   const [purchaseLines, setPurchaseLines] = useState<PurchaseLineItem[]>([
     { ...EMPTY_LINE_ITEM },
   ]);
@@ -1059,6 +1153,11 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           // Solution B: per-line items so the backend can create a proper
           // multi-line journal entry with per-line accounts + VAT codes.
           lineItems: txLineItems,
+          // Purchase credit note: tag the document + link the original purchase.
+          // The amounts are already negative (set by the autofill handler or
+          // entered manually), so the backend's existing isNegative branches
+          // mirror debit↔credit and reverse the original purchase correctly.
+          ...(isCreditNote ? { documentType: 'PURCHASE_CREDIT_NOTE', originalTransactionId: originalPurchaseId || undefined } : {}),
         }),
       });
 
@@ -1109,6 +1208,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       setSelectedAccountId('');
       setProjectId(null);
       setPurchaseLines([{ ...EMPTY_LINE_ITEM }]);
+      setOriginalPurchaseId(null);
       resetOCR();
       clearReceipt();
       setIsRecurring(false);
@@ -1116,11 +1216,16 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       setRecurringStartDate('');
       setRecurringEndDate('');
 
-      toast.success(isDa ? 'Indkøb bogført' : 'Purchase recorded', {
-        description: isDa
-          ? 'Dit indkøb er bogført i dobbelt-posteringsregnskabet'
-          : 'Your purchase has been recorded in the double-entry ledger',
-      });
+      toast.success(
+        isCreditNote
+          ? (isDa ? 'Købskreditnota bogført' : 'Purchase credit note recorded')
+          : (isDa ? 'Indkøb bogført' : 'Purchase recorded'),
+        {
+          description: isDa
+            ? (isCreditNote ? 'Kreditnotaen er bogført i dobbelt-posteringsregnskabet' : 'Dit indkøb er bogført i dobbelt-posteringsregnskabet')
+            : (isCreditNote ? 'The credit note has been recorded in the double-entry ledger' : 'Your purchase has been recorded in the double-entry ledger'),
+        }
+      );
 
       // Clear the persisted draft now that the save succeeded.
       clearDraft();
@@ -1130,7 +1235,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
     } finally {
       setIsLoading(false);
     }
-  }, [date, amount, currency, exchangeRate, includesVAT, netAmount, parsedAmount, description, vatPercent, receiptFile, selectedAccountId, clearReceipt, onSuccess, isDa, handleMutationError, receiptCardHasData, purchaseLinesHasData, purchaseLines, purchaseLinesDate, lineTotals, isRecurring, recurringFrequency, recurringStartDate, recurringEndDate, clearDraft]);
+  }, [date, amount, currency, exchangeRate, includesVAT, netAmount, parsedAmount, description, vatPercent, receiptFile, selectedAccountId, clearReceipt, onSuccess, isDa, handleMutationError, receiptCardHasData, purchaseLinesHasData, purchaseLines, purchaseLinesDate, lineTotals, isRecurring, recurringFrequency, recurringStartDate, recurringEndDate, clearDraft, isCreditNote, originalPurchaseId]);
 
   // ─── RENDER ───
 
@@ -1790,7 +1895,40 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         {renderCalculations()}
         {renderVatCurrency()}
         {renderDateField()}
-        {renderRecurringToggle()}
+        {!isCreditNote && renderRecurringToggle()}
+        {isCreditNote && (
+          <div className="space-y-2">
+            <Label className="dark:text-gray-300 text-sm font-medium">{t('originalPurchase')}</Label>
+            <Popover open={originalPurchaseSearchOpen} onOpenChange={setOriginalPurchaseSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-full h-10 justify-between text-left font-normal">
+                  {originalPurchaseId
+                    ? (() => { const orig = creditablePurchases.find(p => p.id === originalPurchaseId); return orig ? `${orig.description} — ${tc(orig.amount)}` : t('selectOriginalPurchase'); })()
+                    : <span className="text-muted-foreground">{t('noOriginalPurchase')}</span>}
+                  <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0" align="start">
+                <Command>
+                  <CommandInput placeholder={isDa ? 'Søg køb…' : 'Search purchase…'} />
+                  <CommandList>
+                    <CommandEmpty>{isDa ? 'Ingen køb fundet' : 'No purchases found'}</CommandEmpty>
+                    <CommandGroup>
+                      {creditablePurchases.map((p) => (
+                        <CommandItem key={p.id} value={`${p.description} ${p.amount}`} onSelect={() => handleSelectOriginalPurchase(p)}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{p.description || (isDa ? 'Køb' : 'Purchase')}</span>
+                            <span className="text-xs text-muted-foreground">{p.date ? new Date(p.date).toLocaleDateString(isDa ? 'da-DK' : 'en-GB') : ''} · {tc(p.amount)}</span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
 
         {/* ── Section divider: separates the recurring-toggle section from the
             account/project/receipt section below. Adds visual breathing room
@@ -1836,6 +1974,82 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       </div>
       {renderError()}
 
+      {/* ── Credit note: optional original purchase selector (cards layout) ── */}
+      {isCreditNote && (
+        <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shrink-0">
+                <FileMinus className="h-4 w-4 text-white" />
+              </div>
+              {t('originalPurchase')}
+              <span className="text-xs font-normal text-gray-400 dark:text-gray-500">
+                {isDa ? '(valgfrit)' : '(optional)'}
+              </span>
+            </CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {isDa
+                ? 'Vælg et eksisterende køb for at udfylde kreditnotaen automatisk — eller lad stå tom for en fritstående købskreditnota.'
+                : 'Pick an existing purchase to autofill the credit note — or leave empty for a freestanding purchase credit note.'}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Popover open={originalPurchaseSearchOpen} onOpenChange={setOriginalPurchaseSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={originalPurchaseSearchOpen}
+                  className="w-full h-10 justify-between text-left font-normal"
+                >
+                  {originalPurchaseId
+                    ? (() => { const orig = creditablePurchases.find(p => p.id === originalPurchaseId); return orig ? `${orig.description} — ${tc(orig.amount)}` : t('selectOriginalPurchase'); })()
+                    : <span className="text-muted-foreground">{t('noOriginalPurchase')}</span>}
+                  <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0" align="start">
+                <Command>
+                  <CommandInput placeholder={isDa ? 'Søg køb…' : 'Search purchase…'} />
+                  <CommandList>
+                    <CommandEmpty>{isDa ? 'Ingen køb fundet' : 'No purchases found'}</CommandEmpty>
+                    <CommandGroup>
+                      {creditablePurchases.map((p) => (
+                        <CommandItem
+                          key={p.id}
+                          value={`${p.description} ${p.amount}`}
+                          onSelect={() => handleSelectOriginalPurchase(p)}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">{p.description || (isDa ? 'Køb' : 'Purchase')}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {p.date ? new Date(p.date).toLocaleDateString(isDa ? 'da-DK' : 'en-GB') : ''} · {tc(p.amount)}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {originalPurchaseId && (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">{t('purchaseCreditNoteAutofilled')}</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setOriginalPurchaseId(null)}
+                >
+                  {isDa ? 'Fjern reference' : 'Remove link'}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Two-column: Purchase Details + Receipt & Invoice ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
 
@@ -1850,7 +2064,9 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* ── Recurring purchase toggle ── */}
+            {/* ── Recurring purchase toggle (hidden for credit notes — a credit
+                note is never recurring) ── */}
+            {!isCreditNote && (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Repeat className="h-4 w-4 text-[#0d9488] dark:text-[#2dd4bf]" />
@@ -1860,6 +2076,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
               </div>
               <ResponsiveSwitch checked={isRecurring} onCheckedChange={setIsRecurring} disabled={isLoading} />
             </div>
+            )}
 
             {/* ── 1. Beløb (Amount) ── */}
             <div className="space-y-1.5">

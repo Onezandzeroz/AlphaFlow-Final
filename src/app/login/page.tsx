@@ -168,7 +168,7 @@ function Home() {
   const [currentView, setCurrentView] = useState<View>(getInitialView);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [onboardingStepJustDone, setOnboardingStepJustDone] = useState(0);
-  const [pendingCreateAction, setPendingCreateAction] = useState<'create-invoice' | 'create-contact' | null>(null);
+  const [pendingCreateAction, setPendingCreateAction] = useState<'create-invoice' | 'create-credit-note' | 'create-contact' | null>(null);
   const hydrated = useHydrated();
   const hasCheckedAuth = useRef(false);
   const { t, language } = useTranslation();
@@ -870,7 +870,11 @@ function Home() {
         return (
           <InvoicesPage
             user={user}
-            initialView={isCurrent && pendingCreateAction === 'create-invoice' ? 'create' : 'list'}
+            initialView={
+              isCurrent && pendingCreateAction === 'create-invoice' ? 'create'
+              : isCurrent && pendingCreateAction === 'create-credit-note' ? 'create-credit-note'
+              : 'list'
+            }
             onInitialViewConsumed={isCurrent ? () => setPendingCreateAction(null) : undefined}
           />
         );

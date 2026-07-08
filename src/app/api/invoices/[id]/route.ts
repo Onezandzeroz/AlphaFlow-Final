@@ -45,8 +45,15 @@ function effectiveCompanyId(ctx: { activeCompanyId: string | null; isOversightMo
 //
 async function createAccrualJournalEntry(
   ctx: { id: string; activeCompanyId: string | null; isOversightMode: boolean; demoModeEnabled: boolean; isDemoCompany: boolean },
-  existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; lineItems: any; projectId?: string | null },
+  existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; lineItems: any; projectId?: string | null; documentType?: string },
 ): Promise<{ success: boolean; reason?: string; journalEntryId?: string; debit?: number; credit?: number }> {
+  // Credit notes are the mirror of an invoice: instead of Debit Receivables /
+  // Credit Revenue+VAT, they Credit Receivables / Debit Revenue+VAT. We build
+  // the lines exactly as for an invoice, then swap debit↔credit for every
+  // line when this is a credit note. Amounts are stored as positive numbers
+  // on the Invoice row; the documentType carries the sign.
+  const isCreditNote = existing.documentType === 'CREDIT_NOTE';
+  const docLabel = isCreditNote ? 'Kreditnota' : 'Faktura';
   const lineItems = existing.lineItems as Array<{
     description: string;
     quantity: number;
@@ -148,13 +155,23 @@ async function createAccrualJournalEntry(
     });
   }
 
+  // Credit note: mirror every line (swap debit ↔ credit) so the entry
+  // reduces receivables + reverses revenue/VAT instead of booking them.
+  if (isCreditNote) {
+    for (const l of jeLines) {
+      const d = l.debit;
+      l.debit = l.credit;
+      l.credit = d;
+    }
+  }
+
   // Validate balance
   const totalDebit = jeLines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = jeLines.reduce((s, l) => s + l.credit, 0);
 
   if (jeLines.length < 2 || Math.abs(totalDebit - totalCredit) >= 0.01) {
     logger.warn(
-      `[Invoice SENT] Accrual journal entry for ${existing.invoiceNumber} is not balanced: debit=${totalDebit}, credit=${totalCredit}. Skipping.`
+      `[${docLabel} SENT] Accrual journal entry for ${existing.invoiceNumber} is not balanced: debit=${totalDebit}, credit=${totalCredit}. Skipping.`
     );
     return { success: false, reason: 'UNBALANCED', debit: totalDebit, credit: totalCredit };
   }
@@ -164,7 +181,7 @@ async function createAccrualJournalEntry(
     const journalEntry = await tx.journalEntry.create({
       data: {
         date: existing.issueDate,
-        description: `Tilgodehavende – Faktura ${existing.invoiceNumber} – ${existing.customerName}`,
+        description: `Tilgodehavende – ${docLabel} ${existing.invoiceNumber} – ${existing.customerName}`,
         reference: existing.invoiceNumber,
         status: 'POSTED',
         userId: ctx.id,
@@ -213,9 +230,15 @@ async function createAccrualJournalEntry(
 //
 async function createCashReceiptJournalEntry(
   ctx: { id: string; activeCompanyId: string | null; isOversightMode: boolean; demoModeEnabled: boolean; isDemoCompany: boolean },
-  existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; total: number | { toNumber(): number }; projectId?: string | null },
+  existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; total: number | { toNumber(): number }; projectId?: string | null; documentType?: string },
   paymentDate?: Date,
 ): Promise<boolean> {
+  // For a credit note, "PAID" means the refund is paid out to the customer,
+  // so the cash entry is mirrored: Credit Bank / Debit Receivables (instead
+  // of Debit Bank / Credit Receivables). We build the invoice-style lines
+  // then swap when this is a credit note.
+  const isCreditNote = existing.documentType === 'CREDIT_NOTE';
+  const docLabel = isCreditNote ? 'Kreditnota' : 'Faktura';
   // Look up Bank account (1100) and Receivables account (1200)
   const bankAccount = await db.account.findFirst({
     where: { ...tenantFilter(ctx as any), number: '1100', isActive: true },
@@ -241,7 +264,7 @@ async function createCashReceiptJournalEntry(
       accountId: bankAccount.id,
       debit: grossAmount,
       credit: 0,
-      description: `${existing.invoiceNumber} – Indbetaling fra ${existing.customerName}`,
+      description: `${existing.invoiceNumber} – ${isCreditNote ? 'Udbetaling til' : 'Indbetaling fra'} ${existing.customerName}`,
     },
     {
       accountId: receivablesAccount.id,
@@ -251,6 +274,16 @@ async function createCashReceiptJournalEntry(
     },
   ];
 
+  // Credit note: mirror (refund flows OUT of the bank, receivable increases
+  // back toward the customer). Swap debit ↔ credit on every line.
+  if (isCreditNote) {
+    for (const l of jeLines) {
+      const d = l.debit;
+      l.debit = l.credit;
+      l.credit = d;
+    }
+  }
+
   // Reference uses "-IND" suffix to distinguish from the accrual entry
   const cashRef = `${existing.invoiceNumber}-IND`;
 
@@ -258,7 +291,7 @@ async function createCashReceiptJournalEntry(
     const journalEntry = await tx.journalEntry.create({
       data: {
         date: paymentDate || existing.issueDate,
-        description: `Indbetaling – Faktura ${existing.invoiceNumber} – ${existing.customerName}`,
+        description: `${isCreditNote ? 'Udbetaling' : 'Indbetaling'} – ${docLabel} ${existing.invoiceNumber} – ${existing.customerName}`,
         reference: cashRef,
         status: 'POSTED',
         userId: ctx.id,

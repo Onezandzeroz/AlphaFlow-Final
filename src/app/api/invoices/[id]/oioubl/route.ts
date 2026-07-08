@@ -111,12 +111,28 @@ export const GET = withGuard(
       const payableAmount = Number(invoice.total) || 0;
 
       // ── Build OIOUBL data ────────────────────────────────────────────
+      // Credit notes (documentType CREDIT_NOTE) export as type 381 with a
+      // BillingReference to the original invoice. Cancelled invoices keep the
+      // legacy 381 behaviour for backwards compatibility.
+      const isCreditNote = invoice.documentType === 'CREDIT_NOTE';
+      const invoiceTypeCode: '380' | '381' = (isCreditNote || invoice.cancelled) ? '381' : '380';
+
+      // For credit notes, look up the original invoice number for BillingReference.
+      let originalInvoiceNumber: string | undefined;
+      if (isCreditNote && invoice.originalInvoiceId) {
+        const original = await db.invoice.findFirst({
+          where: { id: invoice.originalInvoiceId, ...tenantFilter(ctx) },
+          select: { invoiceNumber: true },
+        });
+        originalInvoiceNumber = original?.invoiceNumber;
+      }
+
       const invoiceData: OIOUBLInvoiceData = {
         invoiceId: invoice.invoiceNumber,
         issueDate: invoice.issueDate.toISOString().split('T')[0],
         dueDate: invoice.dueDate ? invoice.dueDate.toISOString().split('T')[0] : undefined,
-        // Credit note (381) for cancelled invoices, commercial invoice (380) otherwise
-        invoiceTypeCode: invoice.cancelled ? '381' : '380',
+        invoiceTypeCode,
+        originalInvoiceNumber,
         supplier,
         customer,
         lines,

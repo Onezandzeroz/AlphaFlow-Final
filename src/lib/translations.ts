@@ -127,8 +127,72 @@ export const translations = {
     en: 'Purchase',
   },
   createInvoice: {
-    da: 'Opret salg',
-    en: 'Create Sale',
+    da: 'Opret faktura',
+    en: 'Create Invoice',
+  },
+  createCreditNote: {
+    da: 'Opret kreditnota',
+    en: 'Create Credit Note',
+  },
+  creditNote: {
+    da: 'Kreditnota',
+    en: 'Credit Note',
+  },
+  creditNoteDescription: {
+    da: 'Udfyld felterne for at oprette en ny kreditnota',
+    en: 'Fill in the fields to create a new credit note',
+  },
+  originalInvoice: {
+    da: 'Faktura der krediteres',
+    en: 'Invoice being credited',
+  },
+  selectOriginalInvoice: {
+    da: 'Vælg faktura (valgfrit)',
+    en: 'Select invoice (optional)',
+  },
+  noOriginalInvoice: {
+    da: 'Ingen — fritstående kreditnota',
+    en: 'None — freestanding credit note',
+  },
+  creditNoteCreated: {
+    da: 'Kreditnota oprettet',
+    en: 'Credit note created',
+  },
+  creditNoteAutofilled: {
+    da: 'Udfyldt fra den valgte faktura — ret efter behov',
+    en: 'Filled from the selected invoice — edit as needed',
+  },
+  createPurchaseCreditNote: {
+    da: 'Opret købskreditnota',
+    en: 'Create Purchase Credit Note',
+  },
+  purchaseCreditNote: {
+    da: 'Købskreditnota',
+    en: 'Purchase Credit Note',
+  },
+  purchaseCreditNoteDescription: {
+    da: 'Registrer en kreditnota modtaget fra en leverandør',
+    en: 'Record a credit note received from a supplier',
+  },
+  originalPurchase: {
+    da: 'Køb der krediteres',
+    en: 'Purchase being credited',
+  },
+  noOriginalPurchase: {
+    da: 'Ingen — fritstående købskreditnota',
+    en: 'None — freestanding purchase credit note',
+  },
+  selectOriginalPurchase: {
+    da: 'Vælg køb (valgfrit)',
+    en: 'Select purchase (optional)',
+  },
+  purchaseCreditNoteAutofilled: {
+    da: 'Udfyldt fra det valgte køb — beløb er gjort negative, ret efter behov',
+    en: 'Filled from the selected purchase — amounts negated, edit as needed',
+  },
+  purchaseCreditNoteCreated: {
+    da: 'Købskreditnota bogført',
+    en: 'Purchase credit note recorded',
   },
   createContact: {
     da: 'Opret kontakt',

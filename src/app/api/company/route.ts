@@ -23,6 +23,8 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
         bankIban: true, bankStreet: true, bankCity: true, bankCountry: true,
         companyType: true, invoiceTerms: true, invoiceNotesTemplate: true,
         nextInvoiceSequence: true, currentYear: true, isDemo: true, updatedAt: true,
+        // Credit note numbering (separate series from invoices)
+        creditNotePrefix: true, nextCreditNoteSequence: true,
         // E-invoice / eDelivery fields for onboarding status detection
         einvoiceEnabled: true, einvoiceRegistrationNo: true, einvoiceEndpointId: true,
         einvoiceDeliveryMode: true, storecoveConnected: true,
@@ -68,6 +70,8 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       invoiceNotesTemplate: company.invoiceNotesTemplate,
       nextInvoiceSequence: company.nextInvoiceSequence,
       currentYear: company.currentYear,
+      creditNotePrefix: company.creditNotePrefix,
+      nextCreditNoteSequence: company.nextCreditNoteSequence,
       isDemo: company.isDemo,
       updatedAt: company.updatedAt,
       // E-invoice / eDelivery fields for onboarding status detection
@@ -180,6 +184,8 @@ export const POST = withGuard(guard.POST!, async (request, ctx) => {
       invoiceNotesTemplate: company.invoiceNotesTemplate,
       nextInvoiceSequence: company.nextInvoiceSequence,
       currentYear: company.currentYear,
+      creditNotePrefix: company.creditNotePrefix,
+      nextCreditNoteSequence: company.nextCreditNoteSequence,
       isDemo: company.isDemo,
       updatedAt: company.updatedAt,
     };
@@ -292,6 +298,8 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       invoiceNotesTemplate: company.invoiceNotesTemplate,
       nextInvoiceSequence: company.nextInvoiceSequence,
       currentYear: company.currentYear,
+      creditNotePrefix: company.creditNotePrefix,
+      nextCreditNoteSequence: company.nextCreditNoteSequence,
       isDemo: company.isDemo,
       updatedAt: company.updatedAt,
     };

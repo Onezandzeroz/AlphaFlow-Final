@@ -52,7 +52,15 @@ export const POST = withGuard(
         notes,
         status,
         projectId,
+        documentType,
+        originalInvoiceId,
       } = body;
+
+      // documentType defaults to INVOICE (regular sale). When 'CREDIT_NOTE',
+      // the document is a credit note — it gets its own numbering series
+      // (creditNotePrefix) and mirrored bookkeeping on status transitions.
+      const isCreditNote = documentType === 'CREDIT_NOTE';
+      const resolvedDocumentType = isCreditNote ? 'CREDIT_NOTE' : 'INVOICE';
 
       if (!customerName || !issueDate || !dueDate || !lineItems || !Array.isArray(lineItems) || lineItems.length === 0) {
         return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -62,6 +70,22 @@ export const POST = withGuard(
         if (!item.description || !item.quantity || !item.unitPrice || item.vatPercent === undefined) {
           return NextResponse.json({ error: 'Invalid line item data' }, { status: 400 });
         }
+      }
+
+      // If a credit note references an original invoice, verify it belongs to
+      // the same tenant and is not itself a credit note (you cannot credit a
+      // credit note). A missing/blank originalInvoiceId means a freestanding
+      // credit note (refunds/goodwill without a specific original).
+      let resolvedOriginalInvoiceId: string | null = null;
+      if (isCreditNote && originalInvoiceId) {
+        const original = await db.invoice.findFirst({
+          where: { id: originalInvoiceId, ...tenantFilter(ctx), documentType: 'INVOICE' },
+          select: { id: true },
+        });
+        if (!original) {
+          return NextResponse.json({ error: 'Original invoice not found or is not a valid invoice to credit' }, { status: 400 });
+        }
+        resolvedOriginalInvoiceId = original.id;
       }
 
       const subtotal = lineItems.reduce((sum: number, item: { quantity: number; unitPrice: number }) => {
@@ -80,6 +104,7 @@ export const POST = withGuard(
             select: {
               id: true, name: true, cvrNumber: true, address: true, phone: true,
               email: true, invoicePrefix: true, nextInvoiceSequence: true, currentYear: true,
+              creditNotePrefix: true, nextCreditNoteSequence: true,
               bankName: true, bankAccount: true, bankRegistration: true,
             },
           })
@@ -89,17 +114,27 @@ export const POST = withGuard(
       }
 
       const currentYear = new Date().getFullYear();
-      let nextSeq = companyInfo.nextInvoiceSequence;
-      if (companyInfo.currentYear !== currentYear) {
-        nextSeq = 1;
-      }
+      const yearRolled = companyInfo.currentYear !== currentYear;
 
-      const invoiceNumber = `${companyInfo.invoicePrefix}-${currentYear}-${String(nextSeq).padStart(4, '0')}`;
+      // ── Document numbering ──
+      // Invoices use invoicePrefix + nextInvoiceSequence (e.g. INV-2026-0001).
+      // Credit notes use creditNotePrefix + nextCreditNoteSequence (e.g.
+      // KRE-2026-0001). Both sequences reset to 1 on a new calendar year.
+      // The chosen number must be unique within the company; the separate
+      // prefix guarantees no collision between invoices and credit notes.
+      const nextSeq = yearRolled
+        ? 1
+        : (isCreditNote ? companyInfo.nextCreditNoteSequence : companyInfo.nextInvoiceSequence);
+      const invoiceNumber = isCreditNote
+        ? `${companyInfo.creditNotePrefix}-${currentYear}-${String(nextSeq).padStart(4, '0')}`
+        : `${companyInfo.invoicePrefix}-${currentYear}-${String(nextSeq).padStart(4, '0')}`;
 
       const invoice = await db.$transaction(async (tx) => {
         const newInvoice = await tx.invoice.create({
           data: {
             invoiceNumber,
+            documentType: resolvedDocumentType,
+            originalInvoiceId: resolvedOriginalInvoiceId,
             customerName,
             customerAddress: customerAddress || null,
             customerEmail: customerEmail || null,
@@ -119,9 +154,12 @@ export const POST = withGuard(
           },
         });
 
+        // Bump the correct sequence (invoice vs credit-note) + sync currentYear.
         await tx.company.update({
           where: { id: companyInfo.id },
-          data: { nextInvoiceSequence: nextSeq + 1, currentYear },
+          data: isCreditNote
+            ? { nextCreditNoteSequence: nextSeq + 1, currentYear }
+            : { nextInvoiceSequence: nextSeq + 1, currentYear },
         });
 
         return newInvoice;
@@ -132,7 +170,7 @@ export const POST = withGuard(
         ctx.id,
         'Invoice',
         invoice.id,
-        { invoiceNumber, customerName, total, status: status || 'DRAFT' },
+        { invoiceNumber, customerName, total, status: status || 'DRAFT', documentType: resolvedDocumentType, originalInvoiceId: resolvedOriginalInvoiceId },
         requestMetadata(request),
         ctx.activeCompanyId
       );

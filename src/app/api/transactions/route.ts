@@ -90,7 +90,38 @@ export const POST = withGuard({
 }, async (request, ctx) => {
   try {
     const body = await request.json();
-    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId, lineItems } = body;
+    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId, lineItems, documentType, originalTransactionId } = body;
+
+    // Purchase credit notes: a supplier credit note received by the tenant.
+    // Marked via documentType='PURCHASE_CREDIT_NOTE' on a PURCHASE row. The
+    // bookkeeping is identical to a regular purchase with NEGATIVE amounts —
+    // the existing line-item logic already mirrors debit↔credit when netAmount
+    // < 0 (see the isNegative branches below). The client is expected to send
+    // negative amounts; we just persist the documentType + link here.
+    const isPurchaseCreditNote = documentType === 'PURCHASE_CREDIT_NOTE';
+    let resolvedOriginalTransactionId: string | null = null;
+    if (isPurchaseCreditNote && originalTransactionId) {
+      const original = await db.transaction.findFirst({
+        where: {
+          id: originalTransactionId,
+          companyId: ctx.activeCompanyId!,
+          type: 'PURCHASE',
+          // can't credit another credit note — only regular purchases (documentType
+          // null/empty) are eligible. Using `notIn` keeps null rows (regular
+          // purchases) whereas `NOT: { equals }` would also drop them in Prisma.
+          documentType: { notIn: ['PURCHASE_CREDIT_NOTE'] },
+          cancelled: false,
+        },
+        select: { id: true },
+      });
+      if (!original) {
+        return NextResponse.json(
+          { error: 'Det originale køb blev ikke fundet eller kan ikke krediteres. / Original purchase not found or cannot be credited.' },
+          { status: 400 }
+        );
+      }
+      resolvedOriginalTransactionId = original.id;
+    }
 
     // ── Project Mode (FASE 4) ──
     // Defence-in-depth: when the session is in project mode, force projectId
@@ -219,6 +250,9 @@ export const POST = withGuard({
             projectId: effectiveProjectId,
             userId: ctx.id,
             companyId: ctx.activeCompanyId!,
+            // Purchase credit note metadata (null for regular purchases/sales)
+            documentType: isPurchaseCreditNote ? 'PURCHASE_CREDIT_NOTE' : null,
+            originalTransactionId: resolvedOriginalTransactionId,
           },
         });
 
@@ -411,7 +445,7 @@ export const POST = withGuard({
           const je = await tx.journalEntry.create({
             data: {
               date: new Date(date),
-              description: `Køb – ${description}`,
+              description: isPurchaseCreditNote ? `Købskreditnota – ${description}` : `Køb – ${description}`,
               reference: `TX-${newTx.id.slice(0, 8)}`,
               status: 'POSTED',
               userId: ctx.id,
@@ -450,7 +484,7 @@ export const POST = withGuard({
       ctx.id,
       'Transaction',
       transaction.id,
-      { type: txType, date, amount: parsedAmount, description, vatPercent, receiptImage, accountId, projectId: effectiveProjectId },
+      { type: txType, date, amount: parsedAmount, description, vatPercent, receiptImage, accountId, projectId: effectiveProjectId, documentType: isPurchaseCreditNote ? 'PURCHASE_CREDIT_NOTE' : null, originalTransactionId: resolvedOriginalTransactionId },
       requestMetadata(request),
       ctx.activeCompanyId
     );

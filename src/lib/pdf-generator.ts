@@ -41,6 +41,10 @@ export interface InvoiceWithDetails {
   exchangeRate?: number | null;
   status: string;
   notes?: string | null;
+  // Document type: 'CREDIT_NOTE' renders the PDF as a credit note
+  // (KREDITNOTA title, Kreditnotadato) and shows the credited invoice.
+  documentType?: string;
+  originalInvoiceNumber?: string | null;
   companyInfo?: {
     logo?: string | null;
     companyName: string;
@@ -146,6 +150,9 @@ export async function generateInvoicePDF(inv: InvoiceWithDetails): Promise<Uint8
   const sym = getCurrencyConfig(cur).symbol;
   const items = parseItems(inv.lineItems);
   const co = inv.companyInfo;
+  const isCreditNote = inv.documentType === 'CREDIT_NOTE';
+  const docTitle = isCreditNote ? 'KREDITNOTA' : 'FAKTURA';
+  const dateLabel = isCreditNote ? 'Kreditnotadato' : 'Fakturadato';
 
   let pg = doc.addPage([PW, PH]);
   let y = PH - MT;
@@ -183,15 +190,15 @@ export async function generateInvoicePDF(inv: InvoiceWithDetails): Promise<Uint8
   }
 
   // Invoice date below logo/company name
-  txt(pg, `Fakturadato: ${fmtDate(inv.issueDate)}`, ML, headerBottom - 10, fR, 9, C.textMid);
+  txt(pg, `${dateLabel}: ${fmtDate(inv.issueDate)}`, ML, headerBottom - 10, fR, 9, C.textMid);
 
-  // ── Right side: FAKTURA + number + status badge ──
+  // ── Right side: FAKTURA/KREDITNOTA + number + status badge ──
 
   const tY = y - 18;
-  txt(pg, 'FAKTURA', RX, tY, fB, 28, C.teal, 'right');
+  txt(pg, docTitle, RX, tY, fB, 28, C.teal, 'right');
 
   // Teal underline
-  const tw = fB.widthOfTextAtSize('FAKTURA', 28);
+  const tw = fB.widthOfTextAtSize(docTitle, 28);
   pg.drawLine({ start: { x: RX - tw, y: tY - 6 }, end: { x: RX, y: tY - 6 }, thickness: 2.5, color: C.teal });
 
   // Invoice number
@@ -204,6 +211,12 @@ export async function generateInvoicePDF(inv: InvoiceWithDetails): Promise<Uint8
   const badgeY = tY - 46;
   pg.drawRectangle({ x: RX - stW, y: badgeY - 5, width: stW, height: 17, color: stC.bg });
   txt(pg, stLabel, RX - stW / 2, badgeY, fR, 9.5, stC.fg, 'center');
+
+  // Credit note: show the original invoice being credited (right-aligned,
+  // below the status badge, above the divider).
+  if (isCreditNote && inv.originalInvoiceNumber) {
+    txt(pg, `Krediterer: ${inv.originalInvoiceNumber}`, RX, badgeY - 20, fR, 9, C.textMid, 'right');
+  }
 
   // ══════════════════════════════════════════════════════════
   //  INFO GRID: FRA (left) / TIL (right)

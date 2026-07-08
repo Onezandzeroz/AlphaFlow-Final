@@ -74,6 +74,7 @@ import {
 } from '@/components/ui/tooltip';
 import {
   FileText,
+  FileMinus,
   Plus,
   Trash2,
   Eye,
@@ -148,6 +149,8 @@ interface CompanyInfo {
   invoiceTerms: string | null;
   nextInvoiceSequence: number;
   currentYear: number;
+  creditNotePrefix: string;
+  nextCreditNoteSequence: number;
 }
 
 interface LineItem {
@@ -178,6 +181,8 @@ interface Invoice {
   notes: string | null;
   createdAt: string;
   cancelled?: boolean;
+  documentType?: string;
+  originalInvoiceId?: string | null;
   projectId?: string | null;
   project?: { id: string; name: string; color: string | null; code: string | null } | null;
 }
@@ -200,7 +205,7 @@ interface Contact {
 
 interface InvoicesPageProps {
   user: User;
-  initialView?: 'list' | 'create';
+  initialView?: 'list' | 'create' | 'create-credit-note';
   onInitialViewConsumed?: () => void;
 }
 
@@ -225,7 +230,15 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentView, setCurrentView] = useState<PageView>(initialView || 'list');
+  const [currentView, setCurrentView] = useState<PageView>(
+    initialView === 'create-credit-note' ? 'create' : (initialView || 'list')
+  );
+  // Create mode distinguishes a regular invoice from a credit note. Both reuse
+  // the same form; the mode drives the document title, numbering prefix,
+  // bookkeeping direction, and the optional "original invoice" selector.
+  const [createMode, setCreateMode] = useState<'invoice' | 'credit-note'>(
+    initialView === 'create-credit-note' ? 'credit-note' : 'invoice'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showCompanySetup, setShowCompanySetup] = useState(false);
@@ -254,6 +267,9 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const [invoiceProjectId, setInvoiceProjectId] = useState<string | null>(null);
   const [contactTypeFilter, setContactTypeFilter] = useState<'CUSTOMER' | 'SUPPLIER' | 'ALL'>('CUSTOMER');
   const [contactSearchOpen, setContactSearchOpen] = useState(false);
+  // Credit note: the optional original invoice being credited (null = freestanding).
+  const [originalInvoiceId, setOriginalInvoiceId] = useState<string | null>(null);
+  const [originalInvoiceSearchOpen, setOriginalInvoiceSearchOpen] = useState(false);
 
   // ── Project Mode (FASE 4) ──
   // Defence-in-depth: force the invoice's project to the active project when
@@ -385,7 +401,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   });
 
   // ── Open create view (with draft restore) ──
-  const openCreateView = useCallback(() => {
+  const openCreateView = useCallback((mode: 'invoice' | 'credit-note' = 'invoice') => {
     const draft = readDraft('invoice:new');
     if (draft?.data) {
       const d = draft.data;
@@ -420,6 +436,8 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     }
     setEditingInvoiceId(null);
     loadedEditInvoiceRef.current = null;
+    setCreateMode(mode);
+    setOriginalInvoiceId(null);
     setCurrentView('create');
   }, []);
 
@@ -505,7 +523,8 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   // mount, so we need this effect to pick up subsequent prop changes.
   useEffect(() => {
     if (initialView) {
-      setCurrentView(initialView);
+      setCurrentView(initialView === 'create-credit-note' ? 'create' : initialView);
+      setCreateMode(initialView === 'create-credit-note' ? 'credit-note' : 'invoice');
     }
   }, [initialView]);
 
@@ -651,6 +670,43 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     return { subtotal, vatTotal, total: subtotal + vatTotal };
   }, [invoiceForm.lineItems]);
 
+  // Credit note: invoices eligible to be credited (sent/paid, not cancelled,
+  // not already a credit note). Powers the optional "original invoice" selector.
+  const creditableInvoices = useMemo(() => {
+    return invoices.filter(
+      (inv) =>
+        !inv.cancelled &&
+        inv.documentType !== 'CREDIT_NOTE' &&
+        (inv.status === 'SENT' || inv.status === 'PAID')
+    );
+  }, [invoices]);
+
+  // Credit note: autofill the form from the chosen original invoice so the
+  // user only has to review/adjust. The amounts stay positive — the document
+  // type carries the (negative) sign in the bookkeeping layer.
+  const handleSelectOriginalInvoice = useCallback((inv: Invoice) => {
+    setOriginalInvoiceId(inv.id);
+    setOriginalInvoiceSearchOpen(false);
+    const items = Array.isArray(inv.lineItems)
+      ? (inv.lineItems as LineItem[]).filter((i) => i.description?.trim())
+      : [];
+    const todayStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; })();
+    const dueStr = (() => { const n = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; })();
+    setInvoiceForm({
+      customerName: inv.customerName || '',
+      customerAddress: inv.customerAddress || '',
+      customerEmail: inv.customerEmail || '',
+      customerPhone: inv.customerPhone || '',
+      customerCvr: inv.customerCvr || '',
+      issueDate: todayStr,
+      dueDate: dueStr,
+      lineItems: items.length > 0 ? items : [{ description: '', quantity: 1, unitPrice: 0, vatPercent: 25, vatCode: 'S25', accountId: '' }],
+      notes: '',
+    });
+    setSelectedContactId('');
+    toast.success(t('creditNoteAutofilled'));
+  }, [t]);
+
   // Generate invoice
   const handleGenerateInvoice = useCallback(async () => {
     if (!companyInfo) {
@@ -691,6 +747,9 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           lineItems: invoiceForm.lineItems.filter(item => item.description.trim()),
           notes: invoiceForm.notes || null,
           projectId: invoiceProjectId || undefined,
+          // Credit note: tag the document + link the original invoice (if any).
+          // A freestanding credit note sends no originalInvoiceId.
+          ...(createMode === 'credit-note' ? { documentType: 'CREDIT_NOTE', originalInvoiceId: originalInvoiceId || undefined } : {}),
           // Only update status when editing a draft back to draft
           ...(isEditing ? { status: 'DRAFT' } : {}),
         }),
@@ -699,7 +758,9 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       if (!response.ok) {
         const isAccess = await handleMutationError(
           response,
-          language === 'da' ? 'Opret salg' : 'Create sale'
+          createMode === 'credit-note'
+            ? (language === 'da' ? 'Opret kreditnota' : 'Create credit note')
+            : (language === 'da' ? 'Opret faktura' : 'Create invoice')
         );
         if (isAccess) { setIsSubmitting(false); return; }
         const data = await response.json();
@@ -708,9 +769,14 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
 
       const data = await response.json();
       const savedInvoice = isEditing ? data.invoice : data.invoice;
-      toast.success(isEditing ? (language === 'da' ? 'Faktura opdateret' : 'Invoice updated') : t('invoiceCreated'), {
-        description: savedInvoice.invoiceNumber,
-      });
+      toast.success(
+        isEditing
+          ? (createMode === 'credit-note'
+              ? (language === 'da' ? 'Kreditnota opdateret' : 'Credit note updated')
+              : (language === 'da' ? 'Faktura opdateret' : 'Invoice updated'))
+          : (createMode === 'credit-note' ? t('creditNoteCreated') : t('invoiceCreated')),
+        { description: savedInvoice.invoiceNumber }
+      );
 
       // Clear persisted draft for this invoice (success path).
       if (isEditing) { clearEditDraftDraft(); } else { clearCreateDraft(); }
@@ -718,6 +784,8 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
 
       // Reset form and editing state
       setEditingInvoiceId(null);
+      setCreateMode('invoice');
+      setOriginalInvoiceId(null);
 
       // Reset form
       setInvoiceForm({
@@ -738,11 +806,11 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       fetchCompanyInfo(); // Refresh to get updated nextInvoiceSequence
       setCurrentView('list');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : (language === 'da' ? 'Kunne ikke oprette faktura' : 'Failed to create invoice'));
+      toast.error(error instanceof Error ? error.message : (createMode === 'credit-note' ? (language === 'da' ? 'Kunne ikke oprette kreditnota' : 'Failed to create credit note') : (language === 'da' ? 'Kunne ikke oprette faktura' : 'Failed to create invoice')));
     } finally {
       setIsSubmitting(false);
     }
-  }, [companyInfo, invoiceForm, editingInvoiceId, invoiceProjectId, t, language, fetchInvoices, fetchCompanyInfo, handleMutationError, clearCreateDraft, clearEditDraftDraft]);
+  }, [companyInfo, invoiceForm, editingInvoiceId, invoiceProjectId, createMode, originalInvoiceId, t, language, fetchInvoices, fetchCompanyInfo, handleMutationError, clearCreateDraft, clearEditDraftDraft]);
 
   // Delete invoice
   const handleDeleteInvoice = useCallback(async (id: string) => {
@@ -938,6 +1006,10 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     setInvoiceForm(initial);
     loadedEditInvoiceRef.current = initial;
     setInvoiceProjectId(null);
+    // Preserve the document type + original-invoice link when re-opening a
+    // saved draft so the title/numbering/bookkeeping stay correct.
+    setCreateMode(invoice.documentType === 'CREDIT_NOTE' ? 'credit-note' : 'invoice');
+    setOriginalInvoiceId(invoice.originalInvoiceId || null);
     setCurrentView('create');
   }, []);
 
@@ -1062,7 +1134,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
             </div>
           </div>
           <div style="text-align: right;">
-            <div class="invoice-title">${language === 'da' ? 'FAKTURA' : 'INVOICE'}</div>
+            <div class="invoice-title">${invoice.documentType === 'CREDIT_NOTE' ? (language === 'da' ? 'KREDITNOTA' : 'CREDIT NOTE') : (language === 'da' ? 'FAKTURA' : 'INVOICE')}</div>
             <div style="margin-top: 8px; font-size: 16px; font-weight: 600;">${invoice.invoiceNumber}</div>
             <div style="margin-top: 8px;">
               <span class="status-badge status-${invoice.status}">${t(invoice.status.toLowerCase() as Parameters<typeof t>[0])}</span>
@@ -1214,6 +1286,9 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
+    // Credit notes are stored as positive amounts but represent a credit
+    // (negative), so they subtract from all monetary aggregates here.
+    const signed = (i: Invoice) => Number(i.total) * (i.documentType === 'CREDIT_NOTE' ? -1 : 1);
     const overdueInvoices = active.filter(i => getInvoiceDisplayStatus(i) === 'OVERDUE');
     const paidThisMonth = active.filter(i => {
       if (i.status !== 'PAID') return false;
@@ -1221,11 +1296,11 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       return paidDate.getMonth() === currentMonth && paidDate.getFullYear() === currentYear;
     });
     return {
-      totalInvoiced: active.reduce((sum, i) => sum + Number(i.total), 0),
-      outstanding: active.filter(i => i.status === 'SENT' || getInvoiceDisplayStatus(i) === 'OVERDUE').reduce((sum, i) => sum + Number(i.total), 0),
-      overdueAmount: overdueInvoices.reduce((sum, i) => sum + Number(i.total), 0),
-      paid: active.filter(i => i.status === 'PAID').reduce((sum, i) => sum + Number(i.total), 0),
-      paidThisMonth: paidThisMonth.reduce((sum, i) => sum + Number(i.total), 0),
+      totalInvoiced: active.reduce((sum, i) => sum + signed(i), 0),
+      outstanding: active.filter(i => i.status === 'SENT' || getInvoiceDisplayStatus(i) === 'OVERDUE').reduce((sum, i) => sum + signed(i), 0),
+      overdueAmount: overdueInvoices.reduce((sum, i) => sum + signed(i), 0),
+      paid: active.filter(i => i.status === 'PAID').reduce((sum, i) => sum + signed(i), 0),
+      paidThisMonth: paidThisMonth.reduce((sum, i) => sum + signed(i), 0),
       overdueCount: overdueInvoices.length,
       draftCount: invoices.filter(i => i.status === 'DRAFT').length,
     };
@@ -1238,9 +1313,13 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const nextInvoiceNumber = useMemo(() => {
     if (!companyInfo) return '—';
     const year = new Date().getFullYear();
+    if (createMode === 'credit-note') {
+      const seq = companyInfo.currentYear === year ? (companyInfo.nextCreditNoteSequence ?? 1) : 1;
+      return `${companyInfo.creditNotePrefix || 'KRE'}-${year}-${String(seq).padStart(4, '0')}`;
+    }
     const seq = companyInfo.currentYear === year ? companyInfo.nextInvoiceSequence : 1;
     return `${companyInfo.invoicePrefix}-${year}-${String(seq).padStart(4, '0')}`;
-  }, [companyInfo]);
+  }, [companyInfo, createMode]);
 
   // Enhanced status config with status-badge-* classes
   const getStatusConfig = (status: string) => {
@@ -1801,7 +1880,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                   </div>
                   <div className="text-right">
                     <h1 className="text-3xl font-bold text-[#0d9488] dark:text-[#2dd4bf]">
-                      {language === 'da' ? 'FAKTURA' : 'INVOICE'}
+                      {previewInvoice.documentType === 'CREDIT_NOTE' ? (language === 'da' ? 'KREDITNOTA' : 'CREDIT NOTE') : (language === 'da' ? 'FAKTURA' : 'INVOICE')}
                     </h1>
                     <p className="text-lg font-semibold text-gray-900 dark:text-white mt-1">{previewInvoice.invoiceNumber}</p>
                     <div className="mt-2"><StatusBadge status={getInvoiceDisplayStatus(previewInvoice)} /></div>
@@ -1967,16 +2046,20 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
 
       {/* ── Header Section ── */}
       <PageHeader
-        title={editingInvoiceId ? (language === 'da' ? 'Rediger kladde' : 'Edit Draft') : t('createInvoice')}
+        title={editingInvoiceId ? (language === 'da' ? 'Rediger kladde' : 'Edit Draft') : (createMode === 'credit-note' ? t('createCreditNote') : t('createInvoice'))}
         description={editingInvoiceId
-          ? (language === 'da' ? 'Redigér felterne for at opdatere fakturaen' : 'Edit the fields to update the invoice')
-          : (language === 'da'
-            ? 'Udfyld felterne for at oprette en ny faktura'
-            : 'Fill in the fields to create a new invoice')}
+          ? (createMode === 'credit-note'
+            ? (language === 'da' ? 'Redigér felterne for at opdatere kreditnotaen' : 'Edit the fields to update the credit note')
+            : (language === 'da' ? 'Redigér felterne for at opdatere fakturaen' : 'Edit the fields to update the invoice'))
+          : (createMode === 'credit-note'
+            ? t('creditNoteDescription')
+            : (language === 'da'
+              ? 'Udfyld felterne for at oprette en ny faktura'
+              : 'Fill in the fields to create a new invoice'))}
         action={
           <div className="flex items-center gap-2">
             <Badge className="text-xs gap-1 bg-[#0d9488]/10 text-[#0d9488] border border-[#0d9488]/20 lg:bg-white/15 lg:text-white lg:border-white/20">
-              <FileText className="h-3 w-3" />
+              {createMode === 'credit-note' ? <FileMinus className="h-3 w-3" /> : <FileText className="h-3 w-3" />}
               {nextInvoiceNumber}
             </Badge>
             <ClearFormButton
@@ -1999,6 +2082,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 setSelectedContactId('');
                 setInvoiceProjectId(null);
                 setEditingInvoiceId(null);
+                setOriginalInvoiceId(null);
                 loadedEditInvoiceRef.current = null;
                 if (isEditingDraft) { clearEditDraftDraft(); } else { clearCreateDraft(); }
               }}
@@ -2009,6 +2093,82 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           </div>
         }
       />
+
+      {/* ── Credit note: optional original invoice selector ── */}
+      {createMode === 'credit-note' && !editingInvoiceId && (
+        <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shrink-0">
+                <FileMinus className="h-4 w-4 text-white" />
+              </div>
+              {t('originalInvoice')}
+              <span className="text-xs font-normal text-gray-400 dark:text-gray-500">
+                {language === 'da' ? '(valgfrit)' : '(optional)'}
+              </span>
+            </CardTitle>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {language === 'da'
+                ? 'Vælg en eksisterende faktura for at udfylde kreditnotaen automatisk — eller lad stå tom for en fritstående kreditnota.'
+                : 'Pick an existing invoice to autofill the credit note — or leave empty for a freestanding credit note.'}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Popover open={originalInvoiceSearchOpen} onOpenChange={setOriginalInvoiceSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={originalInvoiceSearchOpen}
+                  className="w-full h-10 justify-between text-left font-normal"
+                >
+                  {originalInvoiceId
+                    ? (() => { const orig = invoices.find(i => i.id === originalInvoiceId); return orig ? `${orig.invoiceNumber} — ${orig.customerName}` : t('selectOriginalInvoice'); })()
+                    : <span className="text-muted-foreground">{t('noOriginalInvoice')}</span>}
+                  <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0" align="start">
+                <Command>
+                  <CommandInput placeholder={language === 'da' ? 'Søg faktura…' : 'Search invoice…'} />
+                  <CommandList>
+                    <CommandEmpty>{language === 'da' ? 'Ingen fakturaer fundet' : 'No invoices found'}</CommandEmpty>
+                    <CommandGroup>
+                      {creditableInvoices.map((inv) => (
+                        <CommandItem
+                          key={inv.id}
+                          value={`${inv.invoiceNumber} ${inv.customerName}`}
+                          onSelect={() => handleSelectOriginalInvoice(inv)}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">{inv.invoiceNumber} — {inv.customerName}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {inv.issueDate ? td(new Date(inv.issueDate)) : ''} · {inv.status}
+                            </span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {originalInvoiceId && (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">{t('creditNoteAutofilled')}</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setOriginalInvoiceId(null)}
+                >
+                  {language === 'da' ? 'Fjern reference' : 'Remove link'}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Two-column: Customer Info + Live Invoice Preview ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
@@ -2309,7 +2469,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div className="inv-accent" style={{ fontSize: '24px', fontWeight: 700 }}>
-                        {language === 'da' ? 'FAKTURA' : 'INVOICE'}
+                        {createMode === 'credit-note' ? (language === 'da' ? 'KREDITNOTA' : 'CREDIT NOTE') : (language === 'da' ? 'FAKTURA' : 'INVOICE')}
                       </div>
                       <div style={{ marginTop: '6px', fontSize: '15px', fontWeight: 600 }}>{nextInvoiceNumber}</div>
                     </div>
@@ -2678,11 +2838,11 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           <div className="flex items-center gap-2">
             <Button
                 onClick={() => {
-                  guardWriteAccess(isDanish ? 'Opret salg' : 'Create sale', () => {
+                  guardWriteAccess(isDanish ? 'Opret faktura' : 'Create invoice', () => {
                     if (!companyInfo) {
                       setShowCompanySetup(true);
                     } else {
-                      openCreateView();
+                      openCreateView('invoice');
                     }
                   });
                 }}
@@ -2690,6 +2850,21 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               >
                 <Plus className="h-4 w-4" />
                 {t('createInvoice')}
+              </Button>
+            <Button
+                onClick={() => {
+                  guardWriteAccess(isDanish ? 'Opret kreditnota' : 'Create credit note', () => {
+                    if (!companyInfo) {
+                      setShowCompanySetup(true);
+                    } else {
+                      openCreateView('credit-note');
+                    }
+                  });
+                }}
+                className="bg-white hover:bg-gray-50 text-[#0d9488] border border-[#0d9488]/40 dark:bg-white/10 dark:hover:bg-white/20 dark:text-[#2dd4bf] dark:border-[#2dd4bf]/30 gap-2"
+              >
+                <FileMinus className="h-4 w-4" />
+                {t('createCreditNote')}
               </Button>
           </div>
         }
@@ -2893,7 +3068,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 {invoices.length === 0 ? (
                   <Button
                     onClick={() => {
-                      guardWriteAccess(isDanish ? 'Opret salg' : 'Create sale', () => {
+                      guardWriteAccess(isDanish ? 'Opret faktura' : 'Create invoice', () => {
                         if (!companyInfo) {
                           setShowCompanySetup(true);
                         } else {
@@ -2941,6 +3116,12 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     <span className={`font-mono font-semibold text-sm text-[#0d9488] dark:text-[#2dd4bf] ${isCancelled ? 'line-through' : ''}`}>
                       {invoice.invoiceNumber}
                     </span>
+                    {invoice.documentType === 'CREDIT_NOTE' && (
+                      <Badge variant="outline" className="text-[10px] gap-0.5 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/40 px-1.5 py-0">
+                        <FileMinus className="h-2.5 w-2.5" />
+                        {language === 'da' ? 'Kreditnota' : 'Credit'}
+                      </Badge>
+                    )}
                     <StatusBadge status={displayStatus} />
                   </div>
                   <div onClick={(e) => e.stopPropagation()}>
@@ -3220,7 +3401,15 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                         onClick={() => setPreviewInvoice(invoice)}
                       >
                         <TableCell className={`font-mono font-semibold text-[#0d9488] dark:text-[#2dd4bf] whitespace-nowrap ${isCancelled ? 'line-through' : ''}`}>
-                          {invoice.invoiceNumber}
+                          <span className="flex items-center gap-1.5">
+                            {invoice.invoiceNumber}
+                            {invoice.documentType === 'CREDIT_NOTE' && (
+                              <Badge variant="outline" className="text-[10px] gap-0.5 bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800/40 px-1.5 py-0">
+                                <FileMinus className="h-2.5 w-2.5" />
+                                {language === 'da' ? 'Kreditnota' : 'Credit'}
+                              </Badge>
+                            )}
+                          </span>
                         </TableCell>
                         <TableCell className="font-medium dark:text-gray-300">{invoice.customerName}</TableCell>
                         <TableCell className="whitespace-nowrap dark:text-gray-400">{td(new Date(invoice.issueDate))}</TableCell>
