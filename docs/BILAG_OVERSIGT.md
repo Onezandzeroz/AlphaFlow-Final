@@ -12,7 +12,7 @@
 
 ## 1. Formål
 
-Dette dokument er AlphaFlows samlede **bilagsliste** til anmeldelsen af AlphaFlow som standard digitalt bogføringssystem hos Erhvervsstyrelsen. Hvert bilag er nummereret og kan refereres præcist fra tjeklisten (`AlphaFlow_Endelig-Tjek og Mangleliste.xlsx`) og fra de øvrige dokumenter i anmeldelsespakken.
+Dette dokument er AlphaFlows samlede **bilagsliste** til anmeldelsen af AlphaFlow som standard digitalt bogføringssystem hos Erhvervsstyrelsen. Hvert bilag er nummereret og kan refereres præcist fra tjeklisten (`AlphaFlow_Endelig-Tjekliste.xlsx`) og fra de øvrige dokumenter i anmeldelsespakken.
 
 Erhvervsstyrelsen har i sagsbehandlingen anmodet om, at dokumentationshenvisninger angiver **dokumentnavn og afsnit** — og at links ikke accepteres som dokumentation. Denne bilagsoversigt sikrer, at alle henvisninger i tjeklisten peger på et navngivet, nummereret bilag med et konkret afsnit.
 
@@ -42,7 +42,7 @@ Erhvervsstyrelsen har i sagsbehandlingen anmodet om, at dokumentationshenvisning
 | **16** | DPA — Frisbii/Flatpay | separat PDF ved indsendelse | Abonnementsbetaling |
 | **17** | DPA + SCC — OpenRouter, Inc. | separat PDF ved indsendelse | AI-databehandler — chat-LLM, knowledge-RAG embeddings og scanner VLM (USA-dataoverførsel) |
 | **18** | DPA — Simply A/S / Brevo | separat PDF ved indsendelse | Transaktions-email |
-| **19** | Tjekliste | `docs/AlphaFlow_Endelig-Tjek og Mangleliste.xlsx` | Tjekliste til anmeldelsen (BEK 98) |
+| **19** | Tjekliste | `docs/AlphaFlow_Endelig-Tjekliste.xlsx` | Tjekliste til anmeldelsen (BEK 98) |
 
 > Bilag 1–12 og 19 udgør den skriftlige dokumentation i repositoriet. Bilag 13–18 er de underskrevne underbehandler-DPA'er, der vedhæftes som separate PDF-filer ved indsendelsen.
 
