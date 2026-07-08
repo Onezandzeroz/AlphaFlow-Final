@@ -66,10 +66,19 @@ import {
   X,
   ChevronDown,
   ChevronRight,
+  Sparkles,
+  ThumbsUp,
+  ThumbsDown,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { OpenBankingSection } from '@/components/bank-reconciliation/open-banking-section';
+import { toast } from 'sonner';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 // ──────────────── Types ────────────────
 
@@ -80,8 +89,11 @@ interface BankLine {
   reference: string;
   amount: number;
   balance: number;
-  reconciliationStatus: 'MATCHED' | 'UNMATCHED' | 'MANUAL';
+  reconciliationStatus: 'MATCHED' | 'UNMATCHED' | 'MANUAL' | 'AI_SUGGESTED';
   matchedJournalLineId: string | null;
+  matchConfidence?: number | null;
+  matchMethod?: string | null;
+  aiReasons?: string | null;
   matchedJournalEntry?: {
     id: string;
     date: string;
@@ -166,6 +178,10 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
   const [bankLineToUnmatch, setBankLineToUnmatch] = useState<BankLine | null>(null);
   const [isUnmatching, setIsUnmatching] = useState(false);
 
+  // AI matching state
+  const [isAiMatching, setIsAiMatching] = useState(false);
+  const [acceptingLineId, setAcceptingLineId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ──────────────── Fetch data ────────────────
@@ -211,17 +227,19 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
   // ──────────────── Computed stats ────────────────
 
   const stats = useMemo(() => {
-    if (!data) return { totalStatements: 0, matchedCount: 0, unmatchedCount: 0, totalAmount: 0 };
+    if (!data) return { totalStatements: 0, matchedCount: 0, unmatchedCount: 0, suggestedCount: 0, totalAmount: 0 };
 
     const allLines = data.bankStatements.flatMap((s) => s.lines);
     const matchedCount = allLines.filter((l) => l.reconciliationStatus === 'MATCHED' || l.reconciliationStatus === 'MANUAL').length;
     const unmatchedCount = allLines.filter((l) => l.reconciliationStatus === 'UNMATCHED').length;
+    const suggestedCount = allLines.filter((l) => l.reconciliationStatus === 'AI_SUGGESTED').length;
     const totalAmount = allLines.reduce((sum, l) => sum + Number(l.amount), 0);
 
     return {
       totalStatements: data.bankStatements.length,
       matchedCount,
       unmatchedCount,
+      suggestedCount,
       totalAmount,
     };
   }, [data]);
@@ -497,6 +515,100 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
     }
   }, [bankLineToUnmatch, fetchAndSetLoading]);
 
+  // ──────────────── AI matching ────────────────
+
+  // Run rule-based + fuzzy + batched AI matching across all currently
+  // unmatched lines (server-side). High-confidence matches (≥0.95) are
+  // auto-applied as MATCHED; medium-confidence (0.80–0.95) become
+  // AI_SUGGESTED and surface an accept/reject control per line.
+  const handleRunAiMatch = useCallback(async () => {
+    setIsAiMatching(true);
+    try {
+      const response = await fetch('/api/bank-reconciliation?action=ai-match', {
+        method: 'GET',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'AI-match fejlede');
+      }
+      const s = data.summary || {};
+      const parts: string[] = [];
+      if (s.autoMatched) parts.push(language === 'da' ? `${s.autoMatched} auto-matchet` : `${s.autoMatched} auto-matched`);
+      if (s.suggested) parts.push(language === 'da' ? `${s.suggested} forslag` : `${s.suggested} suggestions`);
+      const remaining = s.remaining ?? 0;
+      if (parts.length === 0) {
+        toast.info(language === 'da' ? 'Ingen match fundet' : 'No matches found', {
+          description: language === 'da'
+            ? `AI fandt ingen match til ${remaining} uafstemte linjer.`
+            : `AI found no matches for ${remaining} unmatched lines.`,
+        });
+      } else {
+        toast.success(language === 'da' ? 'AI-matchning fuldført' : 'AI matching complete', {
+          description: parts.join(' · ') + (remaining > 0 ? ` · ${remaining} ${language === 'da' ? 'tilbage' : 'remaining'}` : ''),
+        });
+      }
+      if (data.summary?.aiError) {
+        toast.error(data.summary.aiError, { duration: 7000 });
+      }
+      await fetchAndSetLoading(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : (language === 'da' ? 'AI-match fejlede' : 'AI matching failed'));
+    } finally {
+      setIsAiMatching(false);
+    }
+  }, [fetchAndSetLoading, language]);
+
+  // Accept an AI suggestion → promote AI_SUGGESTED → MATCHED (preserves the
+  // AI match method + confidence for the audit trail via the accept-ai action).
+  const handleAcceptAi = useCallback(async (bankLine: BankLine) => {
+    if (!bankLine.matchedJournalLineId) return;
+    setAcceptingLineId(bankLine.id);
+    try {
+      const response = await fetch('/api/bank-reconciliation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bankLineId: bankLine.id,
+          journalLineId: bankLine.matchedJournalLineId,
+          action: 'accept-ai',
+        }),
+      });
+      if (!response.ok) {
+        const d = await response.json().catch(() => ({}));
+        throw new Error(d?.error || 'Accept fejlede');
+      }
+      toast.success(language === 'da' ? 'Forslag accepteret' : 'Suggestion accepted');
+      await fetchAndSetLoading(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : (language === 'da' ? 'Kunne ikke acceptere forslaget' : 'Failed to accept suggestion'));
+    } finally {
+      setAcceptingLineId(null);
+    }
+  }, [fetchAndSetLoading, language]);
+
+  // Reject an AI suggestion → clear back to UNMATCHED (reuse the unmatch
+  // action, which also clears the AI provenance fields server-side).
+  const handleRejectAi = useCallback(async (bankLine: BankLine) => {
+    setAcceptingLineId(bankLine.id);
+    try {
+      const response = await fetch('/api/bank-reconciliation', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bankLineId: bankLine.id,
+          action: 'unmatch',
+        }),
+      });
+      if (!response.ok) throw new Error('Reject failed');
+      toast.success(language === 'da' ? 'Forslag afvist' : 'Suggestion rejected');
+      await fetchAndSetLoading(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : (language === 'da' ? 'Kunne ikke afvise forslaget' : 'Failed to reject suggestion'));
+    } finally {
+      setAcceptingLineId(null);
+    }
+  }, [fetchAndSetLoading, language]);
+
   // ──────────────── Loading skeleton ────────────────
 
   if (isLoading) {
@@ -603,6 +715,19 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
           : 'Match bank transactions against journal entries'}
         action={
           <div className="flex items-center gap-2">
+            <Button
+              onClick={handleRunAiMatch}
+              disabled={isAiMatching}
+              className="gap-2 bg-white hover:bg-gray-50 text-[#0d9488] border border-[#0d9488]/40 dark:bg-white/10 dark:hover:bg-white/20 dark:text-[#2dd4bf] dark:border-[#2dd4bf]/30 font-medium transition-all"
+              title={language === 'da' ? 'Kør AI-matchning på alle uafstemte linjer' : 'Run AI matching on all unmatched lines'}
+            >
+              {isAiMatching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              <span className="hidden sm:inline">
+                {isAiMatching
+                  ? (language === 'da' ? 'AI kører…' : 'AI running…')
+                  : (language === 'da' ? 'AI-forslag' : 'AI suggest')}
+              </span>
+            </Button>
             <Button
               onClick={() => setImportDialogOpen(true)}
               className="gap-2 bg-[#0d9488] hover:bg-[#0f766e] text-white border border-[#0d9488] font-medium transition-all lg:bg-white/20 lg:hover:bg-white/30 lg:border-white/30 lg:backdrop-blur-sm"
@@ -974,6 +1099,72 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                                           {language === 'da' ? 'Matchet' : 'Matched'}
                                         </span>
                                       </Badge>
+                                    ) : line.reconciliationStatus === 'AI_SUGGESTED' ? (
+                                      <Popover>
+                                        <PopoverTrigger asChild>
+                                          <button className="cursor-pointer outline-none">
+                                            <Badge className="bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border-amber-500/30 gap-1 text-[10px] hover:bg-amber-500/20 dark:hover:bg-amber-500/30 transition-colors">
+                                              <Sparkles className="h-3 w-3" />
+                                              <span className="hidden sm:inline">
+                                                {language === 'da' ? 'Forslag' : 'Suggested'}
+                                              </span>
+                                              {typeof line.matchConfidence === 'number' && (
+                                                <span className="opacity-70">
+                                                  {Math.round(line.matchConfidence * 100)}%
+                                                </span>
+                                              )}
+                                            </Badge>
+                                          </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-72" align="center">
+                                          <div className="space-y-3">
+                                            <div className="flex items-center gap-2">
+                                              <Sparkles className="h-4 w-4 text-amber-500" />
+                                              <p className="text-sm font-semibold">
+                                                {language === 'da' ? 'AI-forslag' : 'AI suggestion'}
+                                              </p>
+                                              {typeof line.matchConfidence === 'number' && (
+                                                <Badge variant="outline" className="ml-auto text-[10px] gap-1">
+                                                  {Math.round(line.matchConfidence * 100)}%
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            {line.matchedJournalEntry && (
+                                              <div className="text-xs space-y-1 bg-muted/50 rounded-md p-2">
+                                                <div className="font-medium">{line.matchedJournalEntry.accountNumber} — {line.matchedJournalEntry.accountName}</div>
+                                                <div className="text-muted-foreground truncate">{line.matchedJournalEntry.description}</div>
+                                                <div className={line.matchedJournalEntry.amount >= 0 ? 'text-green-600 font-mono' : 'text-red-600 font-mono'}>
+                                                  {line.matchedJournalEntry.amount >= 0 ? '+' : ''}{tc(line.matchedJournalEntry.amount)}
+                                                </div>
+                                              </div>
+                                            )}
+                                            {line.aiReasons && (
+                                              <p className="text-xs text-muted-foreground italic">“{line.aiReasons}”</p>
+                                            )}
+                                            <div className="flex items-center gap-2 pt-1">
+                                              <Button
+                                                size="sm"
+                                                className="h-8 flex-1 gap-1 bg-[#0d9488] hover:bg-[#0f766e] text-white"
+                                                disabled={acceptingLineId === line.id}
+                                                onClick={() => handleAcceptAi(line)}
+                                              >
+                                                {acceptingLineId === line.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ThumbsUp className="h-3.5 w-3.5" />}
+                                                {language === 'da' ? 'Acceptér' : 'Accept'}
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-8 flex-1 gap-1"
+                                                disabled={acceptingLineId === line.id}
+                                                onClick={() => handleRejectAi(line)}
+                                              >
+                                                <ThumbsDown className="h-3.5 w-3.5" />
+                                                {language === 'da' ? 'Afvis' : 'Reject'}
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        </PopoverContent>
+                                      </Popover>
                                     ) : (
                                       <Badge className="bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400 border-red-500/20 gap-1 text-[10px]">
                                         <XCircle className="h-3 w-3" />
@@ -1007,6 +1198,28 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                                           }
                                         >
                                           <Unlink className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    ) : line.reconciliationStatus === 'AI_SUGGESTED' ? (
+                                      <div className="flex items-center gap-1">
+                                        {line.matchedJournalEntry && (
+                                          <Badge
+                                            variant="outline"
+                                            className="hidden lg:inline-flex text-[9px] gap-1 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                                          >
+                                            <Link2 className="h-2.5 w-2.5" />
+                                            {line.matchedJournalEntry.accountNumber}
+                                          </Badge>
+                                        )}
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 px-2 text-[11px] gap-1 text-[#0d9488] hover:text-[#0f766e] hover:bg-[#0d9488]/10"
+                                          onClick={() => openMatchDialog(line)}
+                                          title={language === 'da' ? 'Match manuelt i stedet' : 'Match manually instead'}
+                                        >
+                                          <Link2 className="h-3 w-3" />
+                                          {language === 'da' ? 'Skift' : 'Change'}
                                         </Button>
                                       </div>
                                     ) : (

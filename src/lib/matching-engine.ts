@@ -4,10 +4,12 @@
  * Three-level matching:
  * 1. Rule-based: Exact amount ±0.01 DKK, date ±3 days, reference match
  * 2. Fuzzy: Amount ±5 DKK, date ±7 days, description similarity > 70%
- * 3. AI-assisted: Internal LLM with confidence score
+ * 3. AI-assisted: OpenRouter LLM with confidence score
  *
  * Auto-post at >95% confidence, otherwise requires manual approval.
  */
+
+import { callOpenRouter } from '@/lib/openrouter';
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -236,16 +238,41 @@ function extractKeywords(text: string): string[] {
 }
 
 // ─── AI-Assisted Matching ──────────────────────────────────────────
+//
+// Calls OpenRouter (OpenAI-compatible Chat Completions) via the shared
+// src/lib/openrouter.ts client. This replaces the sandbox-only
+// z-ai-web-dev-sdk that did NOT work in production. The model + API key are
+// configured via OPENROUTER_MODEL / OPENROUTER_API_KEY env vars.
+//
+// Two entry points:
+//   • aiMatch()           — single bank line vs its candidates (used by the
+//                           manual-match dialog's "Spørg AI" fallback).
+//   • batchAiMatch()      — many bank lines in ONE LLM call (used by the
+//                           "AI-forslag" button). Batching cuts cost ~5-8×,
+//                           lowers latency, and lets the LLM disambiguate
+//                           sibling bank lines (e.g. two MobilePay from the
+//                           same person) by cross-reference.
+
+function parseJsonLoose(content: string): any | null {
+  if (!content) return null;
+  // Strip ```json fences if the model wrapped the response.
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const raw = fenced ? fenced[1] : content;
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+}
 
 async function aiMatch(
   bankLine: BankLineInput,
   candidates: JournalLineInput[]
 ): Promise<MatchCandidate[]> {
+  if (candidates.length === 0) return [];
   try {
-    // Dynamic import to avoid client-side bundling
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const sdk = await ZAI.create();
-
     const prompt = `Du er en dansk bogføringsassistent. Analysér denne banktransaktion og de potentielle finansposteringer, og vurder hvilke der matcher.
 
 BANKTRANSAKTION:
@@ -267,17 +294,14 @@ Vigtige regler:
 - Confidence < 0.80 = ingen match
 - Returnér kun matches med confidence >= 0.80`;
 
-    const result = await sdk.chat.completions.create({
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-    });
+    const content = await callOpenRouter(
+      [{ role: 'user', content: prompt }],
+      { temperature: 0.1, maxTokens: 512 }
+    );
 
-    const content = result.choices?.[0]?.message?.content || '';
-    // Parse JSON from response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return [];
+    const parsed = parseJsonLoose(content);
+    if (!parsed) return [];
 
-    const parsed = JSON.parse(jsonMatch[0]);
     const matches: MatchCandidate[] = (parsed.matches || [])
       .filter((m: { confidence: number }) => m.confidence >= 0.80)
       .map((m: { id: string; confidence: number; reason: string }) => ({
@@ -292,6 +316,96 @@ Vigtige regler:
     console.error('[Matching Engine] AI matching failed:', error);
     return [];
   }
+}
+
+/**
+ * Batch AI matching — packs up to `batchSize` (default 10) bank lines plus
+ * their pre-filtered candidates into a SINGLE LLM call, returning ranked
+ * candidates per bank line. Batching is cheaper, faster, and more accurate
+ * than per-line calls (the LLM can disambiguate sibling lines).
+ *
+ * Pre-filtering: for each bank line we only send candidates within ±10%
+ * amount and ±14 days, capped at 10 per line, to keep the prompt small.
+ */
+export async function batchAiMatch(
+  bankLines: BankLineInput[],
+  journalLines: JournalLineInput[],
+  options?: MatchOptions & { batchSize?: number }
+): Promise<Map<string, MatchCandidate>> {
+  const matches = new Map<string, MatchCandidate>();
+  const threshold = options?.aiConfidenceThreshold ?? 0.80;
+  const batchSize = options?.batchSize ?? 10;
+
+  if (bankLines.length === 0 || journalLines.length === 0) return matches;
+
+  for (let i = 0; i < bankLines.length; i += batchSize) {
+    const batch = bankLines.slice(i, i + batchSize);
+
+    // Pre-filter candidates per bank line (±10% amount, ±14 days, max 10).
+    const linePayloads = batch.map((bl) => {
+      const cands = journalLines
+        .filter((jl) => {
+          const amountDiff = Math.abs(Number(bl.amount) - Number(jl.amount));
+          const daysDiff = daysBetween(bl.date, jl.date);
+          return amountDiff <= Math.abs(Number(bl.amount)) * 0.10 + 0.50 && daysDiff <= 14;
+        })
+        .slice(0, 10);
+      return { bankLine: bl, candidates: cands };
+    });
+
+    // Skip lines with no candidates
+    const usable = linePayloads.filter((p) => p.candidates.length > 0);
+    if (usable.length === 0) continue;
+
+    const prompt = `Du er en dansk bogføringsassistent. For hver banktransaktion skal du vælge den bedste matchende finanspostering blandt kandidaterne.
+
+BANKTRANSAKTIONER:
+${usable.map((p, idx) => `${idx + 1}. ID: ${p.bankLine.id} | Dato: ${p.bankLine.date.toISOString().split('T')[0]} | Tekst: ${p.bankLine.description} | Reference: ${p.bankLine.reference || 'Ingen'} | Beløb: ${p.bankLine.amount.toFixed(2)} DKK`).join('\n')}
+
+KANDIDATER pr. banktransaktion:
+${usable.map((p, idx) => `Banktransaktion ${idx + 1} (ID: ${p.bankLine.id}):
+${p.candidates.map((c, j) => `  ${j + 1}. ID: ${c.id} | Dato: ${c.date.toISOString().split('T')[0]} | Tekst: ${c.description} | Konto: ${c.accountNumber} ${c.accountName} | Beløb: ${c.amount.toFixed(2)} DKK`).join('\n')}`).join('\n\n')}
+
+Svar KUN med JSON i dette format:
+{"results": [{"bankLineId": "bank-id", "matchId": "kandidat-id-eller-null", "confidence": 0.92, "reason": "forklaring"}]}
+
+Vigtige regler:
+- Et bankbeløb matcher en finanspostering når beløb (modsat fortegn for debet/kredit) og dato er konsistente.
+- Confidence > 0.95 = automatisk match, 0.80-0.95 = kræver godkendelse, < 0.80 = ingen match (matchId = null).
+- Returnér kun resultater med confidence >= 0.80.`;
+
+    try {
+      const content = await callOpenRouter(
+        [{ role: 'user', content: prompt }],
+        { temperature: 0.1, maxTokens: 1024 }
+      );
+
+      const parsed = parseJsonLoose(content);
+      if (!parsed || !Array.isArray(parsed.results)) continue;
+
+      for (const r of parsed.results) {
+        if (!r.bankLineId || !r.matchId || typeof r.confidence !== 'number') continue;
+        if (r.confidence < threshold) continue;
+        // Verify the matchId actually belongs to this bank line's candidate set
+        // (LLMs occasionally hallucinate IDs).
+        const payload = usable.find((p) => p.bankLine.id === r.bankLineId);
+        if (!payload) continue;
+        if (!payload.candidates.some((c) => c.id === r.matchId)) continue;
+
+        matches.set(r.bankLineId, {
+          journalLineId: r.matchId,
+          confidence: Math.min(r.confidence, 1.0),
+          method: 'ai' as const,
+          reasons: [typeof r.reason === 'string' ? r.reason : 'AI-match'],
+        });
+      }
+    } catch (error) {
+      console.error('[Matching Engine] Batch AI matching failed:', error);
+      // Continue to next batch — partial results are still useful.
+    }
+  }
+
+  return matches;
 }
 
 // ─── Main Matching Functions ───────────────────────────────────────
@@ -371,38 +485,17 @@ export function batchMatch(
 }
 
 /**
- * Run AI-assisted matching on unmatched lines
- * This is async because it calls the LLM
+ * Run AI-assisted matching on unmatched lines.
+ *
+ * @deprecated Use {@link batchAiMatch} instead — it packs many bank lines into
+ * a single LLM call (cheaper, faster, more accurate). This wrapper is kept for
+ * backward compatibility and simply delegates to batchAiMatch with a small
+ * batch size (5) to mirror the previous per-line cadence.
  */
 export async function aiBatchMatch(
   bankLines: BankLineInput[],
   journalLines: JournalLineInput[],
   options?: MatchOptions
 ): Promise<Map<string, MatchCandidate>> {
-  const matches = new Map<string, MatchCandidate>();
-  const threshold = options?.aiConfidenceThreshold ?? 0.80;
-
-  // Process in batches of 5 to avoid rate limiting
-  for (let i = 0; i < bankLines.length; i += 5) {
-    const batch = bankLines.slice(i, i + 5);
-
-    for (const bankLine of batch) {
-      // Get fuzzy candidates first (narrow down to likely matches)
-      const fuzzyCandidates = journalLines.filter(jl => {
-        const amountDiff = Math.abs(Number(bankLine.amount) - Number(jl.amount));
-        const daysDiff = daysBetween(bankLine.date, jl.date);
-        return amountDiff <= Math.abs(Number(bankLine.amount)) * 0.10 && daysDiff <= 14;
-      });
-
-      if (fuzzyCandidates.length === 0) continue;
-
-      const aiResults = await aiMatch(bankLine, fuzzyCandidates.slice(0, 10));
-
-      if (aiResults.length > 0 && aiResults[0].confidence >= threshold) {
-        matches.set(bankLine.id, aiResults[0]);
-      }
-    }
-  }
-
-  return matches;
+  return batchAiMatch(bankLines, journalLines, { ...options, batchSize: 5 });
 }

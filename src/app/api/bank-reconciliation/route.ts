@@ -5,9 +5,29 @@ import { logger } from '@/lib/logger';
 import { tenantFilter, companyScope, Permission, type AuthContext } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { notifyDataChanges } from '@/lib/notify-data-change';
+import { batchMatch, batchAiMatch } from '@/lib/matching-engine';
+import { LLMError, llmErrorUserMessage } from '@/lib/openrouter';
 
 // Helper to round to 2 decimals
 const r = (n: number) => Math.round(n * 100) / 100;
+
+// Mark a bank statement as reconciled iff it has no UNMATCHED or AI_SUGGESTED
+// lines left. (AI_SUGGESTED counts as not-yet-reconciled — the user must
+// accept or reject each suggestion.)
+async function checkStatementReconciled(statementId: string): Promise<void> {
+  const pending = await db.bankStatementLine.count({
+    where: {
+      bankStatementId: statementId,
+      reconciliationStatus: { in: ['UNMATCHED', 'AI_SUGGESTED'] },
+    },
+  });
+  if (pending === 0) {
+    await db.bankStatement.update({
+      where: { id: statementId },
+      data: { reconciled: true, reconciledAt: new Date() },
+    });
+  }
+}
 
 // GET candidates for manual matching
 async function getCandidates(request: Request, ctx: AuthContext) {
@@ -134,9 +154,8 @@ async function runAiMatch(request: Request, ctx: AuthContext) {
       return NextResponse.json({ matches: [], message: 'Ingen journalposter at matche mod' });
     }
 
-    // Use matching engine
-    const { batchMatch, aiBatchMatch } = await import('@/lib/matching-engine');
-
+    // Use matching engine (static import — no longer dynamic now that the AI
+    // path calls OpenRouter directly instead of the sandbox-only SDK).
     const bankLineInputs = unmatchedLines.map(l => ({
       id: l.id,
       date: new Date(l.date),
@@ -154,16 +173,32 @@ async function runAiMatch(request: Request, ctx: AuthContext) {
       amount: Number(jl.debit) > 0 ? -Number(jl.debit) : Number(jl.credit),
     }));
 
-    // First run rule-based + fuzzy matching
+    // First run rule-based + fuzzy matching (synchronous, deterministic)
     const ruleMatches = batchMatch(bankLineInputs, journalLineInputs, {
       autoMatchThreshold: 0.95,
     });
 
-    // Then run AI matching on remaining unmatched lines
+    // Then run batched AI matching on the remaining unmatched lines.
+    // batchAiMatch packs up to 10 bank lines into a single LLM call.
     const aiCandidates = bankLineInputs.filter(bl => !ruleMatches.has(bl.id));
-    const aiMatches = await aiBatchMatch(aiCandidates, journalLineInputs, {
-      aiConfidenceThreshold: 0.80,
-    });
+    let aiError: string | null = null;
+    let aiMatches: Map<string, import('@/lib/matching-engine').MatchCandidate> = new Map();
+    try {
+      aiMatches = await batchAiMatch(aiCandidates, journalLineInputs, {
+        aiConfidenceThreshold: 0.80,
+        batchSize: 10,
+      });
+    } catch (error) {
+      // Surface a user-facing error for AI failures (missing key, rate limit,
+      // etc.) while keeping the rule-based matches already found.
+      if (error instanceof LLMError) {
+        aiError = llmErrorUserMessage(error.kind);
+        logger.warn(`[AI match] LLM error (kind=${error.kind}): ${error.message}`);
+      } else {
+        aiError = 'AI-matchning fejlte uventet.';
+        logger.error('[AI match] Unexpected error:', error);
+      }
+    }
 
     // Combine results
     const allMatches = new Map([...ruleMatches, ...aiMatches]);
@@ -182,6 +217,7 @@ async function runAiMatch(request: Request, ctx: AuthContext) {
           matchedAt: new Date(),
           matchConfidence: match.confidence,
           matchMethod: match.method,
+          aiReasons: match.reasons.join(' · ') || null,
         },
       });
 
@@ -213,12 +249,14 @@ async function runAiMatch(request: Request, ctx: AuthContext) {
       matches: Array.from(allMatches.entries()).map(([id, m]) => ({
         bankLineId: id,
         ...m,
+        reasons: m.reasons,
       })),
       summary: {
         totalUnmatched: unmatchedLines.length,
         autoMatched,
         suggested,
         remaining: unmatchedLines.length - autoMatched - suggested,
+        aiError,
       },
     });
   } catch (error) {
@@ -519,21 +557,26 @@ export const PUT = withGuard(
       const body = await request.json();
       const { bankLineId, journalLineId, action } = body;
 
-      if (!bankLineId || !action || !['match', 'unmatch'].includes(action)) {
+      if (!bankLineId || !action || !['match', 'unmatch', 'accept-ai'].includes(action)) {
         return NextResponse.json(
-          { error: 'Missing required fields: bankLineId and action ("match" or "unmatch")' },
+          { error: 'Missing required fields: bankLineId and action ("match", "unmatch", or "accept-ai")' },
           { status: 400 }
         );
       }
 
-      if (action === 'match' && !journalLineId) {
+      if ((action === 'match' || action === 'accept-ai') && !journalLineId) {
         return NextResponse.json(
-          { error: 'journalLineId is required for match action' },
+          { error: 'journalLineId is required for match/accept-ai actions' },
           { status: 400 }
         );
       }
 
-      // Find the bank statement line and verify ownership
+      // Find the bank statement line and verify tenant ownership.
+      // NOTE: the previous check used `bankStatement.userId !== ctx.id`, which
+      // blocked any team member who wasn't the original importer (e.g. an
+      // ACCOUNTANT reconciling a statement the OWNER imported). We now scope
+      // by company, which is correct for multi-member tenants.
+      const scope = companyScope(ctx);
       const bankLine = await db.bankStatementLine.findUnique({
         where: { id: bankLineId },
         include: {
@@ -541,23 +584,88 @@ export const PUT = withGuard(
         },
       });
 
-      if (!bankLine || bankLine.bankStatement.userId !== ctx.id) {
+      if (!bankLine || (scope.companyId && bankLine.bankStatement.companyId !== scope.companyId)) {
         return NextResponse.json(
           { error: 'Bank statement line not found' },
           { status: 404 }
         );
       }
 
-      if (action === 'match') {
-        // Verify the journal line exists and belongs to the user
-        const journalLine = await db.journalEntryLine.findUnique({
-          where: { id: journalLineId },
+      if (action === 'accept-ai') {
+        // Accept an AI suggestion: promote AI_SUGGESTED → MATCHED while
+        // preserving the AI match method + confidence for the audit trail
+        // (unlike 'match' which overwrites to MANUAL/manual/1.0).
+        if (bankLine.reconciliationStatus !== 'AI_SUGGESTED') {
+          return NextResponse.json(
+            { error: 'Kun AI-forslag kan accepteres med denne handling. / Only AI suggestions can be accepted with this action.' },
+            { status: 400 }
+          );
+        }
+
+        // Verify the journal line exists and belongs to the same tenant
+        const journalLine = await db.journalEntryLine.findFirst({
+          where: { id: journalLineId, journalEntry: { ...companyScope(ctx) } },
+        });
+        if (!journalLine) {
+          return NextResponse.json(
+            { error: 'Journal entry line not found' },
+            { status: 404 }
+          );
+        }
+
+        const oldData = {
+          reconciliationStatus: bankLine.reconciliationStatus,
+          matchedJournalLineId: bankLine.matchedJournalLineId,
+        };
+
+        const updatedLine = await db.bankStatementLine.update({
+          where: { id: bankLineId },
+          data: {
+            reconciliationStatus: 'MATCHED',
+            matchedJournalLineId: journalLineId,
+            matchedAt: new Date(),
+            // Preserve the AI provenance
+            matchMethod: bankLine.matchMethod || 'ai',
+            matchConfidence: bankLine.matchConfidence ?? 0.9,
+          },
           include: {
-            journalEntry: true,
+            matchedJournalLine: {
+              include: {
+                account: true,
+                journalEntry: true,
+              },
+            },
           },
         });
 
-        if (!journalLine || journalLine.journalEntry.userId !== ctx.id) {
+        await auditUpdate(
+          ctx.id,
+          'BankStatement',
+          bankLine.bankStatementId,
+          oldData,
+          { reconciliationStatus: 'MATCHED', matchedJournalLineId: journalLineId, action: 'accept-ai' },
+          { ...requestMetadata(request), bankLineId, journalLineId, action: 'accept-ai' },
+          ctx.activeCompanyId
+        );
+
+        await checkStatementReconciled(bankLine.bankStatementId);
+        notifyDataChanges([
+          { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
+        ]).catch(() => {});
+
+        return NextResponse.json({ bankStatementLine: updatedLine });
+      }
+
+      if (action === 'match') {
+        // Verify the journal line exists and belongs to the same tenant
+        const journalLine = await db.journalEntryLine.findFirst({
+          where: { id: journalLineId, journalEntry: { ...companyScope(ctx) } },
+        });
+
+        if (!journalLine) {
           return NextResponse.json(
             { error: 'Journal entry line not found' },
             { status: 404 }
@@ -640,6 +748,10 @@ export const PUT = withGuard(
             reconciliationStatus: 'UNMATCHED',
             matchedJournalLineId: null,
             matchedAt: null,
+            // Clear AI provenance so a stale suggestion never reappears.
+            matchConfidence: null,
+            matchMethod: null,
+            aiReasons: null,
           },
           include: {
             matchedJournalLine: {

@@ -867,6 +867,10 @@ model BankStatementLine {
   matchedAt            DateTime?
   matchConfidence      Float?
   matchMethod          String?
+  // Human-readable AI/explanation notes for a suggestion (e.g. why the LLM
+  // picked this candidate). Shown in the "Forslag" popover so the user can
+  // make an informed accept/reject decision. Cleared on unmatch.
+  aiReasons            String?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   bankStatement        BankStatement        @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
