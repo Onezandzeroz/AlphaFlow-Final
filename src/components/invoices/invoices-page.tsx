@@ -2861,7 +2861,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     }
                   });
                 }}
-                className="bg-white hover:bg-gray-50 text-[#0d9488] border border-[#0d9488]/40 dark:bg-white/10 dark:hover:bg-white/20 dark:text-[#2dd4bf] dark:border-[#2dd4bf]/30 gap-2"
+                className="bg-transparent text-[#0d9488] border border-[#0d9488]/40 hover:bg-[#0d9488] hover:text-white dark:text-[#2dd4bf] dark:border-[#2dd4bf]/40 dark:hover:bg-[#2dd4bf] dark:hover:text-[#0d9488] lg:text-white lg:border-white/40 lg:hover:bg-white/20 gap-2"
               >
                 <FileMinus className="h-4 w-4" />
                 {t('createCreditNote')}

@@ -718,7 +718,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
             <Button
               onClick={handleRunAiMatch}
               disabled={isAiMatching}
-              className="gap-2 bg-white hover:bg-gray-50 text-[#0d9488] border border-[#0d9488]/40 dark:bg-white/10 dark:hover:bg-white/20 dark:text-[#2dd4bf] dark:border-[#2dd4bf]/30 font-medium transition-all"
+              className="gap-2 bg-transparent text-[#0d9488] border border-[#0d9488]/40 hover:bg-[#0d9488] hover:text-white dark:text-[#2dd4bf] dark:border-[#2dd4bf]/40 dark:hover:bg-[#2dd4bf] dark:hover:text-[#0d9488] lg:text-white lg:border-white/40 lg:hover:bg-white/20 font-medium transition-all"
               title={language === 'da' ? 'Kør AI-matchning på alle uafstemte linjer' : 'Run AI matching on all unmatched lines'}
             >
               {isAiMatching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
