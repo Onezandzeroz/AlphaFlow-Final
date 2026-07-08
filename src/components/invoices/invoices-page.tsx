@@ -760,7 +760,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           response,
           createMode === 'credit-note'
             ? (language === 'da' ? 'Opret kreditnota' : 'Create credit note')
-            : (language === 'da' ? 'Opret faktura' : 'Create invoice')
+            : (language === 'da' ? 'Tilføj salg' : 'Add Sale')
         );
         if (isAccess) { setIsSubmitting(false); return; }
         const data = await response.json();
@@ -2838,7 +2838,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           <div className="flex items-center gap-2">
             <Button
                 onClick={() => {
-                  guardWriteAccess(isDanish ? 'Opret faktura' : 'Create invoice', () => {
+                  guardWriteAccess(isDanish ? 'Tilføj salg' : 'Add Sale', () => {
                     if (!companyInfo) {
                       setShowCompanySetup(true);
                     } else {
@@ -3068,7 +3068,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 {invoices.length === 0 ? (
                   <Button
                     onClick={() => {
-                      guardWriteAccess(isDanish ? 'Opret faktura' : 'Create invoice', () => {
+                      guardWriteAccess(isDanish ? 'Tilføj salg' : 'Add Sale', () => {
                         if (!companyInfo) {
                           setShowCompanySetup(true);
                         } else {
