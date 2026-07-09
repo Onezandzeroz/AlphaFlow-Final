@@ -32,7 +32,7 @@ Dokumentet omfatter:
 - **Neon PostgreSQL** — primært datalager for alle bogføringsdata, brugere, fakturaer, audit-log, bank-tokens (AES-256-GCM-krypteret), TOTP-secrets (AES-256-GCM-krypteret), Hermes-konversationer, knowledge-base.
 - **IONOS VPS** — applikationsserver (Next.js + 5 mini-services + Caddy + PM2) + lokal backup-lagring (`Tenant-Backup/`) + fil-uploads (`uploads/`).
 
-> Dokumentet dækker **ikke** de AI-underbehandlere (OpenRouter — AlphaFlows eneste AI-databehandler) — disse er dokumenteret i `docs/Bilag-05_Databehandleraftale.md` og `docs/Bilag-08_Leverandørstyring.md`. Se afsnit 7 for en kort note om fysisk sikkerhed, der gælder på tværs.
+> Dokumentet dækker **ikke** de AI-underbehandlere (OpenRouter — AlphaFlows eneste AI-databehandler) — disse er dokumenteret i `docs/Bilag-07_Databehandleraftale.md` og `docs/Bilag-10_Leverandørstyring.md`. Se afsnit 7 for en kort note om fysisk sikkerhed, der gælder på tværs.
 
 ---
 
@@ -47,7 +47,7 @@ Dokumentet omfatter:
 | **Caddy** (reverse proxy / TLS) | Self-hosted på IONOS VPS | EU (Tyskland) | Eneste eksterne entry-point (port 443/80). TLS 1.2/1.3, Let's Encrypt, security headers, routing til mini-services. |
 | **PM2** (proces-manager) | Open-source — self-hosted | EU (Tyskland) | Proces-manager med autorestart (max 10, 5s delay), separate log-filer. |
 
-> **Data lokation:** Alle data, der behandles i ovenstående komponenter, forbliver inden for EU/EEA. De eneste dataflow ud af EU/EEA er til AI-underbehandleren (OpenRouter) — dokumenteret i `Bilag-05_Databehandleraftale.md`.
+> **Data lokation:** Alle data, der behandles i ovenstående komponenter, forbliver inden for EU/EEA. De eneste dataflow ud af EU/EEA er til AI-underbehandleren (OpenRouter) — dokumenteret i `Bilag-07_Databehandleraftale.md`.
 
 ---
 
@@ -106,7 +106,7 @@ Neon leverer managed **Point-in-Time Recovery** med op til **7 dages retention**
 | **Lag 1** — Neon PITR (managed) | Neon, Inc. | Defense-in-depth — gendannelse af databasen til ethvert tidspunkt inden for PITR-vinduet | 7 dage |
 | **Lag 2** — AlphaFlow tenant-backups | AlphaAi Consult ApS | Per-tenant ZIP-backups (AES-256-GCM + SHA-256), lagret på IONOS VPS i `Tenant-Backup/` | 25 timer (hourly) / 31 dage (daily) / 53 dage (weekly) / **5 år** (monthly) |
 
-> AlphaFlow kalder ikke Neons backup-API — lag 1 er udelukkende en managed service fra Neon, der fungerer som supplement til AlphaFlows egne tenant-backups. Den fulde backup-strategi er dokumenteret i `docs/Bilag-07_Beredskabsplan.md` og `docs/Bilag-02_Compliance-rapport.md`.
+> AlphaFlow kalder ikke Neons backup-API — lag 1 er udelukkende en managed service fra Neon, der fungerer som supplement til AlphaFlows egne tenant-backups. Den fulde backup-strategi er dokumenteret i `docs/Bilag-09_Beredskabsplan.md` og `docs/Bilag-04_Compliance-rapport.md`.
 
 ### 3.9 High availability
 
@@ -125,7 +125,7 @@ Neon tillader **IP-whitelist** på projektniveau (kun specificerede IP-adresser 
 | Certificering / standard | Status | Kilde |
 |---|---|---|
 | **SOC 2 Type II** | Opnået per Neons dokumentation | Neon, Inc. — offentlig compliance-side |
-| **DPA (Data Processing Agreement)** | Tilgængelig — opfylder GDPR Art. 28 | Neon, Inc. — Neon DPA (https://neon.com/DPA); faktisk DPA vedhæftes som Bilag 13 (separat PDF) (sidst tjekket: 2026) |
+| **DPA (Data Processing Agreement)** | Tilgængelig — opfylder GDPR Art. 28 | Neon, Inc. — Neon DPA (https://neon.com/DPA); faktisk DPA vedhæftes som Bilag 14 (separat PDF) (sidst tjekket: 2026) |
 | **EU/EEA-hosting** | Bekræftet — Frankfurt + Amsterdam datacentre | Neon, Inc. — officiel dokumentation |
 
 ### 3.12 Sub-processors
@@ -482,13 +482,13 @@ Nedenfor angives supplerende sikkerhedsnoter til infrastrukturen.
 
 | # | Bemærkning | Beskyttelse | Tilførsel |
 |---|---|---|---|
-| 1 | Rate-limiting udføres i applikationslaget (in-memory, sliding window). | App-level rate-limiting (login 5/min, API 30/min, m.fl.) | Caddy `rate_limit` plugin kan opsættes som supplement — se `Bilag-10_Udbedringsplan.md` |
-| 2 | Uploadede filer (`uploads/receipts/`, `uploads/documents/`, scanner-SQLite, tokenpay-SQLite) opbevares ukrypteret på VPS-disk. | Beskyttet af IONOS disk-encryption og adgangskontrol (afsnit 4.6) | Applikationsniveau-filkryptering kan opsættes som supplement — se `Bilag-10_Udbedringsplan.md` |
-| 3 | Disk-encryption-verifikation for Neon (managed) og IONOS VPS. | Disk-encryption tilbydes af begge udbydere (afsnit 3.7 og 4.6) | Verificér via udbyderes konsol og dokumentér — se `Bilag-10_Udbedringsplan.md` |
+| 1 | Rate-limiting udføres i applikationslaget (in-memory, sliding window). | App-level rate-limiting (login 5/min, API 30/min, m.fl.) | Caddy `rate_limit` plugin kan opsættes som supplement — se `Bilag-12_Udbedringsplan.md` |
+| 2 | Uploadede filer (`uploads/receipts/`, `uploads/documents/`, scanner-SQLite, tokenpay-SQLite) opbevares ukrypteret på VPS-disk. | Beskyttet af IONOS disk-encryption og adgangskontrol (afsnit 4.6) | Applikationsniveau-filkryptering kan opsættes som supplement — se `Bilag-12_Udbedringsplan.md` |
+| 3 | Disk-encryption-verifikation for Neon (managed) og IONOS VPS. | Disk-encryption tilbydes af begge udbydere (afsnit 3.7 og 4.6) | Verificér via udbyderes konsol og dokumentér — se `Bilag-12_Udbedringsplan.md` |
 | 4 | IP-whitelist for Neon-produktionsprojekt. | Netværksadgang begrænset af Neon's standard netværkspolitik | IP-whitelist kan konfigureres i Neon-konsol (afsnit 3.5) |
 | 5 | MFA for AlphaAi's Neon-admin-konto. | Neon-admin-konto adgangskodebeskyttet | Verificér at MFA er aktiveret (afsnit 3.5) |
 | 6 | Ekstern uptime-monitoring. | Interne health-checks via applikationen | Ekstern uptime-monitoring planlægges opsat (UptimeRobot/Pingdom/Better Stack) |
-| 7 | Log-aggregering. | PM2 logs på VPS | Centraliseret log-aggregering (Loki+Grafana, ELK) kan opsættes som supplement — se `Bilag-10_Udbedringsplan.md` |
+| 7 | Log-aggregering. | PM2 logs på VPS | Centraliseret log-aggregering (Loki+Grafana, ELK) kan opsættes som supplement — se `Bilag-12_Udbedringsplan.md` |
 
 ---
 
@@ -524,13 +524,13 @@ AlphaAi Consult ApS udfører en årlig review af IT-sikkerhedsdokumentationen fo
 
 ### 10.3 Backup-test
 
-Backup-integritet testes jf. `docs/Bilag-07_Beredskabsplan.md`:
+Backup-integritet testes jf. `docs/Bilag-09_Beredskabsplan.md`:
 
 - **Månedlig** — restore-test af én tenant fra AES-256-GCM-krypteret `.zip.enc`-backup.
 - **Kvartalsvis** — fuld DR-øvelse (gendannelse af hele platformen til staging-miljø).
 - **Årlig** — gendannelse fra Neon PITR som defense-in-depth-test.
 
-> Se `docs/Bilag-07_Beredskabsplan.md` for RTO/RPO-mål, gendannelsesprocedurer og kontaktliste.
+> Se `docs/Bilag-09_Beredskabsplan.md` for RTO/RPO-mål, gendannelsesprocedurer og kontaktliste.
 
 ---
 
@@ -547,7 +547,7 @@ Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinf
 | **Lov om bogføring §15 / BEK 97 §3 — Datalagring** | ✅ Opfyldt | 5-års retention via monthly tenant-backups; Neon PITR som defense-in-depth |
 | **EU/EEA-hosting** | ✅ Opfyldt | Både Neon (Frankfurt + Amsterdam) og IONOS (Tyskland) i EU/EEA — ingen infrastruktur-data ud af EU |
 
-> Punkter i afsnit 9 er beskrevet med henblik på fuld information. Planlagte tiltag beskrives i `Bilag-10_Udbedringsplan.md`.
+> Punkter i afsnit 9 er beskrevet med henblik på fuld information. Planlagte tiltag beskrives i `Bilag-12_Udbedringsplan.md`.
 
 ---
 

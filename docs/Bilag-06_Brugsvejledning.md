@@ -1050,7 +1050,7 @@ Når et dokument er scannet, udfylder systemet automatisk:
 
 - Den integrerede Tesseract.js-klient i `ReceiptScanner`-komponenten kan bruges offline i browseren, mens den fulde VLM-pipeline (via OpenRouter) kræver internetforbindelse og aktiv `OPENROUTER_API_KEY` på serveren.
 - Scanner-servicen er hosted separat og rutes gennem AlphaFlows API-proxy.
-- Billeder af kvitteringer sendes til USA via OpenRouter til VLM-analyse (SCC+TIA påkrævet — se Bilag 13) — se afsnit 13 og GDPR-dokumentationen for detaljer om databehandling.
+- Billeder af kvitteringer sendes til USA via OpenRouter til VLM-analyse (SCC+TIA påkrævet — se Bilag 14) — se afsnit 13 og GDPR-dokumentationen for detaljer om databehandling.
 
 ---
 
@@ -1118,7 +1118,7 @@ Før du aktiverer Hermes, skal du som tenant-administrator (OWNER/ADMIN) være o
 > ⚠️ **Advarsel 1 — GDPR-relaterede risici (persondata til USA):**
 > Når Hermes er aktiveret, sendes dit spørgsmål og — hvis du tilmelder dig data-adgang (se afsnit 13.3) — kontekst om din virksomheds regnskab til AlphaFlows AI-underbehandler **OpenRouter, Inc. (USA)**. OpenRouter videresender til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4).
 >
-> Dette indebærer **overførsel af persondata til et tredjeland (USA)**. AlphaAi Consult ApS har indgået DPA + EU-Standard Contractual Clauses (SCC) + Transfer Impact Assessment (TIA) med OpenRouter (Bilag 13) for at beskytte dine data, men der er en tilbageværende risiko for at amerikanske myndigheder (FISA 702, EO 12333, CLOUD Act) kan kræve adgang. Du accepterer denne risiko ved aktivering.
+> Dette indebærer **overførsel af persondata til et tredjeland (USA)**. AlphaAi Consult ApS har indgået DPA + EU-Standard Contractual Clauses (SCC) + Transfer Impact Assessment (TIA) med OpenRouter (Bilag 14) for at beskytte dine data, men der er en tilbageværende risiko for at amerikanske myndigheder (FISA 702, EO 12333, CLOUD Act) kan kræve adgang. Du accepterer denne risiko ved aktivering.
 
 > ⚠️ **Advarsel 2 — Non-deterministiske processer (usikkerhed ved AI-output):**
 > Hermes er baseret på en sprogmodel (LLM). AI-genereret rådgivning er **ikke deterministisk** — det samme spørgsmål kan give forskellige svar, og svar kan indeholde **fejl, unøjagtigheder eller "hallucinationer"** (det vil sige tilsyneladende plausible men forkerte oplysninger). AI-output er **ikke** professionel regnskabsrådgivning og erstatter ikke en revisor eller bogholder.
@@ -1476,7 +1476,7 @@ Standardindstillinger:
 
 > **Prisforbehold:** Specifikke priser og bindingsperioder fremgår af `/pricing`. Priser for årlige og flerårige planer opkræves som et samlet beløb for bindingsperioden. Gratis og Månedlig har ingen binding; årlige planer fornyes automatisk til Månedlig ved udløb, medmindre andet er aftalt.
 
-> **Bemærk om bankintegration:** Kun Demo-provider og Tink er reelle integrationer. Nordea, Danske Bank og Jyske Bank er stubs i den nuværende version. Se Bilag 2 (Bilag-02_Compliance-rapport.md) afsnit 2.1.
+> **Bemærk om bankintegration:** Kun Demo-provider og Tink er reelle integrationer. Nordea, Danske Bank og Jyske Bank er stubs i den nuværende version. Se Bilag 4 (Bilag-04_Compliance-rapport.md) afsnit 2.1.
 
 **Betaling via Flatpay/Frisbii:**
 

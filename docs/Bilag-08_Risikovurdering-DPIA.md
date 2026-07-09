@@ -9,7 +9,7 @@
 | **System** | AlphaFlow (`alphaai-accounting` v1.0.0) — alphaflow.dk |
 | **Klassifikation** | Fortroligt — Compliance-dokumentation |
 | **Gyldighedsperiode** | 12 måneder (næste årlige revision; desuden ved væsentlige arkitektur- eller infrastrukturændringer) |
-| **Relaterede dokumenter** | `Bilag-07_Beredskabsplan.md`, `Bilag-10_Udbedringsplan.md`, `Bilag-03_Krypteringsrapport.md`, `Bilag-08_Leverandørstyring.md`, `Bilag-05_Databehandleraftale.md`, `Bilag-09_IT-sikkerhed-Neon-og-IONOS.md`, `Bilag-02_Compliance-rapport.md` |
+| **Relaterede dokumenter** | `Bilag-09_Beredskabsplan.md`, `Bilag-12_Udbedringsplan.md`, `Bilag-05_Krypteringsrapport.md`, `Bilag-10_Leverandørstyring.md`, `Bilag-07_Databehandleraftale.md`, `Bilag-11_IT-sikkerhed-Neon-og-IONOS.md`, `Bilag-04_Compliance-rapport.md` |
 | **Lovgrundlag** | GDPR (EU 2016/679), Lov om bogføring (LOV nr. 700 af 24. maj 2022), Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023), ISO/IEC 27001/27005:2022, NIST SP 800-63B |
 
 ---
@@ -24,7 +24,7 @@ Formålet er at:
 
 1. Identificere, vurdere og håndtere IT-sikkerheds- og persondatarisici i AlphaFlow-platformen.
 2. Dokumentere eksisterende tekniske og organisatoriske afhjælpninger (verificeret i kodebasen).
-3. Dokumentere eksisterende tekniske og organisatoriske kontroller (verificeret i kodebasen) og planlagte udviklingstiltag (se Bilag-10_Udbedringsplan.md).
+3. Dokumentere eksisterende tekniske og organisatoriske kontroller (verificeret i kodebasen) og planlagte udviklingstiltag (se Bilag-12_Udbedringsplan.md).
 4. Opfylde Erhvervsstyrelsens hovedkrav per Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4: **N2** (risikovurdering af tab af tilgængelighed), **N3** (tredjeparter), **N4** (trusselsændringer), **N5** (konsekvens- og sandsynlighedsvurdering), **D1** (it-sikkerhed på tilstrækkeligt niveau), **D15** (hændelig tilintetgørelse).
 
 ### 1.2 Scope
@@ -49,7 +49,7 @@ Risikovurderingen er udført i overensstemmelse med ISO/IEC 27005:2022 og omfatt
 3. **Aktiv- og sårbarhedsidentifikation** — se afsnit 4.
 4. **Risikovurdering** — systematisk tabel med 20 risici (R-01..R-20), se afsnit 5.
 5. **Risikomatrix** — se afsnit 6.
-6. **Risikohåndtering** — eksisterende afhjælpninger dokumenteret pr. risiko; planlagte afhjælpninger i `Bilag-10_Udbedringsplan.md`.
+6. **Risikohåndtering** — eksisterende afhjælpninger dokumenteret pr. risiko; planlagte afhjælpninger i `Bilag-12_Udbedringsplan.md`.
 7. **Restrisiko og accept** — se afsnit 7.
 8. **Konklusion** — se afsnit 8.
 
@@ -244,7 +244,7 @@ Følgende tekniske kontroller er implementeret og udgør den eksisterende afhjæ
 
 ## 5. Risici (systematisk tabel)
 
-For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (før), konsekvens (før), risikoniveau (før), eksisterende afhjælpning, rest risiko, henvisning til `Bilag-10_Udbedringsplan.md`.
+For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (før), konsekvens (før), risikoniveau (før), eksisterende afhjælpning, rest risiko, henvisning til `Bilag-12_Udbedringsplan.md`.
 
 ### R-01 — Content-Security-Policy (CSP) header (implementeret, U-3)
 
@@ -289,7 +289,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Høj** |
 | **Eksisterende afhjælpning** | AES-256-GCM (12-byte IV, 16-byte auth-tag); nøgler i env vars (ikke hardcoded); adskilt `ENCRYPTION_KEY` / `PROOF_ENCRYPTION_KEY`; `.env.example` dokumenterer `openssl rand -hex 32` for generering; PM2 ecosystem.config.js for env-injektion. |
 | **Rest risiko** | ✅ **Lav** — keyring med version-prefixed ciphertext; rotation via migration-script; rollback understøttet. |
-| **Afhjælpning** | ✅ **Udbedret (U-1).** Implementeret keyring med version-prefixed ciphertext, `encryptionKeyVersion`-kolonner på User/BankConnection/Backup, migration-script (`rotate-encryption-keys.ts`) og rollback-script. Se Bilag 3 (Bilag-03_Krypteringsrapport.md) §2.4 og Bilag 7 (Bilag-07_Beredskabsplan.md) §5.5. |
+| **Afhjælpning** | ✅ **Udbedret (U-1).** Implementeret keyring med version-prefixed ciphertext, `encryptionKeyVersion`-kolonner på User/BankConnection/Backup, migration-script (`rotate-encryption-keys.ts`) og rollback-script. Se Bilag 5 (Bilag-05_Krypteringsrapport.md) §2.4 og Bilag 9 (Bilag-09_Beredskabsplan.md) §5.5. |
 
 ### R-04 — Ingen hash-chain på posteringer
 
@@ -304,7 +304,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | 3-niveau immutability: (1) app CREATE-only audit-funktioner (`src/lib/audit.ts`), (2) PostgreSQL `BEFORE UPDATE/DELETE` triggers `prevent_audit_update`/`prevent_audit_delete` på AuditLog, (3) `onDelete: Restrict` cascade — User/Company kan ikke slettes når AuditLog-entry findes. AuditLog indeholder `changes` JSON (`{field: {old, new}}`) + `metadata` (IP, userAgent, timestamp, reason). 25 AuditAction-typer, 24 EntityType-typer, 75+ routes logger. |
 | **Rest risiko** | Lav — mutation af selve posteringerne vil ikke afspejles i AuditLog, men det vil kunne ses ved sammenligning med backup-ZIPs. |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — hash-chain (som Bitcoin-blockchain) eller periodisk verifikation af posteringer mod backup-checksums. Accepteret for nu — se afsnit 7. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — hash-chain (som Bitcoin-blockchain) eller periodisk verifikation af posteringer mod backup-checksums. Accepteret for nu — se afsnit 7. |
 
 ### R-05 — Ingen account-lockout
 
@@ -319,7 +319,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | In-memory sliding window rate-limit pr. IP (login 5/min, register 3/min, 2FA 5-10/min, forgot-password 1/5min/email anti-enumeration); TOTP 2FA påkrævet for OWNER/ADMIN hvis `Company.twoFactorRequired=true`; bcrypt 12 rounds (gør brute-force dyrt); `AuditLog.LOGIN_FAILED` med reason (`wrong_password` / `invalid_2fa_code`). |
 | **Rest risiko** | Lav — 2FA + bcrypt gør brute-force upraktisk for de fleste konti. |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — tilføj per-account lockout efter 10 fejlede forsøg pr. 24 timer (midlertidig lås 1 time + email-notifikation). |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — tilføj per-account lockout efter 10 fejlede forsøg pr. 24 timer (midlertidig lås 1 time + email-notifikation). |
 
 ### R-06 — Password min. længde kun 6 tegn
 
@@ -334,7 +334,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | bcrypt 12 rounds; optional TOTP 2FA (påkrævet hvis `Company.twoFactorRequired`); rate-limiting; AuditLog; password-reset invaliderer sessioner; legacy `simpleHash` auto-re-hashes til bcrypt ved login. |
 | **Rest risiko** | Lav–Mellem |
-| **Afhjælpning** | Planlagt i `Bilag-10_Udbedringsplan.md`. |
+| **Afhjælpning** | Planlagt i `Bilag-12_Udbedringsplan.md`. |
 
 ### R-07 — Caddy rate_limit ikke installeret
 
@@ -349,7 +349,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | In-memory sliding window rate-limit pr. IP/endpoint; cleanup hvert 5. min; central cache-registry sweep hvert 10. min; PM2 max_memory_restart; IONOS VPS-netværksfirewall. |
 | **Rest risiko** | Mellem |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — installer `caddy-rate_limit` plugin, aktivér udkommenteret blok, tilføj `429 Too Many Requests` response-handler. Alternativt: Cloudflare/IONOS edge DDoS-beskyttelse. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — installer `caddy-rate_limit` plugin, aktivér udkommenteret blok, tilføj `429 Too Many Requests` response-handler. Alternativt: Cloudflare/IONOS edge DDoS-beskyttelse. |
 
 ### R-08 — Ingen Next.js middleware
 
@@ -364,7 +364,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | `withGuard()` gennemtvinger auth/company/oversight/demo/TokenPay/permissions/features på alle protected routes; `tenantFilter(ctx)` på DB-queries; SuperDev oversight read-only for tenant-regnskabsdata (mutationer blokeres via `blockOversightMutation`); SuperDev-admin endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare; demo-firma read-only; AuditLog på 75+ routes. |
 | **Rest risiko** | Lav |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — implementer `src/middleware.ts` der gennemtvinger auth-redirect på alle ikke-`/login`/`/register` routes, samt default-deny for API-routes der ikke eksplicit tillader public adgang. Kombinér med CSP-header (R-01). |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — implementer `src/middleware.ts` der gennemtvinger auth-redirect på alle ikke-`/login`/`/register` routes, samt default-deny for API-routes der ikke eksplicit tillader public adgang. Kombinér med CSP-header (R-01). |
 
 ### R-09 — Ingen CSRF-token
 
@@ -379,7 +379,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Lav** |
 | **Eksisterende afhjælpning** | `SameSite=Lax` + `HttpOnly` + `Secure` cookie; Next.js indbygget CSRF-beskyttelse for POST-routes (sammen med SameSite=Lax); custom Authorization Bearer-token headers krævet på mutationer; same-origin policy for fetch. |
 | **Rest risiko** | Lav |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — double-submit CSRF-token eller synchronizer-token-pattern. Accepteret for nu — se afsnit 7. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — double-submit CSRF-token eller synchronizer-token-pattern. Accepteret for nu — se afsnit 7. |
 
 ### R-10 — Ingen OAuth/SSO/SAML
 
@@ -394,7 +394,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | Email+password + TOTP 2FA RFC 6238 + 10 backup-koder; invitation-system; email-verifikation; password-reset; SuperDev oversight-mode for AlphaAi-support. |
 | **Rest risiko** | Mellem (accepteret — feature-afhængig). |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — MitID-erhverv-integration eller SAML 2.0 til enterprise-kunder. Accepteret for nu — se afsnit 7. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — MitID-erhverv-integration eller SAML 2.0 til enterprise-kunder. Accepteret for nu — se afsnit 7. |
 
 ### R-11 — Webhook HMAC dev-fallback accept-all
 
@@ -424,7 +424,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | Neon disk-encryption (managed); `sslmode=require` (TLS in transit); RBAC + `tenantFilter`; AES-256-GCM på følsomme secrets (bank-tokens, TOTP-secrets, backup-koder); ingen CPR-felter. |
 | **Rest risiko** | Lav–Mellem |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — application-level kryptering af `Contact.email/phone` (komplekst pga. unikke felter der bruges til lookup). Accepteret for nu — se afsnit 7. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — application-level kryptering af `Contact.email/phone` (komplekst pga. unikke felter der bruges til lookup). Accepteret for nu — se afsnit 7. |
 
 ### R-13 — USA-dataoverførsel (OpenRouter)
 
@@ -439,7 +439,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Høj** |
 | **Eksisterende afhjælpning** | `HermesAgent.dataAccessEnabled` per-tenant opt-in (default `false`) — uden opt-in sendes KUN brugerens spørgsmål + statisk system-prompt, IKKE tenant-specifikke finansielle data; scanner-service tekst-først pipeline (PDF'er med tekstlag håndteres lokalt uden VLM-kald) + confidence-baseret fallback (kun ved OCR-confidence < 60 eller PDF uden tekstlag) + billed-caching (SHA-256 forhindrer gentagne VLM-kald); embedding-modeller gemmer kun matematisk repræsentation, ikke teksten; samtalehistorik rulning (kun sidste 20 beskeder); per-tenant rate-limiter. OpenRouter DPA pålægger upstream-model-udbydere samme beskyttelsesniveau per GDPR Art. 28(4). |
 | **Rest risiko** | Mellem — kræver SCC + TIA per GDPR kapitel V (DPA + SCC Modul 2 med OpenRouter). |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — (1) indgå DPA + Standard Contractual Clauses 2021/914 modul 2 med OpenRouter (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM); (2) udfør Transfer Impact Assessment (se `Bilag-08_Leverandørstyring.md` §5.1); (3) dokumenter `HermesAgent.dataAccessEnabled` som data-minimization-foranstaltning i `Bilag-05_Databehandleraftale.md`; (4) EU-baserede alternativer (Mistral Large/Embed/Pixtral, SiloGen, Aleph Alpha, Azure Document Intelligence) som fallback-modeller. Se `Bilag-08_Leverandørstyring.md`. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — (1) indgå DPA + Standard Contractual Clauses 2021/914 modul 2 med OpenRouter (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM); (2) udfør Transfer Impact Assessment (se `Bilag-10_Leverandørstyring.md` §5.1); (3) dokumenter `HermesAgent.dataAccessEnabled` som data-minimization-foranstaltning i `Bilag-07_Databehandleraftale.md`; (4) EU-baserede alternativer (Mistral Large/Embed/Pixtral, SiloGen, Aleph Alpha, Azure Document Intelligence) som fallback-modeller. Se `Bilag-10_Leverandørstyring.md`. |
 
 ### R-14 — TokenPay timingSafeEqual manuelt implementeret
 
@@ -469,7 +469,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | AES-256-GCM kryptering af tokens (klar når integration aktiveres); manuel bank-afstemning virker; Demo-provider returnerer realistiske test-data. |
 | **Rest risiko** | Mellem (accepteret — feature-afhængig). |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — dokumenter bank-integration status i `Bilag-04_Brugsvejledning.md`; fremtid: aktivér PSD2-licenserede bank-aggregatorer for Nordea/Danske Bank/Jyske Bank (Tink er allerede aktiv). Accepteret for nu — se afsnit 7. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — dokumenter bank-integration status i `Bilag-06_Brugsvejledning.md`; fremtid: aktivér PSD2-licenserede bank-aggregatorer for Nordea/Danske Bank/Jyske Bank (Tink er allerede aktiv). Accepteret for nu — se afsnit 7. |
 
 ### R-16 — AI-bankafstemning: risiko for forkerte auto-matches
 
@@ -499,7 +499,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | Neon PITR 7 dage (defense-in-depth lag 1, fuld DB-recovery); PM2 `autorestart:true`, `max_restarts:10`, `restart_delay:5000`; `CronExecution` DB-log med startup catch-up (oversete cron-vinduer genkendes og køres); retry 3x exp. backoff (5s/10s/20s); overlap guard via `runningJobs`-Set; per-tenant health monitoring på `/api/backups/scheduler-status`; `ensureInitialBackup()` første-data-triggeret baseline-backup. |
 | **Rest risiko** | Lav — Neon PITR dækker 7 dage, AlphaFlow-backup-ZIPs dækker op til 5 år. |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — ekstern systemd-timer / PM2 cron_jobs / dedicated backup-cron-script som backup-of-backup. Accepteret for nu — se afsnit 7. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — ekstern systemd-timer / PM2 cron_jobs / dedicated backup-cron-script som backup-of-backup. Accepteret for nu — se afsnit 7. |
 
 ### R-18 — SQLite i mini-services ukrypteret på disk
 
@@ -514,7 +514,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Lav–Mellem** |
 | **Eksisterende afhjælpning** | IONOS VPS-disk-encryption (managed); WAL mode; mini-services kører bag Caddy reverse proxy; inter-service API-key auth (`X-Access-Service-Key`); `API_SHARED_KEY` påkrævet; `PROOF_ENCRYPTION_KEY` for `.tbkey` proofs (fil-indhold er krypteret selvom database-references ikke er). |
 | **Rest risiko** | Lav |
-| **Afhjælpning** | `Bilag-10_Udbedringsplan.md` — SQLCipher eller application-level kryptering af følsomme kolonner (proof-id, access-log). Accepteret for nu — VPS-disk-encryption anses som tilstrækkelig. |
+| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — SQLCipher eller application-level kryptering af følsomme kolonner (proof-id, access-log). Accepteret for nu — VPS-disk-encryption anses som tilstrækkelig. |
 
 ### R-19 — notification-ws /broadcast ingen auth
 
@@ -557,7 +557,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Sandsynlighed** | Høj |
 | **Konsekvens** | Mellem |
 | **Risikoniveau (før)** | **Høj** |
-| **Eksisterende afhjælpning** | (1) Hermes aktiveres per tenant af Owner/Admin (eller SuperDev) via en enable/disable-toggle i Indstillinger → Hermes AI; separat `dataAccessEnabled`-toggle (default `false`) styrer om tenant-specifikke finansielle kontekstdata sendes til OpenRouter-LLM'en. Uden dataadgang sendes kun brugerens spørgsmål og en statisk dansk regnskabs-system-prompt. Aktivering/deaktivering samt dataadgang-ændringer audit-logges (`action: UPDATE`, `entityType: System`) og kan til enhver tid tilbagekaldes. (2) Tre advarsler (GDPR-risici, non-determinisme, ikke-menneskelig-rådgivning) er dokumenteret i Bilag 4 (Bilag-04_Brugsvejledning.md) §13.0 og integreret i aktiverings-beskrivelsen. (3) System-prompt begrænser Hermes til dansk bogføring/moms/skat. (4) VLM-output (scanner) markeres "Kræver gennemsyn" ved lav konfidens; brugeren confirmerer altid før bogføring. (5) AI-output overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid. (6) `HermesAgent.dataAccessEnabled` per-tenant opt-in (default false) for data-adgang. |
+| **Eksisterende afhjælpning** | (1) Hermes aktiveres per tenant af Owner/Admin (eller SuperDev) via en enable/disable-toggle i Indstillinger → Hermes AI; separat `dataAccessEnabled`-toggle (default `false`) styrer om tenant-specifikke finansielle kontekstdata sendes til OpenRouter-LLM'en. Uden dataadgang sendes kun brugerens spørgsmål og en statisk dansk regnskabs-system-prompt. Aktivering/deaktivering samt dataadgang-ændringer audit-logges (`action: UPDATE`, `entityType: System`) og kan til enhver tid tilbagekaldes. (2) Tre advarsler (GDPR-risici, non-determinisme, ikke-menneskelig-rådgivning) er dokumenteret i Bilag 6 (Bilag-06_Brugsvejledning.md) §13.0 og integreret i aktiverings-beskrivelsen. (3) System-prompt begrænser Hermes til dansk bogføring/moms/skat. (4) VLM-output (scanner) markeres "Kræver gennemsyn" ved lav konfidens; brugeren confirmerer altid før bogføring. (5) AI-output overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid. (6) `HermesAgent.dataAccessEnabled` per-tenant opt-in (default false) for data-adgang. |
 | **Rest risiko** | Lav–Mellem — advarsler og samtykke reducerer sandsynlighed for ukritisk brug, men kan ikke eliminere risikoen for at brugere følger forkert AI-rådgivning. |
 | **Afhjælpning** | Accepteret med kompenserende foranstaltninger (ovenfor). |
 
@@ -623,7 +623,7 @@ Følgende risici er **accepteret** af AlphaAi Consult ApS med begrundelse — ek
 | **R-17** (Backup-scheduler process-intern) | Neon PITR 7d + AlphaFlow-backup-ZIPs (5 år retention) + CronExecution startup catch-up + PM2 autorestart vurderes som tilstrækkelig defense-in-depth. |
 | **R-18** (SQLite ukrypteret) | VPS-disk-encryption (IONOS managed) + inter-service API-key auth vurderes som tilstrækkelig. `.tbkey` proof-fil-indhold er krypteret uafhængigt. |
 | **R-19** (notification-ws auth) | ✅ **Udbedret (U-5).** `io.use()` middleware med session-validering; `/broadcast` og `/stats` beskyttet med `HERMES_ADMIN_KEY`. |
-| **R-21** (AI non-determinisme og hallucinationer) | AI-output er iboende non-deterministisk. Accepteret med kompenserende foranstaltninger: (a) Hermes aktiveres per tenant via en enable/disable-toggle af Owner/Admin (eller SuperDev), separat `dataAccessEnabled`-toggle (default `false`) styrer dataadgang til OpenRouter-LLM'en, (b) aktivering/deaktivering samt dataadgang-ændringer audit-logges (`action: UPDATE`, `entityType: System`), (c) VLM-output markeres "Kræver gennemsyn" ved lav konfidens, (d) AI overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid. Se Bilag 4 (Bilag-04_Brugsvejledning.md) §13.0 for fulde advarselstekster. |
+| **R-21** (AI non-determinisme og hallucinationer) | AI-output er iboende non-deterministisk. Accepteret med kompenserende foranstaltninger: (a) Hermes aktiveres per tenant via en enable/disable-toggle af Owner/Admin (eller SuperDev), separat `dataAccessEnabled`-toggle (default `false`) styrer dataadgang til OpenRouter-LLM'en, (b) aktivering/deaktivering samt dataadgang-ændringer audit-logges (`action: UPDATE`, `entityType: System`), (c) VLM-output markeres "Kræver gennemsyn" ved lav konfidens, (d) AI overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid. Se Bilag 6 (Bilag-06_Brugsvejledning.md) §13.0 for fulde advarselstekster. |
 
 ---
 
@@ -639,16 +639,16 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 
 | Prioritet | Risiko ID | Estimeret indsats | Henvisning |
 |---|---|---|---|
-| **P1 — Kritisk** | R-13 (USA-dataoverførsel) | 2-5 dage (DPA+SCC+TIA for OpenRouter — konsolideret AI-DPA) — juridisk arbejde | `Bilag-06_Risikovurdering-DPIA.md` §6-7 (restrisiko Mellem), `Bilag-05_Databehandleraftale.md`, `Bilag-08_Leverandørstyring.md` |
-| **P3 — Mellem** | R-05 (account-lockout) | 1 dag | `Bilag-06_Risikovurdering-DPIA.md` §6-7 (restrisiko Lav) |
-| **P3 — Mellem** | R-06 (password min. længde) | 0,5 dag (inkl. UI-opdatering) | `Bilag-06_Risikovurdering-DPIA.md` §6-7 (restrisiko Lav) |
-| **P3 — Mellem** | R-07 (Caddy rate_limit) | 0,5 dag (plugin-installation + aktivér udkommenteret blok) | `Bilag-06_Risikovurdering-DPIA.md` §6-7 (restrisiko Mellem) |
-| **P3 — Mellem** | R-08 (Next.js middleware) | 1-2 dage (inkl. test af alle routes) | `Bilag-06_Risikovurdering-DPIA.md` §6-7 (restrisiko Lav) |
-| **P4 — Lav** | R-12 (persondata kryptering) | 3-5 dage (komplekst pga. unikke felter) | `Bilag-06_Risikovurdering-DPIA.md` §6-7 (restrisiko Mellem) |
+| **P1 — Kritisk** | R-13 (USA-dataoverførsel) | 2-5 dage (DPA+SCC+TIA for OpenRouter — konsolideret AI-DPA) — juridisk arbejde | `Bilag-08_Risikovurdering-DPIA.md` §6-7 (restrisiko Mellem), `Bilag-07_Databehandleraftale.md`, `Bilag-10_Leverandørstyring.md` |
+| **P3 — Mellem** | R-05 (account-lockout) | 1 dag | `Bilag-08_Risikovurdering-DPIA.md` §6-7 (restrisiko Lav) |
+| **P3 — Mellem** | R-06 (password min. længde) | 0,5 dag (inkl. UI-opdatering) | `Bilag-08_Risikovurdering-DPIA.md` §6-7 (restrisiko Lav) |
+| **P3 — Mellem** | R-07 (Caddy rate_limit) | 0,5 dag (plugin-installation + aktivér udkommenteret blok) | `Bilag-08_Risikovurdering-DPIA.md` §6-7 (restrisiko Mellem) |
+| **P3 — Mellem** | R-08 (Next.js middleware) | 1-2 dage (inkl. test af alle routes) | `Bilag-08_Risikovurdering-DPIA.md` §6-7 (restrisiko Lav) |
+| **P4 — Lav** | R-12 (persondata kryptering) | 3-5 dage (komplekst pga. unikke felter) | `Bilag-08_Risikovurdering-DPIA.md` §6-7 (restrisiko Mellem) |
 
 > **Udbedrede risici (fjernet fra ovenstående plan):** R-01 (CSP, U-3), R-02 (antivirus, U-4), R-03 (key rotation, U-1), R-11 (webhook fail-closed, U-6), R-14 (timingSafeEqual, U-14), R-19 + R-20 (Socket.IO auth, U-5). Se §5 for reststatus.
 
-> **Bemærkning om krydsreferencer:** Bilag 10 (`Bilag-10_Udbedringsplan.md` v3.0, 2026) er den tidssvarende udbedringsplan der dækker **alle 20 risici** (R-01…R-20) fra denne risikovurdering samt de 5 oprindelige compliance-punkter fra 2025. Hver risiko er klassificeret i Kategori A (skal udbedres før indsendelse), Kategori B (indsendes med åbenhed, udbedres efter tidsplan) eller Kategori C (accepteret). Reststatus for hver risiko fremgår af §6 (restrisiko-fordeling) og §7 (accepterede risici) heri; konkret handlingsplan, ansvarlig, tidsramme og acceptkriterier fremgår af Bilag 10 §3-5.
+> **Bemærkning om krydsreferencer:** Bilag 12 (`Bilag-12_Udbedringsplan.md` v3.0, 2026) er den tidssvarende udbedringsplan der dækker **alle 20 risici** (R-01…R-20) fra denne risikovurdering samt de 5 oprindelige compliance-punkter fra 2025. Hver risiko er klassificeret i Kategori A (skal udbedres før indsendelse), Kategori B (indsendes med åbenhed, udbedres efter tidsplan) eller Kategori C (accepteret). Reststatus for hver risiko fremgår af §6 (restrisiko-fordeling) og §7 (accepterede risici) heri; konkret handlingsplan, ansvarlig, tidsramme og acceptkriterier fremgår af Bilag 12 §3-5.
 
 ### 8.3 Overvågning og løbende opgaver
 
@@ -657,7 +657,7 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 - **Løbende** overvågning af `AuditLog`-tabel for anomali-detektion (LOGIN_FAILED, DELETE_ATTEMPT, OVERSIGHT).
 - **Løbende** overvågning af backup-scheduler-health via `/api/backups/scheduler-status`.
 - **Løbende** overvågning af PM2-status via `pm2 status` + `pm2 logs`.
-- **Ved sikkerhedshændelse** — følg `Bilag-07_Beredskabsplan.md` afsnit 6 (Incident response-procedure).
+- **Ved sikkerhedshændelse** — følg `Bilag-09_Beredskabsplan.md` afsnit 6 (Incident response-procedure).
 
 ### 8.4 Underskrift
 
@@ -673,7 +673,7 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 
 - **Lovgrundlag:** GDPR (EU 2016/679) Art. 32, 33, 34, 35; Lov om bogføring (LOV nr. 700 af 24. maj 2022) §4, §13, §15; Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4 (hovedkrav N2, N3, N4, N5, D1, D15), §3 (5-års opbevaring), §7 (backup) og Bilag 1 (uforanderlighed); Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023).
 - **Standarder:** ISO/IEC 27001:2022, ISO/IEC 27005:2022, NIST SP 800-63B (Digital Identity Guidelines).
-- **Relaterede dokumenter:** `Bilag-07_Beredskabsplan.md`, `Bilag-10_Udbedringsplan.md`, `Bilag-03_Krypteringsrapport.md`, `Bilag-08_Leverandørstyring.md`, `Bilag-05_Databehandleraftale.md`, `Bilag-09_IT-sikkerhed-Neon-og-IONOS.md`, `Bilag-02_Compliance-rapport.md`.
+- **Relaterede dokumenter:** `Bilag-09_Beredskabsplan.md`, `Bilag-12_Udbedringsplan.md`, `Bilag-05_Krypteringsrapport.md`, `Bilag-10_Leverandørstyring.md`, `Bilag-07_Databehandleraftale.md`, `Bilag-11_IT-sikkerhed-Neon-og-IONOS.md`, `Bilag-04_Compliance-rapport.md`.
 
 ## Bilag B — Dokumenthistorik
 
