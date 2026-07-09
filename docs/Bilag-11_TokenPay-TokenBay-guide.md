@@ -37,13 +37,14 @@ TokenPay er AlphaFlows adgangsstyringsmodul, der kontrollerer hvilke brugere der
 |---|---|
 | `read_only` | Bruger kan se data men ikke oprette/redigere. Håndhæves af `requireTokenPayAccess()` i `src/lib/route-guard.ts`. |
 | `read_write` | Bruger kan oprette/redigere data (mutationer tilladt). |
-| `owner_bypass` | AlphaAi App Owner (SuperDev) bypasser TokenPay-kontrollen helt. |
+
+> **Note:** AlphaAi App Owner (SuperDev) tildeles syntetisk `read_write`-adgang via owner-bypass (`src/lib/access-guard.ts`), markeret med `isOwnerBypass: true` — ikke et tredje adgangsniveau.
 
 ### 1.3 Adgangs-tilstande
 
 | Tilstand | Beskrivelse |
 |---|---|
-| **Trial** | 60 dage fra `User.trialClaimedAt` — selv-claimet af brugeren, fuld read_write-adgang. |
+| **Trial** | Op til 60 dages fuld `read_write`-adgang, tildelt af App Owner (SuperDev) via `/api/oversight/trial` (30 eller 60 dage). `User.trialClaimedAt` markerer tidspunktet for brugerens valg af plan (ikke trial-udløb). |
 | **Free tier** | Omsætning < 50.000 kr. pr. år — gratis read_write-adgang for små virksomheder. |
 | **Betalt abonnement** | Via Frisbii/Flatpay — `PlanTier`: `monthly`, `annual`, `twoyear`, `threeyear`. |
 | **Expired / Revoked** | `User.subscriptionRevokedAt` sat af App Owner — adgang blokeret. |
@@ -90,17 +91,18 @@ Komplet tabel over alle environment variables fra `.env.example`, kategoriseret.
 
 ### 2.3 AI-integrationer
 
-> **Konsolideret AI-integration:** Alle AI-funktioner (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service VLM) går via OpenRouter som AlphaFlows eneste AI-databehandler. OpenRouter videresender til model-udbydere (Anthropic, Meta, OpenAI m.fl.) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. Der indgås IKKE separate DPA'er med OpenAI eller Anthropic. Se Bilag 17 (konsolideret AI-DPA).
+> **Konsolideret AI-integration:** Alle AI-funktioner (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service VLM) går via OpenRouter som AlphaFlows eneste AI-databehandler. OpenRouter videresender til model-udbydere (Anthropic, Meta, OpenAI m.fl.) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. Der indgås IKKE separate DPA'er med OpenAI eller Anthropic. Se Bilag 13 (konsolideret AI-DPA).
 
 | Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
 |---|---|---|---|---|
-| `OPENROUTER_API_KEY` | OpenRouter API-nøgle — konsolideret AI-integration (Hermes chat-LLM + knowledge-RAG embeddings + scanner VLM). Sættes i både `hermes-agent`, `knowledge-service` og `scanner-service` PM2-env. | **JA for AI-funktioner** | (tom) | Data ud af EU (USA). Kræver SCC + TIA — se Bilag 17. |
+| `OPENROUTER_API_KEY` | OpenRouter API-nøgle — konsolideret AI-integration (Hermes chat-LLM + knowledge-RAG embeddings + scanner VLM). Sættes i både `hermes-agent`, `knowledge-service` og `scanner-service` PM2-env. | **JA for AI-funktioner** | (tom) | Data ud af EU (USA). Kræver SCC + TIA — se Bilag 13. |
 | `OPENROUTER_BASE_URL` | API base URL. | Nej | `https://openrouter.ai/api/v1` | — |
 | `OPENROUTER_MODEL` | LLM-model (chat). | Nej | `anthropic/claude-sonnet-4.5` | Konfigurerbar model via OpenRouter. |
-| `OPENROUTER_APP_NAME` | HTTP-Referer header. | Nej | `AlphaFlow` | — |
-| `OPENROUTER_APP_URL` | X-Title header. | Nej | `https://alphaflow.dk` | — |
+| `OPENROUTER_APP_NAME` | `X-Title` header (identifikation af app over for OpenRouter). | Nej | `AlphaFlow` | — |
+| `OPENROUTER_APP_URL` | `HTTP-Referer` header (henvisende URL). | Nej | `https://alphaflow.dk` | — |
+| `OPENAI_API_KEY` | Valgfri alternativ embedding-udbyder i knowledge-service (`embedder.ts` foretrækker OpenAI hvis sat, falder tilbage til OpenRouter). | Nej | (tom) | **IKKE sat i produktion** — hvis sat, går embeddings direkte til OpenAI (USA) og kræver separat OpenAI DPA+SCC (tillægsbilag). Den dokumenterede produktion bruger KUN OPENROUTER_API_KEY. |
 
-> **Note:** Tidligere versioner af dette dokument nævnte separate `OPENAI_API_KEY` og `ANTHROPIC_API_KEY` env-vars. Disse er fjernet som separate integrationer — alt AI-data går via OpenRouter (Bilag 17, konsolideret AI-DPA per GDPR Art. 28(4)).
+> **Note:** `OPENAI_API_KEY` er en valgfri alternativ embedding-udbyder i knowledge-service (`mini-services/knowledge-service/embedder.ts`); i den dokumenterede produktionskonfiguration er KUN `OPENROUTER_API_KEY` sat, så al AI-data går via OpenRouter (Bilag 13, konsolideret AI-DPA per GDPR Art. 28(4)). Hvis `OPENAI_API_KEY` sættes, vil knowledge-service-embeds gå direkte til OpenAI (USA), hvilket kræver en separat OpenAI DPA + SCC som tillægsbilag. Tidligere separate `ANTHROPIC_API_KEY` er fjernet; Anthropic kaldes via OpenRouter per GDPR Art. 28(4).
 
 ### 2.4 Inter-service API-nøgler
 
@@ -116,10 +118,10 @@ Komplet tabel over alle environment variables fra `.env.example`, kategoriseret.
 | Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
 |---|---|---|---|---|
 | `STORECOVE_API_KEY` | Storecove Peppol/NemHandel e-faktura. | Nej (sim-mode hvis tom) | (tom) | EU (Holland). |
-| `STORECOVE_WEBHOOK_SECRET` | HMAC-SHA256 webhook-verifikation (header `X-Storecove-Signature`). | **JA i prod** | (tom) | **KRITISK:** Hvis tom, accepteres alle webhooks (dev-fallback). |
+| `STORECOVE_WEBHOOK_SECRET` | HMAC-SHA256 webhook-verifikation (header `X-Storecove-Signature`). | **JA i prod** | (tom) | Påkrævet i produktion. Webhooks afvises (fail-closed) hvis secret mangler eller signaturen er ugyldig — U-6 implementeret. |
 | `STORECOVE_API_URL` | API endpoint. | Nej | `https://api.storecove.com/v2` | — |
 | `FLATPAY_API_KEY` | Frisbii/Flatpay abonnementsbetaling. | Nej (mock-mode hvis tom) | (tom) | EU (Tyskland). Frisbii private key starter med `priv_`. |
-| `FLATPAY_WEBHOOK_SECRET` | HMAC-SHA256 webhook (header `Reepay-Signature`/`frisbii-signature`). | **JA i prod** | (tom) | **KRITISK:** Hvis tom, accepteres alle webhooks (dev-fallback). Fallback til `FLATPAY_API_KEY` hvis sat. |
+| `FLATPAY_WEBHOOK_SECRET` | HMAC-SHA256 webhook (header `Reepay-Signature`/`frisbii-signature`). | **JA i prod** | (tom) | Påkrævet i produktion. Webhooks afvises (fail-closed) hvis secret mangler eller signaturen er ugyldig — U-6 implementeret. Fallback til `FLATPAY_API_KEY` som HMAC-secret hvis sat (kræver stadig valid signatur). |
 | `FLATPAY_API_BASE_URL` | Frisbii Checkout API URL. | Nej | `https://checkout-api.frisbii.com/v1` | — |
 | `SKAT_CLIENT_ID` | SKAT Moms-API OAuth2 client_id. | Nej (sim-mode) | (tom) | DK-myndighed. |
 | `SKAT_CLIENT_SECRET` | SKAT OAuth2 client_secret. | Nej (sim-mode) | (tom) | DK-myndighed. KUN moms — ingen årsopgørelse/e-indkomst. |
@@ -173,6 +175,20 @@ Disse sættes i `ecosystem.config.js` under hver mini-services `env:`-blok, **ik
 | `TESSERACT_LANG` | scanner-service | Default: `dan+eng`. |
 | `LOG_LEVEL` | scanner-service | Default: `info`. |
 
+### 2.9 Tink bank-integration (ikke aktiveret i produktion)
+
+Tink er en reel bank-integration (OAuth2 PSD2 consent-flow, kontosync). Aktiv når `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET` er sat. DPA med Tink indgås før produktivaktivering (ikke i Bilag 13 endnu). Nordea/Danske Bank/Jyske Bank er stubs; Demo-provider leverer syntetiske data.
+
+| Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
+|---|---|---|---|---|
+| `TINK_CLIENT_ID` | Tink OAuth2 client_id. | Nej (Tink inaktiv uden) | (tom) | DK-marked. |
+| `TINK_CLIENT_SECRET` | Tink OAuth2 client_secret. | Nej (Tink inaktiv uden) | (tom) | DK-marked. Hemmelig — behandles som API-nøgle. |
+| `TINK_REDIRECT_URI` | OAuth2 redirect URI. | Nej | `https://alphaflow.dk/api/bank-connections/tink-callback` | Skal matche Tink-app-konfiguration. |
+| `TINK_API_BASE_URL` | Tink API endpoint. | Nej | `https://api.tink.com` | — |
+| `TINK_MARKET` | Tink market region. | Nej | `DK` | Sættes normalt til `DK` for danske tenants. |
+
+> **Note:** Tink er IKKE aktiveret i den dokumenterede produktion. Aktivérings-flow: (1) indgå DPA med Tink; (2) sæt `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`; (3) tilføj Tink til leverandørregisteret (LEVERANDØERSTYRING §3.14) og Bilag 13.
+
 ---
 
 ## 3. Produktions-opsætning
@@ -187,7 +203,7 @@ Disse sættes i `ecosystem.config.js` under hver mini-services `env:`-blok, **ik
 >
 > Erstat med: `openssl rand -hex 32`
 
-> ⚠️ **Webhook-secrets SKAL sættes i produktion.** Hvis `STORECOVE_WEBHOOK_SECRET` eller `FLATPAY_WEBHOOK_SECRET` er tom, **accepteres alle webhooks** uden signatur-verifikation (dev-fallback). Dette er en kritisk sikkerhedsrisiko i produktion.
+> ⚠️ **Webhook-secrets SKAL sættes i produktion.** Ved manglende secret afvises webhooks (fail-closed, U-6) — tjenesten fungerer, men modtager ingen webhooks før secret konfigureres.
 
 ### 3.2 Trin-for-trin produktionssætning
 
@@ -300,7 +316,7 @@ env: {
   NODE_ENV: 'production',
   PORT: '3005',
   API_SHARED_KEY: '<samme-som-SCANNER_API_KEY>',
-  OPENROUTER_API_KEY: '<key>',  // VLM via OpenRouter (konsolideret AI-DPA — Bilag 17)
+  OPENROUTER_API_KEY: '<key>',  // VLM via OpenRouter (konsolideret AI-DPA — Bilag 13)
   ANTHROPIC_MODEL: 'claude-sonnet-4-20250514',  // model-identifier videresendt via OpenRouter
   VLM_MAX_TOKENS: '4096',
   DATABASE_PATH: './data/scanner.db',
@@ -410,8 +426,8 @@ Brug denne checklist ved produktionssætning og periodisk audit.
 
 ### 5.3 Webhook-secrets
 
-- [ ] `STORECOVE_WEBHOOK_SECRET` er sat og ikke-tom (forhindrer dev-fallback "accept all").
-- [ ] `FLATPAY_WEBHOOK_SECRET` er sat og ikke-tom (forhindrer dev-fallback "accept all").
+- [ ] `STORECOVE_WEBHOOK_SECRET` er sat og ikke-tom (webhooks afvises fail-closed uden gyldig signatur).
+- [ ] `FLATPAY_WEBHOOK_SECRET` er sat og ikke-tom (webhooks afvises fail-closed uden gyldig signatur).
 - [ ] Webhook-endpoints er nårbare fra internettet:
   - `https://alphaflow.dk/api/storecove/webhook`
   - `https://alphaflow.dk/api/subscription/payment-webhook`
@@ -513,8 +529,8 @@ pm2 restart tokenpay-access
 
 **Løsning:** Sæt `OPENROUTER_API_KEY` eksplicit i `hermes-agent` env-blok i `ecosystem.config.js`. Genstart.
 
-> **Konsolideret AI-integration:** Den samme `OPENROUTER_API_KEY` bruges nu til alle AI-tjenester (chat-LLM, RAG-embeddings, VLM). Tidligere separate `OPENAI_API_KEY` og `ANTHROPIC_API_KEY` er fjernet — alt AI går via OpenRouter per GDPR Art. 28(4) (se Bilag 17).
+> **Konsolideret AI-integration:** Den samme `OPENROUTER_API_KEY` bruges nu til alle AI-tjenester (chat-LLM, RAG-embeddings, VLM). `ANTHROPIC_API_KEY` er fjernet — alt chat/VLM-trafik går via OpenRouter per GDPR Art. 28(4) (se Bilag 13). `OPENAI_API_KEY` er en valgfri alternativ embedding-udbyder i knowledge-service (`embedder.ts`); i produktion er KUN `OPENROUTER_API_KEY` sat (se §2.3).
 
 ---
 
-*Dette dokument er udarbejdet som operationsdokumentation for AlphaAi Consult ApS. For tekniske krypteringsdetaljer henvises til `ENCRYPTION.md`. For sikkerhedsvurdering og udbedringsplaner henvises til `RISIKOVURDERING.md` og `UDBEDRINGSPLAN.md`.*
+*Dette dokument er udarbejdet som operationsdokumentation for AlphaAi Consult ApS. For tekniske krypteringsdetaljer henvises til `Bilag-03_Krypteringsrapport.md`. For sikkerhedsvurdering og udbedringsplaner henvises til `Bilag-06_Risikovurdering-DPIA.md` og `Bilag-10_Udbedringsplan.md`.*

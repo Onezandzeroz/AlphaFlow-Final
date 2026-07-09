@@ -2,7 +2,7 @@
 
 **AlphaAi Consult ApS**
 **CVR: 46312058**
-**Dokumentversion:** 3.0
+**Dokumentversion:** 3.2
 **Dato:** 08.06.2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 **Ansvarlig:** AlphaAi Consult ApS, Compliance Officer
@@ -43,7 +43,7 @@ Dette dokument gælder for alle eksterne leverandører, der leverer it-tjenester
 - **Direkte underbehandlere** (databehandlere jf. GDPR art. 28) — Neon, IONOS, Storecove, Frisbii, OpenRouter, Simply/Brevo. OpenRouter er AlphaFlows eneste AI-underbehandler og videresender til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'.
 - **Myndighedsmodtagere** — SKAT, Erhvervsstyrelsen (ikke underbehandlere, men modtagere af data i henhold til lovpligtige forpligtelser).
 - **Interne sub-systemer** — tokenpay-access, scanner-service, notification-ws, knowledge-service, hermes-agent (kører på AlphaAi's egen infrastruktur, ikke selvstændige underbehandlere).
-- **Implementerede men IKKE aktive integrationer** — bank-API'er (stub-only), z-ai-web-dev-sdk (sandbox-only).
+- **Implementerede men IKKE aktive integrationer** — Tink (reel implementering — ikke aktiveret i produktion endnu), bank-API'er Nordea/Danske Bank/Jyske Bank (stub-only), z-ai-web-dev-sdk (sandbox-only SDK — AI-bankafstemning er nu i produktion via OpenRouter `src/lib/matching-engine.ts`, se §3.15).
 
 ### 1.3 Ansvarlig
 
@@ -92,7 +92,7 @@ AlphaFlows leverandører klassificeres i tre niveauer baseret på risiko for kun
 | **Ikke-kritisk — EU-baseret tjeneste** | Underbehandlere der modtager begrænsede data og er placeret i EU. | Storecove, Frisbii, Simply/Brevo |
 | **Myndighed** | Offentlige myndigheder — ikke underbehandlere, men modtagere. | SKAT, Erhvervsstyrelsen |
 | **Internt sub-system** | Kører på AlphaAi's egen infrastruktur. Ikke selvstændig leverandør. | tokenpay-access, scanner-service, notification-ws, knowledge-service, hermes-agent |
-| **Inaktiv** | Implementeret i kode, men ikke aktiv i produktion. | Bank-API'er (stub), z-ai-web-dev-sdk (sandbox) |
+| **Inaktiv** | Implementeret i kode, men ikke aktiv i produktion. | Tink (reel implementering — ikke aktiveret endnu), bank-API'er Nordea/Danske Bank/Jyske Bank (stub), z-ai-web-dev-sdk (sandbox-only SDK — erstattet af OpenRouter matching-engine) |
 
 ### 2.2 Kritikalitetsvurdering
 
@@ -161,7 +161,7 @@ Dette afsnit indeholder den komplette, verificerede liste over alle 13 integrati
 | **Navn** | Neon PostgreSQL |
 | **Juridisk enhed** | Neon, Inc. |
 | **Lokation (HQ)** | USA (San Francisco, CA) |
-| **Lokation (datacenter)** | EU — Frankfurt (AWS eu-central-1) + Amsterdam (AWS eu-west-1) ifølge `docs/NEON & IONOS_IT_SIKKERHED.md` |
+| **Lokation (datacenter)** | EU — Frankfurt (AWS eu-central-1) + Amsterdam (AWS eu-west-1) ifølge `docs/Bilag-09_IT-sikkerhed-Neon-og-IONOS.md` |
 | **Formål i AlphaFlow** | Primært datalager — PostgreSQL serverless med pgvector-udvidelse til Hermes Knowledge RAG. Lagrer alle bogføringsdata, brugere, virksomheder, fakturaer, kontoplan, momsangivelser, journalposter, audit-log, bank-forbindelser (med AES-256-GCM-krypterede tokens), Hermes-konversationer, knowledge-base. |
 | **Teknisk reference** | `prisma/schema.prisma` (datasource `provider = "postgresql"`, URL via `env("DATABASE_URL")`); `src/lib/db.ts` (PrismaClient med `decimalSerializer` + `neonConnectionRetry` extension for P1001/P1002/P1008/P1017) |
 | **Data sendt** | **Alt:** virksomhedsoplysninger (CVR, adresse, firmanavn), bruger-emails, bcrypt-password-hashes, TOTP-secrets (AES-256-GCM-krypteret), bank-access-tokens (AES-256-GCM-krypteret), alle posteringer, fakturaer, momsangivelser, audit-log, Hermes-konversationer, knowledge-base. |
@@ -206,7 +206,7 @@ Dette afsnit indeholder den komplette, verificerede liste over alle 13 integrati
 | **Lokation (HQ)** | Holland (EU) |
 | **Lokation (datacenter)** | EU |
 | **Formål i AlphaFlow** | Peppol Access Point og NemHandel Access Point — afsendelse/modtagelse af e-fakturaer (OIOUBL + Peppol BIS Billing 3.0) til danske og europæiske modtagere via Peppol-netværket. NemHandel eDelivery-videreførelse via AS4 med MitID Erhverv-certifikat (håndteres af Storecove på AlphaFlows vegne). Storecove fungerer således som **både Peppol og NemHandel Access Point** i den nuværende konfiguration. |
-| **Teknisk reference** | `src/lib/storecove-client.ts`, `src/lib/nemhandel-client.ts` (simulation helper), `src/app/api/storecove/webhook/route.ts`. Miljøvariabler `NEMHANDEL_API_KEY`/`NEMHANDEL_API_URL` (https://nemhandel.nets.dk/api/v2) og `PEPPOL_AP_URL` (jf. Bilag 11 — TOKENBAY-ACCESS-ENV-GUIDE.md) er reserveret til direkte Nets-integration, men er **ikke aktive** — Storecove håndterer begge netværk. |
+| **Teknisk reference** | `src/lib/storecove-client.ts`, `src/lib/nemhandel-client.ts` (simulation helper), `src/app/api/storecove/webhook/route.ts`. Miljøvariabler `NEMHANDEL_API_KEY`/`NEMHANDEL_API_URL` (https://nemhandel.nets.dk/api/v2) og `PEPPOL_AP_URL` (jf. Bilag 11 — Bilag-11_TokenPay-TokenBay-guide.md) er reserveret til direkte Nets-integration, men er **ikke aktive** — Storecove håndterer begge netværk. |
 | **Data sendt** | OIOUBL/Peppol XML indeholdende faktura: afsender-CVR, modtager-CVR/EAN, fakturanummer, dato, linjer (beskrivelse, antal, pris, momssats), total, betalingsbetingelser, IBAN. **B2B — typisk kun firmanavne, CVR, beløb. Ingen persondata iparente, ingen CPR.** |
 | **Rolle** | Databehandler (data processor) |
 | **Tredjeland (USA)?** | Nej |
@@ -297,19 +297,20 @@ Dette afsnit indeholder den komplette, verificerede liste over alle 13 integrati
 | **Lokation (datacenter)** | USA (videresender til model-udbydere Anthropic/Meta/OpenAI m.fl.) |
 | **Formål i AlphaFlow** | OpenRouter er AlphaFlows **eneste AI-underbehandler** og håndterer tre AI-funktioner via én API-aftale: (a) **LLM chat-completions** for Hermes AI-assistent (port 3004) — AI-drevet dansk regnskabskonsulent der besvarer brugerspørgsmål om bogføring, moms, løn, frister, virksomhedsklasser. (b) **Embeddings** til knowledge-service RAG (port 3006) — semantisk embedding af dokumenter i chunks (~500 tokens) og semantisk søgning i videnbase (danske regnskabsregler, branchekoder, kontoplan-beskrivelser); resultater injiceres i Hermes' system-prompt som kontekst. (c) **VLM-ekstraktion** i scanner-service (Python, port 3005) — vision-language model kaldes som fallback når Tesseract OCR-confidence < 60 eller for PDF'er uden tekstlag; returnerer struktureret faktura/kvitteringsdata + FSR-konto-forslag. |
 | **Teknisk reference** | (a) Chat LLM: `mini-services/hermes-agent/index.ts`, `mini-services/hermes-agent/database-tenant-provider.ts`, `mini-services/hermes-agent/knowledge-base.ts` (kalder OpenRouter). (b) Embeddings: `mini-services/knowledge-service/embedder.ts`, `mini-services/knowledge-service/db.ts` (pgvector cosine distance `<=>`) (kalder OpenRouter). (c) VLM: `mini-services/scanner-service/src/vlm_client.py`, `mini-services/scanner-service/src/config.py` (kalder OpenRouter). |
-| **Data sendt** | **(a) Chat LLM (Hermes):** (i) System-prompt: statisk dansk regnskabsviden (454 LOC `knowledge-base.ts`) — lovtekst, moms-satser, frister, virksomhedsklasser. (ii) Brugerens spørgsmål. (iii) Samtalehistorik (sidste 20 beskeder). (iv) Tenant-kontekst **KUN hvis `HermesAgent.dataAccessEnabled = true`**: virksomhedsnavn, CVR, branche, medlemsliste (navn, rolle, email), regnskabsoplysninger (balance, momsstatus, seneste 6 måneders indtægter/udgifter, nettoresultat), afventende påmindelser. (v) Skill-prompts. (vi) RAG-kontekst (top-5 dokument-uddrag fra knowledge-service). **Ingen individuelle posteringer, ingen CPR.** **(b) Embeddings (knowledge-service RAG):** Dokument-tekst chunks (~500 tokens). Default knowledge-base indeholder generelle danske regnskabsregler (BRUGSVEJLEDNING.md) — ikke tenant-specifikke finansielle data. Tenant-admin kan uploade egne dokumenter, som så embeddes. **Ingen adgangskoder, ingen CPR, ingen individuelle posteringer.** Embedding-modeller gemmer kun den matematiske repræsentation — ikke selve teksten (afhængig af zero-retention-aftale, skal verificeres). **(c) VLM (scanner-service fallback):** Base64-encoded PNG-billeder af dokumentets sider + prompt ("Analyze this purchase invoice/receipt document. Extract the following information..."). Billederne kan indeholde leverandørnavn, CVR, beløb, momssats, dato, linjebeskrivelser, kunde-oplysninger. **Ingen CPR** (kvitteringer indeholder sjældent CPR). |
+| **Data sendt** | **(a) Chat LLM (Hermes):** (i) System-prompt: statisk dansk regnskabsviden (454 LOC `knowledge-base.ts`) — lovtekst, moms-satser, frister, virksomhedsklasser. (ii) Brugerens spørgsmål. (iii) Samtalehistorik (sidste 20 beskeder). (iv) Tenant-kontekst **KUN hvis `HermesAgent.dataAccessEnabled = true`**: virksomhedsnavn, CVR, branche, medlemsliste (navn, rolle, email), regnskabsoplysninger (balance, momsstatus, seneste 6 måneders indtægter/udgifter, nettoresultat), afventende påmindelser. (v) Skill-prompts. (vi) RAG-kontekst (top-5 dokument-uddrag fra knowledge-service). **Ingen individuelle posteringer, ingen CPR.** **(b) Embeddings (knowledge-service RAG):** Dokument-tekst chunks (~500 tokens). Default knowledge-base indeholder generelle danske regnskabsregler (Bilag-04_Brugsvejledning.md) — ikke tenant-specifikke finansielle data. Tenant-admin kan uploade egne dokumenter, som så embeddes. **Ingen adgangskoder, ingen CPR, ingen individuelle posteringer.** Embedding-modeller gemmer kun den matematiske repræsentation — ikke selve teksten (afhængig af zero-retention-aftale, skal verificeres). **(c) VLM (scanner-service fallback):** Base64-encoded PNG-billeder af dokumentets sider + prompt ("Analyze this purchase invoice/receipt document. Extract the following information..."). Billederne kan indeholde leverandørnavn, CVR, beløb, momssats, dato, linjebeskrivelser, kunde-oplysninger. **Ingen CPR** (kvitteringer indeholder sjældent CPR). |
 | **Rolle** | Databehandler (data processor) — AlphaFlows eneste AI-underbehandler |
 | **Tredjeland (USA)?** | **JA** |
 | **Autentificering** | Bearer token (`OPENROUTER_API_KEY`); ekstra headers: `HTTP-Referer` (APP_URL) og `X-Title` (APP_NAME) |
 | **Endpoints** | `POST https://openrouter.ai/api/v1/chat/completions` (chat + VLM-vision); OpenRouter's embeddings-endpoint for RAG-embeddings |
 | **Model-konfiguration** | Default chat-LLM: `anthropic/claude-sonnet-4.5` (videresendes til Anthropic USA). Free-tier fallback: `meta-llama/llama-3.3-70b-instruct:free` (videresendes til Meta USA). Embeddings: konfigurerbar embedding-model via OpenRouter. VLM: vision-language model (f.eks. Anthropic Claude Sonnet 4) via OpenRouter. |
 | **Certificeringer** | Ikke verificeret (OpenRouter er en relativt ny udbyder; verificer via https://openrouter.ai/legal) |
-| **DPA-status** | Påkræret — skal indgås før produktion. OpenRouter tilbyder DPA via https://openrouter.ai/legal (konsolideret AI-DPA — se Bilag 17) |
-| **SCC-status** | **Påkræret** — Standard Contractual Clauses 2021/914, Modul 2 (Controller-to-Processor) — se Bilag 17 |
+| **DPA-status** | Påkræret — skal indgås før produktion. OpenRouter tilbyder DPA via https://openrouter.ai/legal (konsolideret AI-DPA — se Bilag 13) |
+| **SCC-status** | **Påkræret** — Standard Contractual Clauses 2021/914, Modul 2 (Controller-to-Processor) — se Bilag 13 |
 | **TIA** | **Påkræret** — se afsnit 5.1 |
 | **Webhook** | Ingen |
 | **Rate-limiting** | Per-tenant rate-limiter med konfigurerbare windows (minut/time/dag/måned). Admin via `/admin/stats` (Bearer `HERMES_ADMIN_KEY`). |
 | **Note** | OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. AlphaAi indgår IKKE separate DPA'er med disse model-udbydere. OpenRouter's DPA pålægger dem samme beskyttelsesniveau. |
+| **Embedding-udbyder alternativ** | `OPENAI_API_KEY` er en valgfri alternativ embedding-udbyder i knowledge-service (`mini-services/knowledge-service/embedder.ts`). I den dokumenterede produktionskonfiguration er KUN `OPENROUTER_API_KEY` sat, så al AI-data går via OpenRouter (Bilag 13). Hvis `OPENAI_API_KEY` sættes, vil knowledge-service-embeds gå direkte til OpenAI (USA), hvilket vil kræve en separat OpenAI DPA + SCC som tillægsbilag. |
 | **Due-dokumentation** | https://openrouter.ai/legal, https://openrouter.ai/privacy, https://openrouter.ai/terms |
 
 ### 3.8 SMTP / Simply / Brevo — Email (EU)
@@ -435,27 +436,27 @@ Dette afsnit indeholder den komplette, verificerede liste over alle 13 integrati
 | **Webhook** | Ingen |
 | **Due-dokumentation** | Intern |
 
-### 3.14 Bank-API'er (Tink, Nordea, Danske Bank, Jyske Bank) — Inaktive
+### 3.14 Bank-API'er (Tink, Nordea, Danske Bank, Jyske Bank) — Inaktive / Implementerede
 
 | Felt | Værdi |
 |------|-------|
 | **#** | — |
 | **Navn** | Bank-API'er (Tink, Nordea, Danske Bank, Jyske Bank) |
-| **Status** | **Stub-only — ikke aktive i produktion.** Implementeret i `src/lib/bank-providers.ts` via `createRealBankProvider()` factory. Consent-flow stubbes; `fetchTransactions` kaster "requires production configuration". Kun Demo-provider returnerer data uden credentials. |
-| **Data sendt** | Ingen reelle data overføres. Bank-access-tokens krypteres dog alligevel med AES-256-GCM før lagring i DB (fremtidssikring). |
-| **Rolle** | Potentiel databehandler ved fremtidig aktivering. |
-| **Note** | Hvis disse aktiveres i fremtiden, vil de blive tilføjet til leverandørregisteret med korrekt DPA + SCC-vurdering (afhængig af bankens datacenter-lokation). |
+| **Status** | **Tink (reel implementering — ikke aktiveret i produktion endnu):** Tink er en fuld OAuth2 PSD2 consent-flow integration med kontosync, implementeret i `src/lib/tink-client.ts` (752 LOC). Aktiv når `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET` er sat. **Nordea / Danske Bank / Jyske Bank (stub-only):** Implementeret i `src/lib/bank-providers.ts` via `createRealBankProvider()` factory. Consent-flow stubbes; `fetchTransactions` kaster "requires production configuration". **Demo-provider:** leverer syntetiske data uden credentials. |
+| **Data sendt** | Ingen reelle data overføres i nuværende konfiguration. Tink vil, når aktiveret, modtage OAuth2-tokens og udføre kontosync. Bank-access-tokens krypteres dog alligevel med AES-256-GCM før lagring i DB (fremtidssikring). |
+| **Rolle** | Tink: Potentiel databehandler ved fremtidig aktivering. Nordea/Danske Bank/Jyske Bank: N/A (stubs). Demo: N/A (syntetiske data). |
+| **Note** | Tink er IKKE i den aktive underbehandler-liste (Bilag 13), da integrationen ikke er aktiveret i produktion. En DPA med Tink indgås før produktionsaktivering (konsistent med BILAG_OVERSIGT §5). Hvis Nordea/Danske Bank/Jyske Bank aktiveres i fremtiden, vil de blive tilføjet til leverandørregisteret med korrekt DPA + SCC-vurdering (afhængig af bankens datacenter-lokation). |
 
-### 3.15 z-ai-web-dev-sdk (AI-bankafstemning) — Inaktiv
+### 3.15 z-ai-web-dev-sdk — Inaktiv (sandbox-only SDK)
 
 | Felt | Værdi |
 |------|-------|
 | **#** | — |
 | **Navn** | z-ai-web-dev-sdk |
-| **Status** | **Sandbox-only — virker ikke i produktion.** Fejler gracefully og returnerer ingen matches. Ifølge `.env.example` er SDK'et sandbox-only. |
+| **Status** | **Sandbox-only SDK — virker ikke i produktion.** Fejler gracefully og returnerer ingen matches. Ifølge `.env.example` er SDK'et sandbox-only. SDK'et er erstattet af en OpenRouter-baseret matching-motor i produktion (se note). |
 | **Data sendt** | Ingen (i produktion). I sandbox: banktransaktioner og finansposteringer sendes til sandbox-API. |
 | **Rolle** | N/A — ikke aktiv. |
-| **Note** | Hvis z-ai-web-dev-sdk aktiveres i produktion, vil det blive tilføjet til leverandørregisteret med korrekt DPA + SCC-vurdering. |
+| **Note** | AI-assisteret bankafstemning er implementeret i produktion via OpenRouter i `src/lib/matching-engine.ts` (tre-niveau matching; AI-match ≥0,95 autoprogrammeres, 0,80–0,95 kræver godkendelse). z-ai-web-dev-sdk er hermed faset ud som separat integration; AI-data går via OpenRouter per GDPR Art. 28(4) (Bilag 13). |
 
 ### 3.16 Samlet leverandørregister — kompakt oversigt
 
@@ -474,8 +475,9 @@ Dette afsnit indeholder den komplette, verificerede liste over alle 13 integrati
 | 11 | notification-ws-service | EU VPS | Intern sub-system | Nej | N/A (intern) | N/A |
 | 12 | knowledge-service | EU VPS | Intern sub-system | Nej (OpenRouter for embeddings: ja) | N/A (intern) | N/A (OpenRouter: ja) |
 | 13 | hermes-agent | EU VPS | Intern sub-system | Nej (OpenRouter for chat: ja) | N/A (intern) | N/A (OpenRouter: ja) |
-| — | Bank-API'er | Afhænger af bank | Inaktiv (stub) | — | — | — |
-| — | z-ai-web-dev-sdk | — | Inaktiv (sandbox) | — | — | — |
+| — | Tink (bank-API) | EU (SE) | Reel implementering (ikke aktiveret) | Nej (EU) | Påkræret før aktivering | N/A (EU) |
+| — | Nordea / Danske Bank / Jyske Bank | Afhænger af bank | Stub (inaktiv) | — | — | — |
+| — | z-ai-web-dev-sdk | — | Inaktiv (sandbox-only SDK — erstattet af OpenRouter matching-engine) | — | — | — |
 
 ---
 
@@ -535,8 +537,8 @@ Nye leverandører evalueres gennem følgende proces:
 
 6. Compliance-godkendelse
    ├── Compliance Officer godkender
-   ├── Risikovurdering opdateres (docs/RISIKOVURDERING.md)
-   └── LEVERANDØERSTYRING.md opdateres
+   ├── Risikovurdering opdateres (docs/Bilag-06_Risikovurdering-DPIA.md)
+   └── Bilag-08_Leverandørstyring.md opdateres
 
 7. Teknisk test
    ├── Integrationstest
@@ -581,7 +583,7 @@ OpenRouter er AlphaFlows eneste AI-underbehandler og håndterer tre AI-funktione
 **(b) Embeddings (knowledge-service RAG):**
 
 - **Indhold:** Dokument-tekst chunks (~500 tokens) fra danske regnskabsregler, branchekoder, kontoplan-beskrivelser.
-- **Default knowledge-base:** Indeholder kun generelle danske regnskabsregler (BRUGSVEJLEDNING.md) — ikke tenant-specifikke finansielle data.
+- **Default knowledge-base:** Indeholder kun generelle danske regnskabsregler (Bilag-04_Brugsvejledning.md) — ikke tenant-specifikke finansielle data.
 - **Tenant-specifikke dokumenter:** Kun hvis tenant-administrator aktivt uploader egne dokumenter til knowledge-base (via `/api/hermes/knowledge`).
 - **Persondata:** Potentielt personnavne, e-mailadresser, CVR (hvis nævnt i dokumenter). **Ingen CPR, ingen adgangskoder, ingen individuelle posteringer.**
 
@@ -614,7 +616,7 @@ OpenRouter er AlphaFlows eneste AI-underbehandler og håndterer tre AI-funktione
 #### 5.1.4 Supplerende foranstaltninger
 
 - **`HermesAgent.dataAccessEnabled` opt-in (default false)** — primær minimization for chat LLM. Uden opt-in sendes kun brugerens spørgsmål og statisk system-prompt.
-- **DPA + SCC (Modul 2)** med OpenRouter — Standard Contractual Clauses 2021/914 (se Bilag 17).
+- **DPA + SCC (Modul 2)** med OpenRouter — Standard Contractual Clauses 2021/914 (se Bilag 13).
 - **OpenRouter's underbehandlere per GDPR Art. 28(4):** OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI). Disse er OpenRouter's underbehandlere — AlphaAi Consult ApS indgår IKKE separate DPA'er med dem. OpenRouter's DPA pålægger dem samme beskyttelsesniveau.
 - **Tekst-først pipeline (VLM):** PDF'er med tekstlag håndteres udelukkende lokalt (PyMuPDF + Tesseract) — ingen VLM-kald.
 - **Confidence-baseret fallback (VLM):** VLM kaldes kun ved OCR-confidence < 60 eller PDF uden tekstlag.
@@ -688,7 +690,7 @@ For leverandører med sub-underbehandlere (særligt Neon, IONOS, Storecove, Open
 | IONOS | 24 timer | DPA |
 | Storecove | 24 timer (påkræret) | DPA (skal verificeres) |
 | Frisbii / Flatpay | 24 timer (påkræret) | DPA (skal verificeres) |
-| OpenRouter | 24 timer (påkræret) | DPA (skal verificeres — konsolideret AI-DPA, se Bilag 17) |
+| OpenRouter | 24 timer (påkræret) | DPA (skal verificeres — konsolideret AI-DPA, se Bilag 13) |
 | Simply / Brevo | 24 timer (påkræret) | DPA (skal verificeres) |
 
 AlphaAi Consult ApS underretter kunden straks efter at have modtaget underretning fra underbehandler, så kunden kan opfylde sin underretningspligt over for Datatilsynet (72 timer) og evt. registrerede (uden unødig forsinkelse).
@@ -697,7 +699,7 @@ AlphaAi Consult ApS underretter kunden straks efter at have modtaget underretnin
 
 ## 7. Berørte leverandører ved incident
 
-Ved en sikkerhedshændelse skal relevante leverandører kontaktes. Den fulde kontaktliste findes i `docs/BEREDSKABSPLAN.md` afsnit 7. Nedenfor er den leverandør-specifikke kontakttabel:
+Ved en sikkerhedshændelse skal relevante leverandører kontaktes. Den fulde kontaktliste findes i `docs/Bilag-07_Beredskabsplan.md` afsnit 7. Nedenfor er den leverandør-specifikke kontakttabel:
 
 ### 7.1 Leverandør-kontaktmatrix ved incident
 
@@ -724,7 +726,7 @@ Ved en sikkerhedshændelse skal relevante leverandører kontaktes. Den fulde kon
 
 ### 7.3 Kommunikation med kunder
 
-Ved incidents der påvirker kunder (jf. `docs/BEREDSKABSPLAN.md` afsnit 7.3):
+Ved incidents der påvirker kunder (jf. `docs/Bilag-07_Beredskabsplan.md` afsnit 7.3):
 
 | Tidsramme | Kanal | Indhold |
 |-----------|-------|---------|
@@ -830,7 +832,7 @@ Ved skift af teknisk leverandør følges denne skabelon:
 4. **A/B-test:** Kør begge modeller parallelt i 2 uger, sammenlign svar-kvalitet.
 5. **Switch:** Opdater miljøvariabel (`OPENROUTER_API_KEY` → ny EU-udbyders API-nøgle).
 6. **Op sigelse:** Opsig OpenRouter DPA, anmod om data-sletning (inkl. hos OpenRouter's underbehandlere per GDPR Art. 28(4)).
-7. **Opdatering:** Opdater LEVERANDØERSTYRING.md + DPA Bilag A.
+7. **Opdatering:** Opdater Bilag-08_Leverandørstyring.md + DPA Bilag A.
 
 ### 8.4 Compliance under overgang
 
@@ -900,7 +902,8 @@ Følgende handlinger er åbne og skal afsluttes før eller umiddelbart efter pro
 | 2.0 | 2026 | Opdateret med konkrete kode-referencer | AlphaAi Consult ApS |
 | 2.1 | 2026 | Tilføjet IONOS VPS | AlphaAi Consult ApS |
 | **3.0** | **08.06.2026** | **Komplet omskrivning:** Tilføjet alle 15 integrationer verificeret i kodebasen (Neon, IONOS, Storecove, Frisbii, OpenAI, OpenRouter, Anthropic, Simply/Brevo, SKAT, Erhvervsstyrelsen, + 5 interne sub-systemer + 2 inaktive); tilføjet detaljeret TIA for de 3 USA-AI-underbehandlere med data-minimization, nødvendighed, alternativer og supplerende foranstaltninger; tilføjet åbne handlinger-liste; rettet klassifikation (kritisk infrastruktur / kritisk AI USA / ikke-kritisk EU / myndighed / intern); tilføjet bank-API-stubs og z-ai-web-dev-sdk som inaktive integrationer for transparens; præcise datakategorier for hver leverandør | AlphaAi Consult ApS Compliance |
-| **3.1** | **2026** | **AI-konsolidering (C2):** OpenAI (tidl. §3.7) og Anthropic (tidl. §3.9) fjernet som selvstændige underbehandlere og konsolideret under OpenRouter (§3.7) per GDPR Art. 28(4) — de er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. OpenRouter-sektion udvidet til at dække alle 3 AI-funktioner (chat LLM + embeddings + VLM). TIA-sektion §5 konsolideret fra 3 separate TIA'er (§5.1 OpenAI, §5.2 OpenRouter, §5.3 Anthropic) til 1 samlet TIA for OpenRouter (§5.1) med samlet konklusion (§5.2). Bilag-referencer opdateret: Bilag 17 = OpenRouter (konsolideret AI-DPA+SCC). Sub-sektionsnummerering i §3 rettet (3.10→3.8 osv.). Antal integrationer reduceret fra 15 til 13. | AlphaAi Consult ApS Compliance |
+| **3.1** | **2026** | **AI-konsolidering (C2):** OpenAI (tidl. §3.7) og Anthropic (tidl. §3.9) fjernet som selvstændige underbehandlere og konsolideret under OpenRouter (§3.7) per GDPR Art. 28(4) — de er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. OpenRouter-sektion udvidet til at dække alle 3 AI-funktioner (chat LLM + embeddings + VLM). TIA-sektion §5 konsolideret fra 3 separate TIA'er (§5.1 OpenAI, §5.2 OpenRouter, §5.3 Anthropic) til 1 samlet TIA for OpenRouter (§5.1) med samlet konklusion (§5.2). Bilag-referencer opdateret: Bilag 13 = OpenRouter (konsolideret AI-DPA+SCC). Sub-sektionsnummerering i §3 rettet (3.10→3.8 osv.). Antal integrationer reduceret fra 15 til 13. | AlphaAi Consult ApS Compliance |
+| **3.2** | **2026** | **Bilagsstruktur-konsolidering:** Underbehandler-DPA'er (tidl. Bilag 13–18) samlet til ét bilagspunkt (Bilag 13). Tjekliste renummereret fra Bilag 19 til Bilag 14. Alle DPA-bilagsreferencer (Neon, IONOS, Storecove, Flatpay/Frisbii, OpenRouter, Simply/Brevo) opdateret til Bilag 13. | AlphaAi Consult ApS Compliance |
 
 ### 9.4 Godkendelse
 

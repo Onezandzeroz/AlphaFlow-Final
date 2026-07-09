@@ -48,7 +48,7 @@ Denne plan dækker hele AlphaFlow-platformen:
 - Upload-lagring (`uploads/`).
 - Caddy reverse proxy / TLS.
 - PM2 proces-manager (6 processer).
-- 13 eksterne integrationer (se `LEVERANDØERSTYRING.md`).
+- 13 eksterne integrationer (se `Bilag-08_Leverandørstyring.md`).
 
 ### 1.3 Ansvarlig
 
@@ -76,13 +76,13 @@ Denne plan dækker hele AlphaFlow-platformen:
 
 ### 1.5 Relaterede dokumenter
 
-- `RISIKOVURDERING.md` — DPIA / IT-risikovurdering (20 risici R-01..R-20).
-- `UDBEDRINGSPLAN.md` — planlagte udviklingstiltag.
-- `ENCRYPTION.md` — krypteringsnøgler, algoritmer, key management.
-- `LEVERANDØERSTYRING.md` — underbehandler-oversigt + DPA-status.
-- `DATABEHANDLERAFTALE.md` — DPA-skabeloner pr. underbehandler.
-- `NEON & IONOS_IT_SIKKERHED.md` — hosting-udbydere sikkerhedscertificeringer.
-- `COMPLIANCE_RAPPORT.md` — samlet compliance-status.
+- `Bilag-06_Risikovurdering-DPIA.md` — DPIA / IT-risikovurdering (20 risici R-01..R-20).
+- `Bilag-10_Udbedringsplan.md` — planlagte udviklingstiltag.
+- `Bilag-03_Krypteringsrapport.md` — krypteringsnøgler, algoritmer, key management.
+- `Bilag-08_Leverandørstyring.md` — underbehandler-oversigt + DPA-status.
+- `Bilag-05_Databehandleraftale.md` — DPA-skabeloner pr. underbehandler.
+- `Bilag-09_IT-sikkerhed-Neon-og-IONOS.md` — hosting-udbydere sikkerhedscertificeringer.
+- `Bilag-02_Compliance-rapport.md` — samlet compliance-status.
 
 ---
 
@@ -151,7 +151,7 @@ RPO = maksimal acceptabel datatab.
 
 | Data-type | RPO-mål | Backup-metode | Bekræftelse |
 |---|---|---|---|
-| **Neon PostgreSQL-transaktioner** | ~0 (7 dage) | Neon managed PITR (Point-in-Time Recovery) | Neon dashboard + `docs/NEON & IONOS_IT_SIKKERHED.md` |
+| **Neon PostgreSQL-transaktioner** | ~0 (7 dage) | Neon managed PITR (Point-in-Time Recovery) | Neon dashboard + `docs/Bilag-09_IT-sikkerhed-Neon-og-IONOS.md` |
 | **Tenant-data (posteringer, fakturaer, journalposter)** | ≤1 time | AlphaFlow hourly backup (`5 * * * *`) | `CronExecution`-log + `/api/backups/scheduler-status` |
 | **Uploads (bilag, kvitteringer)** | ≤1 time | Kopi til `Tenant-Backup/{companyName}/Receipts/` ved upload + hourly ZIP | Fil-system-tjek |
 | **SQLite mini-DBs (scanner.db, access.db)** | Afhængig af VPS-snapshot | Ingen separat backup | Accepteret — scanner.db er cache (genoprettes ved re-scan); access.db backup-frekvens vurderes separat |
@@ -226,9 +226,9 @@ Timezone: `process.env.BACKUP_TIMEZONE || 'Europe/Copenhagen'`.
 
 - **Opret:** `POST /api/backups` (OWNER/ADMIN, `Permission.BACKUP_CREATE`) — opretter Manual-backup med det samme.
 - **Download:** `GET /api/backups/{id}/download` — returnerer AES-256-GCM-krypteret ZIP.
-- **Restore:** `POST /api/backups/{id}/restore` — atomisk gendannelse via database-transaktion (foranstaltes automatisk pre-restore safety backup).
+- **Restore:** `POST /api/backups/{id}` (atomisk gendannelse via database-transaktion, foranstaltes automatisk pre-restore safety backup).
 - **Upload-restore:** `POST /api/backups/upload-restore` — upload `.zip` (max 2 GB), JSZip-validering af `manifest.json`, atomisk gendannelse.
-- **Delete:** `DELETE /api/backups/{id}` (OWNER, `Permission.BACKUP_DELETE`).
+- **Delete:** `DELETE /api/backups/{id}` (OWNER/ADMIN, `Permission.BACKUP_CREATE`).
 - **Scheduler-status:** `GET /api/backups/scheduler-status` — per-tenant cron-health.
 
 ### 4.6 Neon PITR (Lag 1 — managed)
@@ -246,7 +246,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
 - **Algoritme:** AES-256-GCM (12-byte IV, 16-byte auth-tag, 32-byte nøgle).
 - **Nøgle:** `ENCRYPTION_KEY` (64-hex env var, genereres med `openssl rand -hex 32`).
 - **Adskilt fra PROOF_ENCRYPTION_KEY** (som kun bruges til `.tbkey` proof-filer).
-- **Key rotation implementeret** (U-1) — keyring med `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; migration-script og rollback-script. Se `RISIKOVURDERING.md` R-03 + `UDBEDRINGSPLAN.md` U-1 + Bilag 3 §2.4.
+- **Key rotation implementeret** (U-1) — keyring med `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; migration-script og rollback-script. Se `Bilag-06_Risikovurdering-DPIA.md` R-03 + `Bilag-10_Udbedringsplan.md` U-1 + Bilag 3 §2.4.
 - **Bemærkning:** Hvis `ENCRYPTION_KEY` kompromitteres, kan alle backup-ZIPs dekrypteres. Se genopretningsprocedure afsnit 5.5.
 
 ---
@@ -271,7 +271,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
    h. Markér den gamle branch for deprecation efter 7 dage.
 3. **Alternativ metode: AlphaFlow ZIP-restore (hvis nyere end 7 dage kræves):**
    a. Identificér den relevante backup-ZIP i `Tenant-Backup/{companyName}/`.
-   b. Via UI: `POST /api/backups/{id}/restore` (kræver OWNER + `Permission.BACKUP_CREATE`).
+   b. Via UI: `POST /api/backups/{id}` (kræver OWNER + `Permission.BACKUP_RESTORE`).
       - Systemet opretter automatisk en **pre-restore safety backup** før gendannelse.
       - Gendannelse er atomisk via database-transaktion (rollback ved fejl).
    c. Eller via upload: `POST /api/backups/upload-restore` med `.zip` fil (max 2 GB).
@@ -570,7 +570,7 @@ bun run scripts/rollback-encryption-keys.ts --execute
 1. **Identificér root cause** — log-analyse, AuditLog-gennemgang, kode-review.
 2. **Patch sårbarheden** — hotfix-deploy via `git pull` + `bun run build` + `pm2 restart alphaflow`.
 3. **Fjern angriberens adgang** — slet ondsindede brugere/sessions, rotate kompromitterede secrets.
-4. **Opdater security-kontroller** — se `RISIKOVURDERING.md` + `UDBEDRINGSPLAN.md`.
+4. **Opdater security-kontroller** — se `Bilag-06_Risikovurdering-DPIA.md` + `Bilag-10_Udbedringsplan.md`.
 
 ### 6.4 Trin 4 — Genopretning
 
@@ -613,7 +613,7 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 2. **Timeline** — rekonstruér hændelsesforløb (fra første indikator til genopretning).
 3. **Konsekvens-vurdering** — hvilke data berørt, antal brugere, nedetid.
 4. **Erfarer-læringer** — hvad fungerede, hvad fejlede.
-5. **Opdatering af dokumenter** — `RISIKOVURDERING.md`, `BEREDSKABSPLAN.md`, `UDBEDRINGSPLAN.md`.
+5. **Opdatering af dokumenter** — `Bilag-06_Risikovurdering-DPIA.md`, `Bilag-07_Beredskabsplan.md`, `Bilag-10_Udbedringsplan.md`.
 6. **Implementering af forbedringer** — f.eks. tilføj nye kontroller, ændr overvågning, opdater procedurer.
 7. **Dokumentér i AuditLog** — `action: BACKUP_RESTORE` eller ny `AuditAction`-type (f.eks. `INCIDENT_RESOLVED`).
 8. **Gennemgå med team** — inden 2 uger efter hændelsen.
@@ -653,7 +653,7 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 
 | Underbehandler | Formål | Lokation | Support-e-mail | DPA-status |
 |---|---|---|---|---|
-| **OpenRouter, Inc.** | AI-tjenester — Hermes chat LLM, embeddings (RAG), scanner VLM. OpenRouter videresender til relevante model-udbydere (OpenAI, Anthropic, Meta m.fl.) per GDPR Art. 28(4). | USA | `support@openrouter.ai` | _[SCC+TIA påkrævet — se Bilag 17 (DPA — OpenRouter) og Bilag 12 (BILAG_OVERSIGT.md) afsnit 3]_ |
+| **OpenRouter, Inc.** | AI-tjenester — Hermes chat LLM, embeddings (RAG), scanner VLM. OpenRouter videresender til relevante model-udbydere (OpenAI, Anthropic, Meta m.fl.) per GDPR Art. 28(4). | USA | `support@openrouter.ai` | _[SCC+TIA påkrævet — se Bilag 13 (DPA — OpenRouter) og Bilag 12 (Bilag-12_Bilagsoversigt.md) afsnit 3]_ |
 
 ### 7.5 Underbehandlere (EU-baserede)
 
@@ -822,7 +822,7 @@ AlphaAi Consult ApS
 5. **Neon dashboard** — DB-health, forbindelses-antal, langsomme queries.
 6. **IONOS VPS-ressourceforbrug** — CPU/RAM/disk.
 7. **Certifikat-status** — verificér at TLS-certifikat ikke udløber inden for 30 dage.
-8. **Opdatering af `UDBEDRINGSPLAN.md`** — status på planlagte tiltag.
+8. **Opdatering af `Bilag-10_Udbedringsplan.md`** — status på planlagte tiltag.
 
 ### 9.3 Ved infrastruktur-ændringer
 
@@ -892,16 +892,17 @@ pm2 list                                       # tabelleret status
 
 ### Bilag C — Backup-API-endpoints
 
-| Endpoint | Metode | Auth | Formål |
+| Endpoint | Metode | Auth (min. rolle, permission) | Formål |
 |---|---|---|---|
-| `/api/backups` | GET | OWNER/ADMIN, `Permission.BACKUP_READ` | List backups for aktiv tenant |
-| `/api/backups` | POST | OWNER/ADMIN, `Permission.BACKUP_CREATE` | Opret Manual backup |
-| `/api/backups/{id}` | GET | OWNER, `Permission.BACKUP_READ` | Hent backup-metadata |
-| `/api/backups/{id}/download` | GET | OWNER, `Permission.BACKUP_READ` | Download AES-256-GCM-krypteret ZIP |
-| `/api/backups/{id}/restore` | POST | OWNER, `Permission.BACKUP_CREATE` | Atomisk gendannelse (med pre-restore safety backup) |
-| `/api/backups/{id}` | DELETE | OWNER, `Permission.BACKUP_DELETE` | Slet backup |
-| `/api/backups/upload-restore` | POST | OWNER, `Permission.BACKUP_CREATE` | Upload `.zip` (max 2 GB) og gendan atomisk |
-| `/api/backups/scheduler-status` | GET | OWNER, `Permission.BACKUP_READ` | Per-tenant cron-health (grøn/rød) |
+| `/api/backups` | GET | VIEWER+, `Permission.DATA_READ` | List backups for aktiv tenant |
+| `/api/backups` | POST | ADMIN+, `Permission.BACKUP_CREATE` | Opret Manual backup |
+| `/api/backups/{id}/download` | GET | ADMIN+, `Permission.BACKUP_CREATE` | Download AES-256-GCM-krypteret ZIP |
+| `/api/backups/{id}` | POST | OWNER, `Permission.BACKUP_RESTORE` | Atomisk gendannelse (med pre-restore safety backup) |
+| `/api/backups/{id}` | DELETE | ADMIN+, `Permission.BACKUP_CREATE` | Slet backup (audit-logges som `BACKUP_DELETE`) |
+| `/api/backups/upload-restore` | POST | OWNER, `Permission.BACKUP_RESTORE` | Upload `.zip` (max 2 GB) og gendan atomisk |
+| `/api/backups/scheduler-status` | GET | VIEWER+, `Permission.DATA_READ` | Per-tenant cron-health (grøn/rød) |
+
+> **Bemærkning om permissions:** `Permission.BACKUP_DELETE` og `Permission.BACKUP_READ` eksisterer ikke i koden — sletning af backups kræver `BACKUP_CREATE` (min. rolle ADMIN), og list/scheduler-status kræver `DATA_READ` (min. rolle VIEWER). Gendannelse (`restore`, `upload-restore`) kræver `BACKUP_RESTORE` (min. rolle OWNER). Se `src/lib/rbac.ts` og `src/app/api/backups/`.
 
 ### Bilag D — Log-fil-stier
 
@@ -935,4 +936,5 @@ pm2 list                                       # tabelleret status
 | 2.0 | 2025-06 | Tilføjede PM2-kommandoer, RTO/RPO-mål. | AlphaAi Consult ApS |
 | 2.4 | 2026-06 | Mindre opdateringer. | AlphaAi Consult ApS |
 | **3.0** | **2026** | **Fuld omskrivning baseret på faktisk infrastruktur. Tilføjede: 6 PM2-apps detaljeret, backup-strategi med Lag 1-4, 8 genopretningsprocedurer (DB-tab/VPS-fejl/App-crash/Mini-service-crash/ENCRYPTION_KEY-kompromitteret/Ransomware/SQLite-tab/Caddy-fejl), 6-trins incident response-procedure, kontaktliste med underbehandlere, kommunikationsplan med skabeloner, årlig DR-test + kvartalsvis review.** | **AlphaAi Consult ApS** |
-| **3.1** | **2026** | **AI-konsolidering (Task C3): Verificeret at OpenRouter er AlphaFlows eneste AI-underbehandler (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). Antal eksterne integrationer opdateret fra 15 til 13. Bilag 17 (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM) reference verificeret i §7.4.** | **AlphaAi Consult ApS — Task C3** |
+| **3.1** | **2026** | **AI-konsolidering (Task C3): Verificeret at OpenRouter er AlphaFlows eneste AI-underbehandler (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). Antal eksterne integrationer opdateret fra 15 til 13. Bilag 13 (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM) reference verificeret i §7.4.** | **AlphaAi Consult ApS — Task C3** |
+| **3.2** | **2026** | **Dokumentationsnøjaktighed:** Bilag C backup-API-endpoints rettet — `Permission.BACKUP_DELETE` og `Permission.BACKUP_READ` eksisterer ikke i koden; erstattet med korrekte permissions (`BACKUP_CREATE` for create/delete/download, `BACKUP_RESTORE` for restore/upload-restore, `DATA_READ` for list/scheduler-status). §4.5 og §5.1 trin 3 rettet tilsvarende. | **AlphaAi Consult ApS — doc-editor G** |

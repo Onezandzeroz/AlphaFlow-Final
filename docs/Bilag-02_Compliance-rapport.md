@@ -59,7 +59,7 @@ Rapporten dokumenterer platformens compliance-tilstand med afsæt i den faktiske
 |------|-----------|------------|
 | **Dataansvarlig** (controller) | AlphaAi Consult ApS | Definerer formål og midler for behandling af lejernes data. |
 | **Databehandler** (processor) | AlphaAi Consult ApS (drift) | Drifter AlphaFlow på IONOS VPS (Tyskland/EU). |
-| **Underbehandlere** | Neon (DB, USA-virksomhed, EU-datacentre), OpenRouter (USA — se kapitel V), Storecove (Holland), Frisbii/Flatpay (Tyskland), SKAT/Virk (DK), CVR-registeret (DK). | Fulde fortegnelser i `DATABEHANDLERAFTALE.md`. |
+| **Underbehandlere** | Neon (DB, USA-virksomhed, EU-datacentre), OpenRouter (USA — se kapitel V), Storecove (Holland), Frisbii/Flatpay (Tyskland), SKAT/Virk (DK), CVR-registeret (DK). | Fulde fortegnelser i `Bilag-05_Databehandleraftale.md`. |
 | **Systemansvarlig** | AlphaAi Consult ApS | Teknisk drift, sikkerhed, backup, vedligeholdelse. |
 | **Revisor-tilgang** | Lejerens revisor via `AUDITOR`-rolle | Eksport af SAF-T, rapporter og audit-log. |
 
@@ -84,9 +84,9 @@ Lov om bogføring § 3 stiller krav om, at regnskabssystemet skal være egnet ti
 | Mapping til SKAT Fællesoffentlig Standardkontoplan | ✅ Opfyldt | `StandardAccountMapping`-model + `buildAutoMapping()` i `src/lib/standard-chart-of-accounts.ts`. |
 | Automatisk momsberegning | ✅ Opfyldt | 10 momskoder (`VATCode`-enum: S25, S12, S0, SEU, K25, K12, K0, KEU, KUF, NONE) med automatisk kontering. |
 | Regnskabsperioder | ✅ Opfyldt | `FiscalPeriod`-model med `PeriodStatus` (OPEN/CLOSED) og låsning (`lockedAt`/`lockedBy`). |
-| Fakturering | ✅ Opfyldt (med begrænsning) | `Invoice`-model med DRAFT/SENT/PAID/CANCELLED. PDF-generering. **Bemærk:** Der findes ingen selvstændig UI til kreditnota-oprettelse — kun `EInvoiceType.CREDIT_NOTE`-enum-værdien findes, og elektronisk kreditnota kan modtages (ikke oprettes fra UI). |
+| Fakturering | ✅ Opfyldt | `Invoice`-model med DRAFT/SENT/PAID/CANCELLED. PDF-generering. Kreditnotaer er fuldt implementeret: UI-knap, backend med `creditNotePrefix` (KRE-{år}-{seq}), spejlet bogføring, valgfrit `originalInvoiceId`, PDF og OIOUBL type 381. Annullering opretter modpostering `REVERSAL-{invoiceNumber}`. |
 | Momsangivelse til SKAT | ✅ Opfyldt (med begrænsning) | `src/lib/vat-submit.ts` med OAuth2 `client_credentials`. **Kun momsangivelse** — ingen årsopgørelse, e-indkomst eller AM-bidrag. |
-| Bank-integration | ⚠️ Delvist | `BankConnection`-model med krypterede tokens. **Tink er en reel integration** (PSD2 consent-flow virker); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. Matching mellem bank-transaktioner og journalposter er **manuelt** — z-ai-web-dev-sdk-bankafstemning er sandbox-only og fejler graceful. |
+| Bank-integration | ⚠️ Delvist | `BankConnection`-model med krypterede tokens. **Tink er en reel integration** (PSD2 consent-flow virker); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. AI-assisteret bankafstemning er implementeret i produktion via OpenRouter i `src/lib/matching-engine.ts`. Tre-niveau matching: (1) regelbaseret eksakt, (2) fuzzy, (3) AI via OpenRouter med konfidens-score. AI-match ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 = AI_SUGGESTED (manuel godkendelse); <0,80 ignoreres. AI overstyrer aldrig automatisk bogførte posteringer uden godkendelse. |
 | Fremmedvaluta | ✅ Opfyldt | Frankfurter API (ECB reference rates) i `src/lib/currency-utils.ts`. 1-times in-memory cache med stale fallback. DKK, EUR, USD, GBP, SEK, NOK. |
 
 ### 2.2 § 4 — Uforkortethed og beskyttelse mod uberettiget ændring
@@ -139,7 +139,7 @@ BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om b
 | **Kryptering** | AES-256-GCM (`ENCRYPTION_KEY` 32 byte). Original ZIP slettes sikkert (`rmSync({force: true})`) efter kryptering. | `src/lib/crypto.ts` |
 | **Lokation** | `Tenant-Backup/{companyName}/` på IONOS VPS (EU/Tyskland). | `src/lib/backup-engine.ts` |
 | **Robusthed** | `CronExecution` DB-log, startup catch-up (kører missede cron-jobs ved genstart), retry 3× eksponentiel backoff, overlap-guard, pre-restore safety backup, atomisk gendannelse via DB-transaktioner. | `src/lib/backup-scheduler.ts`, `src/lib/backup-engine.ts` |
-| **Defense-in-depth** | Neon PITR op til 7 dage (managed, ekstra lag). | `docs/NEON & IONOS_IT_SIKKERHED.md` |
+| **Defense-in-depth** | Neon PITR op til 7 dage (managed, ekstra lag). | `docs/Bilag-09_IT-sikkerhed-Neon-og-IONOS.md` |
 
 **Begrænsninger:**
 
@@ -222,7 +222,7 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 | Momsangivelse til SKAT | **Art. 6(1)(c)** — retlig forpligtelse | Bogføringsloven og momsloven. |
 | Audit-logning og sikkerhed | **Art. 6(1)(f)** — legitime interesser | AlphaAis berettigede interesse i at sikre systemets integritet og opdage misbrug. |
 | AI-assistent (Hermes) — chat med LLM | **Art. 6(1)(a)** — samtykke | Per-tenant opt-in via tenant-administrator-samtykke (se afsnit 3.10). Samtykket dækker (a) selve AI-brugen, (b) GDPR-risici ved USA-overførsel via OpenRouter, (c) non-deterministiske processer. `HermesAgent.dataAccessEnabled` er et særskilt per-tenant opt-in (default `false`) for data-adgang ud over selve AI-brugssamtykket. |
-| AI-scanning af kvitteringer (OCR/VLM) | **Art. 6(1)(b)** — kontrakt (nødvendig for at levere tjenesten) | Billeder af kvitteringer sendes via OpenRouter til VLM (vision-language model) for struktureret udtræk. VLM-output er non-deterministisk og efterprøves af brugeren før bogføring (jf. BRUGSVEJLEDNING.md §11.3). |
+| AI-scanning af kvitteringer (OCR/VLM) | **Art. 6(1)(b)** — kontrakt (nødvendig for at levere tjenesten) | Billeder af kvitteringer sendes via OpenRouter til VLM (vision-language model) for struktureret udtræk. VLM-output er non-deterministisk og efterprøves af brugeren før bogføring (jf. Bilag-04_Brugsvejledning.md §11.3). |
 
 ### 3.4 Art. 9 — Særlige kategorier
 
@@ -251,7 +251,7 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 
 | Krav | Status | Implementering |
 |------|--------|----------------|
-| Behandlingsaktivitetsoversigt | ✅ Henviser til eksternt dokument | Se `docs/DATABEHANDLERAFTALE.md` for fuld fortegnelse over behandlingsaktiviteter, underbehandlere og datakategorier. |
+| Behandlingsaktivitetsoversigt | ✅ Henviser til eksternt dokument | Se `docs/Bilag-05_Databehandleraftale.md` for fuld fortegnelse over behandlingsaktiviteter, underbehandlere og datakategorier. |
 
 ### 3.8 Art. 32 — Sikkerhed for behandling
 
@@ -279,26 +279,26 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 
 | Krav | Status | Implementering |
 |------|--------|----------------|
-| Notifikation til Datatilsynet inden 72 timer | ✅ Henviser til eksternt dokument | Se `docs/BEREDSKABSPLAN.md` for beredskabsprocedure, 72-timers frist og kommunikationsplan. |
-| Underretning af berørte registrerede | ✅ Henviser til eksternt dokument | Se `docs/BEREDSKABSPLAN.md`. |
+| Notifikation til Datatilsynet inden 72 timer | ✅ Henviser til eksternt dokument | Se `docs/Bilag-07_Beredskabsplan.md` for beredskabsprocedure, 72-timers frist og kommunikationsplan. |
+| Underretning af berørte registrerede | ✅ Henviser til eksternt dokument | Se `docs/Bilag-07_Beredskabsplan.md`. |
 | Teknisk detektionsgrundlag | ⚠️ Delvist | AuditLog Logger auth-fejl (`LOGIN_FAILED`) og oversight-handlinger. Ingen dedikeret SIEM/IDS. |
 
 ### 3.10 Art. 35 — DPIA (Databeskyttelseskonsekvensvurdering)
 
 | Krav | Status | Implementering |
 |------|--------|----------------|
-| DPIA for højrisikobehandling | ✅ Henviser til eksternt dokument | Se `docs/RISIKOVURDERING.md` for DPIA inkl. AI-behandling (Hermes/OCR/VLM) og internationale dataoverførsler. |
+| DPIA for højrisikobehandling | ✅ Henviser til eksternt dokument | Se `docs/Bilag-06_Risikovurdering-DPIA.md` for DPIA inkl. AI-behandling (Hermes/OCR/VLM) og internationale dataoverførsler. |
 
 **AI-specifikke risici i DPIA:**
 
 AlphaFlows AI-funktioner (Hermes chat-LLM, knowledge-RAG embeddings, scanner VLM) udgør en højrisikobehandling jf. GDPR Art. 35(3)(b) (systematisk omfattende evaluering af personlige aspekter) og Art. 35(3)(d) (kombination af datasæt). Følgende AI-specifikke risici er identificeret og håndteres:
 
-1. **GDPR-risici ved USA-overførsel** — Persondata sendes til OpenRouter, Inc. (USA) per GDPR kapitel V. Håndteres via DPA + SCC (Modul 2) + TIA (Bilag 17; TIA i Bilag 8 afsnit 5.1). Restrisiko: Mellem (amerikanske myndigheder kan kræve adgang per FISA 702/EO 12333/CLOUD Act).
-2. **Non-deterministiske processer** — AI-output (chat-svar, kontoforslag, VLM-udtræk) er ikke deterministisk og kan indeholde fejl, unøjagtigheder eller "hallucinationer". Håndteres via: (a) bruger-advarsel og samtykke før Hermes-aktivering (Bilag 4 BRUGSVEJLEDNING.md §13.0), (b) kompakt fodnote på hver Hermes-besked, (c) VLM-output markeres "Kræver gennemsyn" ved lav konfidens (Bilag 4 §11.3), (d) AI-output overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid.
+1. **GDPR-risici ved USA-overførsel** — Persondata sendes til OpenRouter, Inc. (USA) per GDPR kapitel V. Håndteres via DPA + SCC (Modul 2) + TIA (Bilag 13; TIA i Bilag 8 afsnit 5.1). Restrisiko: Mellem (amerikanske myndigheder kan kræve adgang per FISA 702/EO 12333/CLOUD Act).
+2. **Non-deterministiske processer** — AI-output (chat-svar, kontoforslag, VLM-udtræk) er ikke deterministisk og kan indeholde fejl, unøjagtigheder eller "hallucinationer". Håndteres via: (a) bruger-advarsel og samtykke før Hermes-aktivering (Bilag 4 Bilag-04_Brugsvejledning.md §13.0), (b) VLM-output markeres "Kræver gennemsyn" ved lav konfidens (Bilag 4 §11.3), (c) AI-output overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid.
 3. **Uautoriseret rådgivning** — AI kan give rådgivning der overskrider AlphaFlows formål (bogføringsassistent). Håndteres via system-prompt der begrænser Hermes til dansk bogføring/moms/skat, og advarsel om at Hermes ikke er professionel revisor (Bilag 4 §13.0 Advarsel 3).
-4. **Samtykke-krav** — Tenant-administrator (OWNER/ADMIN) skal aktivt acceptere tre advarsler (GDPR-risici, non-determinisme, ikke-menneskelig-rådgivning) via samtykke-dialog før Hermes aktiveres. Samtykke logges i AuditLog (`action: AI_CONSENT_ACCEPTED`). Kan tilbagekaldes ved deaktivering. Særskilt `dataAccessEnabled`-opt-in (default false) for data-adgang ud over selve AI-brugssamtykket.
+4. **Samtykke-krav** — Hermes aktiveres per tenant af Owner/Admin (eller SuperDev) via en enable/disable-toggle. En separat dataadgang-toggle (`HermesAgent.dataAccessEnabled`, default false) styrer om tenant-specifikke finansielle data sendes til OpenRouter-LLM. Uden dataadgang sendes kun brugerspørgsmål + statisk system-prompt. Aktivering og dataadgang audit-logges (`action: UPDATE`).
 
-Se også `docs/RISIKOVURDERING.md` R-21 (AI non-determinisme) og R-13 (USA-dataoverførsel).
+Se også `docs/Bilag-06_Risikovurdering-DPIA.md` R-21 (AI non-determinisme) og R-13 (USA-dataoverførsel).
 
 ### 3.11 Kapitel V — Overførsel til tredjelande
 
@@ -308,7 +308,7 @@ AlphaFlow anvender én USA-baseret AI-underbehandler, der potentielt flytter per
 |----------------|------|--------|------------|---------------------------|
 | **OpenRouter, Inc.** | USA | Konsolideret AI-underbehandler — Hermes chat LLM, knowledge-service RAG-embeddings og scanner-service VLM (vision-language model) via én API-aftale. OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'. | (a) Brugerens spørgsmål + (ved opt-in) tenant-specifikke finansielle data (Hermes chat); (b) tekstuddrag fra lejeres dokumenter (kun hvis `HermesAgent.dataAccessEnabled = true` — embeddings); (c) billeder af kvitteringer/fakturaer uploadet af brugeren (scanner VLM). | Standardkontraktbestemmelser (SCC) + Transfer Impact Assessment (TIA). |
 
-**Dokumentation:** Se `docs/DATABEHANDLERAFTALE.md` for indgåede databehandleraftaler, SCC og TIA (Bilag 17 — konsolideret AI-DPA).
+**Dokumentation:** Se `docs/Bilag-05_Databehandleraftale.md` for indgåede databehandleraftaler, SCC og TIA (Bilag 13 — konsolideret AI-DPA).
 
 **Data minimization:** `HermesAgent.dataAccessEnabled` er per-tenant opt-in (default `false`). Uden opt-in sendes KUN brugerens spørgsmål + statisk system-prompt til LLM, **ikke** tenant-specifikke finansielle data.
 
@@ -386,7 +386,7 @@ Implementeret i applikationslaget (`src/lib/rate-limit.ts`) — in-memory slidin
 
 | Type | Implementering |
 |------|----------------|
-| **SuperDev (App Owner)** | `isSuperDev = true` for brugere med aktivt firma navn "AlphaAi". Promoteres via `/api/auth/promote-superdev`. Får alle features, bypasser 2FA og TokenPay, kan oversee andre tenants **read-only** (mutationer blokeres via `blockOversightMutation`). |
+| **SuperDev (App Owner)** | `isSuperDev = true` for brugere med aktivt firma navn "AlphaAi". Promoteres via `/api/auth/promote-superdev`. Får alle features, bypasser 2FA og TokenPay, kan oversee andre tenants **read-only** (mutationer blokeres via `blockOversightMutation`). SuperDev-administrative endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare for abonnements- og trial-styring på tværs af tenants — dette er en bevidst App Owner-funktion, ikke en data-isolation. |
 | **Demo-firma** | Delt demo-firma (CVR 29876543) med read-only for non-SuperDev. Mutationer blokeres via `requireNotDemoCompany`. |
 
 **23 permissions** i 7 kategorier (`src/lib/rbac.ts` linje 81–117):
@@ -473,7 +473,7 @@ Følgende persondata-felter opbevares **ukrypteret** i PostgreSQL og afhænger a
 | Aldrig i database | Bekræftet via grep. |
 | Aldrig i git | Ekskluderet via `.gitignore`. |
 | Kun server-side | Tilgængelig kun i server-side kode. |
-| Validering | `getEncryptionKey()` kaster hvis manglende eller forkert længde. |
+| Validering | `loadKeyring()` i `src/lib/keyring.ts:99-131` kaster hvis `ENCRYPTION_KEY` mangler eller har forkert længde; `getCurrentKeyVersion()` returnerer aktiv version. |
 | Caching | Parses én gang og caches i hukommelsen. |
 | Key rotation | Keyring med `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; version-prefixed ciphertext `v{N}:iv:authTag:ciphertext`; `encryptionKeyVersion` kolonner på User/BankConnection/Backup; migration-script `scripts/rotate-encryption-keys.ts`. Se Bilag 3 §2.4. |
 
@@ -622,7 +622,7 @@ Ingen konfigureret CORS-policy i `next.config.ts` eller `Caddyfile`. API-routes 
 | Frisbii / Flatpay | `Reepay-Signature` / `frisbii-signature` | HMAC-SHA256 + `timingSafeEqual` (Buffer). |
 | TokenPay | `x-tokenpay-signature` | HMAC-SHA256 + `crypto.timingSafeEqual`. ✅ Udbedret (U-14). |
 
-**✅ Opdateret (U-6/U-14):** Dev-fallback "accept all" er fjernet fra alle 3 webhook-ruter — de afviser nu når `WEBHOOK_SECRET` mangler (fail-closed). TokenPay string-XOR er erstattet med `crypto.timingSafeEqual` i 3 filer. Se `UDBEDRINGSPLAN.md` U-6 + U-14.
+**✅ Opdateret (U-6/U-14):** Dev-fallback "accept all" er fjernet fra alle 3 webhook-ruter — de afviser nu når `WEBHOOK_SECRET` mangler (fail-closed). TokenPay string-XOR er erstattet med `crypto.timingSafeEqual` i 3 filer. Se `Bilag-10_Udbedringsplan.md` U-6 + U-14.
 
 ---
 
@@ -718,8 +718,8 @@ Platformen opfylder GDPR's sikkerhedskrav (art. 32): kryptering i transit (TLS 1
 |--------|-------------|
 | **Immutability (BEK 97 Bilag 1 / Lov om bogføring §13)** | Immutability håndhæves via AuditLog 3-niveau (applikation CREATE-only + PostgreSQL-triggers + cascade-Restrict). |
 | **Persondata-kryptering i hvile (GDPR art. 32)** | Følsomme data (bank-tokens, 2FA-secrets) er AES-256-GCM-krypteret. Øvrige persondata (email, telefon, adresser) opbevares ukrypteret og beskyttes af Neon TLS + DB-adgangskontrol + RBAC. |
-| **Bank-integration** | Tink er en reel integration (PSD2 consent-flow); Nordea/Danske Bank/Jyske Bank er stubs; Demo-provider leverer syntetiske data. Matching er manuelt. |
-| **Kreditnota-oprettelse** | `EInvoiceType.CREDIT_NOTE`-enum findes; modtagelse af elektronisk kreditnota understøttes. |
+| **Bank-integration** | Tink er en reel integration (PSD2 consent-flow); Nordea/Danske Bank/Jyske Bank er stubs; Demo-provider leverer syntetiske data. AI-assisteret bankafstemning er implementeret i produktion via OpenRouter (`src/lib/matching-engine.ts`): tre-niveau matching (regelbaseret/fuzzy/AI) med konfidens-tærskler ≥0,95 autoprogrammeres, 0,80–0,95 kræver manuel godkendelse. |
+| **Kreditnota-oprettelse** | Kreditnotaer er fuldt implementeret: UI-knap, backend med `creditNotePrefix` (KRE-{år}-{seq}), spejlet bogføring, valgfrit `originalInvoiceId`, PDF og OIOUBL type 381. Annullering opretter modpostering `REVERSAL-{invoiceNumber}`. |
 | **Moms-API** | Momsangivelse til SKAT via OAuth2 `client_credentials`. |
 
 ### 11.3 Supplerende sikkerhedsforanstaltninger (planlagt)
@@ -731,7 +731,7 @@ Platformen opfylder GDPR's sikkerhedskrav (art. 32): kryptering i transit (TLS 1
 
 ### 11.4 Afhjælpning
 
-Planlagte sikkerhedsforbedringer er beskrevet i `docs/UDBEDRINGSPLAN.md`.
+Planlagte sikkerhedsforbedringer er beskrevet i `docs/Bilag-10_Udbedringsplan.md`.
 
 ### 11.5 Erklæring
 
@@ -793,12 +793,12 @@ AlphaAi Consult ApS forpligter sig til løbende at vedligeholde og udvikle platf
 
 | Dokument | Formål |
 |----------|--------|
-| `docs/DATABEHANDLERAFTALE.md` | Underbehandlere, SCC, TIA, behandlingsregister (GDPR art. 28, 30, 46). |
-| `docs/BEREDSKABSPLAN.md` | Beredskab ved persondataforstyrrelser (GDPR art. 33–34). |
-| `docs/RISIKOVURDERING.md` | DPIA og risikovurdering (GDPR art. 35). |
-| `docs/UDBEDRINGSPLAN.md` | Planlagte sikkerhedsforbedringer. |
-| `docs/ENCRYPTION.md` | Detaljeret teknisk dokumentation af krypteringsimplementering. |
-| `docs/NEON & IONOS_IT_SIKKERHED.md` | Hosting-udbydernes sikkerhedscertificeringer. |
+| `docs/Bilag-05_Databehandleraftale.md` | Underbehandlere, SCC, TIA, behandlingsregister (GDPR art. 28, 30, 46). |
+| `docs/Bilag-07_Beredskabsplan.md` | Beredskab ved persondataforstyrrelser (GDPR art. 33–34). |
+| `docs/Bilag-06_Risikovurdering-DPIA.md` | DPIA og risikovurdering (GDPR art. 35). |
+| `docs/Bilag-10_Udbedringsplan.md` | Planlagte sikkerhedsforbedringer. |
+| `docs/Bilag-03_Krypteringsrapport.md` | Detaljeret teknisk dokumentation af krypteringsimplementering. |
+| `docs/Bilag-09_IT-sikkerhed-Neon-og-IONOS.md` | Hosting-udbydernes sikkerhedscertificeringer. |
 
 ---
 

@@ -32,7 +32,7 @@ Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den f
 - Hvordan data er beskyttet under transit (TLS, SMTP-STARTTLS, sslmode=require).
 - Hvordan krypteringsnøgler administreres.
 
-**Ansvarlig:** AlphaAi Consult ApS (CVR-oplysninger for AlphaAi Consult ApS (CVR 46312058, Skelagervej 124C, 8200 Aarhus N) fremgår af Bilag 4 (BRUGSVEJLEDNING.md) afsnit 18.2 og Bilag 1 (ANMELDELSESPAKKE.md) afsnit 2).
+**Ansvarlig:** AlphaAi Consult ApS (CVR-oplysninger for AlphaAi Consult ApS (CVR 46312058, Skelagervej 124C, 8200 Aarhus N) fremgår af Bilag 4 (Bilag-04_Brugsvejledning.md) afsnit 18.2 og Bilag 1 (Bilag-01_Anmeldelsespakke.md) afsnit 2).
 **Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) + 5 mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL.
 
 ---
@@ -49,7 +49,7 @@ AlphaFlow opererer med **to separate statiske symmetriske nøgler**, begge AES-2
 | Længde | 32 byte / 256 bit |
 | Algoritme | AES-256-GCM |
 | Bruges til | Bank-tokens, TOTP-secrets, 2FA-backup-koder, backup-ZIP-filer |
-| Påkrævet i produktion | **JA — kritisk.** Service kaster ved opstart hvis manglende/ugyldig (`src/lib/crypto.ts:48-71`). |
+| Påkrævet i produktion | **JA — kritisk.** Service kaster ved opstart hvis manglende/ugyldig (`src/lib/keyring.ts:99-131` — keyring-arkitektur, understøtter nøglerotation via `ENCRYPTION_KEY` + `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`). |
 | Opbevaring | KUN environment variable — aldrig i DB eller kode |
 
 Generering:
@@ -76,9 +76,9 @@ openssl rand -hex 32
 - Nøgler opbevares **KUN** som environment variables:
   - I udvikling: `.env` / `.env.local` (rotet uden for git via `.gitignore`).
   - I produktion: `ecosystem.config.js` `env:`-blokke for hver PM2-app, eller OS-brugerens environment ved manuel start.
-- **PM2 læser IKKE automatisk `.env`** — hver mini-service (`tokenpay-access`, `hermes-agent`, `knowledge-service`, `scanner-service`) har sin egen `env:`-blok i `ecosystem.config.js`, hvor nøgler skal udfyldes eksplicit. Se `TOKENBAY-ACCESS-ENV-GUIDE.md` for detaljer.
+- **PM2 læser IKKE automatisk `.env`** — hver mini-service (`tokenpay-access`, `hermes-agent`, `knowledge-service`, `scanner-service`) har sin egen `env:`-blok i `ecosystem.config.js`, hvor nøgler skal udfyldes eksplicit. Se `Bilag-11_TokenPay-TokenBay-guide.md` for detaljer.
 - Aldrig hårdkodet i kode, aldrig i databasen, aldrig logget.
-- Validering ved opstart: `getEncryptionKey()` kaster hvis manglende eller forkert længde.
+- Validering ved opstart: `loadKeyring()` (`src/lib/keyring.ts:99-131`) kaster hvis `ENCRYPTION_KEY` mangler eller har forkert længde; `getCurrentKeyVersion()` returnerer aktiv version.
 - Caching: nøglen parses én gang per proces og caches (`cachedKey`).
 
 ### 2.4 Key rotation (U-1 — implementeret)
@@ -264,7 +264,7 @@ AlphaFlow verificerer HMAC-SHA256-signaturer på indgående webhooks fra fire in
   - `/api/hermes/*` → hermes-agent :3004 (Bearer `HERMES_ADMIN_KEY`)
   - `/api/knowledge/*` → knowledge-service :3006 (Bearer `HERMES_ADMIN_KEY`)
 - **Real-time WebSocket:** Socket.IO via Caddy reverse proxy med `?XTransformPort=<port>`-routing — TLS-termineret af Caddy.
-- **Eksterne API-kald:** alle over HTTPS (SKAT, Storecove, Frisbii, CVR, OpenRouter). AI-kald (chat-LLM, embeddings, VLM) er konsolideret via OpenRouter — se Bilag 17 (konsolideret AI-DPA).
+- **Eksterne API-kald:** alle over HTTPS (SKAT, Storecove, Frisbii, CVR, OpenRouter). AI-kald (chat-LLM, embeddings, VLM) er konsolideret via OpenRouter — se Bilag 13 (konsolideret AI-DPA).
 
 ### 4.5 Browser-side
 
@@ -338,9 +338,9 @@ Følgende data opbevares ukrypteret i PostgreSQL og beskyttes af foranstaltninge
 De ukrypterede persondata i punkt 5.3 beskyttes af et **forsvar-i-dybden**-lag:
 
 1. **Transport-lag:** Neon TLS-in-transit (`sslmode=require`) — data er krypteret mellem applikation og database. **Ingen plaintext over netværket.**
-2. **Disk-encryption:** Neon tilbyder managed disk-encryption på infrastruktur-niveau (dokumenteret i `NEON & IONOS_IT_SIKKERHED.md`). AlphaFlow verificerer ikke krypteringsniveauet runtime, men er afhængig af Neons service-level agreement.
+2. **Disk-encryption:** Neon tilbyder managed disk-encryption på infrastruktur-niveau (dokumenteret i `Bilag-09_IT-sikkerhed-Neon-og-IONOS.md`). AlphaFlow verificerer ikke krypteringsniveauet runtime, men er afhængig af Neons service-level agreement.
 3. **Adgangskontrol (primært forsvar):**
-   - RBAC: 5 roller (OWNER > ADMIN > ACCOUNTANT > VIEWER > AUDITOR) med 18 permissions (`src/lib/rbac.ts`).
+   - RBAC: 5 roller (OWNER > ADMIN > ACCOUNTANT > VIEWER > AUDITOR) med 23 permissions i 7 kategorier (`src/lib/rbac.ts`).
    - Tenant-isolation: `tenantFilter(ctx)` / `companyScope(ctx)` returnerer Prisma-where `{ companyId: <aktiv tenant> }` på alle queries.
    - Path-traversal-beskyttelse på fil-serving routes.
 4. **Audit-trail immutability:** Alle mutationer logges i `AuditLog` (kun CREATE eksponeres i applikationen + PostgreSQL BEFORE UPDATE/DELETE triggere forhindrer manipulation).
@@ -431,20 +431,11 @@ generateEncryptionKey(): string              // → 64-char hex
 
 ### 7.3 Key-håndtering i praksis
 
-```typescript
-function getEncryptionKey(): Buffer {
-  if (cachedKey) return cachedKey;
-  const keyHex = process.env.ENCRYPTION_KEY;
-  if (!keyHex) throw new Error('CRITICAL: ENCRYPTION_KEY environment variable is not set...');
-  const key = Buffer.from(keyHex, 'hex');
-  if (key.length !== 32) throw new Error(`ENCRYPTION_KEY must be exactly 32 bytes...`);
-  cachedKey = key;
-  return key;
-}
-```
+Krypteringsnøglen indlæses via keyring-arkitekturen i `src/lib/keyring.ts`: `loadKeyring()` læser `ENCRYPTION_KEY` (aktuel) og valgfri `ENCRYPTION_KEY_PREVIOUS` (til rotation), tildeler hver en versions-integer (`CURRENT_KEY_VERSION`), og `getCurrentKey()`/`getKeyForVersion(version)` returnerer den korrekte nøgle. Krypterede felter gemmer den anvendte `encryptionKeyVersion` så gamle data kan dekrypteres efter rotation. Start-preflight i `src/lib/backup-scheduler.ts:629-637` kaster og afbryder opstart hvis `ENCRYPTION_KEY` mangler eller har forkert længde.
 
-- Nøglen parses én gang og caches per proces.
+- Nøglen parses én gang og caches per proces (`cachedKeyring`).
 - Hvis nøglen mangler eller har forkert længde, kastes der — applikationen fejler hurtigt ved opstart.
+- Ciphertext gemmes med version-prefix (`v{N}:...`) så `decrypt()` automatisk vælger korrekt nøgle efter rotation.
 
 ### 7.4 .tbkey dekryptering (TokenPay-service)
 

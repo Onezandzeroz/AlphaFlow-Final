@@ -1,7 +1,7 @@
 # AlphaFlow — Udbedringsplan før indsendelse
 
 **AlphaAi Consult ApS** (CVR 46312058)
-**Dokumentversion:** 3.4
+**Dokumentversion:** 3.6
 **Dato:** 2026
 **Bilag 10 i anmeldelsespakken
 **Ansvarlig:** Jess Martin Christoffersen, Direktør
@@ -12,7 +12,7 @@
 
 ## 1. Formål
 
-Dette dokument beskriver AlphaAi Consult ApS' plan for videreudvikling af AlphaFlow-platformen. Planen bygger på åbenhedslisten i Bilag 1 (ANMELDELSESPAKKE.md) afsnit 8 og risikovurderingen i Bilag 6 (RISIKOVURDERING.md).
+Dette dokument beskriver AlphaAi Consult ApS' plan for videreudvikling af AlphaFlow-platformen. Planen bygger på åbenhedslisten i Bilag 1 (Bilag-01_Anmeldelsespakke.md) afsnit 8 og risikovurderingen i Bilag 6 (Bilag-06_Risikovurdering-DPIA.md).
 
 Tiltagene er inddelt i tre kategorier:
 - **A — Indsendelseskrav** (afhænger af eksterne parter)
@@ -36,7 +36,6 @@ Tiltagene er inddelt i tre kategorier:
 | U-16 | Udvidet kryptering af persondata i DB | B | GDPR Art. 32; BEK 97 §8 stk. 4 (D7) |
 | U-17 | Backup-scheduler adskilles fra applikationsproces | B | BEK 97 §7 |
 | U-18 | Bank-API stubs (Nordea/Danske/Jyske) — kun Tink + Demo reelle | C | BEK 97 Bilag 2 pkt 3.b — delvist |
-| U-19 | AI-bankafstemning sandbox-only — manuel afstemning anvendes | C | BEK 97 Bilag 2 pkt 3 |
 | U-20 | Ingen MitID/SSO/SAML — email+password+TOTP anvendes | C | Ikke lovpåkrævet |
 | U-21 | Ingen CSRF-token — SameSite=Lax + Bearer kompenserer | C | Lav restrisiko |
 | U-22 | SQLite i mini-services ukrypteret — VPS disk-encryption dækker | C | Lav restrisiko |
@@ -52,12 +51,12 @@ AI-ydelser (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service V
 > **Note om model-udbydere:** OpenRouter er AlphaFlows databehandler og connector. Via OpenRouter kan AlphaFlow benytte alle tilgængelige modeller (OpenAI, Anthropic, Meta, Mistral m.fl.). Disse model-udbydere er OpenRouter's underbehandlere per GDPR Art. 28(4) — AlphaAi Consult ApS indgår kun DPA med OpenRouter og forlader sig på OpenRouter's DPA'er med deres underbehandlere. Dette gælder samlet for chat-LLM, RAG-embeddings og scanner-VLM — der indgås IKKE separate DPA'er med Anthropic eller OpenAI.
 
 **Handling:**
-- Indgå DPA + EU-SCC (Modul 2) med OpenRouter, Inc. (Bilag 17 — konsolideret AI-DPA der dækker chat LLM + embeddings + VLM).
+- Indgå DPA + EU-SCC (Modul 2) med OpenRouter, Inc. (Bilag 13 — konsolideret AI-DPA der dækker chat LLM + embeddings + VLM).
 - Udfør Transfer Impact Assessment (TIA) — vurdering af USA-retsmiljø (FISA 702, EO 12333, CLOUD Act) + suppl. foranstaltninger. Ramme i Bilag 8 (LEVERANDØRSTYRING.md) afsnit 5.1.
 - Verificer OpenRouter's underbehandler-liste (inkl. upstream-model-udbydere Anthropic/Meta/OpenAI per GDPR Art. 28(4)) og zero-retention-tilvalg hvor muligt.
 - Vedhæft underskrevne DPA + SCC + TIA som separate PDF'er ved indsendelsen.
 **Ansvarlig:** Jess Martin Christoffersen (juridisk) · **Tidsramme:** 2-5 dage (primært ventetid)
-**Acceptkriterier:** Underskrevet OpenRouter DPA (Bilag 17) + EU-SCC (Modul 2) + TIA vedhæftet; Bilag 12 status opdateret.
+**Acceptkriterier:** Underskrevet OpenRouter DPA (Bilag 13) + EU-SCC (Modul 2) + TIA vedhæftet; Bilag 12 status opdateret.
 
 ### U-8 — SKAT Moms-API credentials
 `vat-submit.ts` simulerer hvis credentials mangler.
@@ -66,14 +65,14 @@ AI-ydelser (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service V
 - Ansøg om adgang til Moms-API (scope `moms:indberet`).
 - Sæt `SKAT_CLIENT_ID` + `SKAT_CLIENT_SECRET` i produktions-`.env`.
 - Test mod Skattestyrelsens test-miljø.
-- Opdater Bilag 4 (BRUGSVEJLEDNING.md) afsnit 9.3.
+- Opdater Bilag 4 (Bilag-04_Brugsvejledning.md) afsnit 9.3.
 **Ansvarlig:** Jess Martin Christoffersen (Skattestyrelsen) + teknisk (konfiguration) · **Tidsramme:** 1 dag kode + Skattestyrelsen ventetid
 **Acceptkriterier:** `hasSkatCredentials()` returnerer true; test-momsangivelse successfuld.
 
 ### U-9 — NemHandel Access Point-aftale (Storecove)
 `nemhandel-client.ts` simulerer uden reel AP-aftale.
 **Handling:**
-- Indgå Access Point-aftale med Storecove B.V. (Bilag 15) — fungerer som både Peppol og NemHandel AP.
+- Indgå Access Point-aftale med Storecove B.V. (Bilag 13) — fungerer som både Peppol og NemHandel AP.
 - Sæt `NEMHANDEL_SIMULATION_MODE=false` + `STORECOVE_API_KEY` i produktion.
 - Test e-faktura-afsendelse (OIOUBL type 380) til test-modtager.
 - Tilmeld AlphaFlow hos NemHandelsregisteret via Storecove.
@@ -106,7 +105,6 @@ Følgende er bevidste arkitektoniske og produktmæssige valg med kompenserende f
 | ID | Tiltag/Beslutning | Begrundelse |
 |---|---|---|
 | U-18 | Bank-API stubs (Nordea/Danske/Jyske) | Tink er reel integration; Demo + CSV-import dækker øvrige. Andre banker aktiveres ved behov. |
-| U-19 | AI-bankafstemning sandbox-only | Manuel afstemning implementeret og opfylder kravet. AI er value-add. |
 | U-20 | Ingen MitID/SSO/SAML | Ikke lovpåkrævet for bogføringssystemer. Email+password+TOTP opfylder BEK 97 §8 stk. 4 (D2). |
 | U-21 | Ingen CSRF-token | Kompenseret via SameSite=Lax cookie + Bearer-token. Lav restrisiko. |
 | U-22 | SQLite i mini-services ukrypteret | `scanner.db` kun scan-historik; `access.db` beskyttes af VPS disk-encryption + adgangskontrol. Lav restrisiko. |
@@ -135,7 +133,7 @@ Før indsendelse bekræftes at:
 
 - [x] Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført.
 - [x] Bilag 1 afsnit 8 (åbenhedsliste) opdateret — implementerede punkter beskrevet som features.
-- [x] Bilag 6 (RISIKOVURDERING.md) §6 restrisiko-fordeling opdateret for implementerede risici.
+- [x] Bilag 6 (Bilag-06_Risikovurdering-DPIA.md) §6 restrisiko-fordeling opdateret for implementerede risici.
 - [x] Berørte dokumenter (Bilag 2, 3, 6, 7, 9) opdateret hvor Kategori A-implementeringer ændrer beskrivelsen.
 
 | Rolle | Navn | Dato | Underskrift |
@@ -159,9 +157,11 @@ Før indsendelse bekræftes at:
 | 2.0 | Juli 2025 | Implementeringslog for 5 mangler. |
 | 3.0 | 2026 | Udvidet med R-01..R-20 fra Bilag 6; Kategori A/B/C-struktur. |
 | 3.1 | 2026 | Simplificeret — fokuseret på konkret handlingsplan; OpenRouter som hoved-databehandler for AI (underbehandlere håndteres af OpenRouter per GDPR Art. 28(4)). |
-| 3.2 | 2026 | AI-konsolidering: kun OpenRouter som AI-udbyder (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). U-2 opdateret — scanner-VLM går nu via OpenRouter (ikke separat Anthropic DPA). Bilag-reference opdateret: Bilag 17 = OpenRouter (konsolideret AI-DPA), Bilag 18 = Simply/Brevo, Bilag 19 = xlsx-tjekliste. |
+| 3.2 | 2026 | AI-konsolidering: kun OpenRouter som AI-udbyder (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). U-2 opdateret — scanner-VLM går nu via OpenRouter (ikke separat Anthropic DPA). |
 | 3.3 | 2026 | Kategori A-udbedringer udført: U-1 (key rotation), U-3 (CSP), U-4 (ClamAV), U-5 (Socket.IO auth), U-6 (webhook fail-closed), U-7 (voucherNumber), U-14 (timingSafeEqual). Tilsvarende bilag opdateret. |
 | 3.4 | 2026 | Fjernet implementerede tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) fra planen; dokumentet fokuserer nu på resterende tiltag. Reframet sprog. |
+| 3.5 | 2026 | Dokumentationsnøjagtighed: rettet permissions 18→23, kreditnota nu implementeret, AI-bankafstemning nu i produktion via OpenRouter, Hermes-consent beskrevet korrekt (toggle-baseret), webhook fail-closed reflekteret, CVR konsolideret til 46312058. |
+| 3.6 | 2026 | Bilagsstruktur-konsolidering: underbehandler-DPA’er samlet til Bilag 13; Tjekliste renummereret fra Bilag 19 til Bilag 14. Krydsreferencer opdateret. |
 
 ---
 

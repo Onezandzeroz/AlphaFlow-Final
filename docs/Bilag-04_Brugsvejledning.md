@@ -141,7 +141,7 @@ Når du er logget ind første gang, vises en onboarding-wizard. Antallet af trin
 | Trin | Vises for | Formål |
 |------|-----------|--------|
 | 1. Virksomhedsoplysninger | Alle | Indtast CVR, navn, adresse, bank |
-| 2. Kontoplan | Alle | Opret FSR-38 standardkonti |
+| 2. Kontoplan | Alle | Opret FSR-baseret standardkonti |
 | 3. eLevering / eFaktura | Kun Business+ (AUTO_EINVOICE-feature) | Konfigurer Storecove + Peppol/NemHandel |
 
 Hvert trin har baggrundsillustration, ikon og "udført"-status, der synkroniseres på tværs af enheder. Når alle trin er gennemført, vises en **OnboardingCompleteOverlay** (mobil: cirkel+checkmark-animation, desktop: inline kort).
@@ -354,7 +354,7 @@ AlphaFlow har 5 roller med faldende rettigheder, plus en særlig App Ejer-rolle.
 | **VIEWER (Seer)** | 2 | Ja | Nej | Nej | Nej |
 | **AUDITOR (Revisor)** | 1 | Ja (viser lilla "revisor"-badge) | Nej | Nej | Nej |
 
-Der er **18 granulære tilladelser** fordelt på områder som virksomhed, medlemmer, data, rapporter, perioder, bank og backup. Hver permission har en minimums-rolle.
+Der er **23 granulære tilladelser** fordelt på 7 kategorier (virksomhed, medlemmer, data, rapporter, perioder, bank og backup). Hver permission har en minimums-rolle (`PERMISSION_MIN_ROLE` i `src/lib/rbac.ts`).
 
 ### 4.2 App Ejer (SuperDev)
 
@@ -406,9 +406,9 @@ Klik på **Slet konto**-ikonet (Trash2) i sidebjælken → bekræft i AlertDialo
 
 ## 5. Bogføring
 
-### 5.1 Kontoplan (FSR-38)
+### 5.1 Kontoplan (FSR-baseret)
 
-Når du opretter en virksomhed, opretter AlphaFlow automatisk en standard dansk kontoplan baseret på FSR-standarden med 38 konti fordelt på:
+Når du opretter en virksomhed, opretter AlphaFlow automatisk en FSR-baseret standard dansk kontoplan fordelt på:
 
 | Kontonummer | Gruppe | Eksempler |
 |-------------|--------|-----------|
@@ -519,12 +519,22 @@ Tilbagevendende posteringer lader dig automatisere gentagne transaktioner som hu
 3. Tilføj posterlinjer (debet/kredit) som i en almindelig journalpost.
 4. Gem.
 
+> **Backfill:** Hvis `startDate` ligger i fortiden ved oprettelse, opretter systemet automatisk alle missede eksekveringer fra `startDate` til dags dato (backfill i `recurring-entries/route.ts`).
+
 **Håndtering:**
 
 - Tidslinje-visning viser kommende og tidligere eksekveringer.
 - Play/pause for at aktivere/deaktivere.
 - "Udfør nu" for at gennemtvinge en eksekvering.
 - Slet for at fjerne posten permanent.
+
+**Scheduler (`src/lib/recurring-scheduler.ts`):**
+
+- Kører via `node-cron` kl. 06:00 dagligt (`0 6 * * *`, tidszone Europe/Copenhagen).
+- **Startup catch-up:** hvis den seneste daglige kørsel var mere end 36 timer siden (`wasRecurringJobMissed`), indhentes den oversete kørsel automatisk ved app-start.
+- Retry med eksponentiel backoff (maks. 2 retries, basistid 3s, maks 30s).
+- Overlap guard via `runningJobs`-Set forhindrer concurrent kørsler.
+- Hver cyklus logges i `CronExecution`-tabellen; `DISABLE_RECURRING_SCHEDULER=true` slår scheduleren fra ved vedligeholdelse.
 
 ### 5.8 Regnskabsperioder
 
@@ -618,7 +628,7 @@ AlphaFlows faktureringsmodul (`/invoices`) håndterer salgsfakturaer, e-mail-afs
 | **PAID (Betalt)** | Fakturaen er markeret som betalt (med betalingsdato). |
 | **CANCELLED (Annulleret)** | Fakturaen er annulleret. Bruges, når en faktura skal trækkes tilbage. |
 
-> **Vigtigt om kreditnotaer:** AlphaFlow har **ikke** et dedikeret kreditnota-oprettelsesflow i brugerfladen. Hvis en faktura skal annulleres eller korrigeres, bruges **CANCELLED**-status (via "Annuller"-knappen i preview-dialogen), der opretter en modpost. Der findes en `EInvoiceType.CREDIT_NOTE`-enum-værdi til e-faktura-modtagelse, men der er ingen knap i UI til at oprette en kreditnota fra en eksisterende faktura.
+> **Kreditnotaer:** Kreditnotaer er fuldt implementeret i AlphaFlow. Klik på **Opret kreditnota** i faktura-listen (`invoices-page.tsx`) for at oprette en kreditnota med separat nummerering (`creditNotePrefix` → f.eks. `KRE-2026-0001`), spejlet bogføring (debet/kredit byttet), valgfrit `originalInvoiceId` reference til den oprindelige faktura, PDF-generering (PDF'en viser titlen "KREDITNOTA"), og OIOUBL e-fakturering med type 381 (`oioubl-generator.ts`). Annullering af en faktura opretter en modpostering (`REVERSAL-{invoiceNumber}`) jf. Bogføringsloven §§ 10-12.
 
 ### 6.3 PDF og e-mail
 
@@ -627,8 +637,8 @@ Fra faktura-preview-dialogen (klik på en faktura i listen):
 - **Download PDF** — genererer en PDF til download.
 - **Print** — åbner browserens print-dialog.
 - **Send via e-mail** (`SendInvoiceDialog`) — indtast subject og message, se modtager-preview. Fakturaen sendes via SMTP (kræver konfigureret SMTP_HOST).
-- **Markér som betalt** (`MarkPaidDialog`) — skift status til PAID med valgfri betalingsdato.
-- **Annuller** — skift status til CANCELLED med årsag.
+- **Markér som betalt** (`MarkPaidDialog`) — skift status til PAID med valgfri betalingsdato (`paidDate`); systemet opretter automatisk en kassejournalpost (Debit Bank / Kredit Tilgodehavende).
+- **Annuller** — skift status til CANCELLED med årsag. Systemet opretter automatisk en modpostering (`REVERSAL-{invoiceNumber}`), der neutraliserer den oprindelige accrual- og evt. kassejournalpost jf. Bogføringsloven §§ 10-12.
 - **Slet** — kun for DRAFT-status.
 
 ### 6.4 Send e-faktura (Peppol/NemHandel)
@@ -784,16 +794,28 @@ Efter import vises nye banktransaktioner i venstre pane i afstemningsvisningen.
 - Søgning, sortering, paginering.
 - Eksport pr. række (CSV).
 
-### 8.4 Manuel afstemning
+### 8.4 Afstemning — tre-niveau matching
 
-AlphaFlow har en **manuel** afstemningsproces. Der er **ikke** automatisk AI-baseret bankafstemning i produktion (z-ai-web-dev-sdk er sandbox-only og fejler graceful).
+AlphaFlow implementerer AI-assisteret bankafstemning i produktion via OpenRouter (LLM) i `src/lib/matching-engine.ts`. Matching kører i tre niveauer:
+
+1. **Regelbaseret eksakt match** — beløb ±0,01 DKK, dato ±3 dage, reference-tekstlighed.
+2. **Fuzzy match** — beløb ±5 DKK, dato ±7 dage, beskrivelses-lighed >70%.
+3. **AI-match via OpenRouter** — sender kandidat-par til LLM'en og får konfidens-score (0,00–1,00) tilbage.
+
+**Konfidens-tærskler:**
+
+- **AI-match ≥ 0,95** → autoprogrammeres som `MATCHED` (banklinje kobles automatisk til journalpost).
+- **AI-match 0,80–0,95** → markeres `AI_SUGGESTED` og vises i afstemningsvisningen; kræver manuel godkendelse (`Link`).
+- **AI-match < 0,80** → ignoreres (forslås ikke).
+
+AI-output overstyrer **aldrig** automatisk bogførte posteringer uden brugergodkendelse.
 
 **Afstemning via to-panes visning:**
 
 1. Gå til **Bankafstemning** (`BankReconciliationPage`).
 2. Venstre pane: banktransaktioner.
 3. Højre pane: bogførte posteringer.
-4. Find en umatchet banklinje.
+4. Find en umatchet banklinje (eller en banklinje med `AI_SUGGESTED`-forslag).
 5. Klik på **Link** for at koble den med en tilsvarende journalpost.
 6. Klik på **Unlink** for at fjerne en kobling.
 
@@ -810,7 +832,7 @@ Du kan også oprette en ny postering direkte fra en umatchet banklinje, hvis der
 | MT940-import | ✅ Virker |
 | Manuel indtastning af transaktioner | ✅ Virker |
 | Manuel afstemning (klik "Link") | ✅ Virker |
-| Automatisk AI-afstemning | ❌ Findes ikke i produktion |
+| AI-assisteret afstemning (OpenRouter, 3-niveau) | ✅ Virker i produktion (≥0,95 auto, 0,80–0,95 forslag) |
 
 ---
 
@@ -1028,7 +1050,7 @@ Når et dokument er scannet, udfylder systemet automatisk:
 
 - Den integrerede Tesseract.js-klient i `ReceiptScanner`-komponenten kan bruges offline i browseren, mens den fulde VLM-pipeline (via OpenRouter) kræver internetforbindelse og aktiv `OPENROUTER_API_KEY` på serveren.
 - Scanner-servicen er hosted separat og rutes gennem AlphaFlows API-proxy.
-- Billeder af kvitteringer sendes til USA via OpenRouter til VLM-analyse (SCC+TIA påkrævet — se Bilag 17) — se afsnit 13 og GDPR-dokumentationen for detaljer om databehandling.
+- Billeder af kvitteringer sendes til USA via OpenRouter til VLM-analyse (SCC+TIA påkrævet — se Bilag 13) — se afsnit 13 og GDPR-dokumentationen for detaljer om databehandling.
 
 ---
 
@@ -1089,14 +1111,14 @@ Når du "går ind i" et projekt (via `ProjectSelector` eller detalje-siden), ski
 
 Hermes er AlphaFlows indbyggete AI-assistent — en chat-baseret hjælperekspert, der kan svare på spørgsmål om dansk regnskab, moms, skat og bogføringsregler.
 
-### 13.0 Vigtige advarsler og samtykke — læs før aktivering
+### 13.0 Vigtige advarsler — læs før aktivering
 
-Før du aktiverer Hermes, skal du som tenant-administrator (OWNER/ADMIN) være opmærksom på følgende og aktivt acceptere dem via samtykke-dialogen i **Indstillinger → Hermes AI**:
+Før du aktiverer Hermes, skal du som tenant-administrator (OWNER/ADMIN) være opmærksom på følgende:
 
 > ⚠️ **Advarsel 1 — GDPR-relaterede risici (persondata til USA):**
 > Når Hermes er aktiveret, sendes dit spørgsmål og — hvis du tilmelder dig data-adgang (se afsnit 13.3) — kontekst om din virksomheds regnskab til AlphaFlows AI-underbehandler **OpenRouter, Inc. (USA)**. OpenRouter videresender til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4).
 >
-> Dette indebærer **overførsel af persondata til et tredjeland (USA)**. AlphaAi Consult ApS har indgået DPA + EU-Standard Contractual Clauses (SCC) + Transfer Impact Assessment (TIA) med OpenRouter (Bilag 17) for at beskytte dine data, men der er en tilbageværende risiko for at amerikanske myndigheder (FISA 702, EO 12333, CLOUD Act) kan kræve adgang. Du accepterer denne risiko ved aktivering.
+> Dette indebærer **overførsel af persondata til et tredjeland (USA)**. AlphaAi Consult ApS har indgået DPA + EU-Standard Contractual Clauses (SCC) + Transfer Impact Assessment (TIA) med OpenRouter (Bilag 13) for at beskytte dine data, men der er en tilbageværende risiko for at amerikanske myndigheder (FISA 702, EO 12333, CLOUD Act) kan kræve adgang. Du accepterer denne risiko ved aktivering.
 
 > ⚠️ **Advarsel 2 — Non-deterministiske processer (usikkerhed ved AI-output):**
 > Hermes er baseret på en sprogmodel (LLM). AI-genereret rådgivning er **ikke deterministisk** — det samme spørgsmål kan give forskellige svar, og svar kan indeholde **fejl, unøjagtigheder eller "hallucinationer"** (det vil sige tilsyneladende plausible men forkerte oplysninger). AI-output er **ikke** professionel regnskabsrådgivning og erstatter ikke en revisor eller bogholder.
@@ -1106,17 +1128,18 @@ Før du aktiverer Hermes, skal du som tenant-administrator (OWNER/ADMIN) være o
 > ⚠️ **Advarsel 3 — Ikke menneskelig rådgivning:**
 > Hermes er AI-kun. Der er ingen menneskelig revisor bag Hermes-chat. For endelig rådgivning ved vigtige beslutninger (årsafslutning, komplekse skattespørgsmål, tvivl om kontering) skal du kontakte en autoriseret revisor eller bogholder.
 
-**Samtykke:** Ved aktivering af Hermes (§13.1) skal tenant-administratoren aktivt afkrydse/acceptere ovenstående tre advarsler via en samtykke-dialog i appen. Samtykket logges i AuditLog (`action: AI_CONSENT_ACCEPTED`) og kan tilbagekaldes ved deaktivering, hvorefter Hermes skjules for alle brugere i tenanten. Hver chat-meddelelse fra Hermes vises med en kompakt fodnote der minder om non-determinisme og USA-overførsel.
+Disse tre advarsler er beskrevet ovenfor og refereres i dataadgangs-beskrivelsen (§13.3). Aktivering, deaktivering og ændring af dataadgangs-indstillingen audit-logges (`action: UPDATE`, `entityType: System`) og kan til enhver tid tilbagekaldes af tenant-administratoren eller SuperDev.
 
 ### 13.1 Aktivering
 
-1. Gå til **Indstillinger → Hermes AI** (`HermesSettings`).
-2. Læs og accepter de tre advarsler i samtykke-dialogen (se afsnit 13.0).
-3. Aktivér **Hermes AI-assistent** for din virksomhed (kræver `HERMES`-feature — Pro+).
-4. Vælg om Hermes må læse dine virksomhedsdata (data-adgang, se afsnit 13.3).
-5. Gem.
+Hermes aktiveres per tenant af Owner/Admin (eller SuperDev for enhver tenant) via en **enable/disable-toggle** i **Indstillinger → Hermes AI** (`HermesSettings`). Aktivering/deaktivering audit-logges med `action: UPDATE`, `entityType: System` i AuditLog (se `src/app/api/hermes/toggle/route.ts`). Hermes forudsætter Pro-abonnement eller derover (`Feature.Hermes` — Pro, Business, Business Extended).
 
-Når Hermes er aktiveret, vises en animeret ugle-FAB (svævende knap) i nederste højre hjørne af appen. Klik på ugle-ikonet for at åbne chat-panelet.
+1. Gå til **Indstillinger → Hermes AI** (`HermesSettings`).
+2. Aktivér **Hermes AI-assistent**-toggle for din virksomhed.
+3. Vælg om Hermes må læse dine virksomhedsdata (data-adgang, se afsnit 13.3) — separat toggle, default `false`.
+4. Gem.
+
+Når Hermes er aktiveret, vises en animeret ugle-FAB (svævende knap) i nederste højre hjørne af appen. Klik på ugle-ikonet for at åbne chat-panelet. Ved deaktivering skjules Hermes for alle brugere i tenanten.
 
 ### 13.2 Brug af Hermes-chat
 
@@ -1154,16 +1177,16 @@ Hermes kan hjælpe med:
 - **Regnskabsstandarder** — FRS, IFRS
 - **Virksomhedsdata** — (kun med dataadgang) aktuelle tal, momsstatus
 
-### 13.5 Skills-system
+### 13.5 Skills-system (SuperDev-styret)
 
-I **Indstillinger → Hermes AI → Skills** (`HermesSkillsAdmin`) kan du tilvælge færdigheder:
+I **Indstillinger → Hermes AI → Skills** (`HermesSkillsAdmin`) kan **App Ejer (SuperDev)** tilvælge færdigheder (skills) globalt på tværs af alle tenants. Tenants har ingen separat skills-UI; hvis de vil vide hvilke skills Hermes har, kan de spørge Hermes direkte.
 
 - Writing
 - Compliance
 - Analysis
 - Productivity
 
-Eksterne skills kan tilføjes via source-URL.
+Eksterne skills kan tilføjes via source-URL. Indbyggede skills kan ikke fjernes. Aktiverer/deaktiverer SuperDev en skill, gælder det for alle tenant-virksomheder.
 
 ### 13.6 Proaktive påmindelser
 
@@ -1184,11 +1207,20 @@ Hermes bruger en RAG-videnbase (Retrieval-Augmented Generation) med semantisk s�
 - App Ejer (SuperDev) kan administrere videnbasen via `HermesKnowledgeAdmin`: tilføje, redigere, slette dokumenter (title, kategori, indhold, tenant scope).
 - Re-index-knap genbygger embeddings.
 
-### 13.8 Rate limiting
+### 13.8 Rate limiting og personlighed
 
-Hermes er underlagt rate limiting pr. tenant (burst/time/dag/måned). Specifikke grænser konfigureres pr. tenant af App Ejer i Hermes Oversight.
+Hermes er underlagt per-tenant rate limiting i 4 niveauer (`mini-services/hermes-agent/rate-limiter.ts`):
 
-Når grænsen nås, vises en meddelelse i chat-panelet.
+| Vindue | Default grænse |
+|--------|----------------|
+| Burst (minut) | 10 beskeder/minut |
+| Time | 40 beskeder/time |
+| Dag | 120 beskeder/dag |
+| Måned | 2.000 beskeder/måned |
+
+Grænserne kan konfigureres pr. tenant af App Ejer (SuperDev) i Hermes Oversight (`/hermes-oversight`). Når en grænse nås, vises en meddelelse i chat-panelet.
+
+**Personlighed:** Hermes' personlighed er konfigurerbar per tenant (`HermesAgent.personality`) med værdierne `professional` (default), `friendly` eller `concise`. Vælg i **Indstillinger → Hermes AI**.
 
 ### 13.9 Hermes Oversight (SuperDev-only)
 
@@ -1444,7 +1476,7 @@ Standardindstillinger:
 
 > **Prisforbehold:** Specifikke priser og bindingsperioder fremgår af `/pricing`. Priser for årlige og flerårige planer opkræves som et samlet beløb for bindingsperioden. Gratis og Månedlig har ingen binding; årlige planer fornyes automatisk til Månedlig ved udløb, medmindre andet er aftalt.
 
-> **Bemærk om bankintegration:** Kun Demo-provider og Tink er reelle integrationer. Nordea, Danske Bank og Jyske Bank er stubs i den nuværende version. Se Bilag 2 (COMPLIANCE_RAPPORT.md) afsnit 2.1.
+> **Bemærk om bankintegration:** Kun Demo-provider og Tink er reelle integrationer. Nordea, Danske Bank og Jyske Bank er stubs i den nuværende version. Se Bilag 2 (Bilag-02_Compliance-rapport.md) afsnit 2.1.
 
 **Betaling via Flatpay/Frisbii:**
 
@@ -1614,12 +1646,10 @@ AlphaFlow understøtter moderne browsere (Chrome, Edge, Firefox, Safari). Kendte
 
 | Begrænsning | Beskrivelse |
 |-------------|-------------|
-| Ingen kreditnota-oprettelsesflow | Brug CANCELLED-status til annullering/modpostering. |
 | Ingen lønmodul | Løn kan bogføres som almindelige journalposter, men der er intet dedikeret lønmodul. |
 | Ingen varekartotek | Faktura-linje-items gemmes som JSON — ingen Item-master. |
 | Ingen MitID/Bank-ID | Autentificering via e-mail + adgangskode + valgfri TOTP-2FA. |
-| Ingen automatisk AI-bankafstemning | Bankafstemning er manuel (klik "Link"). |
-| PSD2-bankintegrationer er stubs | Kun Demo-provider virker i produktion. |
+| PSD2-bankintegrationer er stubs | Nordea/Danske Bank/Jyske Bank er stubs; Tink er reel implementering (aktiv ved konfigurerede TINK_CLIENT_ID/SECRET); Demo-provider virker altid. |
 | Ingen native mobil-app | PWA-installation fra browser. |
 | Ingen SSO/SAML | Kun e-mail/password + 2FA. |
 | Ingen chat-med-revisor | Hermes er AI, ikke menneske. |
