@@ -47,6 +47,11 @@ export function useHermesSocket(options: {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 10000,
       timeout: 10000,
+      // SECURITY (U-5): Ensure the HttpOnly session cookie is sent on every
+      // request (polling + WebSocket upgrade) so the server can verify the
+      // session server-side. Same-origin via Caddy sends cookies by default,
+      // but withCredentials guarantees it across subdomains/CDN edge cases.
+      withCredentials: true,
     });
 
     socketRef.current = socket;
@@ -54,22 +59,14 @@ export function useHermesSocket(options: {
     socket.on('connect', () => {
       console.log('[Hermes UI] Connected to Hermes Agent');
       setIsConnected(true);
-      // Send tenantId + userId + userName so the server can register the
-      // socket and validate subsequent chat messages against the same tenant.
-      //
-      // NOTE (U-5 follow-up): The original U-5 refactor removed tenantId/userId
-      // from this payload with the intent that the server would derive them
-      // from the session cookie. That server-side derivation was never
-      // implemented, which caused every chat to fail with "Din session er
-      // udløbet" (meta.tenantId was undefined, never matching the chat's
-      // tenantId). Restoring them here unblocks chat. A future hardening pass
-      // should add server-side session-cookie verification so tenantId can't
-      // be spoofed by a malicious client.
-      socket.emit('join', {
-        tenantId,
-        userId,
-        userName,
-      });
+      // SECURITY (U-5): Server-side session verification is now enforced.
+      // The server reads the `session` cookie (forwarded by Caddy) from
+      // socket.handshake.headers.cookie, verifies it against the DB, and
+      // derives userId + tenantId server-side. We no longer send
+      // tenantId/userId in the join payload — they're ignored if sent.
+      // The join event just triggers the welcome flow; the verified
+      // identity is already registered on the socket.
+      socket.emit('join', {});
     });
 
     socket.on('disconnect', () => {
@@ -213,8 +210,9 @@ export function useHermesSocket(options: {
       setMessages((prev) => [...prev, userMsg]);
 
       // Emit to server (event name is 'chat')
+      // SECURITY (U-5): tenantId is no longer sent — the server uses the
+      // verified session meta. Only the message text is sent.
       socketRef.current.emit('chat', {
-        tenantId,
         message: content,
       });
     },

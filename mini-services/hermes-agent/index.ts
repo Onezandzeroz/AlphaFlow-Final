@@ -19,6 +19,7 @@ import { MockTenantProvider, type TenantProvider, type TenantData } from './tena
 import { DatabaseTenantProvider } from './database-tenant-provider'
 import { splitIntoChunks, buildTenantContext } from './utils'
 import { getRateLimiter } from './rate-limiter'
+import { verifySession } from './session-verifier'
 
 // ─── Load parent .env if DATABASE_URL or OPENROUTER_API_KEY is not set ──
 // (Now handled by load-env.ts above — kept as documentation.)
@@ -346,21 +347,57 @@ const io = new Server(httpServer, {
 // Connection Handler
 // ============================================================
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log(`[Hermes] Socket connected: ${socket.id}`)
 
+  // ─── Server-side session verification (U-5) ───────────────────────
+  // The session cookie (HttpOnly, SameSite=Lax) is forwarded by Caddy
+  // via socket.handshake.headers.cookie. We verify it against the DB and
+  // derive userId + tenantId server-side — a malicious client can no
+  // longer impersonate another tenant by spoofing the join payload.
+  const session = await verifySession(socket.handshake.headers.cookie)
+
+  if (!session) {
+    console.warn(`[Hermes] Socket ${socket.id} rejected — invalid or missing session cookie`)
+    socket.emit('chat-error', {
+      error: 'Din session er udløbet. Genindlæs venligst siden for at bruge Hermes igen.',
+      kind: 'session_expired',
+    })
+    socket.disconnect(true)
+    return
+  }
+
+  if (!session.tenantId) {
+    console.warn(`[Hermes] Socket ${socket.id} rejected — user ${session.userId} has no active company`)
+    socket.emit('chat-error', {
+      error: 'Du har ingen aktiv virksomhed. Vælg en virksomhed for at bruge Hermes.',
+      kind: 'no_active_company',
+    })
+    socket.disconnect(true)
+    return
+  }
+
+  // Register the verified identity as the socket's meta. This is the ONLY
+  // source of truth for tenantId/userId — the client's join payload is
+  // now ignored (kept only for backwards-compat with older clients).
+  const meta: SocketMeta = {
+    socketId: socket.id,
+    tenantId: session.tenantId,
+    userId: session.userId,
+    userName: session.userName,
+  }
+  connectedSockets.set(socket.id, meta)
+  if (!tenantSockets.has(session.tenantId)) tenantSockets.set(session.tenantId, [])
+  tenantSockets.get(session.tenantId)!.push(socket.id)
+
+  console.log(`[Hermes] User "${session.userName}" (${session.userId}) verified for tenant "${session.tenantId}"`)
+
   // ----- join -----
-  socket.on('join', async (data: { tenantId: string; userId: string; userName: string }) => {
-    const { tenantId, userId, userName } = data
-    console.log(`[Hermes] User "${userName}" (${userId}) joining tenant "${tenantId}"`)
-
-    // Register socket
-    const meta: SocketMeta = { socketId: socket.id, tenantId, userId, userName }
-    connectedSockets.set(socket.id, meta)
-
-    // Track per-tenant
-    if (!tenantSockets.has(tenantId)) tenantSockets.set(tenantId, [])
-    tenantSockets.get(tenantId)!.push(socket.id)
+  // The client still emits 'join' (for backwards-compat with the frontend),
+  // but we IGNORE its payload — tenantId/userId/userName all come from the
+  // verified session above. The event now just triggers the welcome flow.
+  socket.on('join', async () => {
+    const { tenantId, userName } = meta
 
     try {
       // Get or create tenant (cached fallback keeps join + chat consistent)
@@ -424,14 +461,21 @@ io.on('connection', (socket) => {
   })
 
   // ----- chat -----
-  socket.on('chat', async (data: { tenantId: string; message: string }) => {
-    const { tenantId, message } = data
+  socket.on('chat', async (data: { message: string }) => {
+    const { message } = data
     const meta = connectedSockets.get(socket.id)
 
-    if (!meta || meta.tenantId !== tenantId) {
-      socket.emit('chat-error', { error: 'Din session er udløbet. Genindlæs venligst siden for at bruge Hermes igen.' })
+    // meta was set during the verified connection handshake. If it's missing
+    // (e.g. socket reconnected before session re-verification completed),
+    // reject — the client must reload to re-establish a verified session.
+    if (!meta) {
+      socket.emit('chat-error', { error: 'Din session er udløbet. Genindlæs venligst siden for at bruge Hermes igen.', kind: 'session_expired' })
       return
     }
+
+    // tenantId comes ONLY from the verified session meta — the client no
+    // longer supplies it (and if an old client does, it's ignored).
+    const { tenantId } = meta
 
     // Reuse the same cached fallback as join — never error on unknown tenant
     const { tenant } = await getOrCreateTenant(tenantId)
@@ -544,14 +588,16 @@ io.on('connection', (socket) => {
   })
 
   // ----- toggle-agent -----
-  socket.on('toggle-agent', (data: { tenantId: string; enabled: boolean }) => {
-    const { tenantId, enabled } = data
+  socket.on('toggle-agent', (data: { enabled: boolean }) => {
+    const { enabled } = data
     const meta = connectedSockets.get(socket.id)
 
-    if (!meta || meta.tenantId !== tenantId) {
-      socket.emit('chat-error', { error: 'Din session er udløbet. Genindlæs venligst siden for at bruge Hermes igen.' })
+    // tenantId comes from the verified session meta only.
+    if (!meta) {
+      socket.emit('chat-error', { error: 'Din session er udløbet. Genindlæs venligst siden for at bruge Hermes igen.', kind: 'session_expired' })
       return
     }
+    const { tenantId } = meta
 
     tenantProvider.setAgentEnabled(tenantId, enabled)
     console.log(`[Hermes] Agent ${enabled ? 'enabled' : 'disabled'} for tenant "${tenantId}" by "${meta.userName}"`)
