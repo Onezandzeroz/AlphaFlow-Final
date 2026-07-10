@@ -47,11 +47,12 @@ export function useHermesSocket(options: {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 10000,
       timeout: 10000,
-      // SECURITY (U-5): Ensure the HttpOnly session cookie is sent on every
-      // request (polling + WebSocket upgrade) so the server can verify the
-      // session server-side. Same-origin via Caddy sends cookies by default,
-      // but withCredentials guarantees it across subdomains/CDN edge cases.
-      withCredentials: true,
+      // SECURITY (U-5): The HttpOnly session cookie is sent automatically on
+      // every request (polling + WebSocket upgrade) because the connection is
+      // same-origin from the browser's perspective (Caddy proxies /socket.io/
+      // to this service). No withCredentials flag needed — socket.io-client v4
+      // sends cookies by default for same-origin. The server reads the cookie
+      // from socket.handshake.headers.cookie and verifies it against the DB.
     });
 
     socketRef.current = socket;
