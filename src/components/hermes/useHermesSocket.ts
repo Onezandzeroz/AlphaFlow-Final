@@ -54,9 +54,20 @@ export function useHermesSocket(options: {
     socket.on('connect', () => {
       console.log('[Hermes UI] Connected to Hermes Agent');
       setIsConnected(true);
-      // SECURITY (U-5): Only send display-name hint. Server derives userId
-      // and tenantId from the validated session cookie (HttpOnly).
+      // Send tenantId + userId + userName so the server can register the
+      // socket and validate subsequent chat messages against the same tenant.
+      //
+      // NOTE (U-5 follow-up): The original U-5 refactor removed tenantId/userId
+      // from this payload with the intent that the server would derive them
+      // from the session cookie. That server-side derivation was never
+      // implemented, which caused every chat to fail with "Din session er
+      // udløbet" (meta.tenantId was undefined, never matching the chat's
+      // tenantId). Restoring them here unblocks chat. A future hardening pass
+      // should add server-side session-cookie verification so tenantId can't
+      // be spoofed by a malicious client.
       socket.emit('join', {
+        tenantId,
+        userId,
         userName,
       });
     });
