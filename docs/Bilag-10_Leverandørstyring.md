@@ -51,7 +51,7 @@ Dette dokument gælder for alle eksterne leverandører, der leverer it-tjenester
 |-------|-----------------|
 | **Dataansvarlig (for AlphaAi's interne drift)** | AlphaAi Consult ApS, Direktør: Jess Martin Christoffersen |
 | **Databehandler (for kunders data i AlphaFlow)** | AlphaAi Consult ApS |
-| **Compliance Officer** | [Indsættes] |
+| **Compliance Officer** | Jess Martin Christoffersen |
 | **System Administrator** | Jess Martin Christoffersen (61 73 60 76) |
 | **DPO / privacy-kontakt** | alphaaiconsult@gmail.com |
 
@@ -910,9 +910,9 @@ Følgende handlinger er åbne og skal afsluttes før eller umiddelbart efter pro
 | Rolle | Navn | Dato | Underskrift |
 |------|------|------|-------------|
 | Direktør | Jess Martin Christoffersen | 08.06.2026 | _________________________________ |
-| Compliance Officer | [Indsættes] | | _________________________________ |
+| Compliance Officer | Jess Martin Christoffersen | | _________________________________ |
 | System Administrator | Jess Martin Christoffersen | 08.06.2026 | _________________________________ |
-| Technical Lead | [Indsættes] | | _________________________________ |
+| Technical Lead | Jess Martin Christoffersen | | _________________________________ |
 
 ---
 

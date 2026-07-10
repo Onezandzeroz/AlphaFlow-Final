@@ -143,7 +143,7 @@ Følgende integrationer findes i koden, men er **ikke aktive i produktion** og u
 
 | Rolle | Navn | Dato | Underskrift |
 |---|---|---|---|
-| Dataansvarlig (AlphaAi Consult ApS) | _[udfyldes ved indsendelse]_ | _[dato]_ | _[underskrift]_ |
+| Dataansvarlig (AlphaAi Consult ApS) | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
 
 ---
 

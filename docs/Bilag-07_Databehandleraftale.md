@@ -42,7 +42,7 @@ Kunden er dataansvarlig for de personoplysninger og bogføringsdata, der behandl
 |------|-------------|
 | **Virksomhedsnavn** | AlphaAi Consult ApS |
 | **CVR-nummer** | 46312058 |
-| **Adresse** | [Indsættes ved anmeldelse] |
+| **Adresse** | Skelagervej 124C, 8200 Aarhus N |
 | **Direktør / kontaktperson** | Jess Martin Christoffersen |
 | **E-mail** | alphaaiconsult@gmail.com |
 | **Telefon** | 61 73 60 76 |
@@ -798,8 +798,8 @@ Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
 
 | Version | Dato | Ændring |
 |---------|------|---------|
-| 1.0 | 2025 | Første udkast |
-| 2.0 | 1. januar 2025 | Komplet revidering med tekniske referencer |
+| 1.0 | April 2026 | Første udkast |
+| 2.0 | Maj 2026 | Komplet revidering med tekniske referencer |
 | 3.0 | 08.06.2026 | **Komplet omskrivning:** Rettet partrollen (AlphaAi = databehandler, kunde = dataansvarlig); tilføjet komplet underbehandler-tabel for alle 15 integrationer verificeret i kodebasen; tilføjet data-minimization-sektion med `HermesAgent.dataAccessEnabled` opt-in (default false); tilføjet Tredjelands-overførsels-sektion (§ 9) med SCC 2021/914 + TIA for USA-underbehandlere; tilføjet præcise datakategorier; dokumenteret konto-deaktivering vs. hard-delete per Bogføringsloven §§ 10-12; dokumenteret sikkerhedsarkitektur (CSP, CSRF, etc.) |
 | 3.1 | 2026 (AI-konsolidering C1) | **AI-underbehandler-konsolidering:** OpenRouter, Inc. er nu AlphaFlows eneste AI-databehandler per AI-CONSOLIDATION-SPEC. OpenAI, Inc. og Anthropic PBC er fjernet som selvstændige underbehandlere (de er OpenRouter's underbehandlere per GDPR Art. 28(4), ikke AlphaAi Consult ApS'). Bilag A reduceret fra 16 til 14 rækker; §5.1.C reduceret fra 3 til 1 række; §5.2 SCC-status-tabel reduceret fra 3 til 1 AI-række; §9.1 USA-overførsler konsolideret; §6.2/§6.3 beskrivelser opdateret ("via OpenRouter"); §10.2 AI-specifikke forpligtelser gælder nu kun OpenRouter. |
 | 3.2 | 2026 | **Dokumentationsnøjaktighed:** Rettet RBAC permissions 18→23 i 7 kategorier (§7.3); tilføjet SuperDev oversight-nuance (admin endpoints `/api/oversight/subscription` og `/api/oversight/trial` forbliver kaldbare); opdateret §5.1.G og Bilag A.2 — Tink nu korrekt beskrevet som reel implementering, `z-ai-web-dev-sdk`-række erstattet af aktiv AI-bankafstemning via OpenRouter (`matching-engine.ts`); opdateret §6.1 Hermes-consent til toggle-baseret beskrivelse (enable/disable + `dataAccessEnabled` toggles, audit `action: UPDATE`); `FSR-38`-navngivning rettet til `FSR-baseret`. |

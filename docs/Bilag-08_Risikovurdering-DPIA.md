@@ -81,9 +81,9 @@ Se matrix i afsnit 6.
 | Rolle | Navn / Enhed |
 |---|---|
 | Dataansvarlig | AlphaAi Consult ApS (CVR 46312058) |
-| DPO / Compliance-ansvarlig | _[Udfyldes]_ |
-| Teknisk ansvarlig | _[Udfyldes]_ |
-| Årlig review-ansvarlig | _[Udfyldes]_ |
+| DPO / Compliance-ansvarlig | Jess Martin Christoffersen |
+| Teknisk ansvarlig | Jess Martin Christoffersen |
+| Årlig review-ansvarlig | Jess Martin Christoffersen |
 
 ---
 
@@ -648,7 +648,7 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 
 > **Udbedrede risici (fjernet fra ovenstående plan):** R-01 (CSP, U-3), R-02 (antivirus, U-4), R-03 (key rotation, U-1), R-11 (webhook fail-closed, U-6), R-14 (timingSafeEqual, U-14), R-19 + R-20 (Socket.IO auth, U-5). Se §5 for reststatus.
 
-> **Bemærkning om krydsreferencer:** Bilag 12 (`Bilag-12_Udbedringsplan.md` v3.0, 2026) er den tidssvarende udbedringsplan der dækker **alle 20 risici** (R-01…R-20) fra denne risikovurdering samt de 5 oprindelige compliance-punkter fra 2025. Hver risiko er klassificeret i Kategori A (skal udbedres før indsendelse), Kategori B (indsendes med åbenhed, udbedres efter tidsplan) eller Kategori C (accepteret). Reststatus for hver risiko fremgår af §6 (restrisiko-fordeling) og §7 (accepterede risici) heri; konkret handlingsplan, ansvarlig, tidsramme og acceptkriterier fremgår af Bilag 12 §3-5.
+> **Bemærkning om krydsreferencer:** Bilag 12 (`Bilag-12_Udbedringsplan.md` v3.0, 2026) er den tidssvarende udbedringsplan der dækker **alle 20 risici** (R-01…R-20) fra denne risikovurdering samt de 5 oprindelige compliance-punkter fra april 2026. Hver risiko er klassificeret i Kategori A (skal udbedres før indsendelse), Kategori B (indsendes med åbenhed, udbedres efter tidsplan) eller Kategori C (accepteret). Reststatus for hver risiko fremgår af §6 (restrisiko-fordeling) og §7 (accepterede risici) heri; konkret handlingsplan, ansvarlig, tidsramme og acceptkriterier fremgår af Bilag 12 §3-5.
 
 ### 8.3 Overvågning og løbende opgaver
 
@@ -663,9 +663,9 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 
 | Rolle | Navn | Dato | Underskrift |
 |---|---|---|---|
-| Dataansvarlig (AlphaAi Consult ApS) | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
-| DPO / Compliance-ansvarlig | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
-| Teknisk ansvarlig | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
+| Dataansvarlig (AlphaAi Consult ApS) | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
+| DPO / Compliance-ansvarlig | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
+| Teknisk ansvarlig | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
 
 ---
 
@@ -679,8 +679,8 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 
 | Version | Dato | Ændring | Ansvarlig |
 |---|---|---|---|
-| 1.0 | 2025-07-01 | Første version (generisk IT-risikovurdering). | AlphaAi Consult ApS |
-| 2.0 | 2025-07-01 | Tilføjede N2-N5/D1/D15 mapping, aktivoversigt. | AlphaAi Consult ApS |
+| 1.0 | 2026-04-01 | Første version (generisk IT-risikovurdering). | AlphaAi Consult ApS |
+| 2.0 | 2026-05-01 | Tilføjede N2-N5/D1/D15 mapping, aktivoversigt. | AlphaAi Consult ApS |
 | **3.0** | **2026** | **Fuld omskrivning til DPIA (GDPR Art. 35). 21 risici (R-01..R-21). Risikomatrix + accept-begrundelser + prioriteret afhjælpningsplan.** | **AlphaAi Consult ApS** |
 | **3.1** | **2026** | **AI-konsolidering (C2):** R-13 opdateret — 3 USA-AI-underbehandlere (OpenAI, OpenRouter, Anthropic) konsolideret til 1 (OpenRouter, Inc., som videresender til model-udbydere per GDPR Art. 28(4)). §1.2 scope: 15→13 integrationer. §2 kontekst: "Anthropic VLM" → "VLM via OpenRouter". §2.4 integrationstabel: 3 USA-rækker → 1. §3.1 trusselsaktører: OpenAI/Anthropic fjernet. §4.1 A9: `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` fjernet (de er OpenRouter-konfiguration). §4.2 sårbarhed 13 opdateret. §8.2 P1 R-13 afhjælpningsplan opdateret (DPA+SCC+TIA for OpenRouter, konsolideret). Restrisiko for R-13 bevaret som Mellem (DPA+SCC+TIA stadig påkrævet). Bilag A: ingen OpenAI/Anthropic-specifikke referencer at fjerne. | **AlphaAi Consult ApS — AI-konsolidering C2** |
 | **3.2** | **2026** | **Dokumentationsnøjaktighed:** RBAC permissions 18→23 i 7 kategorier (§2.2, §4.2, §4.3). SuperDev oversight nuance — admin-endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare (§2.2, §4.2, §4.3, R-08). AI-bankafstemning opdateret fra "sandbox-only" til "aktiv i produktion via OpenRouter" — §2.4 (13→12 integrationer, da z-ai-web-dev-sdk ikke er en selvstændig integration men en feature under OpenRouter); §4.2 sårbarhed #16 opdateret; R-16 omformuleret fra "sandbox-only" til "auto-match risiko" med nedjusteret risikoniveau (Lav–Mellem); R-16 flyttet fra Mellem-cell til Lav-cell i §6 risikomatrix; R-21 eksisterende afhjælpning og §7 accept opdateret — "tre advarsler + AI_CONSENT_ACCEPTED + fodnote på hver besked" erstattet af toggle-baseret aktivering (enable/disable + `dataAccessEnabled`) med audit `action: UPDATE`. | **AlphaAi Consult ApS — doc-editor G** |

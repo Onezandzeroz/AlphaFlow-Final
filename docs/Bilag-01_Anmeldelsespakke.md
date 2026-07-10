@@ -63,7 +63,7 @@ Følgende funktionelle afgrænsninger er relevante for anmeldelsesomfanget:
 
 | Område | Status |
 |---|---|
-| **Reelle bank-API-kald** | Delvist — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer 404); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
+| **Reelle bank-API-kald** | Delvist — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
 | **MitID / NemID / BankID** | Autentificering via email + password + TOTP 2FA. |
 
 ---
@@ -136,11 +136,13 @@ Nedenstående tabel indekserer de **13 dokumenter** i AlphaFlows `docs/`-mappe, 
 | 9 | `Bilag-09_Beredskabsplan.md` (Bilag 9) | Disaster Recovery-plan — RTO/RPO, gendannelsesprocedurer, backup-strategi, kontaktliste. | Revideret 2026 |
 | 10 | `Bilag-10_Leverandørstyring.md` (Bilag 10) | Evaluering og styring af tekniske leverandører (Neon, IONOS, Storecove, OpenRouter, SKAT, Flatpay/Frisbii). | Revideret 2026 |
 | 11 | `Bilag-11_IT-sikkerhed-Neon-og-IONOS.md` (Bilag 11) | Tredjeparts IT-sikkerhedsdokumentation for de to primære infrastruktur-udbydere (Neon DB + IONOS VPS). | Revideret 2026 |
-| 12 | `Bilag-12_Udbedringsplan.md` (Bilag 12) | Tidssvarende plan for afhjælpning af kendte mangler — dækker alle 20 risici (R-01…R-20) fra Bilag 8 + 5 oprindelige 2026-mangler, klassificeret i Kategori A/B/C. | Revideret 2026 (v3.0) |
+| 12 | `Bilag-12_Udbedringsplan.md` (Bilag 12) | Tidssvarende plan for afhjælpning af kendte mangler før indsendelse — dækker alle 20 risici (R-01…R-20) fra Bilag 8 + 5 oprindelige mangler (april 2026), klassificeret i Kategori A/B/C. | Revideret 2026 (v3.0) |
 | 13 | `Bilag-13_TokenPay-TokenBay-guide.md` (Bilag 13) | Miljø- og opsætningsguide for TokenPay/TokenBay-adgangssystemet (`.tbkey` proofs, trial, free tier). | Revideret 2026 |
+| 14 | `SUBMISSION_CHECKLIST.md` | Tidligere indsendelsesguide — nu supersederet og omdirigerer til Bilag 1, 2 og 3. | Supersederet — eksisterende version gælder som omdirigering. |
 
 > Dokumenterne 1 samt Bilag 2 (`Bilag-02_Bilagsoversigt.md`), Bilag 3 (`Bilag-03_Tjekliste.xlsx`) og Bilag 4–13 udgør den ajourførte anmeldelsespakke for 2026-revisionen. Dokument 12 (UDBEDRINGSPLAN, Bilag 12) refereres fra afsnit 8 nedenfor og opretholdes som separat løbende dokument. **Bilag 14 (underbehandler-DPA'er for Neon, IONOS, Storecove, Flatpay/Frisbii, OpenRouter og Simply/Brevo) vedhæftes anmeldelsen som separate PDF'er samlet under ét bilagspunkt** — se `Bilag-02_Bilagsoversigt.md` (Bilag 2) for fuld oversigt.
 >
+> **Dokumenter udenfor scope:** `MULTI_TENANT_PLAN.md` (designnoter for multi-tenant-arkitektur) og `PROJECTS_IMPLEMENTATION.md` (implementeringsnoter for valgfrit projekt-modul) er interne udviklingsdokumenter uden relevans for Erhvervsstyrelsen-registreringen og er flyttet til `docs/udenfor-scope/`. Se `docs/udenfor-scope/README.md` for begrundelse.
 
 ---
 
@@ -226,8 +228,8 @@ Anmeldelsespakken holdes ajour gennem følgende proces:
 | Rolle | Navn | Dato | Underskrift |
 |---|---|---|---|
 | Anmeldelsesansvarlig (teknisk) | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
-| DPO / dataansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
-| Ledelse (AlphaAi Consult ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| DPO / dataansvarlig | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
+| Ledelse (AlphaAi Consult ApS) | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
 
 ---
 

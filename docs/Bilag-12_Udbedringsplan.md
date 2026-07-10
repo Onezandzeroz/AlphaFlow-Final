@@ -153,8 +153,8 @@ Før indsendelse bekræftes at:
 
 | Version | Dato | Ændring |
 |---|---|---|
-| 1.0 | 2025 | Første version — 5 compliance-mangler. |
-| 2.0 | Juli 2025 | Implementeringslog for 5 mangler. |
+| 1.0 | April 2026 | Første version — 5 compliance-mangler. |
+| 2.0 | Maj 2026 | Implementeringslog for 5 mangler. |
 | 3.0 | 2026 | Udvidet med R-01..R-20 fra Bilag 8; Kategori A/B/C-struktur. |
 | 3.1 | 2026 | Simplificeret — fokuseret på konkret handlingsplan; OpenRouter som hoved-databehandler for AI (underbehandlere håndteres af OpenRouter per GDPR Art. 28(4)). |
 | 3.2 | 2026 | AI-konsolidering: kun OpenRouter som AI-udbyder (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). U-2 opdateret — scanner-VLM går nu via OpenRouter (ikke separat Anthropic DPA). |

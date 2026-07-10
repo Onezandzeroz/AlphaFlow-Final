@@ -628,11 +628,11 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 
 | Rolle | Navn | Telefon (24/7) | E-mail | Backup-kontakt |
 |---|---|---|---|---|
-| Teknisk ansvarlig (App Owner) | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
-| System administrator | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
-| Compliance Officer / DPO | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
-| Backup-ansvarlig | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
-| Direktør (Niveau 3 eskalering) | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ | _[Udfyldes]_ |
+| Teknisk ansvarlig (App Owner) | Jess Martin Christoffersen | 61 73 60 76 | alphaaiconsult@gmail.com | _[Udfyldes — arbejdstid]_ |
+| System administrator | Jess Martin Christoffersen | 61 73 60 76 | alphaaiconsult@gmail.com | _[Udfyldes — arbejdstid]_ |
+| Compliance Officer / DPO | Jess Martin Christoffersen | 61 73 60 76 | alphaaiconsult@gmail.com | _[Udfyldes — arbejdstid]_ |
+| Backup-ansvarlig | Jess Martin Christoffersen | 61 73 60 76 | alphaaiconsult@gmail.com | _[Udfyldes — arbejdstid]_ |
+| Direktør (Niveau 3 eskalering) | Jess Martin Christoffersen | 61 73 60 76 | alphaaiconsult@gmail.com | _[Udfyldes — arbejdstid]_ |
 
 ### 7.2 Hosting-udbydere
 
@@ -932,8 +932,8 @@ pm2 list                                       # tabelleret status
 
 | Version | Dato | Ændring | Ansvarlig |
 |---|---|---|---|
-| 1.0 | 2025 | Første version (generisk beredskabsplan). | AlphaAi Consult ApS |
-| 2.0 | 2025-06 | Tilføjede PM2-kommandoer, RTO/RPO-mål. | AlphaAi Consult ApS |
+| 1.0 | April 2026 | Første version (generisk beredskabsplan). | AlphaAi Consult ApS |
+| 2.0 | Maj 2026 | Tilføjede PM2-kommandoer, RTO/RPO-mål. | AlphaAi Consult ApS |
 | 2.4 | 2026-06 | Mindre opdateringer. | AlphaAi Consult ApS |
 | **3.0** | **2026** | **Fuld omskrivning baseret på faktisk infrastruktur. Tilføjede: 6 PM2-apps detaljeret, backup-strategi med Lag 1-4, 8 genopretningsprocedurer (DB-tab/VPS-fejl/App-crash/Mini-service-crash/ENCRYPTION_KEY-kompromitteret/Ransomware/SQLite-tab/Caddy-fejl), 6-trins incident response-procedure, kontaktliste med underbehandlere, kommunikationsplan med skabeloner, årlig DR-test + kvartalsvis review.** | **AlphaAi Consult ApS** |
 | **3.1** | **2026** | **AI-konsolidering (Task C3): Verificeret at OpenRouter er AlphaFlows eneste AI-underbehandler (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). Antal eksterne integrationer opdateret fra 15 til 13. Bilag 14 (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM) reference verificeret i §7.4.** | **AlphaAi Consult ApS — Task C3** |

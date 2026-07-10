@@ -555,9 +555,9 @@ Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinf
 
 | Rolle | Navn | Dato | Underskrift |
 |---|---|---|---|
-| Teknisk ansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
-| DPO / dataansvarlig | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
-| Ledelse (AlphaAi Consult ApS) | _[skabelon]_ | _[dato]_ | _[underskrift]_ |
+| Teknisk ansvarlig | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
+| DPO / dataansvarlig | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
+| Ledelse (AlphaAi Consult ApS) | Jess Martin Christoffersen | _[dato]_ | _[underskrift]_ |
 
 ---
 
