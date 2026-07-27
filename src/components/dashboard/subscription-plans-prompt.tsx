@@ -1082,7 +1082,20 @@ export function SubscriptionPlansPrompt() {
   // ('alphaflow-selected-plan') by the login page. After login, this effect
   // detects it and auto-invokes handleSelectPlan for that plan — skipping
   // the full plan chooser modal entirely.
+  //
+  // IMPORTANT (race-condition fix): The timer is stored in a ref and is
+  // only cleared when the component UNMOUNTS — NOT when the `user`
+  // dependency changes. Previously this effect returned a cleanup that
+  // called clearTimeout(timer), which meant any parent state update that
+  // created a new user object reference (e.g. Dashboard.fetchOnboardingData
+  // calling setUser after GET /api/demo-mode) would cancel the 600ms timer
+  // before it fired. Because autoPlanChecked.current is set to true before
+  // the timer fires, the effect's re-run would return early and the
+  // payment flow would NEVER start — the user would see the full 5-plan
+  // chooser modal instead. The unmount-only cleanup below fixes this.
   const autoPlanChecked = useRef(false);
+  const autoPlanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!user || autoPlanChecked.current) return;
     if (typeof window === 'undefined') return;
@@ -1119,12 +1132,27 @@ export function SubscriptionPlansPrompt() {
 
     // Auto-start the payment flow for the selected plan.
     // Small delay so the dashboard layout has time to settle before the
-    // payment overlay/result appears.
-    const timer = setTimeout(() => {
+    // payment overlay/result appears. Stored in a ref so that a re-render
+    // (caused by a parent setUser no-op) does NOT cancel this timer — the
+    // effect below clears it only on actual unmount.
+    autoPlanTimerRef.current = setTimeout(() => {
+      autoPlanTimerRef.current = null;
       handleSelectPlan(plan);
     }, 600);
-    return () => clearTimeout(timer);
+    // NOTE: intentionally no cleanup returned here. Returning a cleanup
+    // would cancel the timer whenever `user` changes reference, which
+    // breaks the auto-start flow (see comment above).
   }, [user, handleSelectPlan]);
+
+  // Clear the pending auto-plan timer ONLY when the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (autoPlanTimerRef.current) {
+        clearTimeout(autoPlanTimerRef.current);
+        autoPlanTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!visible) return;

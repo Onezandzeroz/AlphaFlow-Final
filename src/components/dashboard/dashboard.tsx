@@ -505,7 +505,17 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
         // the `user` prop captured in the closure can become outdated.
         const freshUser = useAuthStore.getState().user;
         if (freshUser) {
-          useAuthStore.getState().setUser({ ...freshUser, demoModeEnabled: isDemo, isDemoCompany: isDemo });
+          // Only call setUser if the demo flags ACTUALLY changed. A no-op
+          // setUser here creates a new user object reference, which causes
+          // child components that depend on `user` (notably
+          // SubscriptionPlansPrompt's auto-plan-payment effect) to re-run
+          // their cleanup, cancelling the 600ms setTimeout that auto-starts
+          // the payment flow for a pre-selected plan after login. This was
+          // the root cause of the "payment flow didn't start automatically
+          // after signup" bug.
+          if (freshUser.demoModeEnabled !== isDemo || freshUser.isDemoCompany !== isDemo) {
+            useAuthStore.getState().setUser({ ...freshUser, demoModeEnabled: isDemo, isDemoCompany: isDemo });
+          }
         }
       }
     } catch (error) {
