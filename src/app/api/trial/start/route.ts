@@ -137,7 +137,12 @@ export const POST = withGuard({
           appUrl,
         },
         'da',
-        ctx.activeCompanyId,
+        // Guard config has `requireCompany: true`, so activeCompanyId is
+        // guaranteed non-null here. The non-null assertion matches the usage
+        // on line 91 (db.company.update). The email function's companyId
+        // param is typed `string | undefined` (optional), so we cannot pass
+        // the `string | null` from AuthContext directly.
+        ctx.activeCompanyId!,
       ).catch((e) => {
         logger.warn(`[TRIAL] Welcome email failed for ${user.email}:`, e);
       });
