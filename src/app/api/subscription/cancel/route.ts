@@ -41,8 +41,11 @@ export const POST = withGuard(
   },
   async (request: NextRequest, ctx) => {
     try {
-      // Only the OWNER can cancel the subscription
-      if (ctx.role !== 'OWNER') {
+      // Only the OWNER can cancel the subscription.
+      // (SuperDev in their own company resolves to activeCompanyRole='OWNER'
+      // via getAuthContext; SuperDev in oversight mode is already blocked by
+      // the guard config blockOversight:true.)
+      if (ctx.activeCompanyRole !== 'OWNER') {
         return NextResponse.json(
           { error: 'Kun virksomhedens ejer kan opsige abonnementet.' },
           { status: 403 },
