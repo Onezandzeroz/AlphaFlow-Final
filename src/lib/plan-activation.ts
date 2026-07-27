@@ -1,5 +1,5 @@
 /**
- * Plan activation helper (FASE 5)
+ * Plan activation helper (FASE 5 + FASE 6)
  *
  * Shared logic used by both the payment-callback and payment-webhook
  * handlers to activate a paid plan tier after a confirmed Flatpay payment.
@@ -8,11 +8,19 @@
  *
  * Idempotent: if the plan is already activated (or the payment already
  * processed), it's a no-op.
+ *
+ * FASE 6 ADDITION: After activation, sends the subscription-welcome + payment-
+ * receipt emails. The lastReceiptSentAt field on Company prevents duplicate
+ * receipts when both the callback and the webhook fire for the same payment
+ * (which is the normal case — Frisbii sends both a redirect AND a webhook).
  */
 
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { getBindingMonths, PlanTier, getPlanFeatures, Feature } from '@/lib/plan-features';
+import { getPlanPricing } from '@/lib/plan-pricing';
+import { sendSubscriptionWelcomeEmail, sendPaymentReceiptEmail } from '@/lib/email-service';
+import { getCurrentTermsVersion } from '@/lib/legal';
 
 /**
  * Ensure HermesAgent exists with enabled=true for Pro+ tiers.
@@ -126,6 +134,14 @@ export async function activatePlanAfterPayment(
     : null;
 
   // Activate the plan on the company
+  // FASE 6: also reset planStatus='active' (in case the plan was previously
+  // cancelled/expired/past_due) and clear any cancellation markers. For the
+  // monthly plan (no binding), set nextRenewalAt = +1 month so the billing
+  // scheduler can send pre-renewal reminders.
+  const nextRenewalAt = bindingMonths === 0
+    ? new Date(now.getFullYear(), now.getMonth() + 1, now.getDate())
+    : expiresAt;
+
   await db.company.update({
     where: { id: payment.companyId },
     data: {
@@ -133,6 +149,13 @@ export async function activatePlanAfterPayment(
       planPurchasedAt: now,
       planExpiresAt: expiresAt,
       planActivatedBy: activatedByUserId,
+      // FASE 6 — lifecycle fields
+      planStatus: 'active',
+      planCancelledAt: null,
+      planCancellationReason: null,
+      nextRenewalAt,
+      lastReminderSentAt: null, // reset so the new cycle's reminders can fire
+      lastReceiptSentAt: now,   // we send the receipt below
     },
   });
 
@@ -153,6 +176,73 @@ export async function activatePlanAfterPayment(
 
   // Auto-create HermesAgent for Pro+ tiers
   await ensureHermesForTier(payment.companyId, payment.planTier as PlanTier);
+
+  // ── FASE 6: send subscription-welcome + payment-receipt emails ──────
+  // Fire-and-forget — email failures must NOT roll back the plan activation
+  // (the customer has paid; access must be granted). Send failures are logged
+  // to EmailLog with status='failed' for retry/audit.
+  try {
+    const pricing = getPlanPricing(payment.planTier as PlanTier);
+    const totalAmountDKK = pricing.totalAmountOre / 100;
+    const amountExclVat = totalAmountDKK / 1.25;
+    const vatDKK = totalAmountDKK - amountExclVat;
+
+    // Fetch the purchaser's email
+    const purchaser = await db.user.findUnique({
+      where: { id: payment.userId },
+      select: { email: true },
+    });
+
+    if (purchaser?.email) {
+      const appUrl = process.env.APP_URL || 'https://alphaflow.dk';
+      const planName = pricing.descriptionDa;
+
+      // (a) Welcome / confirmation email
+      await sendSubscriptionWelcomeEmail(
+        purchaser.email,
+        {
+          planName,
+          monthlyPriceDKK: pricing.monthlyPriceDKK,
+          bindingMonths,
+          totalAmountDKK,
+          startDate: now.toISOString(),
+          expiryDate: expiresAt?.toISOString() ?? null,
+          termsVersion: getCurrentTermsVersion(),
+          appUrl,
+        },
+        'da',
+        payment.companyId,
+      ).catch((e) => {
+        logger.warn(`[ACTIVATE PLAN] Welcome email failed for ${purchaser.email}:`, e);
+      });
+
+      // (d) Payment receipt email
+      await sendPaymentReceiptEmail(
+        purchaser.email,
+        {
+          planName,
+          amountDKK: amountExclVat,
+          vatDKK,
+          totalDKK: totalAmountDKK,
+          paymentDate: now.toISOString(),
+          paymentId: payment.id,
+          cardLast4: null, // Frisbii payload may have this in metadata; left null for now
+          period: bindingMonths > 0
+            ? `${now.toLocaleDateString('da-DK')} – ${expiresAt!.toLocaleDateString('da-DK')}`
+            : `${now.toLocaleDateString('da-DK')} – ${nextRenewalAt!.toLocaleDateString('da-DK')}`,
+          isRenewal: false, // this is the initial purchase, not a renewal
+        },
+        'da',
+        payment.companyId,
+      ).catch((e) => {
+        logger.warn(`[ACTIVATE PLAN] Receipt email failed for ${purchaser.email}:`, e);
+      });
+    }
+  } catch (emailError) {
+    // Non-critical — log and continue. The plan IS activated; the customer
+    // can always find their receipt in the dashboard.
+    logger.warn(`[ACTIVATE PLAN] Email sending failed for payment ${paymentId}:`, emailError);
+  }
 
   logger.info(
     `[ACTIVATE PLAN] Payment ${paymentId} succeeded — activated ${payment.planTier} for company ${payment.company.name}. Binding: ${bindingMonths} months.`,

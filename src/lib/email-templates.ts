@@ -301,3 +301,396 @@ export function invoiceEmailHtml(
     : `You are receiving this email from ${companyName}. Prepared via ${APP_NAME} &copy; ${new Date().getFullYear()}.`
   );
 }
+
+// ─── SUBSCRIPTION WELCOME EMAIL (FASE 6) ───────────────────────────
+// Sent immediately after a paid subscription plan is activated. Confirms
+// the purchase, price, binding period, start date, and the terms version
+// the user agreed to. Satisfies bank requirement (a): welcome/confirmation
+// email after subscription creation.
+
+export interface SubscriptionWelcomeData {
+  planName: string;          // "AlphaFlow Pro"
+  monthlyPriceDKK: number;   // 169
+  bindingMonths: number;     // 12 (0 for monthly)
+  totalAmountDKK: number;    // 199 (for monthly) or 2028 (for 12×169)
+  startDate: string;         // ISO date string
+  expiryDate: string | null; // ISO date string or null (monthly has no fixed end)
+  termsVersion: string;      // "2025-07-01-v1"
+  appUrl: string;            // URL to log in
+}
+
+export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWelcomeData): string {
+  const heading = language === 'da' ? 'Velkommen til AlphaFlow 🎉' : 'Welcome to AlphaFlow 🎉';
+  const intro = language === 'da'
+    ? 'Dit abonnement er nu aktiveret. Her er bekræftelsen på din tilmelding:'
+    : 'Your subscription is now active. Here is the confirmation of your enrollment:';
+
+  const planLabel = language === 'da' ? 'Abonnement' : 'Plan';
+  const priceLabel = language === 'da' ? 'Pris pr. måned' : 'Monthly price';
+  const bindingLabel = language === 'da' ? 'Bindingsperiode' : 'Binding period';
+  const totalLabel = language === 'da' ? 'Beløb trukket' : 'Amount charged';
+  const startLabel = language === 'da' ? 'Startdato' : 'Start date';
+  const expiryLabel = language === 'da' ? 'Udløb af binding' : 'Binding expiry';
+  const termsLabel = language === 'da' ? 'Vilkårsversion' : 'Terms version';
+
+  const bindingText = data.bindingMonths > 0
+    ? (language === 'da' ? `${data.bindingMonths} måneder` : `${data.bindingMonths} months`)
+    : (language === 'da' ? 'Ingen binding (månedlig opsigelse)' : 'No commitment (monthly cancellation)');
+
+  const expiryText = data.expiryDate
+    ? new Date(data.expiryDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')
+    : (language === 'da' ? 'Løbende indtil opsigelse' : 'Rolling until cancelled');
+
+  const loginBtn = language === 'da' ? 'Log ind i AlphaFlow' : 'Log in to AlphaFlow';
+
+  const content = `
+    <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:22px; font-weight:600;">${heading}</h2>
+    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${intro}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; background-color:${BG_LIGHT}; border-radius:8px; border:1px solid #e2e8f0;">
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${planLabel}</strong> ${data.planName}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${priceLabel}</strong> ${data.monthlyPriceDKK} kr./md.
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${bindingLabel}</strong> ${bindingText}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${totalLabel}</strong> ${data.totalAmountDKK} kr.
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${startLabel}</strong> ${new Date(data.startDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${expiryLabel}</strong> ${expiryText}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK};">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${termsLabel}</strong> ${data.termsVersion}
+      </td></tr>
+    </table>
+    <p style="margin:0 0 8px; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">
+      ${language === 'da'
+        ? 'Du kan til enhver tid se dine abonnementsoplysninger og opsige i indstillingerne.'
+        : 'You can view your subscription details and cancel at any time in your settings.'}
+    </p>
+    ${buttonHtml(data.appUrl, loginBtn)}
+  `;
+
+  return wrapperHtml(content, language, language === 'da'
+    ? `Du modtager denne e-mail, fordi du har oprettet et abonnement hos ${APP_NAME}.`
+    : `You are receiving this email because you subscribed to ${APP_NAME}.`
+  );
+}
+
+// ─── PAYMENT RECEIPT EMAIL (FASE 6) ────────────────────────────────
+// Sent after each successful payment (initial + recurring renewals).
+// Satisfies bank requirement (d): receipt/invoice after each recurring charge.
+
+export interface PaymentReceiptData {
+  planName: string;
+  amountDKK: number;
+  vatDKK: number;            // 25% moms
+  totalDKK: number;          // incl. VAT
+  paymentDate: string;       // ISO date
+  paymentId: string;         // AlphaFlow internal payment ID
+  cardLast4?: string | null; // last 4 digits of card (if known)
+  period: string;            // "1. juli 2025 – 1. august 2025"
+  isRenewal: boolean;        // true if this is a recurring renewal
+}
+
+export function paymentReceiptHtml(language: Language, data: PaymentReceiptData): string {
+  const heading = language === 'da'
+    ? (data.isRenewal ? 'Kvittering på fornyelse af abonnement' : 'Betalingskvittering')
+    : (data.isRenewal ? 'Subscription renewal receipt' : 'Payment receipt');
+
+  const intro = language === 'da'
+    ? 'Vi har modtaget din betaling. Her er din kvittering:'
+    : 'We have received your payment. Here is your receipt:';
+
+  const dateLabel = language === 'da' ? 'Betalingsdato' : 'Payment date';
+  const planLabel = language === 'da' ? 'Abonnement' : 'Subscription';
+  const periodLabel = language === 'da' ? 'Periode' : 'Period';
+  const amountLabel = language === 'da' ? 'Beløb (ekscl. moms)' : 'Amount (excl. VAT)';
+  const vatLabel = language === 'da' ? 'Moms (25%)' : 'VAT (25%)';
+  const totalLabel = language === 'da' ? 'I alt (inkl. moms)' : 'Total (incl. VAT)';
+  const idLabel = language === 'da' ? 'Betalings-ID' : 'Payment ID';
+  const cardLabel = language === 'da' ? 'Kort' : 'Card';
+
+  const content = `
+    <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:20px; font-weight:600;">${heading}</h2>
+    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${intro}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; background-color:${BG_LIGHT}; border-radius:8px; border:1px solid #e2e8f0;">
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${dateLabel}</strong> ${new Date(data.paymentDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${planLabel}</strong> ${data.planName}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${periodLabel}</strong> ${data.period}
+      </td></tr>
+      ${data.cardLast4 ? `<tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${cardLabel}</strong> •••• ${data.cardLast4}
+      </td></tr>` : ''}
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${amountLabel}</strong> ${data.amountDKK.toFixed(2)} kr.
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatLabel}</strong> ${data.vatDKK.toFixed(2)} kr.
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:14px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_DARK}; font-size:12px; text-transform:uppercase; letter-spacing:0.05em;">${totalLabel}</strong> <strong>${data.totalDKK.toFixed(2)} kr.</strong>
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_MUTED};">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${idLabel}</strong> <code style="font-family:monospace; font-size:11px;">${data.paymentId}</code>
+      </td></tr>
+    </table>
+    <p style="margin:0; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">
+      ${language === 'da'
+        ? 'Opbevar denne kvittering til din regnskabsbog. AlphaAI Consult ApS · CVR 44 55 66 77'
+        : 'Please keep this receipt for your accounting records. AlphaAI Consult ApS · VAT 44 55 66 77'}
+    </p>
+  `;
+
+  return wrapperHtml(content, language, language === 'da'
+    ? `Du modtager denne kvittering, fordi der er trukket betaling for dit AlphaFlow-abonnement.`
+    : `You are receiving this receipt because a payment was charged for your AlphaFlow subscription.`
+  );
+}
+
+// ─── SUBSCRIPTION CANCELLED EMAIL (FASE 6) ─────────────────────────
+// Sent when the user cancels their subscription. Confirms cancellation and
+// states that access is retained until the binding period ends.
+// Satisfies bank requirement (e): cancellation confirmation.
+
+export interface SubscriptionCancelledData {
+  planName: string;
+  cancelledDate: string;     // ISO date
+  accessUntilDate: string | null; // ISO date or null (monthly = end of current period)
+  reason: string;            // 'user_request' | 'payment_failed' | 'admin_action'
+  appUrl: string;
+}
+
+export function subscriptionCancelledHtml(language: Language, data: SubscriptionCancelledData): string {
+  const heading = language === 'da' ? 'Bekræftelse på opsigelse' : 'Cancellation confirmation';
+  const intro = language === 'da'
+    ? 'Vi bekræfter hermed, at dit abonnement er opsagt.'
+    : 'We hereby confirm that your subscription has been cancelled.';
+
+  const planLabel = language === 'da' ? 'Abonnement' : 'Plan';
+  const cancelledLabel = language === 'da' ? 'Opsigelsesdato' : 'Cancellation date';
+  const accessLabel = language === 'da' ? 'Adgang indtil' : 'Access until';
+
+  const accessText = data.accessUntilDate
+    ? new Date(data.accessUntilDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')
+    : (language === 'da' ? 'Udløb af nuværende periode' : 'End of current period');
+
+  const loginBtn = language === 'da' ? 'Log ind i AlphaFlow' : 'Log in to AlphaFlow';
+
+  const content = `
+    <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:20px; font-weight:600;">${heading}</h2>
+    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${intro}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; background-color:${BG_LIGHT}; border-radius:8px; border:1px solid #e2e8f0;">
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${planLabel}</strong> ${data.planName}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${cancelledLabel}</strong> ${new Date(data.cancelledDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK};">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${accessLabel}</strong> ${accessText}
+      </td></tr>
+    </table>
+    <div style="margin:16px 0; padding:16px 20px; background-color:#fef3c7; border-left:3px solid #f59e0b; border-radius:0 8px 8px 0; font-size:13px; color:#92400e; line-height:1.6;">
+      ${language === 'da'
+        ? '<strong>Vigtigt:</strong> Du beholder fuld adgang til AlphaFlow indtil ovenstående dato. Efter udløbet vil kontoen blive deaktiveret, men dine data opbevares i 5 år jf. Bogføringsloven §10-12.'
+        : '<strong>Important:</strong> You retain full access to AlphaFlow until the date above. After expiry, your account will be deactivated, but your data is retained for 5 years per the Danish Bookkeeping Act §10-12.'}
+    </div>
+    ${buttonHtml(data.appUrl, loginBtn)}
+  `;
+
+  return wrapperHtml(content, language, language === 'da'
+    ? `Du modtager denne e-mail, fordi du har opsagt dit abonnement hos ${APP_NAME}.`
+    : `You are receiving this email because you cancelled your ${APP_NAME} subscription.`
+  );
+}
+
+// ─── PAYMENT FAILED EMAIL (FASE 6) ─────────────────────────────────
+// Sent when a renewal payment fails. Includes retry info and a link to
+// update the payment method.
+// Satisfies bank requirement (f): failed payment notification.
+
+export interface PaymentFailedData {
+  planName: string;
+  amountDKK: number;
+  attemptDate: string;       // ISO date
+  retryDate: string | null;  // ISO date when retry will be attempted
+  appUrl: string;            // link to update payment method
+}
+
+export function paymentFailedHtml(language: Language, data: PaymentFailedData): string {
+  const heading = language === 'da' ? 'Betaling mislykkedes ⚠️' : 'Payment failed ⚠️';
+  const intro = language === 'da'
+    ? `Vi kunne ikke trække betalingen for dit <strong>${data.planName}</strong>-abonnement. Dette kan skyldes udløbet kort, manglende dækning eller at kortet er blokeret.`
+    : `We were unable to charge the payment for your <strong>${data.planName}</strong> subscription. This may be due to an expired card, insufficient funds, or the card being blocked.`;
+
+  const updateBtn = language === 'da' ? 'Opdater betalingsmetode' : 'Update payment method';
+
+  const retryText = data.retryDate
+    ? (language === 'da'
+        ? `Vi vil forsøge igen den <strong>${new Date(data.retryDate).toLocaleDateString('da-DK')}</strong>.`
+        : `We will retry on <strong>${new Date(data.retryDate).toLocaleDateString('en-GB')}</strong>.`)
+    : (language === 'da'
+        ? 'Der vil ikke blive foretaget yderligere forsøg automatisk.'
+        : 'No further automatic retry will be attempted.');
+
+  const content = `
+    <h2 style="margin:0 0 16px; color:#b91c1c; font-size:20px; font-weight:600;">${heading}</h2>
+    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${intro}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; background-color:#fef2f2; border-radius:8px; border:1px solid #fecaca;">
+      <tr><td style="padding:12px 20px; font-size:13px; color:#7f1d1d; border-bottom:1px solid #fecaca;">
+        <strong style="display:inline-block; width:160px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${language === 'da' ? 'Abonnement' : 'Plan'}</strong> ${data.planName}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:#7f1d1d; border-bottom:1px solid #fecaca;">
+        <strong style="display:inline-block; width:160px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${language === 'da' ? 'Beløb' : 'Amount'}</strong> ${data.amountDKK.toFixed(2)} kr.
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:#7f1d1d;">
+        <strong style="display:inline-block; width:160px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${language === 'da' ? 'Forsøg den' : 'Attempted on'}</strong> ${new Date(data.attemptDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
+      </td></tr>
+    </table>
+    <p style="margin:0 0 8px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${retryText}</p>
+    <p style="margin:0 0 16px; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">
+      ${language === 'da'
+        ? 'For at undgå afbrydelse af dit abonnement, bedes du opdatere din betalingsmetode hurtigst muligt.'
+        : 'To avoid disruption of your subscription, please update your payment method as soon as possible.'}
+    </p>
+    ${buttonHtml(data.appUrl, updateBtn)}
+  `;
+
+  return wrapperHtml(content, language, language === 'da'
+    ? `Du modtager denne e-mail, fordi en betaling for dit AlphaFlow-abonnement mislykkedes.`
+    : `You are receiving this email because a payment for your AlphaFlow subscription failed.`
+  );
+}
+
+// ─── PRE-RENEWAL REMINDER EMAIL (FASE 6) ───────────────────────────
+// Sent X days before a binding period ends (annual/2year/3year plans) or
+// before a monthly recurring renewal. Tells the customer that a renewal
+// charge is upcoming.
+// Satisfies bank requirement (c): pre-renewal reminder.
+
+export interface PreRenewalReminderData {
+  planName: string;
+  renewalDate: string;       // ISO date of upcoming renewal
+  amountDKK: number;         // amount that will be charged
+  daysUntilRenewal: number;  // 14, 7, 3, 1...
+  isAutoRenew: boolean;      // true if it will auto-charge, false if action needed
+  appUrl: string;
+}
+
+export function preRenewalReminderHtml(language: Language, data: PreRenewalReminderData): string {
+  const heading = language === 'da' ? 'Påmindelse: Fornyelse af abonnement' : 'Reminder: Subscription renewal';
+  const intro = language === 'da'
+    ? `Dit <strong>${data.planName}</strong>-abonnement ${
+        data.isAutoRenew ? 'fornyes automatisk' : 'udløber'
+      } om <strong>${data.daysUntilRenewal} ${data.daysUntilRenewal === 1 ? 'dag' : 'dage'}</strong>.`
+    : `Your <strong>${data.planName}</strong> subscription will ${
+        data.isAutoRenew ? 'auto-renew' : 'expire'
+      } in <strong>${data.daysUntilRenewal} ${data.daysUntilRenewal === 1 ? 'day' : 'days'}</strong>.`;
+
+  const renewalLabel = language === 'da' ? 'Fornyelsesdato' : 'Renewal date';
+  const amountLabel = language === 'da' ? 'Beløb ved fornyelse' : 'Amount at renewal';
+  const actionBtn = data.isAutoRenew
+    ? (language === 'da' ? 'Se abonnement' : 'View subscription')
+    : (language === 'da' ? 'Forny abonnement' : 'Renew subscription');
+
+  const actionNote = data.isAutoRenew
+    ? (language === 'da'
+        ? 'Betalingen trækkes automatisk på den tilknyttede betalingsmetode. Hvis du ikke ønsker fornyelse, kan du opsige i indstillingerne inden fornyelsesdatoen.'
+        : 'The payment will be charged automatically to your payment method on file. To cancel, please do so in your settings before the renewal date.')
+    : (language === 'da'
+        ? 'For at fortsætte med AlphaFlow skal du aktivt forny dit abonnement inden udløbet.'
+        : 'To continue using AlphaFlow, please renew your subscription before it expires.');
+
+  const content = `
+    <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:20px; font-weight:600;">${heading}</h2>
+    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${intro}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; background-color:${BG_LIGHT}; border-radius:8px; border:1px solid #e2e8f0;">
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${language === 'da' ? 'Abonnement' : 'Plan'}</strong> ${data.planName}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${renewalLabel}</strong> ${new Date(data.renewalDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK};">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${amountLabel}</strong> ${data.amountDKK.toFixed(2)} kr.
+      </td></tr>
+    </table>
+    <p style="margin:0 0 16px; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">${actionNote}</p>
+    ${buttonHtml(data.appUrl, actionBtn)}
+  `;
+
+  return wrapperHtml(content, language, language === 'da'
+    ? `Du modtager denne påmindelse, fordi dit AlphaFlow-abonnement snart fornyes.`
+    : `You are receiving this reminder because your AlphaFlow subscription is about to renew.`
+  );
+}
+
+// ─── TERMS CHANGE NOTIFICATION EMAIL (FASE 6) ──────────────────────
+// Sent when the terms of service version changes. Broadcast to all active
+// subscribers. The email must clearly state what changed and when the new
+// terms take effect.
+// Satisfies bank requirement (g) + (h): terms change + material change notice.
+
+export interface TermsChangeData {
+  oldVersion: string;        // "2025-07-01-v1"
+  newVersion: string;        // "2025-11-01-v1"
+  effectiveDate: string;     // ISO date when new terms take effect
+  summaryHtml: string;       // bullet-point summary of changes (HTML)
+  termsUrl: string;          // link to the full new terms
+}
+
+export function termsChangeHtml(language: Language, data: TermsChangeData): string {
+  const heading = language === 'da' ? 'Vigtigt: Ændringer af vores vilkår' : 'Important: Changes to our terms';
+  const intro = language === 'da'
+    ? `Vi opdaterer vores Forretningsbetingelser. De nye vilkår træder i kraft den <strong>${new Date(data.effectiveDate).toLocaleDateString('da-DK')}</strong>.`
+    : `We are updating our Terms of Service. The new terms take effect on <strong>${new Date(data.effectiveDate).toLocaleDateString('en-GB')}</strong>.`;
+
+  const oldLabel = language === 'da' ? 'Tidligere version' : 'Previous version';
+  const newLabel = language === 'da' ? 'Ny version' : 'New version';
+  const effLabel = language === 'da' ? 'Ikrafttrædelse' : 'Effective date';
+  const summaryLabel = language === 'da' ? 'Hovedændringer' : 'Key changes';
+  const readBtn = language === 'da' ? 'Læs de fulde vilkår' : 'Read the full terms';
+
+  const content = `
+    <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:20px; font-weight:600;">${heading}</h2>
+    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${intro}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; background-color:${BG_LIGHT}; border-radius:8px; border:1px solid #e2e8f0;">
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${oldLabel}</strong> ${data.oldVersion}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${newLabel}</strong> ${data.newVersion}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK};">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${effLabel}</strong> ${new Date(data.effectiveDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
+      </td></tr>
+    </table>
+    <h3 style="margin:0 0 12px; color:${TEXT_DARK}; font-size:14px; font-weight:600;">${summaryLabel}</h3>
+    <div style="margin:0 0 20px; padding:16px 20px; background-color:#f9fafb; border-left:3px solid ${PRIMARY}; border-radius:0 8px 8px 0; font-size:14px; color:${TEXT_DARK}; line-height:1.7;">
+      ${data.summaryHtml}
+    </div>
+    <p style="margin:0 0 16px; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">
+      ${language === 'da'
+        ? 'Ved fortsat brug af AlphaFlow efter ikrafttrædelsesdatoen accepterer du de nye vilkår. Hvis du ikke accepterer de nye vilkår, kan du opsige dit abonnement inden da.'
+        : 'By continuing to use AlphaFlow after the effective date, you accept the new terms. If you do not accept the new terms, you may cancel your subscription before that date.'}
+    </p>
+    ${buttonHtml(data.termsUrl, readBtn)}
+  `;
+
+  return wrapperHtml(content, language, language === 'da'
+    ? `Du modtager denne e-mail, fordi du er aktiv abonnent hos ${APP_NAME}, og vi er juridisk forpligtet til at informere dig om væsentlige vilkårsændringer.`
+    : `You are receiving this email because you are an active ${APP_NAME} subscriber, and we are legally required to notify you of material changes to our terms.`
+  );
+}

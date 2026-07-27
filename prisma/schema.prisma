@@ -209,6 +209,33 @@ enum PlanTier {
   threeyear // Business Extended — 145 kr./md., 36-month binding (frontend id: "3year")
 }
 
+// ─── SUBSCRIPTION LIFECYCLE STATUS (FASE 6 — billing compliance) ──
+// Tracks the lifecycle state of a tenant's subscription independently of
+// planTier. planTier says WHICH plan; planStatus says whether it is active,
+// pending renewal, cancelled (running out the binding), expired, or past_due
+// (failed payment during recurring renewal).
+
+enum PlanStatus {
+  active // Plan is in good standing
+  cancelled // User cancelled — access retained until planExpiresAt
+  expired // Binding period ended, no renewal
+  past_due // Renewal payment failed — grace period
+}
+
+// ─── CONSENT TRACKING (FASE 6 — PSD2 / Forbrugeraftaleloven compliance) ──
+// Explicit consent must be captured BEFORE a recurring/subscription payment
+// is created. Each consent event is logged immutably with the terms version,
+// timestamp, IP, and user-agent so it can be produced as evidence on request
+// from the bank, the Danish Consumer Ombudsman (Forbrugerombudsmanden), or
+// Card scheme disputes (Visa/MC).
+
+enum ConsentType {
+  TERMS_OF_SERVICE // Generelle forretningsbetingelser
+  RECURRING_BILLING // Samtykke til tilbagevendende opkrævninger
+  PRIVACY_POLICY // Persondatapolitik
+  MARKETING // Markedsførings-samtykke (GDPR Art. 7)
+}
+
 // ─── COMPANY (TENANT ENTITY) ──────────────────────────────────────
 // Replaces the old CompanyInfo model. This IS the tenant boundary.
 
@@ -294,6 +321,19 @@ model Company {
   planActivatedBy String? // userId of the App Owner who set the paid plan (audit trail)
   planNotes       String? // SuperDev free-text note (e.g. "granted as courtesy")
 
+  // ── Subscription lifecycle (FASE 6 — billing compliance) ──
+  // planStatus tracks whether the subscription is active, cancelled (running
+  // out the binding period), expired, or past_due. Decoupled from planTier so
+  // we can keep "which plan" + "what state" separate. Used by the billing
+  // scheduler to decide who needs pre-renewal reminders and by access-guard to
+  // decide whether to grant/restrict write access.
+  planStatus           PlanStatus @default(active)
+  planCancelledAt      DateTime? // Set when user cancels — access retained until planExpiresAt
+  planCancellationReason String? // 'user_request' | 'payment_failed' | 'admin_action' | 'expired'
+  nextRenewalAt        DateTime? // When the next recurring charge will be attempted (monthly plan)
+  lastReminderSentAt   DateTime? // Anti-spam: tracks the last pre-renewal/pre-billing reminder
+  lastReceiptSentAt    DateTime? // Tracks the last payment-receipt email (avoids duplicate sends on webhook retries)
+
   // Meta
   isDemo    Boolean  @default(false) // Demo company flag — only the shared demo company should be true
   isActive  Boolean  @default(true)
@@ -324,11 +364,16 @@ model Company {
   vatSubmissions          VATSubmission[]
   projects                Project[]
   payments                Payment[]
+  consentLogs             ConsentLog[]
+  webhookEvents           WebhookEvent[]
 
   @@unique([name])
   @@index([isActive])
   @@index([cvrNumber])
   @@index([planTier])
+  @@index([planStatus])
+  @@index([planExpiresAt])
+  @@index([nextRenewalAt])
 }
 
 // ─── USER-COMPANY JUNCTION ────────────────────────────────────────
@@ -435,6 +480,7 @@ model User {
   vatSubmissions     VATSubmission[]
   projects           Project[]
   payments           Payment[]
+  consentLogs        ConsentLog[]
 }
 
 // ─── SESSION (with activeCompanyId) ───────────────────────────────
@@ -1534,6 +1580,7 @@ model Payment {
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  consentLogs ConsentLog[]
 
   @@index([userId])
   @@index([companyId])
@@ -1562,4 +1609,73 @@ model ContactMessage {
   @@index([status])
   @@index([createdAt])
   @@index([email])
+}
+
+// ─── CONSENT LOG (FASE 6 — explicit consent tracking) ──────────────
+// Immutable record of every explicit consent the user has given. Each consent
+// captures the terms version, timestamp, IP, and user-agent so we can produce
+// evidence on demand for the bank, the Card schemes, the Danish Consumer
+// Ombudsman, or a court. This is the legal anchor for recurring billing
+// under Betalingsloven §100-102 and Forbrugeraftaleloven §18-19.
+
+model ConsentLog {
+  id              String      @id @default(cuid())
+  userId          String
+  companyId       String
+  consentType     ConsentType
+  // Version string of the document the user agreed to (e.g. "2025-07-01-v1")
+  // Resolved at accept-time from lib/legal.ts CURRENT_TERMS_VERSION.
+  consentVersion  String
+  consentedAt     DateTime    @default(now())
+  consentIp       String?
+  consentUserAgent String?
+  withdrawnAt     DateTime? // Set if the user later revokes this consent
+  // Optional relation to the Payment that this consent authorized. Makes it
+  // possible to trace from a disputed charge back to the exact consent event.
+  paymentId       String?
+
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company         Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payment         Payment?    @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([userId, consentType])
+  @@index([companyId])
+  @@index([consentType])
+  @@index([consentVersion])
+  @@index([consentedAt])
+  @@index([paymentId])
+}
+
+// ─── WEBHOOK EVENT LOG (FASE 6 — idempotency + audit) ──────────────
+// Stores every incoming payment-provider webhook (Frisbii/Flatpay) so we can:
+//   1. Detect duplicate deliveries (idempotency — providers retry webhooks)
+//   2. Reconcile missed events by replaying the log
+//   3. Produce an audit trail for the bank / Card scheme disputes
+// The (source, eventId) pair is unique — a second delivery of the same event
+// is rejected at insert time.
+
+model WebhookEvent {
+  id            String    @id @default(cuid())
+  // "frisbii" | "flatpay" | "reepay" — which provider sent it
+  source        String
+  // The provider's event ID (e.g. Frisbii's "evt_..."). Used for idempotency.
+  eventId       String
+  // Event type from the provider (e.g. "invoice_settled", "invoice_failed")
+  eventType     String
+  // Full raw payload (JSON) for audit/debugging
+  payload       Json
+  // Processing status: "processed" | "ignored" | "error"
+  status        String    @default("processed")
+  errorMessage  String?
+  receivedAt    DateTime  @default(now())
+  processedAt   DateTime?
+
+  company       Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId     String?
+
+  @@unique([source, eventId])
+  @@index([source, eventType])
+  @@index([companyId])
+  @@index([receivedAt])
+  @@index([status])
 }

@@ -26,17 +26,46 @@ import {
   invitationEmailHtml,
   ownerNotificationHtml,
   invoiceEmailHtml,
+  subscriptionWelcomeHtml,
+  paymentReceiptHtml,
+  subscriptionCancelledHtml,
+  paymentFailedHtml,
+  preRenewalReminderHtml,
+  termsChangeHtml,
+  type SubscriptionWelcomeData,
+  type PaymentReceiptData,
+  type SubscriptionCancelledData,
+  type PaymentFailedData,
+  type PreRenewalReminderData,
+  type TermsChangeData,
 } from '@/lib/email-templates';
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
 export type Language = 'da' | 'en';
 
+// Template-union expanded in FASE 6 to cover all subscription-lifecycle emails
+// required by the bank's payment-gateway compliance review.
+export type EmailTemplate =
+  | 'verification'
+  | 'password-reset'
+  | 'invitation'
+  | 'owner-notification'
+  | 'invoice'
+  // FASE 6 — subscription lifecycle emails
+  | 'subscription-welcome'        // (a) welcome/confirmation after subscription
+  | 'payment-receipt'             // (d) receipt after each recurring charge
+  | 'subscription-cancelled'      // (e) cancellation confirmation
+  | 'payment-failed'              // (f) failed payment notification
+  | 'pre-renewal-reminder'        // (c) reminder before renewal/binding expiry
+  | 'pre-billing-reminder'        // (b) reminder before trial → paid conversion
+  | 'terms-change-notice';        // (g)+(h) terms/service change notification
+
 interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
-  template: 'verification' | 'password-reset' | 'invitation' | 'owner-notification' | 'invoice';
+  template: EmailTemplate;
   companyId?: string;
   metadata?: Record<string, unknown>;
   attachments?: Array<{
@@ -338,5 +367,224 @@ export async function sendInvoiceEmail(
         contentType: 'application/pdf',
       },
     ],
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FASE 6 — SUBSCRIPTION LIFECYCLE EMAILS
+// ═══════════════════════════════════════════════════════════════════
+// These functions cover all email types required by the bank's payment-
+// gateway compliance review. Each is fire-and-forget safe — the caller
+// does NOT need to await them, and any send failure is logged to EmailLog
+// with status='failed' for retry/audit.
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── (a) SUBSCRIPTION WELCOME / CONFIRMATION ───────────────────────
+// Sent immediately after a paid plan is activated (post Flatpay payment
+// success). Confirms the purchase, price, binding period, start date,
+// and the terms version the user agreed to.
+
+export async function sendSubscriptionWelcomeEmail(
+  to: string,
+  data: SubscriptionWelcomeData,
+  language: Language = 'da',
+  companyId?: string,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? `Velkommen til AlphaFlow — dit ${data.planName}-abonnement er aktiveret`
+    : `Welcome to AlphaFlow — your ${data.planName} subscription is active`;
+
+  return sendEmail({
+    to,
+    subject,
+    html: subscriptionWelcomeHtml(language, data),
+    template: 'subscription-welcome',
+    companyId,
+    metadata: {
+      planName: data.planName,
+      monthlyPriceDKK: data.monthlyPriceDKK,
+      bindingMonths: data.bindingMonths,
+      totalAmountDKK: data.totalAmountDKK,
+      termsVersion: data.termsVersion,
+    },
+  });
+}
+
+// ─── (d) PAYMENT RECEIPT ───────────────────────────────────────────
+// Sent after each successful payment — both the initial subscription
+// purchase AND every recurring renewal charge. The metadata.paymentId
+// makes it possible to look up the receipt from the Payment record.
+
+export async function sendPaymentReceiptEmail(
+  to: string,
+  data: PaymentReceiptData,
+  language: Language = 'da',
+  companyId?: string,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? (data.isRenewal ? 'Kvittering på fornyelse af abonnement' : 'Betalingskvittering — AlphaFlow')
+    : (data.isRenewal ? 'Subscription renewal receipt — AlphaFlow' : 'Payment receipt — AlphaFlow');
+
+  return sendEmail({
+    to,
+    subject,
+    html: paymentReceiptHtml(language, data),
+    template: 'payment-receipt',
+    companyId,
+    metadata: {
+      paymentId: data.paymentId,
+      planName: data.planName,
+      totalDKK: data.totalDKK,
+      isRenewal: data.isRenewal,
+      paymentDate: data.paymentDate,
+    },
+  });
+}
+
+// ─── (e) SUBSCRIPTION CANCELLED ────────────────────────────────────
+// Sent when the user (or admin) cancels a subscription. Confirms the
+// cancellation and the access-until date (binding end or current period end).
+
+export async function sendSubscriptionCancelledEmail(
+  to: string,
+  data: SubscriptionCancelledData,
+  language: Language = 'da',
+  companyId?: string,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? 'Bekræftelse på opsigelse af dit AlphaFlow-abonnement'
+    : 'Cancellation confirmation — AlphaFlow subscription';
+
+  return sendEmail({
+    to,
+    subject,
+    html: subscriptionCancelledHtml(language, data),
+    template: 'subscription-cancelled',
+    companyId,
+    metadata: {
+      planName: data.planName,
+      reason: data.reason,
+      accessUntilDate: data.accessUntilDate,
+    },
+  });
+}
+
+// ─── (f) PAYMENT FAILED ────────────────────────────────────────────
+// Sent when a renewal payment fails (Frisbii invoice_failed event).
+// Includes retry info and a link to update the payment method.
+
+export async function sendPaymentFailedEmail(
+  to: string,
+  data: PaymentFailedData,
+  language: Language = 'da',
+  companyId?: string,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? 'Betaling mislykkedes — handling kræves'
+    : 'Payment failed — action required';
+
+  return sendEmail({
+    to,
+    subject,
+    html: paymentFailedHtml(language, data),
+    template: 'payment-failed',
+    companyId,
+    metadata: {
+      planName: data.planName,
+      amountDKK: data.amountDKK,
+      retryDate: data.retryDate,
+    },
+  });
+}
+
+// ─── (c) PRE-RENEWAL REMINDER ──────────────────────────────────────
+// Sent X days before a binding period ends or before a monthly recurring
+// renewal. The billing-scheduler calls this with daysUntilRenewal ∈
+// {14, 7, 3, 1} — and the Company.lastReminderSentAt field prevents
+// duplicate sends within the same window.
+
+export async function sendPreRenewalReminderEmail(
+  to: string,
+  data: PreRenewalReminderData,
+  language: Language = 'da',
+  companyId?: string,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? `Påmindelse: Dit AlphaFlow-abonnement ${data.isAutoRenew ? 'fornyes' : 'udløber'} om ${data.daysUntilRenewal} ${data.daysUntilRenewal === 1 ? 'dag' : 'dage'}`
+    : `Reminder: Your AlphaFlow subscription ${data.isAutoRenew ? 'renews' : 'expires'} in ${data.daysUntilRenewal} ${data.daysUntilRenewal === 1 ? 'day' : 'days'}`;
+
+  return sendEmail({
+    to,
+    subject,
+    html: preRenewalReminderHtml(language, data),
+    template: 'pre-renewal-reminder',
+    companyId,
+    metadata: {
+      planName: data.planName,
+      renewalDate: data.renewalDate,
+      daysUntilRenewal: data.daysUntilRenewal,
+      isAutoRenew: data.isAutoRenew,
+    },
+  });
+}
+
+// ─── (b) PRE-BILLING REMINDER (trial → paid conversion) ────────────
+// Sent before a free trial converts to a paid subscription. Currently the
+// AlphaFlow platform uses a revenue-gated Free tier (not a time-limited
+// trial), so this function is wired up for future use and parity with
+// the bank's checklist. Reuses pre-renewal template with isAutoRenew=true.
+
+export async function sendPreBillingReminderEmail(
+  to: string,
+  data: PreRenewalReminderData,
+  language: Language = 'da',
+  companyId?: string,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? `Din prøveperiode konverteres til betalt abonnement om ${data.daysUntilRenewal} ${data.daysUntilRenewal === 1 ? 'dag' : 'dage'}`
+    : `Your trial converts to a paid subscription in ${data.daysUntilRenewal} ${data.daysUntilRenewal === 1 ? 'day' : 'days'}`;
+
+  return sendEmail({
+    to,
+    subject,
+    html: preRenewalReminderHtml(language, { ...data, isAutoRenew: true }),
+    template: 'pre-billing-reminder',
+    companyId,
+    metadata: {
+      planName: data.planName,
+      renewalDate: data.renewalDate,
+      daysUntilRenewal: data.daysUntilRenewal,
+      isAutoRenew: true,
+    },
+  });
+}
+
+// ─── (g)+(h) TERMS CHANGE NOTIFICATION ─────────────────────────────
+// Broadcast to all active subscribers when the terms-of-service version
+// changes. The caller (admin script or oversight UI) supplies the summary
+// of changes as HTML bullet points. This is the legally-required notice
+// for material changes under Forbrugeraftaleloven §14.
+
+export async function sendTermsChangeEmail(
+  to: string,
+  data: TermsChangeData,
+  language: Language = 'da',
+  companyId?: string,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? 'Vigtigt: Ændringer af vores forretningsbetingelser'
+    : 'Important: Changes to our terms of service';
+
+  return sendEmail({
+    to,
+    subject,
+    html: termsChangeHtml(language, data),
+    template: 'terms-change-notice',
+    companyId,
+    metadata: {
+      oldVersion: data.oldVersion,
+      newVersion: data.newVersion,
+      effectiveDate: data.effectiveDate,
+    },
   });
 }

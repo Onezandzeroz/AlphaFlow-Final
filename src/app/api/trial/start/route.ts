@@ -4,6 +4,8 @@ import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { frontendPlanIdToTier, PlanTier } from '@/lib/plan-features';
+import { sendSubscriptionWelcomeEmail } from '@/lib/email-service';
+import { getCurrentTermsVersion } from '@/lib/legal';
 
 // ─── POST /api/trial/start ─────────────────────────────────────────
 // Activate the FREE plan on first login.
@@ -92,6 +94,12 @@ export const POST = withGuard({
         planPurchasedAt: now,
         planExpiresAt: null,
         planActivatedBy: ctx.id,
+        // FASE 6 — lifecycle fields. Free plan is active, no renewal, no expiry.
+        planStatus: 'active',
+        planCancelledAt: null,
+        planCancellationReason: null,
+        nextRenewalAt: null, // Free plan has no renewal
+        lastReminderSentAt: null,
       },
     });
 
@@ -108,6 +116,34 @@ export const POST = withGuard({
       },
       metadata: requestMetadata(request),
     });
+
+    // ── FASE 6: send welcome email for the Free plan ───────────────────
+    // Even free-tier users should receive a welcome/confirmation email that
+    // confirms their signup, the revenue gate terms (50.000 kr.), and the
+    // terms version they agreed to. Fire-and-forget — must not block the
+    // plan activation.
+    try {
+      const appUrl = process.env.APP_URL || 'https://alphaflow.dk';
+      await sendSubscriptionWelcomeEmail(
+        user.email,
+        {
+          planName: 'AlphaFlow Gratis',
+          monthlyPriceDKK: 0,
+          bindingMonths: 0,
+          totalAmountDKK: 0,
+          startDate: now.toISOString(),
+          expiryDate: null, // Free plan has no expiry
+          termsVersion: getCurrentTermsVersion(),
+          appUrl,
+        },
+        'da',
+        ctx.activeCompanyId,
+      ).catch((e) => {
+        logger.warn(`[TRIAL] Welcome email failed for ${user.email}:`, e);
+      });
+    } catch (emailError) {
+      logger.warn(`[TRIAL] Email sending failed for user ${ctx.id}:`, emailError);
+    }
 
     logger.info(
       `[TRIAL] User ${user.email} chose the Free plan. trialClaimedAt set. Revenue gate now active.`,

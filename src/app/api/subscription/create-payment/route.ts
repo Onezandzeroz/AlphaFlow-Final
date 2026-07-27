@@ -6,15 +6,23 @@ import { auditLog, requestMetadata } from '@/lib/audit';
 import { frontendPlanIdToTier, PlanTier, getBindingMonths } from '@/lib/plan-features';
 import { getPlanPricing } from '@/lib/plan-pricing';
 import { createPaymentSession } from '@/lib/flatpay-client';
+import { recordConsent } from '@/lib/consent';
+import { getCurrentTermsVersion } from '@/lib/legal';
 
 /**
  * POST /api/subscription/create-payment
  *
  * Creates a Flatpay payment session for a paid subscription plan.
  * Called when the user clicks a paid plan (Månedlig / Pro / Business /
- * Business Extended) on the subscription plans prompt.
+ * Business Extended) on the subscription plans prompt — AFTER they have
+ * confirmed consent in the consent-confirmation dialog.
  *
- * Request body: { planId: 'monthly' | 'annual' | '2year' | '3year' }
+ * Request body (FASE 6):
+ *   {
+ *     planId: 'monthly' | 'annual' | '2year' | '3year',
+ *     agreedToTerms: boolean,   // REQUIRED — must be true
+ *     consentVersion: string,   // REQUIRED — must match CURRENT_TERMS_VERSION
+ *   }
  *
  * Response: { checkoutUrl, paymentId }
  *
@@ -24,6 +32,14 @@ import { createPaymentSession } from '@/lib/flatpay-client';
  * /api/subscription/payment-webhook. The plan is activated only after
  * a confirmed payment.
  *
+ * FASE 6 — Consent validation:
+ *   Before creating the payment session, we validate that the user has
+ *   explicitly agreed to the terms (agreedToTerms === true) and that the
+ *   consentVersion matches the current terms version. We then write a
+ *   ConsentLog row linked to the resulting Payment — providing the legal
+ *   evidence chain from consent → payment → plan activation that the bank
+ *   and Card schemes require for recurring billing disputes.
+ *
  * For the Free plan, use /api/trial/start instead (no payment needed).
  */
 export const POST = withGuard(
@@ -31,10 +47,42 @@ export const POST = withGuard(
   async (request: NextRequest, ctx) => {
     try {
       const body = await request.json().catch(() => ({}));
-      const { planId } = body as { planId?: string };
+      const { planId, agreedToTerms, consentVersion } = body as {
+        planId?: string;
+        agreedToTerms?: boolean;
+        consentVersion?: string;
+      };
 
       if (!planId) {
         return NextResponse.json({ error: 'Missing: planId' }, { status: 400 });
+      }
+
+      // ── FASE 6: Consent validation ──────────────────────────────────
+      // The user MUST have explicitly agreed to the terms before we create
+      // a payment session. This is the legal anchor for recurring billing
+      // under Forbrugeraftaleloven §18-19 and Betalingsloven §100-102.
+      // Without this, the bank can refuse to settle disputed charges.
+      if (!agreedToTerms) {
+        return NextResponse.json(
+          {
+            error: 'Consent required. You must accept the terms before subscribing.',
+            code: 'CONSENT_REQUIRED',
+          },
+          { status: 400 },
+        );
+      }
+
+      const currentTermsVersion = getCurrentTermsVersion();
+      if (!consentVersion || consentVersion !== currentTermsVersion) {
+        return NextResponse.json(
+          {
+            error: 'Outdated or missing consent version. Please reload the page and try again.',
+            code: 'CONSENT_VERSION_MISMATCH',
+            expected: currentTermsVersion,
+            received: consentVersion ?? null,
+          },
+          { status: 400 },
+        );
       }
 
       const planTier = frontendPlanIdToTier(planId);
@@ -67,6 +115,43 @@ export const POST = withGuard(
           status: 'pending',
         },
       });
+
+      // ── FASE 6: Record the consent, linked to this Payment ──────────
+      // This creates the legal evidence chain: ConsentLog → Payment →
+      // Company.planTier. The consent includes IP + user-agent for forensic
+      // evidence in case of a later chargeback dispute.
+      try {
+        await recordConsent({
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId!,
+          consentType: 'RECURRING_BILLING',
+          consentVersion,
+          request,
+          paymentId: payment.id,
+        });
+        // Also record Terms-of-Service consent at the same time (the user
+        // accepted both in the same checkbox click)
+        await recordConsent({
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId!,
+          consentType: 'TERMS_OF_SERVICE',
+          consentVersion,
+          request,
+          paymentId: payment.id,
+        });
+      } catch (consentError) {
+        // Critical — if we can't log consent, we can't legally charge.
+        // Roll back the Payment row and refuse to create the session.
+        logger.error('[CREATE PAYMENT] Failed to record consent — aborting payment session:', consentError);
+        await db.payment.delete({ where: { id: payment.id } }).catch(() => {});
+        return NextResponse.json(
+          {
+            error: 'Could not record consent. Please try again.',
+            code: 'CONSENT_LOG_FAILED',
+          },
+          { status: 500 },
+        );
+      }
 
       // Build the URLs Frisbii needs.
       // - acceptUrl: the URL Frisbii redirects the user to on SUCCESS.
@@ -117,12 +202,13 @@ export const POST = withGuard(
           planTier: { old: null, new: planTier },
           amount: { old: null, new: pricing.totalAmountOre },
           flatpayPaymentId: { old: null, new: session.flatpayPaymentId },
+          consentVersion: { old: null, new: consentVersion },
         },
         metadata: requestMetadata(request),
       });
 
       logger.info(
-        `[SUBSCRIPTION] Payment session created for user ${ctx.email}, plan ${planTier}, amount ${pricing.totalAmountOre} øre. Payment ID: ${payment.id}`,
+        `[SUBSCRIPTION] Payment session created for user ${ctx.email}, plan ${planTier}, amount ${pricing.totalAmountOre} øre. Payment ID: ${payment.id}. Consent v${consentVersion} logged.`,
       );
 
       return NextResponse.json({

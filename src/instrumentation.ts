@@ -46,10 +46,15 @@ export async function register(): Promise<void> {
     const { logger } = await import('@/lib/logger');
     const { startBackupScheduler } = await import('@/lib/backup-scheduler');
     const { startRecurringScheduler } = await import('@/lib/recurring-scheduler');
+    // FASE 6 — billing scheduler for subscription-lifecycle reminder emails
+    // (pre-renewal reminders, expiry marking). Required by the bank's
+    // payment-gateway compliance review.
+    const { startBillingScheduler } = await import('@/lib/billing-scheduler');
 
     logger.info('[INSTRUMENTATION] Node.js runtime — initializing background services');
     startBackupScheduler();
     startRecurringScheduler();
+    startBillingScheduler();
     logger.info('[INSTRUMENTATION] Background services initialized successfully');
   } catch (error) {
     // Never let instrumentation failure crash the server boot. Background
@@ -68,10 +73,12 @@ export async function unregister(): Promise<void> {
     const { logger } = await import('@/lib/logger');
     const { stopBackupScheduler } = await import('@/lib/backup-scheduler');
     const { stopRecurringScheduler } = await import('@/lib/recurring-scheduler');
+    const { stopBillingScheduler } = await import('@/lib/billing-scheduler');
 
     logger.info('[INSTRUMENTATION] Server shutting down — stopping background services');
     stopBackupScheduler();
     stopRecurringScheduler();
+    stopBillingScheduler();
   } catch (error) {
     // Best-effort cleanup — never let unregister throw during shutdown.
     console.error('[INSTRUMENTATION] Error during unregister:', error);

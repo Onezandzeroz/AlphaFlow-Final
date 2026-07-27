@@ -18,11 +18,24 @@ import {
   Star,
   ChevronLeft,
   ChevronRight,
+  FileText,
+  Loader2,
 } from 'lucide-react';
 import { openFrisbiiOverlay, isMockSession } from '@/lib/frisbii-checkout';
 import { MockCheckoutDialog } from '@/components/payment/mock-checkout-dialog';
 import { PaymentResultOverlay } from '@/components/payment/payment-result-overlay';
+import { ResponsiveCheckbox } from '@/components/ui/responsive-checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { getCurrentTermsVersion, getTermsUrl } from '@/lib/legal';
 
 // ─── Plan definitions ──────────────────────────────────────────────────
 
@@ -628,6 +641,19 @@ export function SubscriptionPlansPrompt() {
     planBinding?: string;
     planFeatures?: { da: string; en: string }[];
   }>({ open: false, type: 'success' });
+
+  // ── FASE 6: Consent confirmation dialog ──────────────────────────────
+  // When the user clicks a PAID plan, we don't immediately create a payment
+  // session. Instead, we open a confirmation dialog that shows the plan
+  // summary, the recurring-billing consent text, a link to the terms, and a
+  // mandatory checkbox. Only after the user checks the box and clicks
+  // "Bekræft og fortsæt til betaling" do we call /api/subscription/create-
+  // payment with { planId, agreedToTerms: true, consentVersion }.
+  // The backend validates this and writes a ConsentLog row — making the
+  // consent legally traceable to the exact payment.
+  const [pendingPlan, setPendingPlan] = useState<Plan | null>(null);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+
   const overlayRef = useRef<HTMLDivElement>(null);
   const hasScheduled = useRef(false);
 
@@ -850,14 +876,48 @@ export function SubscriptionPlansPrompt() {
         return;
       }
 
+      // ── Paid plan: open the consent confirmation dialog ──
+      // FASE 6: We do NOT create a payment session directly. Instead, we
+      // open a confirmation dialog that requires the user to explicitly
+      // agree to the terms + recurring billing before proceeding. This
+      // satisfies the bank's requirement for "udtrykkeligt samtykke til
+      // tilbagevendende opkrævninger" (Forbrugeraftaleloven §18-19,
+      // Betalingsloven §100-102). The actual create-payment call happens
+      // in `handleConfirmConsent` after the checkbox is ticked.
+      setPendingPlan(plan);
+      setAgreedToTerms(false);
+      return;
+    },
+    [dismiss],
+  );
+
+  // ── FASE 6: Confirmed consent → create payment session ──────────────
+  // Called from the consent dialog's "Bekræft og fortsæt til betaling" button
+  // AFTER the user has ticked the agree-checkbox. Sends the consentVersion
+  // + agreedToTerms flag to the backend, which validates them and writes a
+  // ConsentLog row linked to the resulting Payment.
+  const handleConfirmConsent = useCallback(
+    async (plan: Plan) => {
+      if (!agreedToTerms) {
+        toast.error(language === 'da' ? 'Du skal acceptere betingelserne for at fortsætte.' : 'You must accept the terms to continue.');
+        return;
+      }
+
+      const consentVersion = getCurrentTermsVersion();
+
       // ── Paid plan: create a Frisbii charge session ──
       // In mock mode → show MockCheckoutDialog (visible test checkout)
       // In production → open Frisbii Overlay Checkout (real payment)
       setStartingTrial(true);
+      setPendingPlan(null); // close the consent dialog
       fetch('/api/subscription/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId: plan.id }),
+        body: JSON.stringify({
+          planId: plan.id,
+          agreedToTerms: true,
+          consentVersion,
+        }),
       })
         .then((res) => res.json())
         .then(async (data) => {
@@ -962,7 +1022,7 @@ export function SubscriptionPlansPrompt() {
           );
         });
     },
-    [dismiss, language],
+    [agreedToTerms, dismiss, language],
   );
 
   // ── Mock checkout dialog handlers ──
@@ -1270,6 +1330,157 @@ export function SubscriptionPlansPrompt() {
           onError={handleMockError}
         />
       )}
+
+      {/* ════════════════════════════════════════════════════════════════
+          FASE 6 — Consent confirmation dialog
+          Opens when the user clicks a PAID plan. The user MUST tick the
+          agree-checkbox before /api/subscription/create-payment is called.
+          The backend validates { agreedToTerms, consentVersion } and writes
+          a ConsentLog row linked to the resulting Payment.
+          ════════════════════════════════════════════════════════════════ */}
+      <Dialog
+        open={pendingPlan !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            // User closed the dialog without confirming
+            setPendingPlan(null);
+            setAgreedToTerms(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-[#0d9488]" />
+              {language === 'da' ? 'Bekræft dit abonnement' : 'Confirm your subscription'}
+            </DialogTitle>
+            <DialogDescription>
+              {language === 'da'
+                ? 'Læs og acceptér betingelserne, før du fortsætter til betaling.'
+                : 'Please read and accept the terms before proceeding to payment.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingPlan && (
+            <div className="space-y-4 py-2">
+              {/* Plan summary */}
+              <div className="rounded-lg bg-[#f0fdfa] border border-[#ccfbf1] p-4">
+                <div className="flex items-baseline justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      {language === 'da' ? pendingPlan.name : pendingPlan.name}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {language === 'da' ? pendingPlan.descDa : pendingPlan.descEn}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-bold text-[#0d9488]">
+                      {language === 'da' ? pendingPlan.priceDa : pendingPlan.priceEn}
+                    </p>
+                    <p className="text-[11px] text-gray-500">
+                      {language === 'da' ? pendingPlan.bindDa : pendingPlan.bindEn}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recurring billing notice */}
+              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 leading-relaxed">
+                {pendingPlan.id === 'monthly' ? (
+                  language === 'da' ? (
+                    <>Du accepterer et <strong>løbende månedligt abonnement</strong> uden binding. Der trækkes betaling hver måned, indtil du opsiger abonnementet i indstillingerne.</>
+                  ) : (
+                    <>You agree to a <strong>rolling monthly subscription</strong> with no commitment. Payment is charged every month until you cancel in your settings.</>
+                  )
+                ) : (
+                  language === 'da' ? (
+                    <>Du accepterer et abonnement med <strong>{pendingPlan.bindDa.toLowerCase()}</strong>. Beløbet trækkes nu for hele perioden. Ved udløb skal du aktivt forny for at fortsætte.</>
+                  ) : (
+                    <>You agree to a subscription with <strong>{pendingPlan.bindEn.toLowerCase()}</strong>. The full period amount is charged now. At expiry you must actively renew to continue.</>
+                  )
+                )}
+              </div>
+
+              {/* Agree to terms checkbox */}
+              <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-md border border-gray-200 hover:border-[#0d9488]/50 transition-colors">
+                <ResponsiveCheckbox
+                  checked={agreedToTerms}
+                  onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
+                  className="h-[18px] w-[18px] mt-0.5 rounded-[5px] border-2 border-gray-300 data-[state=checked]:bg-[#0d9488] data-[state=checked]:border-[#0d9488] data-[state=unchecked]:bg-white data-[state=unchecked]:hover:border-[#0d9488]/50 transition-all duration-150"
+                />
+                <span className="text-sm text-gray-700 leading-relaxed select-none">
+                  {language === 'da' ? (
+                    <>
+                      Jeg accepterer{' '}
+                      <a
+                        href={getTermsUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#0d9488] hover:text-[#0f766e] underline font-medium"
+                      >
+                        Forretningsbetingelserne
+                      </a>{' '}
+                      og giver samtykke til, at der trækkes betaling for det valgte abonnement
+                      {pendingPlan.id === 'monthly' ? ' hver måned indtil opsigelse.' : ' for den valgte bindingsperiode.'}
+                    </>
+                  ) : (
+                    <>
+                      I accept the{' '}
+                      <a
+                        href={getTermsUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#0d9488] hover:text-[#0f766e] underline font-medium"
+                      >
+                        Terms of Service
+                      </a>{' '}
+                      and consent to being charged for the selected subscription
+                      {pendingPlan.id === 'monthly' ? ' every month until cancellation.' : ' for the selected binding period.'}
+                    </>
+                  )}
+                </span>
+              </label>
+
+              <p className="text-[11px] text-gray-400 leading-relaxed">
+                {language === 'da'
+                  ? `Vilkårsversion: ${getCurrentTermsVersion()}. Dit samtykke logges med tidsstempel, IP-adresse og browser-oplysninger jf. Forbrugeraftaleloven §18-19.`
+                  : `Terms version: ${getCurrentTermsVersion()}. Your consent is logged with timestamp, IP address, and browser details per the Danish Consumer Agreements Act §18-19.`}
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPendingPlan(null);
+                setAgreedToTerms(false);
+              }}
+              disabled={startingTrial}
+            >
+              {language === 'da' ? 'Annuller' : 'Cancel'}
+            </Button>
+            <Button
+              onClick={() => pendingPlan && handleConfirmConsent(pendingPlan)}
+              disabled={!agreedToTerms || startingTrial}
+              className="bg-[#0d9488] hover:bg-[#0f766e] text-white"
+            >
+              {startingTrial ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {language === 'da' ? 'Starter betaling…' : 'Starting payment…'}
+                </>
+              ) : (
+                <>
+                  {language === 'da' ? 'Bekræft og fortsæt til betaling' : 'Confirm and proceed to payment'}
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Payment result overlay — animated checkmark/X + welcome card.
           Rendered here (when prompt is visible) AND via the early-return
