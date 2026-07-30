@@ -1391,16 +1391,16 @@ export function SubscriptionPlansPrompt() {
         }}
       >
         <DialogContent
-          className="sm:max-w-[480px] z-[300]"
-          overlayClassName="z-[300]"
+          className="sm:max-w-[480px] z-[300] !bg-[#0c1a33] dark:!bg-[#091325] !border-[#1a2d4d]/60 dark:!border-[#152240]/80 !rounded-2xl !shadow-2xl !shadow-black/40"
+          overlayClassName="z-[300] !bg-black/70 !backdrop-blur-sm"
           showCloseButton={false}
         >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-[#0d9488]" />
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <FileText className="h-5 w-5 text-[#2dd4bf]" />
               {language === 'da' ? 'Bekræft dit abonnement' : 'Confirm your subscription'}
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-white/50">
               {language === 'da'
                 ? 'Læs og acceptér betingelserne, før du fortsætter til betaling.'
                 : 'Please read and accept the terms before proceeding to payment.'}
@@ -1409,53 +1409,53 @@ export function SubscriptionPlansPrompt() {
 
           {pendingPlan && (
             <div className="space-y-4 py-2">
-              {/* Plan summary */}
-              <div className="rounded-lg bg-[#f0fdfa] border border-[#ccfbf1] p-4">
+              {/* Plan summary — matches the plan card aesthetic */}
+              <div className="rounded-xl bg-[#0e1f3d]/80 border border-[#1e3a5f]/60 p-4">
                 <div className="flex items-baseline justify-between gap-3">
                   <div>
-                    <p className="font-semibold text-gray-900">
+                    <p className="font-semibold text-white">
                       {language === 'da' ? pendingPlan.name : pendingPlan.name}
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-white/45 mt-0.5">
                       {language === 'da' ? pendingPlan.descDa : pendingPlan.descEn}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-bold text-[#0d9488]">
+                    <p className="font-bold text-[#2dd4bf]">
                       {language === 'da' ? pendingPlan.priceDa : pendingPlan.priceEn}
                     </p>
-                    <p className="text-[11px] text-gray-500">
+                    <p className="text-[11px] text-white/35">
                       {language === 'da' ? pendingPlan.bindDa : pendingPlan.bindEn}
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Recurring billing notice */}
-              <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 leading-relaxed">
+              {/* Recurring billing notice — dark amber variant */}
+              <div className="rounded-lg bg-[#f59e0b]/[0.08] border border-[#f59e0b]/20 p-3 text-xs text-[#fbbf24]/90 leading-relaxed">
                 {pendingPlan.id === 'monthly' ? (
                   language === 'da' ? (
-                    <>Du accepterer et <strong>løbende månedligt abonnement</strong> uden binding. Der trækkes betaling hver måned, indtil du opsiger abonnementet i indstillingerne.</>
+                    <>Du accepterer et <strong className="text-[#fbbf24]">løbende månedligt abonnement</strong> uden binding. Der trækkes betaling hver måned, indtil du opsiger abonnementet i indstillingerne.</>
                   ) : (
-                    <>You agree to a <strong>rolling monthly subscription</strong> with no commitment. Payment is charged every month until you cancel in your settings.</>
+                    <>You agree to a <strong className="text-[#fbbf24]">rolling monthly subscription</strong> with no commitment. Payment is charged every month until you cancel in your settings.</>
                   )
                 ) : (
                   language === 'da' ? (
-                    <>Du accepterer et abonnement med <strong>{pendingPlan.bindDa.toLowerCase()}</strong>. Beløbet trækkes nu for hele perioden. Ved udløb skal du aktivt forny for at fortsætte.</>
+                    <>Du accepterer et abonnement med <strong className="text-[#fbbf24]">{pendingPlan.bindDa.toLowerCase()}</strong>. Beløbet trækkes nu for hele perioden. Ved udløb skal du aktivt forny for at fortsætte.</>
                   ) : (
-                    <>You agree to a subscription with <strong>{pendingPlan.bindEn.toLowerCase()}</strong>. The full period amount is charged now. At expiry you must actively renew to continue.</>
+                    <>You agree to a subscription with <strong className="text-[#fbbf24]">{pendingPlan.bindEn.toLowerCase()}</strong>. The full period amount is charged now. At expiry you must actively renew to continue.</>
                   )
                 )}
               </div>
 
-              {/* Agree to terms checkbox */}
-              <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-md border border-gray-200 hover:border-[#0d9488]/50 transition-colors">
+              {/* Agree to terms checkbox — dark theme */}
+              <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-lg border border-white/[0.08] hover:border-[#2dd4bf]/30 bg-white/[0.02] transition-colors">
                 <ResponsiveCheckbox
                   checked={agreedToTerms}
                   onCheckedChange={(checked) => setAgreedToTerms(checked === true)}
-                  className="h-[18px] w-[18px] mt-0.5 rounded-[5px] border-2 border-gray-300 data-[state=checked]:bg-[#0d9488] data-[state=checked]:border-[#0d9488] data-[state=unchecked]:bg-white data-[state=unchecked]:hover:border-[#0d9488]/50 transition-all duration-150"
+                  className="h-[18px] w-[18px] mt-0.5 rounded-[5px] border-2 border-white/20 data-[state=checked]:bg-[#0d9488] data-[state=checked]:border-[#0d9488] data-[state=unchecked]:bg-white/5 data-[state=unchecked]:hover:border-[#2dd4bf]/50 transition-all duration-150"
                 />
-                <span className="text-sm text-gray-700 leading-relaxed select-none">
+                <span className="text-sm text-white/70 leading-relaxed select-none">
                   {language === 'da' ? (
                     <>
                       Jeg accepterer{' '}
@@ -1463,7 +1463,7 @@ export function SubscriptionPlansPrompt() {
                         href={getTermsUrl()}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[#0d9488] hover:text-[#0f766e] underline font-medium"
+                        className="text-[#2dd4bf] hover:text-[#0d9488] underline font-medium transition-colors"
                       >
                         Forretningsbetingelserne
                       </a>{' '}
@@ -1477,7 +1477,7 @@ export function SubscriptionPlansPrompt() {
                         href={getTermsUrl()}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[#0d9488] hover:text-[#0f766e] underline font-medium"
+                        className="text-[#2dd4bf] hover:text-[#0d9488] underline font-medium transition-colors"
                       >
                         Terms of Service
                       </a>{' '}
@@ -1488,7 +1488,7 @@ export function SubscriptionPlansPrompt() {
                 </span>
               </label>
 
-              <p className="text-[11px] text-gray-400 leading-relaxed">
+              <p className="text-[11px] text-white/25 leading-relaxed">
                 {language === 'da'
                   ? `Vilkårsversion: ${getCurrentTermsVersion()}. Dit samtykke logges med tidsstempel, IP-adresse og browser-oplysninger jf. Forbrugeraftaleloven §18-19.`
                   : `Terms version: ${getCurrentTermsVersion()}. Your consent is logged with timestamp, IP address, and browser details per the Danish Consumer Agreements Act §18-19.`}
@@ -1504,13 +1504,14 @@ export function SubscriptionPlansPrompt() {
                 setAgreedToTerms(false);
               }}
               disabled={startingTrial}
+              className="border-white/15 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/25"
             >
               {language === 'da' ? 'Annuller' : 'Cancel'}
             </Button>
             <Button
               onClick={() => pendingPlan && handleConfirmConsent(pendingPlan)}
               disabled={!agreedToTerms || startingTrial}
-              className="bg-[#0d9488] hover:bg-[#0f766e] text-white"
+              className="bg-[#0d9488] hover:bg-[#0f766e] text-white shadow-lg shadow-[#0d9488]/20"
             >
               {startingTrial ? (
                 <>
