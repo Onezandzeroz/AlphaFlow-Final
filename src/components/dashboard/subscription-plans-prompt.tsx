@@ -1390,7 +1390,11 @@ export function SubscriptionPlansPrompt() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent
+          className="sm:max-w-[480px] z-[300]"
+          overlayClassName="z-[300]"
+          showCloseButton={false}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-[#0d9488]" />
