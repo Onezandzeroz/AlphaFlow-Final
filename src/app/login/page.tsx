@@ -173,35 +173,50 @@ function Home() {
   const hasCheckedAuth = useRef(false);
   const { t, language } = useTranslation();
 
-  // Detect ?verify=TOKEN from URL (one-time, client-only)
-  const [verifyToken, setVerifyToken] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get('verify');
-    if (t) window.history.replaceState({}, '', window.location.pathname);
-    return t;
-  });
+  // ── URL token detection (verify / invite / reset-password) ──
+  // IMPORTANT: These MUST use useEffect — NOT useState initializers.
+  // In Next.js 16, the useState initializer runs during SSR where
+  // `window` is undefined → returns null. React then REUSES that
+  // null during client hydration (the initializer does NOT re-run),
+  // so the token is permanently lost. By using useEffect, we read
+  // from the Next.js `searchParams` (useSearchParams hook) which is
+  // available on the client after hydration.
 
-  // Detect ?invite=TOKEN from URL (one-time, client-only)
-  const [inviteToken, setInviteToken] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get('invite');
-    if (t) window.history.replaceState({}, '', window.location.pathname);
-    return t;
-  });
-
-  // Detect ?token=TOKEN, ?reset=TOKEN or /reset-password?token=TOKEN from URL (one-time, client-only)
-  const [resetPasswordToken, setResetPasswordToken] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const params = new URLSearchParams(window.location.search);
-    const t = params.get('token') || params.get('reset');
+  const [verifyToken, setVerifyToken] = useState<string | null>(null);
+  const verifyReadRef = useRef(false);
+  useEffect(() => {
+    if (verifyReadRef.current) return;
+    verifyReadRef.current = true;
+    const t = searchParams.get('verify');
     if (t) {
+      setVerifyToken(t);
       window.history.replaceState({}, '', window.location.pathname);
-      return t;
     }
-    return null;
-  });
+  }, [searchParams]);
+
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const inviteReadRef = useRef(false);
+  useEffect(() => {
+    if (inviteReadRef.current) return;
+    inviteReadRef.current = true;
+    const t = searchParams.get('invite');
+    if (t) {
+      setInviteToken(t);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams]);
+
+  const [resetPasswordToken, setResetPasswordToken] = useState<string | null>(null);
+  const resetTokenReadRef = useRef(false);
+  useEffect(() => {
+    if (resetTokenReadRef.current) return;
+    resetTokenReadRef.current = true;
+    const t = searchParams.get('token') || searchParams.get('reset');
+    if (t) {
+      setResetPasswordToken(t);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams]);
   const resetPathDetectedRef = useRef(false);
   useEffect(() => {
     if (!hydrated || resetPathDetectedRef.current || resetPasswordToken) return;
@@ -211,7 +226,6 @@ function Home() {
       const params = new URLSearchParams(window.location.search);
       const t = params.get('token');
       if (t) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate one-time hydration sync from URL pathname
         setResetPasswordToken(t);
         window.history.replaceState({}, '', window.location.pathname);
       }
@@ -233,13 +247,19 @@ function Home() {
   useEffect(() => {
     if (!hydrated || hasCheckedAuth.current) return;
     hasCheckedAuth.current = true;
-    // Skip auth check when showing verify or reset screen — but clear loading flag
-    if (verifyToken || resetPasswordToken) {
+    // Skip auth check when showing verify/invite/reset screen — but clear loading flag.
+    // We check BOTH the state variables AND searchParams directly because the
+    // useEffect that sets state from searchParams may not have run yet when
+    // this effect fires (they run in declaration order within the same cycle).
+    const hasVerify = verifyToken || searchParams.get('verify');
+    const hasInvite = inviteToken || searchParams.get('invite');
+    const hasReset = resetPasswordToken || searchParams.get('token') || searchParams.get('reset');
+    if (hasVerify || hasInvite || hasReset) {
       useAuthStore.getState().setLoading(false);
       return;
     }
     checkAuth();
-  }, [hydrated, checkAuth, verifyToken, resetPasswordToken]);
+  }, [hydrated, checkAuth, verifyToken, resetPasswordToken, inviteToken, searchParams]);
 
   // ── Detect ?payment= query param (redirect back from Frisbii) ──
   // When the user returns from a Frisbii payment, the URL contains
