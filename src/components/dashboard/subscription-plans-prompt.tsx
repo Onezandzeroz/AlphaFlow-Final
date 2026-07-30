@@ -1137,6 +1137,20 @@ export function SubscriptionPlansPrompt() {
     // effect below clears it only on actual unmount.
     autoPlanTimerRef.current = setTimeout(() => {
       autoPlanTimerRef.current = null;
+      // CRITICAL: Set visible BEFORE calling handleSelectPlan.
+      // handleSelectPlan sets pendingPlan for paid plans, which opens
+      // a consent <Dialog>. That Dialog is rendered INSIDE the
+      // `if (!visible) return null` guard (line ~1206). If we don't
+      // set visible here, the consent dialog can never mount, and
+      // the payment flow silently dies.
+      //
+      // We already set hasScheduled.current = true above to prevent
+      // the auto-show effect from also firing (which would show the
+      // full plan-chooser). Setting visible here is ONLY so the
+      // Dialog DOM node exists — the consent dialog's own overlay
+      // covers the plan cards behind it.
+      setAnimatingIn(true);
+      setVisible(true);
       handleSelectPlan(plan);
     }, 600);
     // NOTE: intentionally no cleanup returned here. Returning a cleanup
