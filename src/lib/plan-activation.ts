@@ -98,7 +98,7 @@ export async function activatePlanAfterPayment(
 ): Promise<boolean> {
   const payment = await db.payment.findUnique({
     where: { id: paymentId },
-    include: { company: { select: { name: true, planTier: true } } },
+    include: { company: { select: { name: true, planTier: true, cvrNumber: true, address: true, email: true } } },
   });
 
   if (!payment) {
@@ -183,9 +183,12 @@ export async function activatePlanAfterPayment(
   // to EmailLog with status='failed' for retry/audit.
   try {
     const pricing = getPlanPricing(payment.planTier as PlanTier);
-    const totalAmountDKK = pricing.totalAmountOre / 100;
-    const amountExclVat = totalAmountDKK / 1.25;
-    const vatDKK = totalAmountDKK - amountExclVat;
+
+    // VAT calculation: prices are exclusive of 25% Danish VAT (B2B standard)
+    // payment.amount = the actual charged amount (VAT-inclusive)
+    const totalChargedDKK = (payment.amount || pricing.totalAmountInclVatOre) / 100;
+    const amountExclVat = totalChargedDKK / 1.25;
+    const vatDKK = totalChargedDKK - amountExclVat;
 
     // Fetch the purchaser's email
     const purchaser = await db.user.findUnique({
@@ -204,7 +207,7 @@ export async function activatePlanAfterPayment(
           planName,
           monthlyPriceDKK: pricing.monthlyPriceDKK,
           bindingMonths,
-          totalAmountDKK,
+          totalAmountDKK: totalChargedDKK,
           startDate: now.toISOString(),
           expiryDate: expiresAt?.toISOString() ?? null,
           termsVersion: getCurrentTermsVersion(),
@@ -216,14 +219,14 @@ export async function activatePlanAfterPayment(
         logger.warn(`[ACTIVATE PLAN] Welcome email failed for ${purchaser.email}:`, e);
       });
 
-      // (d) Payment receipt email
+      // (d) Payment receipt email (with PDF invoice attachment)
       await sendPaymentReceiptEmail(
         purchaser.email,
         {
           planName,
           amountDKK: amountExclVat,
           vatDKK,
-          totalDKK: totalAmountDKK,
+          totalDKK: totalChargedDKK,
           paymentDate: now.toISOString(),
           paymentId: payment.id,
           cardLast4: null, // Frisbii payload may have this in metadata; left null for now
@@ -231,6 +234,11 @@ export async function activatePlanAfterPayment(
             ? `${now.toLocaleDateString('da-DK')} – ${expiresAt!.toLocaleDateString('da-DK')}`
             : `${now.toLocaleDateString('da-DK')} – ${nextRenewalAt!.toLocaleDateString('da-DK')}`,
           isRenewal: false, // this is the initial purchase, not a renewal
+          // Customer info for PDF invoice
+          customerCompanyName: payment.company.name,
+          customerEmail: purchaser.email,
+          customerCvr: payment.company.cvrNumber || null,
+          customerAddress: payment.company.address || null,
         },
         'da',
         payment.companyId,

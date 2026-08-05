@@ -150,7 +150,8 @@ async function runPreRenewalReminders(): Promise<ReminderRunSummary> {
       }
 
       const pricing = getPlanPricing(company.planTier as PlanTier);
-      const amountDKK = pricing.totalAmountOre / 100;
+      // Show VAT-inclusive amount (this is what the customer will actually be charged)
+      const amountDKK = pricing.totalAmountInclVatOre / 100;
       const appUrl = process.env.APP_URL || 'https://alphaflow.dk';
 
       // Binding plans (annual/2year/3year) require MANUAL renewal —

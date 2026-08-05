@@ -1336,6 +1336,7 @@ export function SubscriptionPlansPrompt() {
                 <Zap className="h-4 w-4 text-[#2dd4bf]/70" />
                 <span>{t('Ingen binding på prøve', 'No trial commitment')}</span>
               </div>
+              <p className="text-white/25 text-[10px]">{t('Alle priser ekskl. 25% moms', 'All prices excl. 25% VAT')}</p>
             </div>
 
             {/* Desktop: inline features row */}
@@ -1348,10 +1349,13 @@ export function SubscriptionPlansPrompt() {
                 <Zap className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-[#2dd4bf]/70" />
                 <span>{t('Ingen binding på prøve', 'No trial commitment')}</span>
               </div>
+              <span className="text-white/15">·</span>
+              <span className="text-white/25">{t('Alle priser ekskl. 25% moms', 'All prices excl. 25% VAT')}</span>
             </div>
 
+
             {/* Bottom branding */}
-            <div className="mt-3 sm:mt-2.5 flex items-center justify-center gap-2 text-white/15 text-[10px] sm:text-xs tracking-widest">
+            <div className="mt-2.5 sm:mt-2 flex items-center justify-center gap-2 text-white/15 text-[10px] sm:text-xs tracking-widest">
               <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
               <span>WEB ACCESS PROOF &middot; .TBKEY</span>
               <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
@@ -1423,6 +1427,7 @@ export function SubscriptionPlansPrompt() {
                   <div className="text-right shrink-0">
                     <p className="font-bold text-[#2dd4bf]">
                       {language === 'da' ? pendingPlan.priceDa : pendingPlan.priceEn}
+                      <span className="text-[10px] text-white/30 font-normal ml-1">{t('ekscl. moms', 'excl. VAT')}</span>
                     </p>
                     <p className="text-[11px] text-white/35">
                       {language === 'da' ? pendingPlan.bindDa : pendingPlan.bindEn}

@@ -99,17 +99,21 @@ export const POST = withGuard(
       const pricing = getPlanPricing(planTier);
       const bindingMonths = getBindingMonths(planTier);
 
-      if (pricing.totalAmountOre <= 0) {
+      // The charge amount INCLUDES 25% Danish VAT (B2B standard: display excl., charge incl.)
+      const chargeAmountOre = pricing.totalAmountInclVatOre;
+
+      if (chargeAmountOre <= 0) {
         return NextResponse.json({ error: 'Invalid plan pricing' }, { status: 400 });
       }
 
       // Create a Payment row (status=pending)
+      // amount = VAT-inclusive (the actual amount charged to the customer)
       const payment = await db.payment.create({
         data: {
           userId: ctx.id,
           companyId: ctx.activeCompanyId!,
           planTier,
-          amount: pricing.totalAmountOre,
+          amount: chargeAmountOre,
           currency: 'DKK',
           bindingMonths,
           status: 'pending',
@@ -167,10 +171,10 @@ export const POST = withGuard(
       const acceptUrl = `${origin}/api/subscription/payment-callback?payment_id=${payment.id}`;
       const cancelUrl = `${origin}/login?payment=cancelled`;
 
-      // Create the charge session with Frisbii
+      // Create the charge session with Frisbii (VAT-inclusive amount)
       const session = await createPaymentSession({
         paymentId: payment.id,
-        amount: pricing.totalAmountOre,
+        amount: chargeAmountOre,
         currency: 'DKK',
         description: pricing.descriptionDa,
         acceptUrl,
@@ -200,7 +204,7 @@ export const POST = withGuard(
         companyId: ctx.activeCompanyId,
         changes: {
           planTier: { old: null, new: planTier },
-          amount: { old: null, new: pricing.totalAmountOre },
+          amount: { old: null, new: chargeAmountOre },
           flatpayPaymentId: { old: null, new: session.flatpayPaymentId },
           consentVersion: { old: null, new: consentVersion },
         },
@@ -208,7 +212,7 @@ export const POST = withGuard(
       });
 
       logger.info(
-        `[SUBSCRIPTION] Payment session created for user ${ctx.email}, plan ${planTier}, amount ${pricing.totalAmountOre} øre. Payment ID: ${payment.id}. Consent v${consentVersion} logged.`,
+        `[SUBSCRIPTION] Payment session created for user ${ctx.email}, plan ${planTier}, amount ${chargeAmountOre} øre (incl. 25% VAT). Payment ID: ${payment.id}. Consent v${consentVersion} logged.`,
       );
 
       return NextResponse.json({
@@ -218,7 +222,7 @@ export const POST = withGuard(
         sessionId: session.flatpayPaymentId,
         paymentId: payment.id,
         planTier,
-        amount: pricing.totalAmountOre,
+        amount: chargeAmountOre,
         currency: 'DKK',
       });
     } catch (error) {

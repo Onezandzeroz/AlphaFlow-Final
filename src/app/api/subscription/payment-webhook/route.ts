@@ -200,7 +200,8 @@ export async function POST(request: NextRequest) {
 
         if (purchaser?.email) {
           const pricing = getPlanPricing(payment.planTier as PlanTier);
-          const amountDKK = (payment.amount || pricing.totalAmountOre) / 100;
+          // payment.amount is VAT-inclusive (what was actually charged/attempted)
+          const amountDKK = (payment.amount || pricing.totalAmountInclVatOre) / 100;
           const appUrl = process.env.APP_URL || 'https://alphaflow.dk';
 
           await sendPaymentFailedEmail(

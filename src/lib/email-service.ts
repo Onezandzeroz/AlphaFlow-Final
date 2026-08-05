@@ -425,12 +425,42 @@ export async function sendPaymentReceiptEmail(
     ? (data.isRenewal ? 'Kvittering på fornyelse af abonnement' : 'Betalingskvittering — AlphaFlow')
     : (data.isRenewal ? 'Subscription renewal receipt — AlphaFlow' : 'Payment receipt — AlphaFlow');
 
+  // Generate PDF invoice and attach it
+  let attachments: Array<{ filename: string; content: Buffer | Uint8Array; contentType?: string }> | undefined;
+  try {
+    const { generateInvoicePdf } = await import('@/lib/invoice-pdf');
+    const pdfBytes = await generateInvoicePdf({
+      planName: data.planName,
+      amountExclVatDKK: data.amountDKK,
+      vatDKK: data.vatDKK,
+      totalDKK: data.totalDKK,
+      paymentDate: new Date(data.paymentDate),
+      paymentId: data.paymentId,
+      period: data.period,
+      isRenewal: data.isRenewal,
+      customerCompanyName: data.customerCompanyName,
+      customerEmail: data.customerEmail,
+      customerCvr: data.customerCvr ?? null,
+      customerAddress: data.customerAddress ?? null,
+      cardLast4: data.cardLast4 ?? null,
+    });
+    const invNumber = `AF-${data.paymentId.slice(-8).toUpperCase()}`;
+    attachments = [{
+      filename: `Faktura-${invNumber}.pdf`,
+      content: pdfBytes,
+      contentType: 'application/pdf',
+    }];
+  } catch (pdfError) {
+    logger.warn('[EMAIL] Failed to generate PDF invoice for receipt — sending email without attachment:', pdfError);
+  }
+
   return sendEmail({
     to,
     subject,
     html: paymentReceiptHtml(language, data),
     template: 'payment-receipt',
     companyId,
+    attachments,
     metadata: {
       paymentId: data.paymentId,
       planName: data.planName,

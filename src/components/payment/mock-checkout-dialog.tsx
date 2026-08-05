@@ -163,9 +163,21 @@ export function MockCheckoutDialog({
               </span>
               <span className="font-medium text-white/80">{currency}</span>
             </div>
-            <div className="flex justify-between items-center px-5 py-5 bg-[#0d9488]/5">
+            <div className="flex justify-between items-center px-5 py-2.5">
+              <span className="text-white/50 text-sm">
+                {isDa ? 'Subtotal (ekscl. moms)' : 'Subtotal (excl. VAT)'}
+              </span>
+              <span className="font-medium text-white/70">{(amountOre / 125).toLocaleString(isDa ? 'da-DK' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}</span>
+            </div>
+            <div className="flex justify-between items-center px-5 py-2.5">
+              <span className="text-white/50 text-sm">
+                {isDa ? 'Moms (25%)' : 'VAT (25%)'}
+              </span>
+              <span className="font-medium text-white/70">{(amountOre / 500).toLocaleString(isDa ? 'da-DK' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {currency}</span>
+            </div>
+            <div className="flex justify-between items-center px-5 py-4 bg-[#0d9488]/5">
               <span className="font-bold text-white text-lg">
-                {isDa ? 'Total' : 'Total'}
+                {isDa ? 'Total (inkl. moms)' : 'Total (incl. VAT)'}
               </span>
               <div className="text-right">
                 <span className="font-bold text-2xl sm:text-3xl text-[#2dd4bf] tracking-tight">

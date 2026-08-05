@@ -6,17 +6,28 @@
  *   - /api/subscription/create-payment (charge the correct amount)
  *   - The Flatpay payment flow
  *
+ * All displayed prices are EXCLUSIVE of Danish VAT (25% moms) — this is
+ * standard for B2B SaaS in Denmark. The actual charge sent to Flatpay
+ * (totalAmountInclVatOre) includes VAT.
+ *
  * Prices are in DKK øre (1 DKK = 100 øre) for the FULL binding period.
  * For monthly plans, the amount is 1 month. For annual, 12 months. Etc.
  */
 
 import { PlanTier, getBindingMonths } from '@/lib/plan-features';
 
+/** Danish VAT rate for B2B services */
+export const VAT_RATE = 0.25;
+
 export interface PlanPricing {
-  /** Monthly price in DKK */
+  /** Monthly price in DKK (EXCLUSIVE of VAT) */
   monthlyPriceDKK: number;
-  /** Total amount for the binding period in DKK øre (1 DKK = 100 øre) */
+  /** Total amount for the binding period in DKK øre (EXCLUSIVE of VAT) */
   totalAmountOre: number;
+  /** Total amount for the binding period in DKK øre (INCLUSIVE of 25% VAT) — use this for charging */
+  totalAmountInclVatOre: number;
+  /** VAT amount for the binding period in DKK øre */
+  vatAmountOre: number;
   /** Human-readable description for the Flatpay payment */
   descriptionDa: string;
   descriptionEn: string;
@@ -54,10 +65,14 @@ export function getPlanPricing(tier: PlanTier): PlanPricing {
   // Monthly plan: charge 1 month. Binding plans: charge the full period.
   const monthsToCharge = bindingMonths > 0 ? bindingMonths : 1;
   const totalAmountOre = monthlyPriceDKK * monthsToCharge * 100;
+  const vatAmountOre = Math.round(totalAmountOre * VAT_RATE);
+  const totalAmountInclVatOre = totalAmountOre + vatAmountOre;
 
   return {
     monthlyPriceDKK,
     totalAmountOre,
+    totalAmountInclVatOre,
+    vatAmountOre,
     descriptionDa: DESCRIPTIONS_DA[tier] ?? `AlphaFlow ${tier}`,
     descriptionEn: DESCRIPTIONS_EN[tier] ?? `AlphaFlow ${tier}`,
   };

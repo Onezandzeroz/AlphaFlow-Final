@@ -310,9 +310,9 @@ export function invoiceEmailHtml(
 
 export interface SubscriptionWelcomeData {
   planName: string;          // "AlphaFlow Pro"
-  monthlyPriceDKK: number;   // 169
+  monthlyPriceDKK: number;   // 169 (exclusive of VAT)
   bindingMonths: number;     // 12 (0 for monthly)
-  totalAmountDKK: number;    // 199 (for monthly) or 2028 (for 12×169)
+  totalAmountDKK: number;    // total charged incl. 25% VAT (e.g. 2535 for 12×169)
   startDate: string;         // ISO date string
   expiryDate: string | null; // ISO date string or null (monthly has no fixed end)
   termsVersion: string;      // "2025-07-01-v1"
@@ -326,9 +326,9 @@ export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWe
     : 'Your subscription is now active. Here is the confirmation of your enrollment:';
 
   const planLabel = language === 'da' ? 'Abonnement' : 'Plan';
-  const priceLabel = language === 'da' ? 'Pris pr. måned' : 'Monthly price';
+  const priceLabel = language === 'da' ? 'Pris pr. måned (ekscl. moms)' : 'Monthly price (excl. VAT)';
   const bindingLabel = language === 'da' ? 'Bindingsperiode' : 'Binding period';
-  const totalLabel = language === 'da' ? 'Beløb trukket' : 'Amount charged';
+  const totalLabel = language === 'da' ? 'Beløb trukket (inkl. 25% moms)' : 'Amount charged (incl. 25% VAT)';
   const startLabel = language === 'da' ? 'Startdato' : 'Start date';
   const expiryLabel = language === 'da' ? 'Udløb af binding' : 'Binding expiry';
   const termsLabel = language === 'da' ? 'Vilkårsversion' : 'Terms version';
@@ -357,7 +357,7 @@ export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWe
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${bindingLabel}</strong> ${bindingText}
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${totalLabel}</strong> ${data.totalAmountDKK} kr.
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${totalLabel}</strong> <strong>${data.totalAmountDKK.toFixed(2)} kr.</strong>
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${startLabel}</strong> ${new Date(data.startDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
@@ -397,6 +397,11 @@ export interface PaymentReceiptData {
   cardLast4?: string | null; // last 4 digits of card (if known)
   period: string;            // "1. juli 2025 – 1. august 2025"
   isRenewal: boolean;        // true if this is a recurring renewal
+  // Customer info (for PDF invoice)
+  customerCompanyName: string;
+  customerEmail: string;
+  customerCvr?: string | null;
+  customerAddress?: string | null;
 }
 
 export function paymentReceiptHtml(language: Language, data: PaymentReceiptData): string {
@@ -405,8 +410,12 @@ export function paymentReceiptHtml(language: Language, data: PaymentReceiptData)
     : (data.isRenewal ? 'Subscription renewal receipt' : 'Payment receipt');
 
   const intro = language === 'da'
-    ? 'Vi har modtaget din betaling. Her er din kvittering:'
-    : 'We have received your payment. Here is your receipt:';
+    ? `Tak for din betaling! Vi har modtaget <strong>${data.totalDKK.toFixed(2)} kr.</strong> for <strong>${data.planName}</strong>. Din betaling er gennemført, og dit abonnement er nu aktivt.`
+    : `Thank you for your payment! We have received <strong>${data.totalDKK.toFixed(2)} kr.</strong> for <strong>${data.planName}</strong>. Your payment has been processed and your subscription is now active.`;
+
+  const pdfNotice = language === 'da'
+    ? `En faktura (mærket som betalt) er vedhæftet denne e-mail som PDF. Du kan bruge den som dokumentation for dit regnskab.`
+    : `An invoice (marked as paid) is attached to this email as a PDF. You can use it as documentation for your accounting.`;
 
   const dateLabel = language === 'da' ? 'Betalingsdato' : 'Payment date';
   const planLabel = language === 'da' ? 'Abonnement' : 'Subscription';
@@ -446,10 +455,14 @@ export function paymentReceiptHtml(language: Language, data: PaymentReceiptData)
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${idLabel}</strong> <code style="font-family:monospace; font-size:11px;">${data.paymentId}</code>
       </td></tr>
     </table>
+    <div style="margin:0 0 20px; padding:14px 20px; background-color:#f0fdfa; border:1px solid #ccfbf1; border-radius:8px;">
+      <p style="margin:0 0 4px; font-size:13px; font-weight:600; color:#0d9488;">📎 ${language === 'da' ? 'Vedhæftet faktura' : 'Attached invoice'}</p>
+      <p style="margin:0; font-size:13px; color:${TEXT_MUTED}; line-height:1.5;">${pdfNotice}</p>
+    </div>
     <p style="margin:0; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">
       ${language === 'da'
-        ? 'Opbevar denne kvittering til din regnskabsbog. AlphaAI Consult ApS · CVR 44 55 66 77'
-        : 'Please keep this receipt for your accounting records. AlphaAI Consult ApS · VAT 44 55 66 77'}
+        ? 'Opbevar denne kvittering og den vedhæftede faktura til din regnskabsbog. Har du spørgsmål, er du altid velkommen til at kontakte os på alphaaiconsult@gmail.com.<br/>AlphaAI Consult ApS · CVR 46312058 · Skelagervej 124C, 8200 Aarhus N'
+        : 'Please keep this receipt and the attached invoice for your accounting records. If you have any questions, feel free to contact us at alphaaiconsult@gmail.com.<br/>AlphaAI Consult ApS · CVR 46312058 · Skelagervej 124C, 8200 Aarhus N, Denmark'}
     </p>
   `;
 
@@ -553,7 +566,7 @@ export function paymentFailedHtml(language: Language, data: PaymentFailedData): 
         <strong style="display:inline-block; width:160px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${language === 'da' ? 'Abonnement' : 'Plan'}</strong> ${data.planName}
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:#7f1d1d; border-bottom:1px solid #fecaca;">
-        <strong style="display:inline-block; width:160px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${language === 'da' ? 'Beløb' : 'Amount'}</strong> ${data.amountDKK.toFixed(2)} kr.
+        <strong style="display:inline-block; width:160px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${language === 'da' ? 'Beløb (inkl. 25% moms)' : 'Amount (incl. 25% VAT)'}</strong> <strong>${data.amountDKK.toFixed(2)} kr.</strong>
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:#7f1d1d;">
         <strong style="display:inline-block; width:160px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${language === 'da' ? 'Forsøg den' : 'Attempted on'}</strong> ${new Date(data.attemptDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
@@ -600,7 +613,7 @@ export function preRenewalReminderHtml(language: Language, data: PreRenewalRemin
       } in <strong>${data.daysUntilRenewal} ${data.daysUntilRenewal === 1 ? 'day' : 'days'}</strong>.`;
 
   const renewalLabel = language === 'da' ? 'Fornyelsesdato' : 'Renewal date';
-  const amountLabel = language === 'da' ? 'Beløb ved fornyelse' : 'Amount at renewal';
+  const amountLabel = language === 'da' ? 'Beløb ved fornyelse (inkl. 25% moms)' : 'Amount at renewal (incl. 25% VAT)';
   const actionBtn = data.isAutoRenew
     ? (language === 'da' ? 'Se abonnement' : 'View subscription')
     : (language === 'da' ? 'Forny abonnement' : 'Renew subscription');
@@ -624,7 +637,7 @@ export function preRenewalReminderHtml(language: Language, data: PreRenewalRemin
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${renewalLabel}</strong> ${new Date(data.renewalDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK};">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${amountLabel}</strong> ${data.amountDKK.toFixed(2)} kr.
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${amountLabel}</strong> <strong>${data.amountDKK.toFixed(2)} kr.</strong>
       </td></tr>
     </table>
     <p style="margin:0 0 16px; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">${actionNote}</p>
