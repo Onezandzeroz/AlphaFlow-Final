@@ -16,7 +16,7 @@
  *   customer accepted at a given point in time.
  *
  * VERSIONING SCHEME:
- *   "<YYYY-MM-DD>-v<n>"  e.g. "2025-07-01-v1"
+ *   "<YYYY-MM-DD>-v<n>"  e.g. "2026-05-v1"
  *   - Bump the date when the terms content changes
  *   - Bump the version number for same-day corrections
  *
@@ -29,11 +29,11 @@
  */
 
 // The terms version currently in force. Match this to the "lastUpdated" date
-// in src/components/legal/terms-of-service.tsx (currently "1. juli 2025").
-export const CURRENT_TERMS_VERSION = '2025-07-01-v1';
+// in src/components/legal/terms-of-service.tsx (currently "maj 2026").
+export const CURRENT_TERMS_VERSION = '2026-05-v1';
 
 // The date the current terms took effect.
-export const CURRENT_TERMS_EFFECTIVE_DATE = '2025-07-01';
+export const CURRENT_TERMS_EFFECTIVE_DATE = '2026-05';
 
 // The previous terms version (used by the terms-change broadcast to populate
 // the "oldVersion" field). Update this when bumping CURRENT_TERMS_VERSION.

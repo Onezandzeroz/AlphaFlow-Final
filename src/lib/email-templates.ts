@@ -320,8 +320,8 @@ export interface SubscriptionWelcomeData {
 
 export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWelcomeData): string {
   const heading = language === 'da'
-    ? `Velkommen til AlphaFlow — ${data.planName}`
-    : `Welcome to AlphaFlow — ${data.planName}`;
+    ? 'Velkommen til AlphaFlow'
+    : 'Welcome to AlphaFlow';
 
   const greeting = language === 'da'
     ? 'Vi er glade for at have dig med ombord! Dit abonnement er nu aktiveret, og du har fuld adgang til alle funktioner i dit valgte plan.'
@@ -341,9 +341,12 @@ export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWe
       : `The subscription costs ${data.monthlyPriceDKK} kr. per month (excl. VAT).`)
     : '';
 
+  // Extract just the date portion (e.g. "2026-05") from the full version string
+  const termsDate = data.termsVersion.split('-').slice(0, 2).join('-');
+
   const termsLine = language === 'da'
-    ? `Ved oprettelsen har du accepteret vores gældende forretningsbetingelser (version ${data.termsVersion}). Du kan altid læse de fulde vilkår i appen under Indstillinger.`
-    : `By signing up you have accepted our current terms of service (version ${data.termsVersion}). You can always read the full terms in the app under Settings.`
+    ? `Ved oprettelsen har du accepteret vores gældende forretningsbetingelser (version ${termsDate}). Du kan altid læse de fulde vilkår i appen under Indstillinger.`
+    : `By signing up you have accepted our current terms of service (version ${termsDate}). You can always read the full terms in the app under Settings.`
 
   const receiptNote = language === 'da'
     ? 'Du modtager en separat e-mail med din betalingskvittering og en faktura (PDF) vedhæftet. Den indeholder en fuld momsopdeling.'

@@ -61,7 +61,7 @@ const TOC_ITEMS: SectionItem[] = [
 
 const DA_CONTENT: LegalContent = {
   title: 'Forretningsbetingelser',
-  lastUpdated: '1. juli 2025',
+  lastUpdated: 'maj 2026',
   tocLabel: 'Indholdsfortegnelse',
   backLabel: 'Tilbage',
 
@@ -364,7 +364,7 @@ c) Lovvalg: Disse Vilkår reguleres af og fortolkes i overensstemmelse med dansk
 
 const EN_CONTENT: LegalContent = {
   title: 'Terms of Service',
-  lastUpdated: '1 July 2025',
+  lastUpdated: 'May 2026',
   tocLabel: 'Table of Contents',
   backLabel: 'Back',
 
