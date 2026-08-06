@@ -20,6 +20,7 @@ import { logger } from '@/lib/logger';
 import { getBindingMonths, PlanTier, getPlanFeatures, Feature } from '@/lib/plan-features';
 import { getPlanPricing } from '@/lib/plan-pricing';
 import { sendSubscriptionWelcomeEmail, sendPaymentReceiptEmail } from '@/lib/email-service';
+import { generateSequentialInvoiceNumber } from '@/lib/invoice-number';
 import { getCurrentTermsVersion } from '@/lib/legal';
 
 /**
@@ -218,6 +219,20 @@ export async function activatePlanAfterPayment(
         logger.warn(`[ACTIVATE PLAN] Welcome email failed for ${purchaser.email}:`, e);
       });
 
+      // Generate a sequential invoice number (e.g. AF-0001) and persist it
+      let invoiceNumber: string | undefined;
+      try {
+        invoiceNumber = await generateSequentialInvoiceNumber();
+        // Store the invoice number on the Payment record for audit
+        await db.payment.update({
+          where: { id: paymentId },
+          data: { invoiceNumber },
+        });
+      } catch (invErr) {
+        logger.warn(`[ACTIVATE PLAN] Failed to generate sequential invoice number for ${paymentId}:`, invErr);
+        // Continue without sequential number — the PDF will fall back to a derived ID
+      }
+
       // (d) Payment receipt email (with PDF invoice attachment)
       await sendPaymentReceiptEmail(
         purchaser.email,
@@ -230,6 +245,7 @@ export async function activatePlanAfterPayment(
           bindingMonths,
           paymentDate: now.toISOString(),
           paymentId: payment.id,
+          invoiceNumber,
           cardLast4: null, // Frisbii payload may have this in metadata; left null for now
           period: bindingMonths > 0
             ? `${now.toLocaleDateString('da-DK')} – ${expiresAt!.toLocaleDateString('da-DK')}`

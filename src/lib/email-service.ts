@@ -426,6 +426,7 @@ export async function sendPaymentReceiptEmail(
 
   // Generate PDF invoice and attach it
   let attachments: Array<{ filename: string; content: Buffer | Uint8Array; contentType?: string }> | undefined;
+  const invNumber = data.invoiceNumber || `AF-${data.paymentId.slice(-8).toUpperCase()}`;
   try {
     const { generateInvoicePdf } = await import('@/lib/invoice-pdf');
     const pdfBytes = await generateInvoicePdf({
@@ -437,6 +438,7 @@ export async function sendPaymentReceiptEmail(
       bindingMonths: data.bindingMonths,
       paymentDate: new Date(data.paymentDate),
       paymentId: data.paymentId,
+      invoiceNumber: invNumber,
       period: data.period,
       isRenewal: data.isRenewal,
       customerCompanyName: data.customerCompanyName,
@@ -445,7 +447,6 @@ export async function sendPaymentReceiptEmail(
       customerAddress: data.customerAddress ?? null,
       cardLast4: data.cardLast4 ?? null,
     });
-    const invNumber = `AF-${data.paymentId.slice(-8).toUpperCase()}`;
     attachments = [{
       filename: `Faktura-${invNumber}.pdf`,
       content: pdfBytes,
@@ -464,6 +465,7 @@ export async function sendPaymentReceiptEmail(
     attachments,
     metadata: {
       paymentId: data.paymentId,
+      invoiceNumber: invNumber,
       planName: data.planName,
       totalDKK: data.totalDKK,
       isRenewal: data.isRenewal,

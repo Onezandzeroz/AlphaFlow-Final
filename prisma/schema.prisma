@@ -1569,6 +1569,8 @@ model Payment {
   // Flatpay's payment/session identifier (returned when the session is created)
   flatpayPaymentId  String? // Flatpay's payment ID
   flatpaySessionUrl String? // Hosted checkout URL the user is redirected to
+  // Sequential invoice number (e.g. "AF-0001") — assigned on payment success
+  invoiceNumber     String?
   // Status tracking
   status            PaymentStatus @default(pending)
   // Metadata from Flatpay (raw webhook payload, error messages, etc.)
@@ -1586,6 +1588,7 @@ model Payment {
   @@index([companyId])
   @@index([status])
   @@index([flatpayPaymentId])
+  @@index([invoiceNumber])
 }
 
 // ─── Contact Form Submissions ───────────────────────────────────────
@@ -1678,4 +1681,16 @@ model WebhookEvent {
   @@index([companyId])
   @@index([receivedAt])
   @@index([status])
+}
+
+// ─── INVOICE COUNTER (sequential AF-XXXX numbering) ──────────────────
+// Single-row table that holds the next sequential invoice number.
+// Uses atomic SQL UPDATE ... RETURNING for concurrency-safe incrementing.
+// The singleton row is seeded on first use (upsert in generateSequentialInvoiceNumber).
+
+model InvoiceCounter {
+  id          String   @id @default("singleton")
+  nextNumber  Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

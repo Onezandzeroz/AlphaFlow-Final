@@ -403,6 +403,7 @@ export interface PaymentReceiptData {
   bindingMonths?: number;    // number of months charged, for momsgrundlag breakdown
   paymentDate: string;       // ISO date
   paymentId: string;         // AlphaFlow internal payment ID
+  invoiceNumber?: string;    // Sequential invoice number (e.g. "AF-0001")
   cardLast4?: string | null; // last 4 digits of card (if known)
   period: string;            // "1. juli 2025 – 1. august 2025"
   isRenewal: boolean;        // true if this is a recurring renewal
@@ -429,6 +430,7 @@ export function paymentReceiptHtml(language: Language, data: PaymentReceiptData)
   const dateLabel = language === 'da' ? 'Betalingsdato' : 'Payment date';
   const planLabel = language === 'da' ? 'Abonnement' : 'Subscription';
   const periodLabel = language === 'da' ? 'Periode' : 'Period';
+  const invoiceNumberLabel = language === 'da' ? 'Fakturanr.' : 'Invoice No.';
   const vatBasisLabel = language === 'da' ? 'Momsgrundlag (ekscl. moms)' : 'VAT basis (excl. VAT)';
   const vatRateLabel = language === 'da' ? 'Momssats' : 'VAT rate';
   const vatAmountLabel = language === 'da' ? 'Momsbeløb' : 'VAT amount';
@@ -455,6 +457,9 @@ export function paymentReceiptHtml(language: Language, data: PaymentReceiptData)
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${periodLabel}</strong> ${data.period}
       </td></tr>
+      ${data.invoiceNumber ? `<tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${invoiceNumberLabel}</strong> <strong>${data.invoiceNumber}</strong>
+      </td></tr>` : ''}
       ${data.cardLast4 ? `<tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${cardLabel}</strong> •••• ${data.cardLast4}
       </td></tr>` : ''}
