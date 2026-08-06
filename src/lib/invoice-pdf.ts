@@ -118,7 +118,6 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   const metaRows: [string, string][] = [
     ['Fakturanr.', invNumber],
     ['Fakturadato', fmtDateShort(data.paymentDate)],
-    ['Forfaldsdato', fmtDateShort(data.paymentDate)],
     ['Betalings-ID', data.paymentId.slice(0, 16) + '…'],
   ];
 
@@ -215,24 +214,32 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
     ? `${fmt(data.monthlyPriceDKK)} kr. × ${data.bindingMonths} md. = ${fmt(data.amountExclVatDKK)} kr.`
     : `${fmt(data.amountExclVatDKK)} kr.`;
 
+  // Right-aligned value helper: text RIGHT edge ends at width - margin
+  const rightX = width - margin;
+
   page.drawText('Momsgrundlag (ekscl. moms):', { x: totalsX, y, size: 9, font: fontRegular, color: GRAY });
-  // Right-align the basis text by measuring its width
   const basisTextWidth = fontRegular.widthOfTextAtSize(basisText, 9);
-  page.drawText(basisText, { x: width - margin - basisTextWidth, y, size: 9, font: fontRegular, color: DARK });
+  page.drawText(basisText, { x: rightX - basisTextWidth, y, size: 9, font: fontRegular, color: DARK });
   y -= 16;
 
+  const vatRateText = '25 %';
   page.drawText('Momssats:', { x: totalsX, y, size: 9, font: fontRegular, color: GRAY });
-  page.drawText('25 %', { x: width - margin, y, size: 9, font: fontRegular, color: DARK });
+  const vatRateW = fontRegular.widthOfTextAtSize(vatRateText, 9);
+  page.drawText(vatRateText, { x: rightX - vatRateW, y, size: 9, font: fontRegular, color: DARK });
   y -= 16;
 
+  const vatAmountText = `${fmt(data.vatDKK)} kr.`;
   page.drawText('Momsbeløb:', { x: totalsX, y, size: 9, font: fontRegular, color: GRAY });
-  page.drawText(`${fmt(data.vatDKK)} kr.`, { x: width - margin, y, size: 9, font: fontRegular, color: DARK });
+  const vatAmountW = fontRegular.widthOfTextAtSize(vatAmountText, 9);
+  page.drawText(vatAmountText, { x: rightX - vatAmountW, y, size: 9, font: fontRegular, color: DARK });
   y -= 4;
-  page.drawLine({ start: { x: totalsX, y }, end: { x: width - margin, y }, thickness: 1.5, color: TEAL });
+  page.drawLine({ start: { x: totalsX, y }, end: { x: rightX, y }, thickness: 1.5, color: TEAL });
   y -= 18;
 
+  const totalText = `${fmt(data.totalDKK)} kr.`;
   page.drawText('I alt (inkl. moms):', { x: totalsX, y, size: 11, font: fontBold, color: DARK });
-  page.drawText(`${fmt(data.totalDKK)} kr.`, { x: width - margin, y, size: 12, font: fontBold, color: TEAL });
+  const totalW = fontBold.widthOfTextAtSize(totalText, 12);
+  page.drawText(totalText, { x: rightX - totalW, y, size: 12, font: fontBold, color: TEAL });
 
   // ── Payment info section ──
   y -= 36;
