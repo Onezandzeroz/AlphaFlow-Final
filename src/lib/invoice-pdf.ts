@@ -22,9 +22,10 @@ const SELLER = {
   email: 'alphaaiconsult@gmail.com',
   website: 'www.alphaflow.dk',
   phone: '61736076',
-  bankName: 'Jyske Bank',
-  bankAccount: '7521-2100123',
-  bankReg: '7784',
+  bankName: 'Lunar Bank A/S',
+  bankAddress: 'Hack Kampmanns Plads 10, 8000 Aarhus, Danmark',
+  bankAccount: '2003084399',
+  bankReg: '6695',
 } as const;
 
 // ─── Color palette ────────────────────────────────────────────────
@@ -43,6 +44,8 @@ export interface InvoicePdfData {
   amountExclVatDKK: number;
   vatDKK: number;
   totalDKK: number;
+  monthlyPriceDKK?: number;  // unit price per month (excl. VAT)
+  bindingMonths?: number;    // number of months charged
   paymentDate: Date;
   paymentId: string;
   period: string;
@@ -193,7 +196,9 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   const rowY = y + 3;
   page.drawText(data.planName, { x: tableX + 8, y: rowY, size: 9, font: fontRegular, color: DARK });
   page.drawText(data.period, { x: tableX + colDesc + 8, y: rowY, size: 8, font: fontRegular, color: GRAY });
-  page.drawText(`${fmt(data.amountExclVatDKK)} kr.`, { x: tableX + colDesc + colPeriod + 8, y: rowY, size: 9, font: fontRegular, color: DARK });
+  // Show unit price per month in "Enhedspris" column (e.g. 145,00 kr.)
+  const unitPrice = (data.monthlyPriceDKK != null) ? data.monthlyPriceDKK : (data.bindingMonths && data.bindingMonths > 1 ? data.amountExclVatDKK / data.bindingMonths : data.amountExclVatDKK);
+  page.drawText(`${fmt(unitPrice)} kr.`, { x: tableX + colDesc + colPeriod + 8, y: rowY, size: 9, font: fontRegular, color: DARK });
   page.drawText('25%', { x: tableX + colDesc + colPeriod + colUnitPrice + 8, y: rowY, size: 9, font: fontRegular, color: GRAY });
   page.drawText(`${fmt(data.totalDKK)} kr.`, { x: tableX + colDesc + colPeriod + colUnitPrice + colVat + 8, y: rowY, size: 9, font: fontBold, color: DARK });
   y -= 24;
@@ -203,13 +208,24 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
 
   // ── Totals block (right-aligned) ──
   y -= 16;
-  const totalsX = width - margin - 200;
+  const totalsX = width - margin - 280;
 
-  page.drawText('Subtotal (ekscl. moms):', { x: totalsX, y, size: 9, font: fontRegular, color: GRAY });
-  page.drawText(`${fmt(data.amountExclVatDKK)} kr.`, { x: width - margin, y, size: 9, font: fontRegular, color: DARK });
+  // Momsgrundlag with breakdown (e.g. "145,00 kr. × 36 md. = 5.220,00 kr.")
+  const basisText = (data.monthlyPriceDKK != null && data.bindingMonths && data.bindingMonths > 0)
+    ? `${fmt(data.monthlyPriceDKK)} kr. × ${data.bindingMonths} md. = ${fmt(data.amountExclVatDKK)} kr.`
+    : `${fmt(data.amountExclVatDKK)} kr.`;
+
+  page.drawText('Momsgrundlag (ekscl. moms):', { x: totalsX, y, size: 9, font: fontRegular, color: GRAY });
+  // Right-align the basis text by measuring its width
+  const basisTextWidth = fontRegular.widthOfTextAtSize(basisText, 9);
+  page.drawText(basisText, { x: width - margin - basisTextWidth, y, size: 9, font: fontRegular, color: DARK });
   y -= 16;
 
-  page.drawText('Moms (25%):', { x: totalsX, y, size: 9, font: fontRegular, color: GRAY });
+  page.drawText('Momssats:', { x: totalsX, y, size: 9, font: fontRegular, color: GRAY });
+  page.drawText('25 %', { x: width - margin, y, size: 9, font: fontRegular, color: DARK });
+  y -= 16;
+
+  page.drawText('Momsbeløb:', { x: totalsX, y, size: 9, font: fontRegular, color: GRAY });
   page.drawText(`${fmt(data.vatDKK)} kr.`, { x: width - margin, y, size: 9, font: fontRegular, color: DARK });
   y -= 4;
   page.drawLine({ start: { x: totalsX, y }, end: { x: width - margin, y }, thickness: 1.5, color: TEAL });
@@ -237,7 +253,11 @@ export async function generateInvoicePdf(data: InvoicePdfData): Promise<Uint8Arr
   y -= 14;
   page.drawText('Bankoplysninger (AlphaAI Consult ApS)', { x: margin, y, size: 8, font: fontBold, color: GRAY });
   y -= 12;
-  page.drawText(`${SELLER.bankName}  ·  Reg.nr.: ${SELLER.bankReg}  ·  Kontonr.: ${SELLER.bankAccount}`, { x: margin, y, size: 8, font: fontRegular, color: GRAY });
+  page.drawText(`${SELLER.bankName}`, { x: margin, y, size: 8, font: fontRegular, color: GRAY });
+  y -= 11;
+  page.drawText(`${SELLER.bankAddress}`, { x: margin, y, size: 8, font: fontRegular, color: GRAY });
+  y -= 11;
+  page.drawText(`Reg.nr.: ${SELLER.bankReg}  ·  Kontonr.: ${SELLER.bankAccount}`, { x: margin, y, size: 8, font: fontRegular, color: GRAY });
 
   // ── Footer ──
   y -= 30;

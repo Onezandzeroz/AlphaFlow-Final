@@ -313,6 +313,8 @@ export interface SubscriptionWelcomeData {
   monthlyPriceDKK: number;   // 169 (exclusive of VAT)
   bindingMonths: number;     // 12 (0 for monthly)
   totalAmountDKK: number;    // total charged incl. 25% VAT (e.g. 2535 for 12×169)
+  amountExclVatDKK: number;  // total amount excl. VAT (e.g. 2028 for 12×169)
+  vatAmountDKK: number;     // VAT amount (e.g. 507 for 12×169)
   startDate: string;         // ISO date string
   expiryDate: string | null; // ISO date string or null (monthly has no fixed end)
   termsVersion: string;      // "2025-07-01-v1"
@@ -328,10 +330,18 @@ export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWe
   const planLabel = language === 'da' ? 'Abonnement' : 'Plan';
   const priceLabel = language === 'da' ? 'Pris pr. måned (ekscl. moms)' : 'Monthly price (excl. VAT)';
   const bindingLabel = language === 'da' ? 'Bindingsperiode' : 'Binding period';
-  const totalLabel = language === 'da' ? 'Beløb trukket (inkl. 25% moms)' : 'Amount charged (incl. 25% VAT)';
+  const vatBasisLabel = language === 'da' ? 'Momsgrundlag (ekscl. moms)' : 'VAT basis (excl. VAT)';
+  const vatRateLabel = language === 'da' ? 'Momssats' : 'VAT rate';
+  const vatAmountLabel = language === 'da' ? 'Momsbeløb' : 'VAT amount';
+  const totalLabel = language === 'da' ? 'I alt (inkl. moms)' : 'Total (incl. VAT)';
   const startLabel = language === 'da' ? 'Startdato' : 'Start date';
   const expiryLabel = language === 'da' ? 'Udløb af binding' : 'Binding expiry';
   const termsLabel = language === 'da' ? 'Vilkårsversion' : 'Terms version';
+
+  // Momsgrundlag breakdown: "145,00 kr. × 36 måneder = 5.220,00 kr."
+  const vatBasisBreakdown = data.bindingMonths > 0
+    ? `${data.monthlyPriceDKK.toFixed(2)} kr. × ${data.bindingMonths} ${language === 'da' ? 'måneder' : 'months'} = ${data.amountExclVatDKK.toFixed(2)} kr.`
+    : `${data.amountExclVatDKK.toFixed(2)} kr.`;
 
   const bindingText = data.bindingMonths > 0
     ? (language === 'da' ? `${data.bindingMonths} måneder` : `${data.bindingMonths} months`)
@@ -357,7 +367,16 @@ export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWe
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${bindingLabel}</strong> ${bindingText}
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${totalLabel}</strong> <strong>${data.totalAmountDKK.toFixed(2)} kr.</strong>
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatBasisLabel}</strong> ${vatBasisBreakdown}
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatRateLabel}</strong> 25 %
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatAmountLabel}</strong> ${data.vatAmountDKK.toFixed(2)} kr.
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_DARK}; font-size:12px; text-transform:uppercase; letter-spacing:0.05em;">${totalLabel}</strong> <strong>${data.totalAmountDKK.toFixed(2)} kr.</strong>
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${startLabel}</strong> ${new Date(data.startDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
@@ -392,6 +411,8 @@ export interface PaymentReceiptData {
   amountDKK: number;
   vatDKK: number;            // 25% moms
   totalDKK: number;          // incl. VAT
+  monthlyPriceDKK?: number;  // unit price per month (excl. VAT), for momsgrundlag breakdown
+  bindingMonths?: number;    // number of months charged, for momsgrundlag breakdown
   paymentDate: string;       // ISO date
   paymentId: string;         // AlphaFlow internal payment ID
   cardLast4?: string | null; // last 4 digits of card (if known)
@@ -420,11 +441,18 @@ export function paymentReceiptHtml(language: Language, data: PaymentReceiptData)
   const dateLabel = language === 'da' ? 'Betalingsdato' : 'Payment date';
   const planLabel = language === 'da' ? 'Abonnement' : 'Subscription';
   const periodLabel = language === 'da' ? 'Periode' : 'Period';
-  const amountLabel = language === 'da' ? 'Beløb (ekscl. moms)' : 'Amount (excl. VAT)';
-  const vatLabel = language === 'da' ? 'Moms (25%)' : 'VAT (25%)';
+  const vatBasisLabel = language === 'da' ? 'Momsgrundlag (ekscl. moms)' : 'VAT basis (excl. VAT)';
+  const vatRateLabel = language === 'da' ? 'Momssats' : 'VAT rate';
+  const vatAmountLabel = language === 'da' ? 'Momsbeløb' : 'VAT amount';
   const totalLabel = language === 'da' ? 'I alt (inkl. moms)' : 'Total (incl. VAT)';
   const idLabel = language === 'da' ? 'Betalings-ID' : 'Payment ID';
   const cardLabel = language === 'da' ? 'Kort' : 'Card';
+
+  // Momsgrundlag breakdown: "145,00 kr. × 36 måneder = 5.220,00 kr."
+  const showBasisBreakdown = (data.monthlyPriceDKK != null && data.bindingMonths != null && data.bindingMonths > 0);
+  const vatBasisValue = showBasisBreakdown
+    ? `${data.monthlyPriceDKK!.toFixed(2)} kr. × ${data.bindingMonths} ${language === 'da' ? 'måneder' : 'months'} = ${data.amountDKK.toFixed(2)} kr.`
+    : `${data.amountDKK.toFixed(2)} kr.`;
 
   const content = `
     <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:20px; font-weight:600;">${heading}</h2>
@@ -443,10 +471,13 @@ export function paymentReceiptHtml(language: Language, data: PaymentReceiptData)
         <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${cardLabel}</strong> •••• ${data.cardLast4}
       </td></tr>` : ''}
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${amountLabel}</strong> ${data.amountDKK.toFixed(2)} kr.
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatBasisLabel}</strong> ${vatBasisValue}
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatLabel}</strong> ${data.vatDKK.toFixed(2)} kr.
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatRateLabel}</strong> 25 %
+      </td></tr>
+      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatAmountLabel}</strong> ${data.vatDKK.toFixed(2)} kr.
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:14px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
         <strong style="display:inline-block; width:160px; color:${TEXT_DARK}; font-size:12px; text-transform:uppercase; letter-spacing:0.05em;">${totalLabel}</strong> <strong>${data.totalDKK.toFixed(2)} kr.</strong>

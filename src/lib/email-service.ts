@@ -434,6 +434,8 @@ export async function sendPaymentReceiptEmail(
       amountExclVatDKK: data.amountDKK,
       vatDKK: data.vatDKK,
       totalDKK: data.totalDKK,
+      monthlyPriceDKK: data.monthlyPriceDKK,
+      bindingMonths: data.bindingMonths,
       paymentDate: new Date(data.paymentDate),
       paymentId: data.paymentId,
       period: data.period,

@@ -131,6 +131,8 @@ export const POST = withGuard({
           monthlyPriceDKK: 0,
           bindingMonths: 0,
           totalAmountDKK: 0,
+          amountExclVatDKK: 0,
+          vatAmountDKK: 0,
           startDate: now.toISOString(),
           expiryDate: null, // Free plan has no expiry
           termsVersion: getCurrentTermsVersion(),

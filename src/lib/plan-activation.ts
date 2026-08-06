@@ -208,6 +208,8 @@ export async function activatePlanAfterPayment(
           monthlyPriceDKK: pricing.monthlyPriceDKK,
           bindingMonths,
           totalAmountDKK: totalChargedDKK,
+          amountExclVatDKK: amountExclVat,
+          vatAmountDKK: vatDKK,
           startDate: now.toISOString(),
           expiryDate: expiresAt?.toISOString() ?? null,
           termsVersion: getCurrentTermsVersion(),
@@ -227,6 +229,8 @@ export async function activatePlanAfterPayment(
           amountDKK: amountExclVat,
           vatDKK,
           totalDKK: totalChargedDKK,
+          monthlyPriceDKK: pricing.monthlyPriceDKK,
+          bindingMonths,
           paymentDate: now.toISOString(),
           paymentId: payment.id,
           cardLast4: null, // Frisbii payload may have this in metadata; left null for now
