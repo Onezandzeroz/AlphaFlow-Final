@@ -404,7 +404,6 @@ export async function sendSubscriptionWelcomeEmail(
       planName: data.planName,
       monthlyPriceDKK: data.monthlyPriceDKK,
       bindingMonths: data.bindingMonths,
-      totalAmountDKK: data.totalAmountDKK,
       termsVersion: data.termsVersion,
     },
   });

@@ -310,11 +310,8 @@ export function invoiceEmailHtml(
 
 export interface SubscriptionWelcomeData {
   planName: string;          // "AlphaFlow Pro"
-  monthlyPriceDKK: number;   // 169 (exclusive of VAT)
+  monthlyPriceDKK: number;   // 169 (exclusive of VAT) — shown briefly
   bindingMonths: number;     // 12 (0 for monthly)
-  totalAmountDKK: number;    // total charged incl. 25% VAT (e.g. 2535 for 12×169)
-  amountExclVatDKK: number;  // total amount excl. VAT (e.g. 2028 for 12×169)
-  vatAmountDKK: number;     // VAT amount (e.g. 507 for 12×169)
   startDate: string;         // ISO date string
   expiryDate: string | null; // ISO date string or null (monthly has no fixed end)
   termsVersion: string;      // "2025-07-01-v1"
@@ -322,78 +319,69 @@ export interface SubscriptionWelcomeData {
 }
 
 export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWelcomeData): string {
-  const heading = language === 'da' ? 'Velkommen til AlphaFlow 🎉' : 'Welcome to AlphaFlow 🎉';
-  const intro = language === 'da'
-    ? 'Dit abonnement er nu aktiveret. Her er bekræftelsen på din tilmelding:'
-    : 'Your subscription is now active. Here is the confirmation of your enrollment:';
+  const heading = language === 'da'
+    ? `Velkommen til AlphaFlow — ${data.planName}`
+    : `Welcome to AlphaFlow — ${data.planName}`;
 
-  const planLabel = language === 'da' ? 'Abonnement' : 'Plan';
-  const priceLabel = language === 'da' ? 'Pris pr. måned (ekscl. moms)' : 'Monthly price (excl. VAT)';
-  const bindingLabel = language === 'da' ? 'Bindingsperiode' : 'Binding period';
-  const vatBasisLabel = language === 'da' ? 'Momsgrundlag (ekscl. moms)' : 'VAT basis (excl. VAT)';
-  const vatRateLabel = language === 'da' ? 'Momssats' : 'VAT rate';
-  const vatAmountLabel = language === 'da' ? 'Momsbeløb' : 'VAT amount';
-  const totalLabel = language === 'da' ? 'I alt (inkl. moms)' : 'Total (incl. VAT)';
-  const startLabel = language === 'da' ? 'Startdato' : 'Start date';
-  const expiryLabel = language === 'da' ? 'Udløb af binding' : 'Binding expiry';
-  const termsLabel = language === 'da' ? 'Vilkårsversion' : 'Terms version';
-
-  // Momsgrundlag breakdown: "145,00 kr. × 36 måneder = 5.220,00 kr."
-  const vatBasisBreakdown = data.bindingMonths > 0
-    ? `${data.monthlyPriceDKK.toFixed(2)} kr. × ${data.bindingMonths} ${language === 'da' ? 'måneder' : 'months'} = ${data.amountExclVatDKK.toFixed(2)} kr.`
-    : `${data.amountExclVatDKK.toFixed(2)} kr.`;
+  const greeting = language === 'da'
+    ? 'Vi er glade for at have dig med ombord! Dit abonnement er nu aktiveret, og du har fuld adgang til alle funktioner i dit valgte plan.'
+    : 'We\'re happy to have you on board! Your subscription is now active and you have full access to all features in your chosen plan.';
 
   const bindingText = data.bindingMonths > 0
-    ? (language === 'da' ? `${data.bindingMonths} måneder` : `${data.bindingMonths} months`)
-    : (language === 'da' ? 'Ingen binding (månedlig opsigelse)' : 'No commitment (monthly cancellation)');
+    ? (language === 'da'
+      ? `Din bindingperiode er ${data.bindingMonths} måneder${data.expiryDate ? `, frem til ${new Date(data.expiryDate).toLocaleDateString('da-DK')}` : ''}.`
+      : `Your binding period is ${data.bindingMonths} months${data.expiryDate ? `, until ${new Date(data.expiryDate).toLocaleDateString('en-GB')}` : ''}.`)
+    : (language === 'da'
+      ? 'Dit abonnement løber måned til måned og kan opsiges til udgangen af enhver måned.'
+      : 'Your subscription runs month-to-month and can be cancelled at the end of any month.');
 
-  const expiryText = data.expiryDate
-    ? new Date(data.expiryDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')
-    : (language === 'da' ? 'Løbende indtil opsigelse' : 'Rolling until cancelled');
+  const priceLine = data.monthlyPriceDKK > 0
+    ? (language === 'da'
+      ? `Abonnementet koster ${data.monthlyPriceDKK} kr. pr. måned (ekscl. moms).`
+      : `The subscription costs ${data.monthlyPriceDKK} kr. per month (excl. VAT).`)
+    : '';
+
+  const termsLine = language === 'da'
+    ? `Ved oprettelsen har du accepteret vores gældende forretningsbetingelser (version ${data.termsVersion}). Du kan altid læse de fulde vilkår i appen under Indstillinger.`
+    : `By signing up you have accepted our current terms of service (version ${data.termsVersion}). You can always read the full terms in the app under Settings.`
+
+  const receiptNote = language === 'da'
+    ? 'Du modtager en separat e-mail med din betalingskvittering og en faktura (PDF) vedhæftet. Den indeholder en fuld momsopdeling.'
+    : 'You will receive a separate email with your payment receipt and an invoice (PDF) attached. It contains a full VAT breakdown.'
 
   const loginBtn = language === 'da' ? 'Log ind i AlphaFlow' : 'Log in to AlphaFlow';
+  const ctaText = language === 'da'
+    ? 'Kom i gang med at bogføre, afstemme og rapportere — log ind via knappen herunder.'
+    : 'Get started with bookkeeping, reconciliation and reporting — log in via the button below.';
 
   const content = `
     <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:22px; font-weight:600;">${heading}</h2>
-    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${intro}</p>
+    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${greeting}</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px; background-color:${BG_LIGHT}; border-radius:8px; border:1px solid #e2e8f0;">
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${planLabel}</strong> ${data.planName}
+        <strong style="color:${TEXT_DARK};">${language === 'da' ? 'Abonnement' : 'Plan'}</strong>: ${data.planName}
       </td></tr>
+      ${priceLine ? `<tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
+        <strong style="color:${TEXT_DARK};">${language === 'da' ? 'Pris' : 'Price'}</strong>: ${priceLine}
+      </td></tr>` : ''}
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${priceLabel}</strong> ${data.monthlyPriceDKK} kr./md.
-      </td></tr>
-      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${bindingLabel}</strong> ${bindingText}
-      </td></tr>
-      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatBasisLabel}</strong> ${vatBasisBreakdown}
-      </td></tr>
-      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatRateLabel}</strong> 25 %
-      </td></tr>
-      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${vatAmountLabel}</strong> ${data.vatAmountDKK.toFixed(2)} kr.
-      </td></tr>
-      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_DARK}; font-size:12px; text-transform:uppercase; letter-spacing:0.05em;">${totalLabel}</strong> <strong>${data.totalAmountDKK.toFixed(2)} kr.</strong>
-      </td></tr>
-      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${startLabel}</strong> ${new Date(data.startDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
-      </td></tr>
-      <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK}; border-bottom:1px solid #e2e8f0;">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${expiryLabel}</strong> ${expiryText}
+        <strong style="color:${TEXT_DARK};">${language === 'da' ? 'Startdato' : 'Start date'}</strong>: ${new Date(data.startDate).toLocaleDateString(language === 'da' ? 'da-DK' : 'en-GB')}
       </td></tr>
       <tr><td style="padding:12px 20px; font-size:13px; color:${TEXT_DARK};">
-        <strong style="display:inline-block; width:160px; color:${TEXT_MUTED}; font-size:11px; text-transform:uppercase; letter-spacing:0.05em;">${termsLabel}</strong> ${data.termsVersion}
+        <strong style="color:${TEXT_DARK};">${language === 'da' ? 'Binding' : 'Commitment'}</strong>: ${bindingText}
       </td></tr>
     </table>
-    <p style="margin:0 0 8px; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">
-      ${language === 'da'
-        ? 'Du kan til enhver tid se dine abonnementsoplysninger og opsige i indstillingerne.'
-        : 'You can view your subscription details and cancel at any time in your settings.'}
-    </p>
+    <p style="margin:0 0 8px; font-size:13px; color:${TEXT_DARK}; line-height:1.6;">${termsLine}</p>
+    <div style="margin:0 0 20px; padding:14px 20px; background-color:#f0fdfa; border:1px solid #ccfbf1; border-radius:8px;">
+      <p style="margin:0; font-size:13px; color:${TEXT_MUTED}; line-height:1.5;">${receiptNote}</p>
+    </div>
+    <p style="margin:0 0 16px; font-size:13px; color:${TEXT_DARK}; line-height:1.6;">${ctaText}</p>
     ${buttonHtml(data.appUrl, loginBtn)}
+    <p style="margin:20px 0 0; font-size:12px; color:${TEXT_MUTED}; line-height:1.6;">
+      ${language === 'da'
+        ? 'Spørgsmål? Skriv til os på alphaaiconsult@gmail.com — vi svarer hurtigst muligt.'<br/>AlphaAI Consult ApS · CVR 46312058'
+        : 'Questions? Write to us at alphaaiconsult@gmail.com — we reply as soon as possible.<br/>AlphaAI Consult ApS · CVR 46312058'}
+    </p>
   `;
 
   return wrapperHtml(content, language, language === 'da'
