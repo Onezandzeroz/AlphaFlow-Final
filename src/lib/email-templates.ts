@@ -379,7 +379,7 @@ export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWe
     ${buttonHtml(data.appUrl, loginBtn)}
     <p style="margin:20px 0 0; font-size:12px; color:${TEXT_MUTED}; line-height:1.6;">
       ${language === 'da'
-        ? 'Spørgsmål? Skriv til os på alphaaiconsult@gmail.com — vi svarer hurtigst muligt.'<br/>AlphaAI Consult ApS · CVR 46312058'
+        ? 'Spørgsmål? Skriv til os på alphaaiconsult@gmail.com — vi svarer hurtigst muligt.<br/>AlphaAI Consult ApS · CVR 46312058'
         : 'Questions? Write to us at alphaaiconsult@gmail.com — we reply as soon as possible.<br/>AlphaAI Consult ApS · CVR 46312058'}
     </p>
   `;
