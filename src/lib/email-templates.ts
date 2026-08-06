@@ -341,16 +341,13 @@ export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWe
       : `The subscription costs ${data.monthlyPriceDKK} kr. per month (excl. VAT).`)
     : '';
 
-  // Extract just the date portion (e.g. "2026-05") from the full version string
-  const termsDate = data.termsVersion.split('-').slice(0, 2).join('-');
-
   const termsLine = language === 'da'
-    ? `Ved oprettelsen har du accepteret vores gældende forretningsbetingelser (version ${termsDate}). Du kan altid læse de fulde vilkår i appen under Indstillinger.`
-    : `By signing up you have accepted our current terms of service (version ${termsDate}). You can always read the full terms in the app under Settings.`
+    ? `Ved oprettelsen har du accepteret vores <a href="${data.appUrl}/legal/terms" style="color:${PRIMARY}; text-decoration:underline;">forretningsbetingelser</a>. Du kan altid læse de fulde vilkår i appen under Indstillinger.`
+    : `By signing up you have accepted our <a href="${data.appUrl}/legal/terms" style="color:${PRIMARY}; text-decoration:underline;">terms of service</a>. You can always read the full terms in the app under Settings.`
 
   const receiptNote = language === 'da'
-    ? 'Du modtager en separat e-mail med din betalingskvittering og en faktura (PDF) vedhæftet. Den indeholder en fuld momsopdeling.'
-    : 'You will receive a separate email with your payment receipt and an invoice (PDF) attached. It contains a full VAT breakdown.'
+    ? 'Du modtager en separat e-mail med din betalingskvittering og en faktura (PDF) vedhæftet.'
+    : 'You will receive a separate email with your payment receipt and an invoice (PDF) attached.'
 
   const loginBtn = language === 'da' ? 'Log ind i AlphaFlow' : 'Log in to AlphaFlow';
   const ctaText = language === 'da'
@@ -382,8 +379,8 @@ export function subscriptionWelcomeHtml(language: Language, data: SubscriptionWe
     ${buttonHtml(data.appUrl, loginBtn)}
     <p style="margin:20px 0 0; font-size:12px; color:${TEXT_MUTED}; line-height:1.6;">
       ${language === 'da'
-        ? 'Spørgsmål? Skriv til os på alphaaiconsult@gmail.com — vi svarer hurtigst muligt.<br/>AlphaAI Consult ApS · CVR 46312058'
-        : 'Questions? Write to us at alphaaiconsult@gmail.com — we reply as soon as possible.<br/>AlphaAI Consult ApS · CVR 46312058'}
+        ? 'Spørgsmål? Skriv til os på support@alphaflow.dk — vi svarer hurtigst muligt.<br/>AlphaAI Consult ApS · CVR 46312058'
+        : 'Questions? Write to us at support@alphaflow.dk — we reply as soon as possible.<br/>AlphaAI Consult ApS · CVR 46312058'}
     </p>
   `;
 
@@ -483,8 +480,8 @@ export function paymentReceiptHtml(language: Language, data: PaymentReceiptData)
     </div>
     <p style="margin:0; font-size:13px; color:${TEXT_MUTED}; line-height:1.6;">
       ${language === 'da'
-        ? 'Opbevar denne kvittering og den vedhæftede faktura til din regnskabsbog. Har du spørgsmål, er du altid velkommen til at kontakte os på alphaaiconsult@gmail.com.<br/>AlphaAI Consult ApS · CVR 46312058 · Skelagervej 124C, 8200 Aarhus N'
-        : 'Please keep this receipt and the attached invoice for your accounting records. If you have any questions, feel free to contact us at alphaaiconsult@gmail.com.<br/>AlphaAI Consult ApS · CVR 46312058 · Skelagervej 124C, 8200 Aarhus N, Denmark'}
+        ? 'Opbevar denne kvittering og den vedhæftede faktura til din regnskabsbog. Har du spørgsmål, er du altid velkommen til at kontakte os på support@alphaflow.dk.<br/>AlphaAI Consult ApS · CVR 46312058 · Skelagervej 124C, 8200 Aarhus N'
+        : 'Please keep this receipt and the attached invoice for your accounting records. If you have any questions, feel free to contact us at support@alphaflow.dk.<br/>AlphaAI Consult ApS · CVR 46312058 · Skelagervej 124C, 8200 Aarhus N, Denmark'}
     </p>
   `;
 

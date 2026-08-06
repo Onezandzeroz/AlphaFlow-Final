@@ -19,7 +19,7 @@ const SELLER = {
   address1: 'Skelagervej 124C',
   address2: '8200 Aarhus N',
   country: 'Danmark',
-  email: 'alphaaiconsult@gmail.com',
+  email: 'support@alphaflow.dk',
   website: 'www.alphaflow.dk',
   phone: '61736076',
   bankName: 'Lunar Bank A/S',

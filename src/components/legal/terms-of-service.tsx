@@ -136,7 +136,7 @@ b) Undtagelse for digitale tjenester: Fortrydelsesretten bortfalder, hvis leveri
 c) Hvordan du fortryder: Hvis du ønsker at udøve din fortrydelsesret, skal du sende en utvetydig erklæring via e-mail til:
 
 AlphaAI Consult ApS
-E-mail: alphaaiconsult@gmail.com
+E-mail: support@alphaflow.dk
 
 Du kan også benytte nedenstående standardfortrydelsesformular.
 
@@ -163,7 +163,7 @@ f) Bevis for fortrydelse: Det er dit ansvar at påvise, at du har udnyttet fortr
 
 a) Digital tjeneste: AlphaFlow leveres som en digital tjeneste og kan ikke returneres på traditionel vis. Ved opsigelse af abonnementet ophører din adgang til Tjenesten.
 
-b) Refusion for ubrugte perioder: For månedlige abonnementer refunderes ikke betaling for den aktuelle faktureringsperiode, da tjenesten er fuldt tilgængelig gennem hele perioden. For årlige abonnementer kan der, under særlige omstændigheder, ansøges om forholdsmæssig refusion for resterende perioder ved skriftlig henvendelse til alphaaiconsult@gmail.com. Hvert tilfælde vurderes individuelt.
+b) Refusion for ubrugte perioder: For månedlige abonnementer refunderes ikke betaling for den aktuelle faktureringsperiode, da tjenesten er fuldt tilgængelig gennem hele perioden. For årlige abonnementer kan der, under særlige omstændigheder, ansøges om forholdsmæssig refusion for resterende perioder ved skriftlig henvendelse til support@alphaflow.dk. Hvert tilfælde vurderes individuelt.
 
 c) Refusionsbehandling: Hvis en refusion godkendes, behandles den inden for 14 dage. Refusionen tilbagebetales via samme betalingsmiddel, som blev anvendt ved det oprindelige køb.
 
@@ -222,7 +222,7 @@ Som registreret har du følgende rettigheder i henhold til GDPR artikel 12–22:
 - Ret til dataportabilitet (art. 20)
 - Ret til indsigelse mod behandling (art. 21)
 
-Anmodninger om udøvelse af dine rettigheder kan rettes til vores datalogansvarlige via e-mail: alphaaiconsult@gmail.com. Vi svarer på anmodninger inden 30 dage jf. GDPR artikel 12.
+Anmodninger om udøvelse af dine rettigheder kan rettes til vores datalogansvarlige via e-mail: support@alphaflow.dk. Vi svarer på anmodninger inden 30 dage jf. GDPR artikel 12.
 
 For erhvervskunder indgås en databehandleraftale (DPA — Data Processing Agreement) i overensstemmelse med GDPR artikel 28. Aftalen sendes automatisk ved oprettelse og kan tilgås via indstillingerne i Tjenesten.
 
@@ -304,11 +304,11 @@ e) Overførsel af data: AlphaFlow hjælper med at eksportere dine data ved opsig
       title: '13. Klageprocedure',
       content: `Vi ønsker at sikre, at du er tilfreds med AlphaFlow. Hvis du har en klage, bedes du følge nedenstående procedure:
 
-a) Trin 1 — Kontakt os: Henvend dig til vores kundeservice via e-mail (alphaaiconsult@gmail.com) eller pr. telefon (se Kontaktoplysninger). Beskriv klagen så detaljeret som muligt, herunder dit navn, CVR-nummer og en beskrivelse af problemet. Vi bestræber os på at besvare henvendelser inden for 2 hverdage.
+a) Trin 1 — Kontakt os: Henvend dig til vores kundeservice via e-mail (support@alphaflow.dk) eller pr. telefon (se Kontaktoplysninger). Beskriv klagen så detaljeret som muligt, herunder dit navn, CVR-nummer og en beskrivelse af problemet. Vi bestræber os på at besvare henvendelser inden for 2 hverdage.
 
 b) Trin 2 — Skriftlig behandling: Hvis klagen ikke løses umiddelbart, modtager du en skriftlig bekræftelse på modtagelse af din klage. Vi behandler din klage og svarer dig inden for 14 dage. Hvis behandlingen tager længere tid, informerer vi dig om årsagen og den forventede svartid.
 
-c) Trin 3 — Eskalering: Hvis du ikke er tilfreds med vores svar, kan klagen eskaleres til ledelsen af AlphaAI Consult ApS. Kontakt os via e-mail på alphaaiconsult@gmail.com med anmærkningen "Eskalering af klage".
+c) Trin 3 — Eskalering: Hvis du ikke er tilfreds med vores svar, kan klagen eskaleres til ledelsen af AlphaAI Consult ApS. Kontakt os via e-mail på support@alphaflow.dk med anmærkningen "Eskalering af klage".
 
 d) Trin 4 — Forbrugerklagenævnet: Hvis klagen ikke kan løses mellem parterne, kan forbrugere indgive en klage til Forbrugerklagenævnet via Konkurrence- og Forbrugerstyrelsens hjemmeside: www.kfst.dk. Forbrugerklagenævnet er et uafhængigt organ, der behandler tvister mellem forbrugere og virksomheder.
 
@@ -352,7 +352,7 @@ c) Lovvalg: Disse Vilkår reguleres af og fortolkes i overensstemmelse med dansk
     company: 'AlphaAI Consult ApS',
     address: 'Skelagervej 124C\n8200 Aarhus N\nDanmark',
     cvr: 'CVR-nr.: 46312058',
-    email: 'alphaaiconsult@gmail.com',
+    email: 'support@alphaflow.dk',
     website: 'www.alphaflow.dk',
     phone: '61736076',
   },
@@ -439,7 +439,7 @@ b) Exception for digital services: The right of withdrawal lapses if delivery of
 c) How to withdraw: If you wish to exercise your right of withdrawal, you must send an unambiguous statement via email to:
 
 AlphaAI Consult ApS
-Email: alphaaiconsult@gmail.com
+Email: support@alphaflow.dk
 
 You may also use the standard withdrawal form below.
 
@@ -466,7 +466,7 @@ f) Proof of withdrawal: It is your responsibility to demonstrate that you have e
 
 a) Digital service: AlphaFlow is delivered as a digital service and cannot be returned in the traditional sense. Upon cancellation of the subscription, your access to the Service ceases.
 
-b) Refund for unused periods: For monthly subscriptions, no refund is provided for the current billing period, as the service is fully available throughout the entire period. For annual subscriptions, a proportional refund for remaining periods may, under special circumstances, be requested by written application to alphaaiconsult@gmail.com. Each case is assessed individually.
+b) Refund for unused periods: For monthly subscriptions, no refund is provided for the current billing period, as the service is fully available throughout the entire period. For annual subscriptions, a proportional refund for remaining periods may, under special circumstances, be requested by written application to support@alphaflow.dk. Each case is assessed individually.
 
 c) Refund processing: If a refund is approved, it will be processed within 14 days. The refund will be issued using the same payment method as was used for the original purchase.
 
@@ -525,7 +525,7 @@ As a data subject, you have the following rights under GDPR Articles 12–22:
 - Right to data portability (Art. 20)
 - Right to object to processing (Art. 21)
 
-Requests to exercise your rights can be directed to our data protection officer via email: alphaaiconsult@gmail.com. We respond to requests within 30 days pursuant to GDPR Article 12.
+Requests to exercise your rights can be directed to our data protection officer via email: support@alphaflow.dk. We respond to requests within 30 days pursuant to GDPR Article 12.
 
 For business customers, a Data Processing Agreement (DPA) is concluded in accordance with GDPR Article 28. The agreement is sent automatically upon creation and can be accessed via the settings in the Service.
 
@@ -607,11 +607,11 @@ e) Data transfer: AlphaFlow assists with exporting your data upon termination. W
       title: '13. Complaint Handling Procedure',
       content: `We want to ensure that you are satisfied with AlphaFlow. If you have a complaint, please follow the procedure below:
 
-a) Step 1 — Contact us: Reach out to our customer service via email (alphaaiconsult@gmail.com) or phone (contact details). Describe the complaint in as much detail as possible, including your name, CVR number, and a description of the issue. We aim to respond to enquiries within 2 business days.
+a) Step 1 — Contact us: Reach out to our customer service via email (support@alphaflow.dk) or phone (contact details). Describe the complaint in as much detail as possible, including your name, CVR number, and a description of the issue. We aim to respond to enquiries within 2 business days.
 
 b) Step 2 — Written processing: If the complaint is not resolved immediately, you will receive a written confirmation of receipt of your complaint. We will process your complaint and respond to you within 14 days. If processing takes longer, we will inform you of the reason and the expected response time.
 
-c) Step 3 — Escalation: If you are not satisfied with our response, the complaint may be escalated to the management of AlphaAI Consult ApS. Contact us via email at alphaaiconsult@gmail.com with the subject line "Complaint escalation".
+c) Step 3 — Escalation: If you are not satisfied with our response, the complaint may be escalated to the management of AlphaAI Consult ApS. Contact us via email at support@alphaflow.dk with the subject line "Complaint escalation".
 
 d) Step 4 — Consumer Complaints Board: If the complaint cannot be resolved between the parties, consumers may file a complaint with the Danish Consumer Complaints Board (Forbrugerklagenævnet) via the Danish Competition and Consumer Authority's website: www.kfst.dk. The Consumer Complaints Board is an independent body that handles disputes between consumers and businesses.
 
@@ -657,7 +657,7 @@ d) Choice of law: These Terms are governed by and construed in accordance with D
     company: 'AlphaAI Consult ApS',
     address: 'Skelagervej 124\n8200 Aarhus N\nDenmark',
     cvr: 'CVR No.: 46312058',
-    email: 'alphaaiconsult@gmail.com',
+    email: 'support@alphaflow.dk',
     website: 'www.alphaflow.dk',
     phone: '61736076',
   },

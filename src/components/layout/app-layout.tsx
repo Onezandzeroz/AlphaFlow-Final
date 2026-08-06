@@ -575,7 +575,7 @@ export function AppLayout({
               <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed space-y-0.5">
                 <p>CVR-nr. 46312058</p>
                 <p>
-                  <a href="mailto:alphaaiconsult@gmail.com" className="hover:text-[#0d9488] transition-colors truncate">alphaaiconsult@gmail.com</a>
+                  <a href="mailto:support@alphaflow.dk" className="hover:text-[#0d9488] transition-colors truncate">support@alphaflow.dk</a>
                 </p>
               </div>
             </div>

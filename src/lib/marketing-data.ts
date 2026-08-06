@@ -476,7 +476,7 @@ export const COMPANY_FACTS = {
   cvr: "46312058",
   address: "Skelagervej 124, 8200 Aarhus N, Danmark",
   email: "info@alphaflow.dk",
-  emailAlt: "alphaaiconsult@gmail.com",
+  emailAlt: "support@alphaflow.dk",
   phone: "+45 61 73 60 76",
   website: "www.alphaflow.dk",
   founded: "2024",

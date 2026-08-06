@@ -636,7 +636,7 @@ function Home() {
           <div className="mt-2 space-y-0.5">
             <p className="text-[10px] text-gray-400">CVR-nr. 46312058</p>
             <p className="text-[10px] text-gray-400">
-              <a href="mailto:alphaaiconsult@gmail.com" className="hover:text-[#0d9488] transition-colors">alphaaiconsult@gmail.com</a>
+              <a href="mailto:support@alphaflow.dk" className="hover:text-[#0d9488] transition-colors">support@alphaflow.dk</a>
             </p>
           </div>
           <p className="mt-3 flex items-center justify-center flex-wrap gap-x-3 gap-y-1">
@@ -712,7 +712,7 @@ function Home() {
           <div className="mt-2 space-y-0.5">
             <p className="text-[10px] text-gray-400">CVR-nr. 46312058</p>
             <p className="text-[10px] text-gray-400">
-              <a href="mailto:alphaaiconsult@gmail.com" className="hover:text-[#0d9488] transition-colors">alphaaiconsult@gmail.com</a>
+              <a href="mailto:support@alphaflow.dk" className="hover:text-[#0d9488] transition-colors">support@alphaflow.dk</a>
             </p>
           </div>
           <p className="mt-3 flex items-center justify-center flex-wrap gap-x-3 gap-y-1">
@@ -842,7 +842,7 @@ function Home() {
           <div className="mt-2 space-y-0.5">
             <p className="text-[10px] text-gray-400">CVR-nr. 46312058</p>
             <p className="text-[10px] text-gray-400">
-              <a href="mailto:alphaaiconsult@gmail.com" className="hover:text-[#0d9488] transition-colors">alphaaiconsult@gmail.com</a>
+              <a href="mailto:support@alphaflow.dk" className="hover:text-[#0d9488] transition-colors">support@alphaflow.dk</a>
             </p>
           </div>
           <p className="mt-3 flex items-center justify-center flex-wrap gap-x-3 gap-y-1">
