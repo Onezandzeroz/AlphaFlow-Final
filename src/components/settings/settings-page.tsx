@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/shared/page-header';
 import { CompanySettingsPage } from '@/components/settings/company-settings-page';
 import { TeamManagement } from '@/components/settings/team-management';
 import { OversightSettings } from '@/components/settings/oversight-settings';
+import { SystemMessagesTab } from '@/components/settings/system-messages-tab';
 import { AccessSettings } from '@/components/settings/access-settings';
 import { HermesSettings } from '@/components/settings/hermes-settings';
 import { EInvoiceSettings } from '@/components/settings/einvoice-settings';
@@ -38,6 +39,7 @@ import {
   KeyRound,
   Bot,
   FileSpreadsheet,
+  Mail,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -298,13 +300,22 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
           </TabsTrigger>
           {/* Oversight tab — only visible to the App Owner, or to AlphaAi users if no App Owner exists yet */}
           {(user.isSuperDev || (!user.hasAppOwner && user.activeCompanyName?.startsWith('AlphaAi'))) && (
-            <TabsTrigger
-              value="oversight"
-              className="gap-2 rounded-lg data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 data-[state=active]:shadow-sm data-[state=active]:shadow-amber-600/20 data-[state=active]:border data-[state=active]:border-amber-600/20 transition-all relative"
-            >
-              <Shield className="h-4 w-4" />
-              <span className="hidden sm:inline">{language === 'da' ? 'Tilsyn' : 'Oversight'}</span>
-            </TabsTrigger>
+            <>
+              <TabsTrigger
+                value="system-messages"
+                className="gap-2 rounded-lg data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 data-[state=active]:shadow-sm data-[state=active]:shadow-amber-600/20 data-[state=active]:border data-[state=active]:border-amber-600/20 transition-all relative"
+              >
+                <Mail className="h-4 w-4" />
+                <span className="hidden sm:inline">{language === 'da' ? 'Systemmeddelelser' : 'System Messages'}</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="oversight"
+                className="gap-2 rounded-lg data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 data-[state=active]:shadow-sm data-[state=active]:shadow-amber-600/20 data-[state=active]:border data-[state=active]:border-amber-600/20 transition-all relative"
+              >
+                <Shield className="h-4 w-4" />
+                <span className="hidden sm:inline">{language === 'da' ? 'Tilsyn' : 'Oversight'}</span>
+              </TabsTrigger>
+            </>
           )}
         </TabsList>
 
@@ -554,6 +565,13 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
         <TabsContent value="hermes" className="border-l-4 border-amber-400 dark:border-amber-600 pl-4">
           <HermesSettings user={user} />
         </TabsContent>
+
+        {/* ═══ SYSTEM MESSAGES TAB (SuperDev only) ═══ */}
+        {(user.isSuperDev || (!user.hasAppOwner && user.activeCompanyName?.startsWith('AlphaAi'))) && (
+          <TabsContent value="system-messages" className="border-l-4 border-amber-400 dark:border-amber-600 pl-4">
+            <SystemMessagesTab />
+          </TabsContent>
+        )}
 
         {/* ═══ OVERSIGHT TAB ═══ */}
         {(user.isSuperDev || (!user.hasAppOwner && user.activeCompanyName?.startsWith('AlphaAi'))) && (
