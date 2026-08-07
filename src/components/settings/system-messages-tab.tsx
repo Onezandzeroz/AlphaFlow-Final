@@ -10,6 +10,13 @@ import { Separator } from '@/components/ui/separator';
 import { useTranslation } from '@/lib/use-translation';
 import { toast } from 'sonner';
 import { Loader2, Send, Mail, CheckCircle2, XCircle } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 // ── Email type definitions ──────────────────────────────────────
 
@@ -73,6 +80,67 @@ const EMAIL_TYPES: EmailType[] = [
   },
 ];
 
+// ── Plan definitions ─────────────────────────────────────────────
+
+interface PlanOption {
+  id: string;
+  nameDa: string;
+  nameEn: string;
+  priceDa: string;
+  priceEn: string;
+  bindingDa: string;
+  bindingEn: string;
+  totalDa: string;
+  totalEn: string;
+}
+
+const PLANS: PlanOption[] = [
+  {
+    id: 'monthly',
+    nameDa: 'AlphaFlow Månedlig',
+    nameEn: 'AlphaFlow Monthly',
+    priceDa: '199 kr./md.',
+    priceEn: '199 DKK/mo.',
+    bindingDa: 'Ingen binding',
+    bindingEn: 'No commitment',
+    totalDa: '199,00 kr. (inkl. moms)',
+    totalEn: '248.75 DKK (incl. VAT)',
+  },
+  {
+    id: 'annual',
+    nameDa: 'AlphaFlow Pro',
+    nameEn: 'AlphaFlow Pro',
+    priceDa: '169 kr./md.',
+    priceEn: '169 DKK/mo.',
+    bindingDa: '12 måneders binding',
+    bindingEn: '12-month commitment',
+    totalDa: '2.535,00 kr. (inkl. moms)',
+    totalEn: '2,535.00 DKK (incl. VAT)',
+  },
+  {
+    id: '2year',
+    nameDa: 'AlphaFlow Business',
+    nameEn: 'AlphaFlow Business',
+    priceDa: '149 kr./md.',
+    priceEn: '149 DKK/mo.',
+    bindingDa: '24 måneders binding',
+    bindingEn: '24-month commitment',
+    totalDa: '4.470,00 kr. (inkl. moms)',
+    totalEn: '4,470.00 DKK (incl. VAT)',
+  },
+  {
+    id: '3year',
+    nameDa: 'AlphaFlow Business Extended',
+    nameEn: 'AlphaFlow Business Extended',
+    priceDa: '145 kr./md.',
+    priceEn: '145 DKK/mo.',
+    bindingDa: '36 måneders binding',
+    bindingEn: '36-month commitment',
+    totalDa: '6.525,00 kr. (inkl. moms)',
+    totalEn: '6,525.00 DKK (incl. VAT)',
+  },
+];
+
 // ── Component ───────────────────────────────────────────────────
 
 export function SystemMessagesTab() {
@@ -80,9 +148,12 @@ export function SystemMessagesTab() {
   const isDa = language === 'da';
 
   const [emailTo, setEmailTo] = useState('');
+  const [selectedPlanId, setSelectedPlanId] = useState('3year');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sending, setSending] = useState(false);
   const [results, setResults] = useState<Array<{ type: string; success: boolean; error?: string }>>([]);
+
+  const selectedPlan = PLANS.find((p) => p.id === selectedPlanId) ?? PLANS[PLANS.length - 1];
 
   const toggleEmail = (key: string) => {
     setSelected((prev) => {
@@ -116,6 +187,7 @@ export function SystemMessagesTab() {
           to: emailTo,
           emails: Array.from(selected),
           language,
+          planId: selectedPlanId,
         }),
       });
       const data = await res.json();
@@ -132,8 +204,8 @@ export function SystemMessagesTab() {
       if (data.failed === 0) {
         toast.success(
           isDa
-            ? `${data.sent} e-mail(s) sendt til ${emailTo}`
-            : `${data.sent} email(s) sent to ${emailTo}`,
+            ? `${data.sent} e-mail(s) sendt til ${emailTo} (${selectedPlan.nameDa})`
+            : `${data.sent} email(s) sent to ${emailTo} (${selectedPlan.nameEn})`,
         );
       } else {
         toast.warning(
@@ -151,7 +223,7 @@ export function SystemMessagesTab() {
 
   return (
     <div className="space-y-6">
-      {/* ── Email recipient ── */}
+      {/* ── Plan selector & Email recipient ── */}
       <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
         <CardHeader className="pb-3">
           <CardTitle className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -160,11 +232,42 @@ export function SystemMessagesTab() {
           </CardTitle>
           <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
             {isDa
-              ? 'Vælg hvilke systemmeddelelser der skal sendes, og angiv modtagerens e-mailadresse. Alle e-mails sendes med test-data.'
-              : 'Select which system messages to send and specify the recipient email. All emails are sent with test data.'}
+              ? 'Vælg en abonnementsplan, hvilke systemmeddelelser der skal sendes, og angiv modtagerens e-mailadresse.'
+              : 'Select a subscription plan, which system messages to send, and specify the recipient email.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Plan selector */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {isDa ? 'Abonnementsplan' : 'Subscription plan'}
+            </Label>
+            <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+              <SelectTrigger className="max-w-md">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PLANS.map((plan) => (
+                  <SelectItem key={plan.id} value={plan.id}>
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium">{isDa ? plan.nameDa : plan.nameEn}</span>
+                      <span className="text-xs text-gray-400">
+                        ({isDa ? plan.priceDa : plan.priceEn} · {isDa ? plan.bindingDa : plan.bindingEn})
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedPlan && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {isDa ? 'Beløb pr. periode' : 'Amount per period'}: <span className="font-medium text-gray-700 dark:text-gray-300">{isDa ? selectedPlan.totalDa : selectedPlan.totalEn}</span>
+              </p>
+            )}
+          </div>
+
+          <Separator />
+
           {/* Email field */}
           <div className="space-y-2">
             <Label htmlFor="test-email-to" className="text-sm font-medium text-gray-700 dark:text-gray-300">

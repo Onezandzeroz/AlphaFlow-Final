@@ -5,7 +5,10 @@
  * to a specified address. Used for KYB documentation and QA.
  *
  * Body:
- *   { to: string, emails: string[], language?: 'da'|'en' }
+ *   { to: string, emails: string[], language?: 'da'|'en', planId?: string }
+ *
+ *   planId is one of: 'monthly', 'annual', '2year', '3year'
+ *   (defaults to '3year' if omitted)
  *
  *   emails is an array of email type keys, e.g.:
  *     ["welcome", "receipt", "pre-renewal", "pre-billing",
@@ -25,42 +28,96 @@ import {
   sendTermsChangeEmail,
 } from '@/lib/email-service';
 import { generateSequentialInvoiceNumber } from '@/lib/invoice-number';
+import { frontendPlanIdToTier, getBindingMonths, PlanTier } from '@/lib/plan-features';
+import { getPlanPricing } from '@/lib/plan-pricing';
 
 const APP_URL = process.env.APP_URL || 'https://alphaflow.dk';
 
-// ── Mock data factories ──────────────────────────────────────────
+// ── Plan name mapping ────────────────────────────────────────────
+
+const PLAN_NAMES: Record<string, string> = {
+  free: 'AlphaFlow Gratis',
+  monthly: 'AlphaFlow Månedlig',
+  annual: 'AlphaFlow Pro',
+  '2year': 'AlphaFlow Business',
+  '3year': 'AlphaFlow Business Extended',
+};
+
+const VALID_PLAN_IDS = ['monthly', 'annual', '2year', '3year'];
+
+// ── Helper: resolve plan context ────────────────────────────────
+
+interface PlanContext {
+  planName: string;
+  tier: PlanTier;
+  monthlyPriceDKK: number;
+  bindingMonths: number;
+  amountExclVatDKK: number;  // total for the period (excl. VAT)
+  vatDKK: number;
+  totalDKK: number;           // total for the period (incl. VAT)
+}
+
+function resolvePlan(planId: string): PlanContext {
+  const tier = frontendPlanIdToTier(planId);
+  const pricing = getPlanPricing(tier);
+  const bindingMonths = getBindingMonths(tier);
+  const monthsToCharge = bindingMonths > 0 ? bindingMonths : 1;
+
+  return {
+    planName: PLAN_NAMES[planId] || 'AlphaFlow',
+    tier,
+    monthlyPriceDKK: pricing.monthlyPriceDKK,
+    bindingMonths: monthsToCharge,
+    amountExclVatDKK: pricing.totalAmountOre / 100,
+    vatDKK: pricing.vatAmountOre / 100,
+    totalDKK: pricing.totalAmountInclVatOre / 100,
+  };
+}
+
+// ── Date helpers ────────────────────────────────────────────────
 
 const NOW = new Date();
 const inDays = (n: number) => new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() + n);
+const inMonths = (m: number) => {
+  const d = new Date(NOW);
+  d.setMonth(d.getMonth() + m);
+  return d;
+};
 
-async function sendWelcome(to: string, lang: 'da' | 'en') {
+// ── Mock data factories (plan-aware) ────────────────────────────
+
+async function sendWelcome(to: string, lang: 'da' | 'en', plan: PlanContext) {
+  const bindingMonths = plan.bindingMonths;
   return sendSubscriptionWelcomeEmail(to, {
-    planName: 'AlphaFlow Business Extended',
-    monthlyPriceDKK: 145,
-    bindingMonths: 36,
+    planName: plan.planName,
+    monthlyPriceDKK: plan.monthlyPriceDKK,
+    bindingMonths,
     startDate: NOW.toISOString(),
-    expiryDate: inDays(36 * 30).toISOString(),
+    expiryDate: bindingMonths > 0 ? inMonths(bindingMonths).toISOString() : null,
     termsVersion: '2026-05-v1',
     appUrl: APP_URL,
   }, lang);
 }
 
-async function sendReceipt(to: string, lang: 'da' | 'en') {
+async function sendReceipt(to: string, lang: 'da' | 'en', plan: PlanContext) {
   let invoiceNumber: string | undefined;
   try { invoiceNumber = await generateSequentialInvoiceNumber(); } catch { /* fallback below */ }
-  const renewalDate = inDays(36 * 30);
+  const bindingMonths = plan.bindingMonths;
+  const periodEnd = bindingMonths > 0 ? inMonths(bindingMonths) : inMonths(1);
+  const period = `${NOW.toLocaleDateString('da-DK')} – ${periodEnd.toLocaleDateString('da-DK')}`;
+
   return sendPaymentReceiptEmail(to, {
-    planName: 'AlphaFlow Business Extended',
-    amountDKK: 5220,
-    vatDKK: 1305,
-    totalDKK: 6525,
-    monthlyPriceDKK: 145,
-    bindingMonths: 36,
+    planName: plan.planName,
+    amountDKK: plan.amountExclVatDKK,
+    vatDKK: plan.vatDKK,
+    totalDKK: plan.totalDKK,
+    monthlyPriceDKK: plan.monthlyPriceDKK,
+    bindingMonths: bindingMonths > 1 ? bindingMonths : undefined,
     paymentDate: NOW.toISOString(),
     paymentId: 'test_payment_' + Date.now(),
     invoiceNumber,
     cardLast4: '4242',
-    period: `${NOW.toLocaleDateString('da-DK')} – ${renewalDate.toLocaleDateString('da-DK')}`,
+    period,
     isRenewal: false,
     customerCompanyName: 'Test Virksomhed ApS',
     customerEmail: to,
@@ -69,42 +126,43 @@ async function sendReceipt(to: string, lang: 'da' | 'en') {
   }, lang);
 }
 
-async function sendPreRenewal(to: string, lang: 'da' | 'en', days = 14) {
+async function sendPreRenewal(to: string, lang: 'da' | 'en', days: number, plan: PlanContext) {
   return sendPreRenewalReminderEmail(to, {
-    planName: 'AlphaFlow Business Extended',
+    planName: plan.planName,
     renewalDate: inDays(days).toISOString(),
-    amountDKK: 6525,
+    amountDKK: plan.totalDKK,  // template shows "incl. 25% moms"
     daysUntilRenewal: days,
     isAutoRenew: true,
     appUrl: APP_URL,
   }, lang);
 }
 
-async function sendPreBilling(to: string, lang: 'da' | 'en', days = 7) {
+async function sendPreBilling(to: string, lang: 'da' | 'en', days: number, plan: PlanContext) {
   return sendPreBillingReminderEmail(to, {
-    planName: 'AlphaFlow Business Extended',
+    planName: plan.planName,
     renewalDate: inDays(days).toISOString(),
-    amountDKK: 6525,
+    amountDKK: plan.totalDKK,  // template shows "incl. 25% moms"
     daysUntilRenewal: days,
     isAutoRenew: true,
     appUrl: APP_URL,
   }, lang);
 }
 
-async function sendCancelled(to: string, lang: 'da' | 'en') {
+async function sendCancelled(to: string, lang: 'da' | 'en', plan: PlanContext) {
+  const bindingMonths = plan.bindingMonths;
   return sendSubscriptionCancelledEmail(to, {
-    planName: 'AlphaFlow Business Extended',
+    planName: plan.planName,
     cancelledDate: NOW.toISOString(),
-    accessUntilDate: inDays(36 * 30).toISOString(),
+    accessUntilDate: bindingMonths > 0 ? inMonths(bindingMonths).toISOString() : inMonths(1).toISOString(),
     reason: 'user_request',
     appUrl: APP_URL,
   }, lang);
 }
 
-async function sendFailed(to: string, lang: 'da' | 'en') {
+async function sendFailed(to: string, lang: 'da' | 'en', plan: PlanContext) {
   return sendPaymentFailedEmail(to, {
-    planName: 'AlphaFlow Business Extended',
-    amountDKK: 145,
+    planName: plan.planName,
+    amountDKK: plan.totalDKK,  // template shows "incl. 25% moms" — this is the full period charge
     attemptDate: NOW.toISOString(),
     retryDate: inDays(3).toISOString(),
     appUrl: APP_URL,
@@ -132,17 +190,22 @@ const VALID_EMAILS: EmailType[] = [
   'cancelled', 'payment-failed', 'terms-change',
 ];
 
-async function sendTestEmail(type: EmailType, to: string, lang: 'da' | 'en'): Promise<{ type: string; success: boolean; logId: string; error?: string }> {
+async function sendTestEmail(
+  type: EmailType,
+  to: string,
+  lang: 'da' | 'en',
+  plan: PlanContext,
+): Promise<{ type: string; success: boolean; logId: string; error?: string }> {
   try {
     let result: { success: boolean; logId: string };
     switch (type) {
-      case 'welcome':      result = await sendWelcome(to, lang); break;
-      case 'receipt':       result = await sendReceipt(to, lang); break;
-      case 'pre-renewal':   result = await sendPreRenewal(to, lang); break;
-      case 'pre-billing':   result = await sendPreBilling(to, lang); break;
-      case 'cancelled':     result = await sendCancelled(to, lang); break;
-      case 'payment-failed': result = await sendFailed(to, lang); break;
-      case 'terms-change':  result = await sendTermsChange(to, lang); break;
+      case 'welcome':        result = await sendWelcome(to, lang, plan); break;
+      case 'receipt':        result = await sendReceipt(to, lang, plan); break;
+      case 'pre-renewal':    result = await sendPreRenewal(to, lang, 14, plan); break;
+      case 'pre-billing':    result = await sendPreBilling(to, lang, 7, plan); break;
+      case 'cancelled':      result = await sendCancelled(to, lang, plan); break;
+      case 'payment-failed': result = await sendFailed(to, lang, plan); break;
+      case 'terms-change':   result = await sendTermsChange(to, lang); break;
     }
     return { type, success: result.success, logId: result.logId };
   } catch (err) {
@@ -159,13 +222,14 @@ export const POST = withGuard(
   async (request) => {
     try {
       const body = await request.json();
-      const { to, emails, language } = body as {
+      const { to, emails, language, planId } = body as {
         to: string;
         emails: string[];
         language?: 'da' | 'en';
+        planId?: string;
       };
 
-      // Validate
+      // Validate recipient
       if (!to || typeof to !== 'string' || !to.includes('@')) {
         return NextResponse.json(
           { error: 'Gyldig e-mailadresse kræves' },
@@ -173,6 +237,7 @@ export const POST = withGuard(
         );
       }
 
+      // Validate email types
       if (!Array.isArray(emails) || emails.length === 0) {
         return NextResponse.json(
           { error: 'Vælg mindst én e-mailtype' },
@@ -188,12 +253,18 @@ export const POST = withGuard(
         );
       }
 
+      // Validate & resolve plan
+      const resolvedPlanId = (planId && VALID_PLAN_IDS.includes(planId)) ? planId : '3year';
+      const plan = resolvePlan(resolvedPlanId);
+
       const lang = (language === 'en' ? 'en' : 'da') as 'da' | 'en';
+
+      logger.warn(`[TEST-EMAILS] Sending batch to ${to}: plan=${resolvedPlanId} (${plan.planName}), emails=${emails.join(',')}, lang=${lang}`);
 
       // Send all selected emails sequentially
       const results: Array<{ type: string; success: boolean; logId: string; error?: string }> = [];
       for (const type of emails as EmailType[]) {
-        const r = await sendTestEmail(type, to, lang);
+        const r = await sendTestEmail(type, to, lang, plan);
         results.push(r);
       }
 
@@ -207,6 +278,8 @@ export const POST = withGuard(
         sent: succeeded,
         failed,
         results,
+        planUsed: resolvedPlanId,
+        planName: plan.planName,
       });
     } catch (err) {
       logger.error('[TEST-EMAILS] Batch failed:', err);
