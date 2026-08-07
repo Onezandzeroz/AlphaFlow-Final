@@ -191,7 +191,7 @@ export const POST = withGuard(
       const lang = (language === 'en' ? 'en' : 'da') as 'da' | 'en';
 
       // Send all selected emails sequentially
-      const results = [];
+      const results: Array<{ type: string; success: boolean; logId: string; error?: string }> = [];
       for (const type of emails as EmailType[]) {
         const r = await sendTestEmail(type, to, lang);
         results.push(r);
