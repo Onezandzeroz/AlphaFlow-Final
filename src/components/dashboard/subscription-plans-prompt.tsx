@@ -653,6 +653,7 @@ export function SubscriptionPlansPrompt() {
   // consent legally traceable to the exact payment.
   const [pendingPlan, setPendingPlan] = useState<Plan | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToAutoRenewal, setAgreedToAutoRenewal] = useState(false);
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const hasScheduled = useRef(false);
@@ -898,8 +899,8 @@ export function SubscriptionPlansPrompt() {
   // ConsentLog row linked to the resulting Payment.
   const handleConfirmConsent = useCallback(
     async (plan: Plan) => {
-      if (!agreedToTerms) {
-        toast.error(language === 'da' ? 'Du skal acceptere betingelserne for at fortsætte.' : 'You must accept the terms to continue.');
+      if (!agreedToTerms || !agreedToAutoRenewal) {
+        toast.error(language === 'da' ? 'Du skal acceptere betingelserne og give samtykke til automatisk fornyelse for at fortsætte.' : 'You must accept the terms and consent to automatic renewal to continue.');
         return;
       }
 
@@ -916,6 +917,7 @@ export function SubscriptionPlansPrompt() {
         body: JSON.stringify({
           planId: plan.id,
           agreedToTerms: true,
+          agreedToAutoRenewal: true,
           consentVersion,
         }),
       })
@@ -1022,7 +1024,7 @@ export function SubscriptionPlansPrompt() {
           );
         });
     },
-    [agreedToTerms, dismiss, language],
+    [agreedToTerms, agreedToAutoRenewal, dismiss, language],
   );
 
   // ── Mock checkout dialog handlers ──
@@ -1391,6 +1393,7 @@ export function SubscriptionPlansPrompt() {
             // User closed the dialog without confirming
             setPendingPlan(null);
             setAgreedToTerms(false);
+            setAgreedToAutoRenewal(false);
           }
         }}
       >
@@ -1446,9 +1449,9 @@ export function SubscriptionPlansPrompt() {
                   )
                 ) : (
                   language === 'da' ? (
-                    <>Du accepterer et abonnement med <strong className="text-[#fbbf24]">{pendingPlan.bindDa.toLowerCase()}</strong>. Beløbet trækkes nu for hele perioden. Ved udløb skal du aktivt forny for at fortsætte.</>
+                    <>Du accepterer et abonnement med <strong className="text-[#fbbf24]">{pendingPlan.bindDa.toLowerCase()}</strong>. Beløbet trækkes nu for hele perioden og <strong className="text-[#fbbf24]">fornyes automatisk</strong> ved udløb, medmindre du opsiger i indstillingerne.</>
                   ) : (
-                    <>You agree to a subscription with <strong className="text-[#fbbf24]">{pendingPlan.bindEn.toLowerCase()}</strong>. The full period amount is charged now. At expiry you must actively renew to continue.</>
+                    <>You agree to a subscription with <strong className="text-[#fbbf24]">{pendingPlan.bindEn.toLowerCase()}</strong>. The full period amount is charged now and <strong className="text-[#fbbf24]">automatically renews</strong> at expiry, unless you cancel in your settings.</>
                   )
                 )}
               </div>
@@ -1493,6 +1496,34 @@ export function SubscriptionPlansPrompt() {
                 </span>
               </label>
 
+              {/* Auto-renewal consent checkbox — dark theme */}
+              <label className="flex items-start gap-3 cursor-pointer group p-3 rounded-lg border border-white/[0.08] hover:border-[#f59e0b]/30 bg-white/[0.02] transition-colors">
+                <ResponsiveCheckbox
+                  checked={agreedToAutoRenewal}
+                  onCheckedChange={(checked) => setAgreedToAutoRenewal(checked === true)}
+                  className="h-[18px] w-[18px] mt-0.5 rounded-[5px] border-2 border-white/20 data-[state=checked]:bg-[#f59e0b] data-[state=checked]:border-[#f59e0b] data-[state=unchecked]:bg-white/5 data-[state=unchecked]:hover:border-[#f59e0b]/50 transition-all duration-150"
+                />
+                <span className="text-sm text-white/70 leading-relaxed select-none">
+                  {language === 'da' ? (
+                    <>
+                      Jeg giver <strong className="text-white/90">udtrykkeligt samtykke</strong> til tilbagevendende opkrævninger og automatisk fornyelse af abonnementet. Jeg accepterer, at der automatisk trækkes penge fra min betalingsmetode{
+                        pendingPlan.id === 'monthly'
+                          ? ' hver måned.'
+                          : ` ved udløb af den ${pendingPlan.bindDa.toLowerCase()}.`
+                      }
+                    </>
+                  ) : (
+                    <>
+                      I give <strong className="text-white/90">explicit consent</strong> to recurring charges and automatic renewal of the subscription. I accept that money will be automatically withdrawn from my payment method{
+                        pendingPlan.id === 'monthly'
+                          ? ' every month.'
+                          : ` at the end of the ${pendingPlan.bindEn.toLowerCase()}.`
+                      }
+                    </>
+                  )}
+                </span>
+              </label>
+
               <p className="text-[11px] text-white/25 leading-relaxed">
                 {language === 'da'
                   ? `Vilkårsversion: ${getCurrentTermsVersion()}. Dit samtykke logges med tidsstempel, IP-adresse og browser-oplysninger jf. Forbrugeraftaleloven §18-19.`
@@ -1507,6 +1538,7 @@ export function SubscriptionPlansPrompt() {
               onClick={() => {
                 setPendingPlan(null);
                 setAgreedToTerms(false);
+                setAgreedToAutoRenewal(false);
               }}
               disabled={startingTrial}
               className="border-white/15 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/25"
@@ -1515,7 +1547,7 @@ export function SubscriptionPlansPrompt() {
             </Button>
             <Button
               onClick={() => pendingPlan && handleConfirmConsent(pendingPlan)}
-              disabled={!agreedToTerms || startingTrial}
+              disabled={!agreedToTerms || !agreedToAutoRenewal || startingTrial}
               className="bg-[#0d9488] hover:bg-[#0f766e] text-white shadow-lg shadow-[#0d9488]/20"
             >
               {startingTrial ? (

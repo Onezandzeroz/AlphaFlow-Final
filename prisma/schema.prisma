@@ -232,6 +232,7 @@ enum PlanStatus {
 enum ConsentType {
   TERMS_OF_SERVICE // Generelle forretningsbetingelser
   RECURRING_BILLING // Samtykke til tilbagevendende opkrævninger
+  AUTO_RENEWAL // Udtrykkeligt samtykke til automatisk fornyelse (Forbrugeraftaleloven §18-19)
   PRIVACY_POLICY // Persondatapolitik
   MARKETING // Markedsførings-samtykke (GDPR Art. 7)
 }

@@ -20,8 +20,9 @@ import { getCurrentTermsVersion } from '@/lib/legal';
  * Request body (FASE 6):
  *   {
  *     planId: 'monthly' | 'annual' | '2year' | '3year',
- *     agreedToTerms: boolean,   // REQUIRED — must be true
- *     consentVersion: string,   // REQUIRED — must match CURRENT_TERMS_VERSION
+ *     agreedToTerms: boolean,         // REQUIRED — must be true
+ *     agreedToAutoRenewal: boolean,   // REQUIRED — must be true (explicit consent to recurring charges)
+ *     consentVersion: string,         // REQUIRED — must match CURRENT_TERMS_VERSION
  *   }
  *
  * Response: { checkoutUrl, paymentId }
@@ -47,9 +48,10 @@ export const POST = withGuard(
   async (request: NextRequest, ctx) => {
     try {
       const body = await request.json().catch(() => ({}));
-      const { planId, agreedToTerms, consentVersion } = body as {
+      const { planId, agreedToTerms, agreedToAutoRenewal, consentVersion } = body as {
         planId?: string;
         agreedToTerms?: boolean;
+        agreedToAutoRenewal?: boolean;
         consentVersion?: string;
       };
 
@@ -67,6 +69,19 @@ export const POST = withGuard(
           {
             error: 'Consent required. You must accept the terms before subscribing.',
             code: 'CONSENT_REQUIRED',
+          },
+          { status: 400 },
+        );
+      }
+
+      // FASE 6 — Explicit consent to recurring/automatic charges
+      // Required by Forbrugeraftaleloven §18-19 and Betalingsloven §100-102
+      // for automatic renewal of subscriptions.
+      if (!agreedToAutoRenewal) {
+        return NextResponse.json(
+          {
+            error: 'Auto-renewal consent required. You must consent to automatic recurring charges.',
+            code: 'AUTO_RENEWAL_CONSENT_REQUIRED',
           },
           { status: 400 },
         );
@@ -133,12 +148,21 @@ export const POST = withGuard(
           request,
           paymentId: payment.id,
         });
-        // Also record Terms-of-Service consent at the same time (the user
-        // accepted both in the same checkbox click)
+        // Also record Terms-of-Service consent (the user accepted both)
         await recordConsent({
           userId: ctx.id,
           companyId: ctx.activeCompanyId!,
           consentType: 'TERMS_OF_SERVICE',
+          consentVersion,
+          request,
+          paymentId: payment.id,
+        });
+        // Record explicit auto-renewal consent (Forbrugeraftaleloven §18-19,
+        // Betalingsloven §100-102 — separate consent for recurring charges)
+        await recordConsent({
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId!,
+          consentType: 'AUTO_RENEWAL',
           consentVersion,
           request,
           paymentId: payment.id,
