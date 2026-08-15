@@ -18,13 +18,18 @@
  * Background services started here (Node runtime only):
  *  - Backup scheduler    (Danish Bookkeeping Act / Bogføringsloven §15)
  *  - Recurring scheduler (automatic recurring purchase/invoice execution)
+ *  - Billing scheduler   (subscription-lifecycle reminder emails — FASE 6)
+ *  - Log monitor scheduler (daily AuditLog security scan, 06:00 Europe/Copenhagen
+ *    — required by Erhvervsstyrelsen compliance review, Krav 18, row 18)
  *
- * Both are idempotent — guarded by internal `_schedulerStarted` flags — so
+ * All are idempotent — guarded by internal `_schedulerStarted` flags — so
  * duplicate calls are safe.
  *
- * Both can be disabled via env vars:
+ * All can be disabled via env vars:
  *   - DISABLE_BACKUP_SCHEDULER=true
  *   - DISABLE_RECURRING_SCHEDULER=true
+ *   - DISABLE_BILLING_SCHEDULER=true
+ *   - DISABLE_LOG_MONITOR_SCHEDULER=true
  *
  * NOTE ON IMPORTS: ALL imports here are dynamic (inside register/unregister),
  * including `logger`. This is intentional — a static top-level import of
@@ -50,11 +55,16 @@ export async function register(): Promise<void> {
     // (pre-renewal reminders, expiry marking). Required by the bank's
     // payment-gateway compliance review.
     const { startBillingScheduler } = await import('@/lib/billing-scheduler');
+    // FIX-5 — log-monitor scheduler (daily AuditLog security scan at 06:00
+    // Europe/Copenhagen). Required by Erhvervsstyrelsen compliance review,
+    // Krav 18, row 18 ("Er der advarsler vedr. logs").
+    const { startLogMonitorScheduler } = await import('@/lib/log-monitor-scheduler');
 
     logger.info('[INSTRUMENTATION] Node.js runtime — initializing background services');
     startBackupScheduler();
     startRecurringScheduler();
     startBillingScheduler();
+    startLogMonitorScheduler();
     logger.info('[INSTRUMENTATION] Background services initialized successfully');
   } catch (error) {
     // Never let instrumentation failure crash the server boot. Background
@@ -74,11 +84,13 @@ export async function unregister(): Promise<void> {
     const { stopBackupScheduler } = await import('@/lib/backup-scheduler');
     const { stopRecurringScheduler } = await import('@/lib/recurring-scheduler');
     const { stopBillingScheduler } = await import('@/lib/billing-scheduler');
+    const { stopLogMonitorScheduler } = await import('@/lib/log-monitor-scheduler');
 
     logger.info('[INSTRUMENTATION] Server shutting down — stopping background services');
     stopBackupScheduler();
     stopRecurringScheduler();
     stopBillingScheduler();
+    stopLogMonitorScheduler();
   } catch (error) {
     // Best-effort cleanup — never let unregister throw during shutdown.
     console.error('[INSTRUMENTATION] Error during unregister:', error);

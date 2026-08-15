@@ -10,6 +10,7 @@ import { enrichTransactionsWithVAT } from '@/lib/vat-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { notifyDataChanges } from '@/lib/notify-data-change';
 import { VAT_RATE_MAP } from '@/lib/vat-codes';
+import { sealJournalEntry, sealTransaction, findClosedFiscalPeriod } from '@/lib/journal-hash-chain';
 
 // GET - Fetch all non-cancelled transactions for the logged-in user
 export const GET = withGuard({
@@ -229,6 +230,23 @@ export const POST = withGuard({
           : `Cannot record purchase — the following accounts are missing from the chart of accounts: ${missing.join(', ')}. Go to Chart of Accounts and click "Seed" to create the standard Danish chart.`;
         logger.error(`[PURCHASE] Prerequisite check failed for company ${ctx.activeCompanyId}: missing ${missing.join(', ')}`);
         return NextResponse.json({ error: msg }, { status: 400 });
+      }
+    }
+
+    // ─── Backdating prevention (Bogføringsloven §10-12, BEK 97 Bilag 1, 2, e) ───
+    // Transactions are created directly in their final state — there is no
+    // DRAFT→POSTED lifecycle for the Transaction itself, and PURCHASE
+    // transactions also create a POSTED JournalEntry. So we must verify the
+    // date is not inside a CLOSED FiscalPeriod before any record is written.
+    {
+      const closedPeriod = await findClosedFiscalPeriod(ctx.activeCompanyId!, new Date(date));
+      if (closedPeriod) {
+        return NextResponse.json(
+          {
+            error: `Kan ikke bogføre i en lukket periode (${closedPeriod.year}-${String(closedPeriod.month).padStart(2, '0')}). / Cannot post to a closed fiscal period (${closedPeriod.year}-${String(closedPeriod.month).padStart(2, '0')}).`,
+          },
+          { status: 400 }
+        );
       }
     }
 
@@ -466,7 +484,17 @@ export const POST = withGuard({
 
           await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, 'POSTED');
           logger.info(`[PURCHASE] Created journal entry ${je.id} for transaction ${newTx.id}: DR=${totalDebit}, CR=${totalCredit}, lines=${jeLines.length}, projectId=${effectiveProjectId || 'none'}`);
+
+          // Seal the paired JournalEntry into the hash chain (Bogføringsloven §10-12).
+          // The JournalEntry is the legally authoritative double-entry record.
+          await sealJournalEntry(tx, je.id, ctx.activeCompanyId!);
         }
+
+        // Seal the Transaction itself into its own hash chain. Transactions
+        // carry their own recordHash so an auditor can verify their integrity
+        // independently of the JournalEntry (e.g. SALE/BANK/SALARY transactions
+        // don't have a paired JournalEntry but are still bookkeeping records).
+        await sealTransaction(tx, newTx.id, ctx.activeCompanyId!);
 
         return newTx;
       });

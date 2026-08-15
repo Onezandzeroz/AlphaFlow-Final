@@ -8,6 +8,7 @@ import { withGuard } from '@/lib/route-guard';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { notifyDataChanges } from '@/lib/notify-data-change';
+import { sealJournalEntry, findClosedFiscalPeriod } from '@/lib/journal-hash-chain';
 
 // GET - List journal entries for the authenticated user
 export const GET = withGuard(
@@ -152,6 +153,23 @@ export const POST = withGuard(
         );
       }
 
+      // ─── Backdating prevention (Bogføringsloven §10-12, BEK 97 Bilag 1, 2, e) ───
+      // Reject posting into a CLOSED FiscalPeriod. DRAFT entries are allowed
+      // in closed periods (the user may still be composing) — only POSTED is
+      // blocked, because posting finalizes the entry into the books.
+      if (entryStatus === 'POSTED') {
+        const entryDate = new Date(date);
+        const closedPeriod = await findClosedFiscalPeriod(ctx.activeCompanyId!, entryDate);
+        if (closedPeriod) {
+          return NextResponse.json(
+            {
+              error: `Kan ikke bogføre i en lukket periode (${closedPeriod.year}-${String(closedPeriod.month).padStart(2, '0')}). / Cannot post to a closed fiscal period (${closedPeriod.year}-${String(closedPeriod.month).padStart(2, '0')}).`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+
       // Create journal entry inside a transaction to support atomic voucher number assignment
       const entry = await db.$transaction(async (tx) => {
         const je = await tx.journalEntry.create({
@@ -187,6 +205,15 @@ export const POST = withGuard(
 
         // Assign voucher number if the entry is created directly as POSTED
         await assignVoucherNumberIfPosted(tx, je.id, ctx.activeCompanyId!, entryStatus);
+
+        // Seal the entry into the hash chain (Bogføringsloven §10-12).
+        // Sealing happens AFTER voucher number assignment so the voucherNumber
+        // is included in the canonical hash input. The sealing UPDATE and
+        // the status=POSTED commit land in the same transaction, so an
+        // outside connection can never observe a "POSTED but unsealed" row.
+        if (entryStatus === 'POSTED') {
+          await sealJournalEntry(tx, je.id, ctx.activeCompanyId!);
+        }
 
         return je;
       });

@@ -731,3 +731,105 @@ export function termsChangeHtml(language: Language, data: TermsChangeData): stri
     : `You are receiving this email because you are an active ${APP_NAME} subscriber, and we are legally required to notify you of material changes to our terms.`
   );
 }
+
+// ─── NEMHANDEL REGISTRATION NOTICE EMAIL ───────────────────────────
+// Sent to (a) NEW customers at registration time, and (b) EXISTING customers
+// via a SuperDev batch-notify endpoint. Informs the customer that AlphaFlow
+// is a registered digital bookkeeping system with Erhvervsstyrelsen, and that
+// they may be enrolled in the NemHandelsregisteret to send/receive electronic
+// invoices via NemHandel / Peppol.
+//
+// Satisfies Bilag 2, Row 47 (Krav 8) — the system MUST notify customers about
+// the possibility of being registered in NemHandelsregisteret.
+// Satisfies Bilag 2, Row 48 (Krav 9) — the system MUST be able to show info
+// about NemHandelsregisteret enrollment at setup or via direct message.
+
+export interface NemHandelRegistrationNoticeData {
+  appUrl: string;             // base URL of the AlphaFlow app
+  settingsPath?: string;      // deep-link to e-invoice settings, default '/settings-edelivery'
+}
+
+export function nemhandelRegistrationNoticeHtml(
+  language: Language,
+  data: NemHandelRegistrationNoticeData
+): string {
+  const settingsUrl = `${data.appUrl}${data.settingsPath ?? '/settings-edelivery'}`;
+
+  const heading = language === 'da'
+    ? 'AlphaFlow er nu registreret som digitalt bogføringssystem'
+    : 'AlphaFlow is now a registered digital bookkeeping system';
+
+  const intro = language === 'da'
+    ? `Vi er glade for at kunne meddele, at <strong>${APP_NAME}</strong> er registreret som et digitalt standardbogføringssystem hos Erhvervsstyrelsen. Som en del af dette kan din virksomhed tilmeldes <strong>NemHandelsregisteret</strong>.`
+    : `We are pleased to announce that <strong>${APP_NAME}</strong> is now registered as a digital standard bookkeeping system with the Danish Business Authority (Erhvervsstyrelsen). As part of this, your business can be enrolled in the <strong>NemHandel Register</strong>.`;
+
+  const whatIsHeading = language === 'da'
+    ? 'Hvad er NemHandelsregisteret?'
+    : 'What is the NemHandel Register?';
+
+  const whatIsBody = language === 'da'
+    ? `NemHandelsregisteret gør det muligt for din virksomhed at <strong>modtage og afsende elektroniske fakturaer</strong> via NemHandel og det europæiske Peppol-netværk. Det er en standard for sikker, struktureret og automatisk udveksling af forretningsdokumenter (f.eks. e-fakturaer, kreditnotaer og ordrebekræftelser) mellem virksomheder og offentlige myndigheder.`
+    : `The NemHandel Register enables your business to <strong>receive and send electronic invoices</strong> via NemHandel and the European Peppol network. It is a standard for secure, structured, automatic exchange of business documents (e.g. e-invoices, credit notes and order confirmations) between businesses and public authorities.`;
+
+  const benefitsHeading = language === 'da' ? 'Fordele ved tilmelding' : 'Benefits of enrollment';
+  const benefits = language === 'da'
+    ? [
+        'Modtag e-fakturaer automatisk fra offentlige myndigheder og store virksomheder.',
+        'Afsend e-fakturaer direkte fra AlphaFlow via NemHandel/Peppol.',
+        'Færre manuelle trin, færre fejl og hurtigere betaling.',
+        'Overholder kommende krav til elektronisk fakturering til det offentlige.',
+      ]
+    : [
+        'Receive e-invoices automatically from public authorities and large enterprises.',
+        'Send e-invoices directly from AlphaFlow via NemHandel/Peppol.',
+        'Fewer manual steps, fewer errors and faster payment.',
+        'Comply with upcoming requirements for electronic invoicing to the public sector.',
+      ];
+
+  const benefitsHtml = benefits.map((b) =>
+    `<li style="margin:0 0 6px; padding-left:20px; position:relative; font-size:14px; color:${TEXT_DARK}; line-height:1.6;"><span style="position:absolute; left:0; color:${PRIMARY};">✓</span>${b}</li>`
+  ).join('');
+
+  const consentHeading = language === 'da'
+    ? 'Sådan tilmelder du dig'
+    : 'How to enroll';
+
+  const consentBody = language === 'da'
+    ? `Tilmelding er frivillig og kræver dit samtykke. Gå til <strong>Indstillinger → eLevering / eFaktura</strong> i AlphaFlow, aktivér e-fakturering, og marker at du ønsker tilmelding til NemHandelsregisteret. Når du har givet samtykke, håndterer AlphaFlow automatisk tilmeldingen via vores integrerede Storecove Access Point.`
+    : `Enrollment is voluntary and requires your consent. Go to <strong>Settings → e-Delivery / e-Invoice</strong> in AlphaFlow, enable e-invoicing, and mark that you wish to enroll in the NemHandel Register. Once you have given consent, AlphaFlow automatically handles the enrollment via our integrated Storecove Access Point.`;
+
+  const ctaText = language === 'da'
+    ? 'Gå til e-faktura-indstillinger'
+    : 'Go to e-invoice settings';
+
+  const legalNote = language === 'da'
+    ? `Denne meddelelse sendes i overensstemmelse med Erhvervsstyrelsens krav (Bilag 2, punkt 8) til registrerede digitale bogføringssystemer. Du kan til enhver tid til- eller afmelde dig NemHandelsregisteret fra indstillingerne.`
+    : `This notice is sent in accordance with the Danish Business Authority requirements (Bilag 2, item 8) for registered digital bookkeeping systems. You can enroll in or withdraw from the NemHandel Register at any time from the settings.`;
+
+  const content = `
+    <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:20px; font-weight:600;">${heading}</h2>
+    <p style="margin:0 0 20px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${intro}</p>
+
+    <div style="margin:0 0 20px; padding:16px 20px; background-color:${BG_LIGHT}; border:1px solid #ccfbf1; border-radius:8px;">
+      <p style="margin:0 0 8px; font-size:14px; font-weight:600; color:${PRIMARY_DARK};">${whatIsHeading}</p>
+      <p style="margin:0; font-size:13px; color:${TEXT_DARK}; line-height:1.6;">${whatIsBody}</p>
+    </div>
+
+    <h3 style="margin:0 0 10px; font-size:14px; font-weight:600; color:${TEXT_DARK};">${benefitsHeading}</h3>
+    <ul style="margin:0 0 20px; padding:0; list-style:none;">${benefitsHtml}</ul>
+
+    <h3 style="margin:0 0 10px; font-size:14px; font-weight:600; color:${TEXT_DARK};">${consentHeading}</h3>
+    <p style="margin:0 0 16px; font-size:14px; color:${TEXT_DARK}; line-height:1.6;">${consentBody}</p>
+
+    ${buttonHtml(settingsUrl, ctaText)}
+
+    <div style="margin:24px 0 0; padding:12px 16px; background-color:#f9fafb; border-left:3px solid ${PRIMARY}; border-radius:0 8px 8px 0;">
+      <p style="margin:0; font-size:12px; color:${TEXT_MUTED}; line-height:1.6;">${legalNote}</p>
+    </div>
+  `;
+
+  return wrapperHtml(content, language, language === 'da'
+    ? `Du modtager denne e-mail, fordi du er kunde hos ${APP_NAME}, og vi er forpligtet til at informere dig om muligheden for tilmelding til NemHandelsregisteret.`
+    : `You are receiving this email because you are a customer of ${APP_NAME}, and we are required to inform you about the possibility of enrollment in the NemHandel Register.`
+  );
+}

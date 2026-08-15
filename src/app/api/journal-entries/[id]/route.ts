@@ -5,8 +5,9 @@ import { VATCode } from '@prisma/client';
 import { logger } from '@/lib/logger';
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
-import { generateVoucherNumber } from '@/lib/voucher-number';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { notifyDataChanges } from '@/lib/notify-data-change';
+import { sealJournalEntry, findClosedFiscalPeriod } from '@/lib/journal-hash-chain';
 
 // GET - Get a single journal entry with lines
 export const GET = withGuard(
@@ -138,53 +139,86 @@ export const PUT = withGuard(
       if (reference !== undefined) updateData.reference = reference || null;
       if (status !== undefined) updateData.status = status;
 
-      // DRAFT → POSTED transition: assign voucher number atomically
+      // DRAFT → POSTED transition: assign voucher number + seal hash atomically
       const isDraftToPosted = existing.status === 'DRAFT' && status === 'POSTED';
-      if (isDraftToPosted && !existing.voucherNumber) {
-        const voucherNumber = await db.$transaction(async (tx) => {
-          const vNum = await generateVoucherNumber(tx, existing.companyId);
-          return vNum;
-        });
-        updateData.voucherNumber = voucherNumber;
+
+      // ─── Backdating prevention (Bogføringsloven §10-12, BEK 97 Bilag 1, 2, e) ───
+      // When transitioning to POSTED, the entry's date must not fall inside a
+      // CLOSED FiscalPeriod. Use the new date if provided, else the existing.
+      if (isDraftToPosted) {
+        const effectiveDate = date !== undefined ? new Date(date) : existing.date;
+        const closedPeriod = await findClosedFiscalPeriod(existing.companyId, effectiveDate);
+        if (closedPeriod) {
+          return NextResponse.json(
+            {
+              error: `Kan ikke bogføre i en lukket periode (${closedPeriod.year}-${String(closedPeriod.month).padStart(2, '0')}). / Cannot post to a closed fiscal period (${closedPeriod.year}-${String(closedPeriod.month).padStart(2, '0')}).`,
+            },
+            { status: 400 }
+          );
+        }
       }
 
-      // Update the entry
-      const entry = await db.journalEntry.update({
-        where: { id },
-        data: updateData,
-        include: {
-          lines: {
-            include: {
-              account: true,
+      // Wrap entry update + line replacement + (optional) voucher number
+      // assignment + hash sealing in a SINGLE transaction. This guarantees
+      // the hash covers the final committed state of the entry (including
+      // any line replacements) and that the sealing UPDATE can never be
+      // observed separately from the status=POSTED UPDATE by an outside
+      // connection.
+      const entry = await db.$transaction(async (tx) => {
+        // Assign voucher number atomically if DRAFT → POSTED.
+        // assignVoucherNumberIfPosted performs its own UPDATE on the entry.
+        if (isDraftToPosted) {
+          await assignVoucherNumberIfPosted(tx, existing.id, existing.companyId, 'POSTED');
+        }
+
+        // Apply the user-supplied field updates (date, description, reference, status).
+        // If isDraftToPosted, the status UPDATE is what flips DRAFT→POSTED in the row.
+        if (Object.keys(updateData).length > 0) {
+          await tx.journalEntry.update({
+            where: { id },
+            data: updateData,
+          });
+        }
+
+        // If lines are provided, replace all lines (delete old, create new)
+        if (lines && Array.isArray(lines)) {
+          await tx.journalEntryLine.deleteMany({
+            where: { journalEntryId: id },
+          });
+
+          await tx.journalEntryLine.createMany({
+            data: lines.map((l: { accountId: string; debit: number; credit: number; description?: string; vatCode?: string }) => ({
+              journalEntryId: id,
+              companyId: existing.companyId,
+              accountId: l.accountId,
+              debit: l.debit,
+              credit: l.credit,
+              description: l.description || null,
+              vatCode: (l.vatCode as VATCode | undefined) ?? null,
+            })),
+          });
+        }
+
+        // Seal the entry into the hash chain (Bogføringsloven §10-12).
+        // This MUST happen AFTER all other updates so the hash reflects the
+        // final committed state. Once recordHash is set, the DB trigger
+        // (prisma/journal-immutability.sql) blocks any further UPDATE.
+        if (isDraftToPosted) {
+          await sealJournalEntry(tx, id, existing.companyId);
+        }
+
+        // Re-fetch with updated lines + account relations for the response.
+        return tx.journalEntry.findUniqueOrThrow({
+          where: { id },
+          include: {
+            lines: {
+              include: {
+                account: true,
+              },
             },
           },
-        },
+        });
       });
-
-      // If lines are provided, replace all lines (delete old, create new)
-      if (lines && Array.isArray(lines)) {
-        await db.journalEntryLine.deleteMany({
-          where: { journalEntryId: id },
-        });
-
-        await db.journalEntryLine.createMany({
-          data: lines.map((l: { accountId: string; debit: number; credit: number; description?: string; vatCode?: string }) => ({
-            journalEntryId: id,
-            companyId: existing.companyId,
-            accountId: l.accountId,
-            debit: l.debit,
-            credit: l.credit,
-            description: l.description || null,
-            vatCode: (l.vatCode as VATCode | undefined) ?? null,
-          })),
-        });
-
-        // Re-fetch with updated lines
-        entry.lines = await db.journalEntryLine.findMany({
-          where: { journalEntryId: id },
-          include: { account: true },
-        });
-      }
 
       await auditUpdate(
         ctx.id,

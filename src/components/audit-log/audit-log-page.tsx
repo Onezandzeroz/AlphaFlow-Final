@@ -39,6 +39,7 @@ import {
 import { PageHeader } from '@/components/shared/page-header';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
 import { useDataVersion } from '@/hooks/use-data-version';
+import { SecurityAlertsPanel } from '@/components/audit-log/security-alerts-panel';
 import {
   Collapsible,
   CollapsibleContent,
@@ -486,6 +487,11 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
       <div className="text-sm text-gray-500 dark:text-gray-400">
         {total} {isDanish ? 'logposter i alt' : 'log entries total'}
       </div>
+
+      {/* Security Alerts Panel — automated log-monitor scan (Krav 18).
+          Surfaced at the top so admins see critical/high alerts before
+          scrolling through the raw AuditLog table. */}
+      <SecurityAlertsPanel />
 
       {/* Summary Stats */}
       {logs.length > 0 && (

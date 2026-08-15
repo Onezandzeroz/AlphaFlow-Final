@@ -32,12 +32,14 @@ import {
   paymentFailedHtml,
   preRenewalReminderHtml,
   termsChangeHtml,
+  nemhandelRegistrationNoticeHtml,
   type SubscriptionWelcomeData,
   type PaymentReceiptData,
   type SubscriptionCancelledData,
   type PaymentFailedData,
   type PreRenewalReminderData,
   type TermsChangeData,
+  type NemHandelRegistrationNoticeData,
 } from '@/lib/email-templates';
 
 // ─── TYPES ────────────────────────────────────────────────────────
@@ -59,7 +61,9 @@ export type EmailTemplate =
   | 'payment-failed'              // (f) failed payment notification
   | 'pre-renewal-reminder'        // (c) reminder before renewal/binding expiry
   | 'pre-billing-reminder'        // (b) reminder before trial → paid conversion
-  | 'terms-change-notice';        // (g)+(h) terms/service change notification
+  | 'terms-change-notice'         // (g)+(h) terms/service change notification
+  // Erhvervsstyrelsen compliance — NemHandel notification (Bilag 2, Row 47/48)
+  | 'nemhandel-registration-notice';
 
 interface SendEmailOptions {
   to: string;
@@ -618,6 +622,41 @@ export async function sendTermsChangeEmail(
       oldVersion: data.oldVersion,
       newVersion: data.newVersion,
       effectiveDate: data.effectiveDate,
+    },
+  });
+}
+
+// ─── NEMHANDEL REGISTRATION NOTICE ─────────────────────────────────
+// Erhvervsstyrelsen compliance — Bilag 2, Row 47 (Krav 8) + Row 48 (Krav 9).
+// Sent (a) automatically to NEW customers at registration time, and
+// (b) in batches to EXISTING customers via the SuperDev oversight endpoint
+// at /api/oversight/notify-nemhandel. Informs the customer that AlphaFlow
+// is a registered digital bookkeeping system, and that they can be enrolled
+// in NemHandelsregisteret to send/receive electronic invoices via NemHandel
+// and Peppol. The email contains a deep-link to the e-invoice settings page
+// where the customer can give consent to enrollment.
+
+export async function sendNemHandelNoticeEmail(
+  to: string,
+  data: NemHandelRegistrationNoticeData,
+  language: Language = 'da',
+  companyId?: string,
+  metadata?: Record<string, unknown>,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? 'AlphaFlow er nu registreret som digitalt bogføringssystem — tilmeld NemHandel'
+    : 'AlphaFlow is now a registered digital bookkeeping system — enroll in NemHandel';
+
+  return sendEmail({
+    to,
+    subject,
+    html: nemhandelRegistrationNoticeHtml(language, data),
+    template: 'nemhandel-registration-notice',
+    companyId,
+    metadata: {
+      appUrl: data.appUrl,
+      settingsPath: data.settingsPath ?? '/settings-edelivery',
+      ...metadata,
     },
   });
 }

@@ -208,6 +208,14 @@ function buildOIOUBLData(
     bankName?: string;
     bankAccount?: string;
     bankIban?: string | null;
+    // Document type distinguishes commercial invoices (INVOICE) from credit
+    // notes (CREDIT_NOTE). Credit notes must be transmitted as OIOUBL/Peppol
+    // type 381 (Credit note) — not 380 (Commercial invoice) — per Bilag 2,
+    // 1, c and Bilag 2, 2, c.
+    documentType?: string | null;
+    // For credit notes: the invoice number of the original invoice being
+    // credited. Surfaced in cac:BillingReference by the OIOUBL generator.
+    originalInvoiceNumber?: string | null;
   },
   company: {
     name: string;
@@ -241,7 +249,10 @@ function buildOIOUBLData(
     invoiceId: invoice.invoiceNumber,
     issueDate: invoice.issueDate.toISOString().slice(0, 10),
     dueDate: invoice.dueDate.toISOString().slice(0, 10),
-    invoiceTypeCode: '380',
+    invoiceTypeCode: invoice.documentType === 'CREDIT_NOTE' ? '381' : '380',
+    originalInvoiceNumber: invoice.documentType === 'CREDIT_NOTE'
+      ? (invoice.originalInvoiceNumber || undefined)
+      : undefined,
     supplier: {
       id: company.cvrNumber || 'DK00000000',
       name: company.name,
@@ -352,6 +363,8 @@ export async function queueEInvoiceSend(params: {
         total: true,
         currency: true,
         contactId: true,
+        documentType: true,
+        originalInvoiceId: true,
       },
     });
 
@@ -454,7 +467,33 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
     const sending = await db.eInvoiceSending.findUnique({
       where: { id: sendingId },
       include: {
-        invoice: true,
+        invoice: {
+          // Select only the fields needed for OIOUBL generation. Includes
+          // documentType + originalInvoice relation so credit notes are
+          // transmitted as type 381 with a cac:BillingReference.
+          // Note: the Invoice model has no bank* fields (those live on
+          // Company); buildOIOUBLData falls back to company.bankIban /
+          // company.bankAccount for paymentAccountId.
+          select: {
+            invoiceNumber: true,
+            customerName: true,
+            customerAddress: true,
+            customerEmail: true,
+            customerPhone: true,
+            customerCvr: true,
+            issueDate: true,
+            dueDate: true,
+            lineItems: true,
+            subtotal: true,
+            vatTotal: true,
+            total: true,
+            currency: true,
+            notes: true,
+            documentType: true,
+            originalInvoiceId: true,
+            originalInvoice: { select: { invoiceNumber: true } },
+          },
+        },
         company: {
           select: {
             id: true,
@@ -506,7 +545,14 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
     });
 
     // 4. Generate OIOUBL XML from invoice data
-    const invoiceData = buildOIOUBLData(sending.invoice, sending.company);
+    // For credit notes (documentType CREDIT_NOTE), resolve the original
+    // invoice's number from the originalInvoice relation so it can be
+    // surfaced in cac:BillingReference (OIOUBL type 381).
+    const invoiceInput = {
+      ...sending.invoice,
+      originalInvoiceNumber: sending.invoice.originalInvoice?.invoiceNumber ?? null,
+    };
+    const invoiceData = buildOIOUBLData(invoiceInput, sending.company);
     const xmlContent = generateOIOUBL(invoiceData);
 
     logger.info('[EINVOICE_SEND] Generated OIOUBL XML', {

@@ -426,6 +426,115 @@ Gå til **Kontoplan** i sidebjælken (`/accounts`) for at se, oprette, redigere 
 - **StandardMappingPanel** — kobler dine konti til FSR-standardkonti (til SAF-T eksport).
 - **PostingGuideAssistant** — søgbar dansk konteringsvejledning.
 
+#### 5.1.1 Bogføringsguide og konteringsvejledning (PostingGuideAssistant)
+
+AlphaFlow indeholder en **indbygget bogføringsguide** i Kontoplan-siden, der hjælper virksomheden med at bogføre korrekt og vælge den rette konto ved hver postering. Funktionen opfylder Erhvervsstyrelsens krav **Bilag 2, 5, a–c** (række 39–41 i gennemgangen) og består af tre dele:
+
+1. **Indbygget søgbar konteringsvejledning** (Bilag 2, 5, a) — en søgbar videnbase med standard danske bogføringsregler.
+2. **Reference til officiel 3.-partskonteringsvejledning** (Bilag 2, 5, b) — links til Skattestyrelsen, Retsinformation og Økonomistyrelsen.
+3. **Brugerdefineret konteringsvejledning pr. konto** (Bilag 2, 5, c) — et fritekstfelt `postingGuide` på hver konto, som virksomheden selv udfylder.
+
+Du åbner bogføringsguiden ved at gå til **Kontoplan** i sidebjælken (`/accounts`) og klikke på fanen **Bogføringsguide** (eller **Posting Guide** i den engelske grænseflade). Fanen er mærket med en `Lightbulb`-ikon.
+
+> **Skærmbillede:** ![PostingGuideAssistant — søgning og konteringsforslag](./screenshots/posting-guide-assistant-search.png)
+> *(Vil blive indsat ved produktionsgennemgang)*
+
+##### a) Indbygget bogføringsguide/assistent (Bilag 2, 5, a — Krav 39)
+
+Komponenten `PostingGuideAssistant` (`src/components/chart-of-accounts/posting-guide-assistant.tsx`) er en indbygget assistent, der viser de mest almindelige danske bogføringsregler. Den indeholder en konstant `POSTING_RULES` med fire kategorier:
+
+| Kategori (DA) | Nøgle | Antal regler | Eksempler på bogføringsregler |
+|---------------|-------|--------------|-------------------------------|
+| **Salg og indtægter** | `salg` | 4 | Kontantsalg (25 % moms), Salg på kredit (25 % moms), EU-salg (IGS, 0 % moms), Tjenesteydelsessalg |
+| **Indkøb og udgifter** | `indkob` | 4 | Indkøb af varer (25 % moms), Lønudbetaling, Husleje, EU-indkøb (omvendt betalingspligt) |
+| **Momsafregning** | `moms` | 2 | Momsafregning — netto til betaling, Momsafregning — refusion |
+| **Årsafslutning** | `period` | 2 | Årsafslutning — resultat, Årets resultat → Overført resultat |
+
+Hver regel vises som et T-diagram med:
+
+- **Debetkonto** (kontonummer + kontonavn, f.eks. `1100 — Bankkonto`) i en grøn boks.
+- **Kreditkonto** (kontonummer + kontonavn, f.eks. `1000 — Salg af varer/ydelser`) i en rød boks.
+- **Beskrivelse** af, hvornår reglen anvendes (f.eks. *"Ved salg af varer kontant. Debet bank, kredit salgsindtægt + udgående moms."*).
+
+Brugeren kan enten **søge** efter en regel via et fritekstsøgefelt eller **browse** kategorierne ved at klikke på dem (collapsible Cards med `ChevronRight`-ikon der roterer ved åbning). Søgningen matcher mod titel (DA/EN), beskrivelse (DA/EN) og debit-/kreditkontonavn, så man f.eks. kan skrive *"moms"*, *"løn"* eller *"EU"* og få de relevante konteringsregler frem.
+
+Videnbasen er baseret på Bogføringsloven (BEK 1331) og standard dansk regnskabspraksis. Det fremgår direkte af grænsefladens infoboks, at *"Denne guide indeholder de mest almindelige bogføringsregler for dansk regnskab. Den er baseret på Bogføringsloven (BEK 1331) og standard dansk regnskabspraksis."*
+
+> **Skærmbillede:** ![PostingGuideAssistant — POSTING_RULES kategorier med T-diagram](./screenshots/posting-guide-assistant-categories.png)
+> *(Vil blive indsat ved produktionsgennemgang — viser de fire kategorier udfoldet med debet/kredit-konti og beskrivelser)*
+
+**Filreferencer:**
+- Komponent: `src/components/chart-of-accounts/posting-guide-assistant.tsx` (konstanterne `POSTING_RULES` og komponenten `PostingGuideAssistant`).
+- Integration i kontoplan-side: `src/components/chart-of-accounts/chart-of-accounts-page.tsx` (fanen `guide` renderer `<PostingGuideAssistant user={user} />`).
+
+##### b) Konteringsvejledning og link til 3. part (Bilag 2, 5, b — Krav 40)
+
+Systemet indeholder to typer af konteringsvejledning, der tilsammen opfylder kravet:
+
+**1. Indbygget konteringsvejledning i standardkontoplanen.** Den Fællesoffentlige Standardkontoplan (`PUBLIC_STANDARD_CHART` i `src/lib/standard-chart-of-accounts.ts`) er Skats og Økonomistyrelsens officielle standardkontoplan. Hver standardkonto har et indbygget `description`-felt (på dansk) samt et engelsk navn (`nameEn`) og forslag til tilsvarende FSR-konti (`suggestedFSR`). Eksempelvis er konto `5610 — Momsgæld til Skattestyrelsen` beskrevet som *"Skyldig udgående moms til Skattestyrelsen (netto)"*. Standardkontoplanen omfatter konti fordelt på driftsomkostninger (0xxx), driftsindtægter (1xxx), varelager/vareforbrug (2xxx), aktiver (3xxx), gæld (4xxx), egenkapital (5xxx), finansielle poster (6xxx), skat og moms (7xxx), årsafslutning (8xxx) og statistiske konti (9xxx).
+
+**2. Links til officielle 3.-partskilder.** PostingGuideAssistant-komponenten indeholder en konstant `SKAT_REFERENCES` med direkte links til de officielle danske konteringsvejledninger. Links vises i et dedikeret kort mærket *"Officiel konteringsvejledning (3. part)"* med `ExternalLink`-ikoner, og åbner i en ny fane (`target="_blank"`, `rel="noopener noreferrer"`):
+
+| Titel | URL | Beskrivelse |
+|-------|-----|-------------|
+| Bogføringsloven (Bek. 1331) | `https://www.retsinformation.dk/eli/lta/2023/1331` | Lov om bogføring af visse erhvervsdrivende |
+| Bekendtgørelse om standard bogføringssystemer (BEK 98) | `https://www.retsinformation.dk/eli/lta/2023/98` | Krav til godkendelse af standard bogføringssystemer |
+| SKAT — Moms | `https://skat.dk/moms` | Skattestyrelsens momsguide |
+| Fællesoffentlig Standardkontoplan | `https://www.oesta.dk/standardkontoplan` | Økonomistyrelsens standardkontoplan for den offentlige sektor |
+
+> **Skærmbillede:** ![PostingGuideAssistant — officiel 3.-partskonteringsvejledning (SKAT/Retsinformation/Økonomistyrelsen)](./screenshots/posting-guide-assistant-skat-references.png)
+> *(Vil blive indsat ved produktionsgennemgang — viser kortet med de fire officielle referencelinks)*
+
+**Filreferencer:**
+- Standardkontoplan med indbyggede beskrivelser: `src/lib/standard-chart-of-accounts.ts` (konstanten `PUBLIC_STANDARD_CHART`, type `StandardAccount`).
+- 3.-partslinks: `src/components/chart-of-accounts/posting-guide-assistant.tsx` (konstanten `SKAT_REFERENCES`).
+
+##### c) Brugerdefineret konteringsvejledning pr. konto (Bilag 2, 5, c — Krav 41)
+
+Hver konto i AlphaFlows kontoplan har et fritekstfelt `postingGuide`, hvor virksomheden selv kan indtaste en konteringsvejledning for netop den konto. Feltet er implementeret som en nullable tekstkolonne i Prisma-modellen `Account`:
+
+```prisma
+model Account {
+  // ...
+  postingGuide         String? // Brugerdefineret konteringsvejledning per konto
+  // ...
+}
+```
+
+I brugergrænsefladen (`src/components/chart-of-accounts/chart-of-accounts-page.tsx`) er feltet tilgængeligt i både oprettelses- og redigeringsdialogen for en konto, under et `Label` mærket *"Konteringsvejledning"* med underteksten *"(Krav N18)"*. Feltet er en `Textarea` med tre linjer og pladsholder-teksten:
+
+> *"Tilføj konteringsvejledning for denne konto. F.eks.: "Bruges til salg af ydelser indenlands med 25% moms""*
+
+Hjælpeteksten under feltet forklarer: *"Denne vejledning vises ved bogføring for at hjælpe brugeren med at vælge den rigtige konto."* Virksomheden kan altså tilføje specifikke interne retningslinjer, f.eks.:
+
+- *"Vi bogfører altid kontorartikler på 4630 med momskode K25."*
+- *"Bankgebyrer bogføres her — aldrig på 9100."*
+- *"Kun EU-salg til CVR-registrerede kunder — ellers bruges 4100."*
+
+**Persistering og sikkerhed.** Feltet gemmes via to API-endpoints, begge beskyttet af `withGuard`-middlewaren (`auth: true`, `requireCompany: true`, `blockOversight: true`, `blockDemo: true`, `requireTokenPay: true`, `permissions: [Permission.DATA_EDIT]`):
+
+1. **PUT `/api/accounts/[id]`** (`src/app/api/accounts/[id]/route.ts`) — generel konto-opdatering, der accepterer `postingGuide` som et af felterne sammen med `name`, `type`, `group`, `description`, `isActive` osv. Linje 73: `if (postingGuide !== undefined) updateData.postingGuide = postingGuide || null;`
+2. **PUT `/api/accounts/posting-guide`** (`src/app/api/accounts/posting-guide/route.ts`) — dedikeret endpoint til kun at opdatere `postingGuide` på en enkelt konto. Modtager `{ accountId, postingGuide }`, verificerer at kontoen tilhører den aktive tenant (`tenantFilter(ctx)`), opdaterer feltet og skriver en detaljeret audit-logpost via `auditUpdate(...)` med både før- og efter-værdi af `postingGuide`.
+
+Begge endpoints validerer tenant-ejerskab (én virksomheds brugere kan ikke ændre andres konti) og ændringerne logges i den uforanderlige revisionslog (se Bilag 04 afsnit 6).
+
+> **Skærmbillede:** ![Per-konto konteringsvejledning — redigering i Kontoplan-dialogen](./screenshots/posting-guide-per-account-editor.png)
+> *(Vil blive indsat ved produktionsgennemgang — viser "Konteringsvejledning"-Textarea-feltet i konto-redigeringsdialogen med pladsholder-eksempel)*
+
+**Filreferencer:**
+- Prisma-model: `prisma/schema.prisma` (model `Account`, felt `postingGuide String?`).
+- Frontend-editor: `src/components/chart-of-accounts/chart-of-accounts-page.tsx` (Textarea med `id={`${mode}-postingGuide`}`).
+- Generel opdaterings-API: `src/app/api/accounts/[id]/route.ts` (PUT — håndterer `postingGuide` blandt andre felter).
+- Dedikeret posting-guide API: `src/app/api/accounts/posting-guide/route.ts` (PUT — kun `postingGuide`).
+
+##### Krav-opfyldelse
+
+| Krav | Opfyldt via | Fil-reference |
+|------|-------------|---------------|
+| Bilag 2, 5, a — indbygget bogføringsguide/assistent | `PostingGuideAssistant`-komponenten med indbygget `POSTING_RULES`-videnbase (4 kategorier, 12 standardregler) og søgefunktion | `src/components/chart-of-accounts/posting-guide-assistant.tsx` |
+| Bilag 2, 5, b — konteringsvejledning / link til 3. part | `PUBLIC_STANDARD_CHART` (indbyggede kontobeskrivelser) + `SKAT_REFERENCES` med 4 officielle links (Retsinformation, SKAT, Økonomistyrelsen) | `src/lib/standard-chart-of-accounts.ts`, `src/components/chart-of-accounts/posting-guide-assistant.tsx` |
+| Bilag 2, 5, c — egen konteringsvejledning pr. konto | `Account.postingGuide`-kolonnen (Prisma) + Textarea-editor i konto-dialogen + PUT-endpoints med tenant-guard og audit-log | `prisma/schema.prisma`, `src/components/chart-of-accounts/chart-of-accounts-page.tsx`, `src/app/api/accounts/[id]/route.ts`, `src/app/api/accounts/posting-guide/route.ts` |
+
 ### 5.2 Finansjournal (dobbelt bogføring)
 
 Den finansielle journal (`/journal`) er AlphaFlows kerne-bogføringsmodul. En journalpost består af mindst to linjer — en debet og en kredit — der tilsammen balancerer.
@@ -1517,6 +1626,51 @@ Følgende præferencer synkroniseres på tværs af enheder via `/api/user/prefer
 - `expandedSections` (sidebar accordion tilstand) — debounced sync.
 - `dashboardWidgets` (widget synlighed, størrelse, kolonne-position).
 - `sidebarPrefs`.
+
+### 16.11 NemHandel-notifikation til kunder
+
+AlphaFlow er registreret som digitalt standardbogføringssystem hos Erhvervsstyrelsen. Som led i compliance-kravene (Bilag 2, punkt 8 og 9) informerer systemet automatisk både nye og eksisterende kunder om muligheden for tilmelding til **NemHandelsregisteret** (modtag/afsend e-fakturaer via NemHandel og Peppol).
+
+**Nye kunder (Bilag 2, punkt 8):**
+
+Når en ny bruger opretter en konto (`POST /api/auth/register`), udsendes automatisk en `nemhandel-registration-notice`-e-mail umiddelbart efter verifikations-e-mailen. Forsendelsen er fire-and-forget (blokerer ikke registrationen) og logges i `EmailLog` og `AuditLog`. Implementeret i `src/lib/nemhandel-notification.ts` (`notifyNewCustomerAboutNemHandel`) og trigget i `src/app/api/auth/register/route.ts`.
+
+**Eksisterende kunder (Bilag 2, punkt 8 og 9):**
+
+App Ejer (SuperDev) kan batch-udsende samme notifikation til alle eksisterende aktive virksomheders OWNER via:
+
+```
+POST /api/oversight/notify-nemhandel
+Body (valgfrit): { "companyIds": ["<id>", ...] }
+Svar: { "success": true, "notified": N, "attempted": N, "skipped": N }
+```
+
+- Udelades `companyIds`, kontaktes alle aktive ikke-demo virksomheder med en OWNER.
+- Endpointet er rate-limitet til 1 kald/minut for at forhindre utilsigtede dobbeltudsendelser.
+- Hver individuel forsendelse logges i `AuditLog` (action `CREATE`, entityType `Company`, metadata `type=nemhandel_registration_notice_sent`) og i `EmailLog`.
+
+**In-app notifikationsbanner (Bilag 2, punkt 9):**
+
+På Indstillinger → eLevering / eFaktura (`/settings-edelivery`) vises et afviseligt banner (`NemHandelRegistrationNotice` i `src/components/settings/nemhandel-registration-notice.tsx`) for virksomheder hvor `einvoiceEnabled === false`. Banneret:
+
+- Forklarer hvad NemHandelsregisteret er, og fordelene ved tilmelding.
+- Har en CTA-knap der dybdekæder til e-faktureringsopsætningen.
+- Kan afvises pr. virksomhed (localStorage-nøgle `nemhandel-notice-dismissed-{companyId}`).
+- Genvises automatisk hvis e-fakturering deaktiveres igen.
+
+**Samtykke- og tilmeldingsflow (Bilag 2, punkt 9):**
+
+Kunden tilmelder sig frivilligt ved at:
+
+1. Gå til **Indstillinger → eLevering / eFaktura**.
+2. Aktivere e-fakturering (toggle).
+3. Udfylde endpoint-ID (CVR-baseret, scheme 0184), vælge standardkanal (NemHandel eller Peppol BIS Billing 3.0).
+4. Forbinde Storecove Access Point (API-nøgle + legal entity ID).
+5. Markere at virksomheden ønsker tilmelding til NemHandelsregisteret og give samtykke.
+
+Når samtykket er givet, håndterer AlphaFlow automatisk tilmeldingen via den integrerede Storecove Access Point (`src/lib/einvoice-sender.ts` → `registerNemHandel()`). Se også afsnit 16.3 (E-faktura).
+
+> **Henvisning:** Kravene er defineret i Bilag 2 (Erhvervsstyrelsen Gennemgang) række 47 (Krav 8) og række 48 (Krav 9).
 
 ---
 

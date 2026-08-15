@@ -96,7 +96,7 @@ Lov om bogføring § 3 stiller krav om, at regnskabssystemet skal være egnet ti
 | Krav | Status | Implementering |
 |------|--------|----------------|
 | Komplet bogføring | ✅ Opfyldt | Alle erhvervsmæssige transaktioner bogføres via journalposter med linjer, bilagsreference, dato og konti. |
-| Beskyttelse mod ændring | ✅ Opfyldt (med begrænsning) | Se BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) nedenfor for 3-niveau immutability på audit-log. **Vigtig begrænsning:** ingen kryptografisk hash-chain på selve posteringerne (ingen `previousHash`/`hash`-felter på `JournalEntry` eller `Transaction`). Immutability håndhæves via AuditLog + PostgreSQL-triggers, **ikke** via kryptografisk kæde mellem posteringer. |
+| Beskyttelse mod ændring | ✅ Opfyldt | Se BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) nedenfor for 3-niveau immutability på audit-log. **Kryptografisk hash-chain på selve posteringerne** (`JournalEntry` og `Transaction`): se afsnit 2.10 for SHA-256 chain via `recordHash`/`previousHash` + DB-triggers der blokerer UPDATE/DELETE på forseglede rækker. Immutability håndhæves nu på **begge** niveauer: AuditLog + posteringernes egen hash-chain. |
 | Sporing af ændringer | ✅ Opfyldt | AuditLog med before/after-changes, IP, User-Agent, tidsstempel. |
 
 ### 2.3 BEK 97 Bilag 1 / Lov om bogføring §13 — Uforanderlighed / uforkortethed (5-års opbevaring)
@@ -120,9 +120,9 @@ AlphaFlow implementerer en **3-niveau immutability-strategi** på AuditLog-tabel
 | **Journalposter (POSTED)** | Annulleres med modpostering + årsagsangivelse (status `CANCELLED`). Original post bevares. | Soft-delete via modpostering opfylder BEK 97 Bilag 1s princip om uforanderlighed. |
 | **Fakturaer** | Annulleres med status `CANCELLED`, slettes ikke. | Samme princip. |
 
-**Hvad der IKKE findes (vigtig åbenhed):**
+**Hvad der tidligere IKKE fandtes (nu udbedret — se afsnit 2.10):**
 
-- **Ingen kryptografisk hash-chain** på `JournalEntry` eller `Transaction` — ingen `previousHash`, `hash`, `locked`, `immutable` eller `version`-felter på disse modeller. Immunitet håndhæves alene via AuditLog + DB-triggers, ikke via kryptografisk sammenkædning af posteringer.
+- ~~**Ingen kryptografisk hash-chain** på `JournalEntry` eller `Transaction`~~ → **Udbedret:** SHA-256 hash-chain med `recordHash`/`previousHash`/`hashedAt`-felter på begge modeller, sealing ved POSTED-transition, DB-triggers der blokerer UPDATE/DELETE på forseglede rækker, og auditor-endpoint `/api/journal-entries/verify-integrity`. Se afsnit 2.10 for detaljer.
 - **Ingen separate `deletedAt`/`retentionUntil`-felter** på regnskabsmodeller — soft-delete markeres via status-felter (`CANCELLED`, `deactivatedAt`).
 
 ### 2.4 BEK 97 §3 + §7 — Backup og opbevaring (5 år) (udstedt i medfør af Lov om bogføring §15)
@@ -181,6 +181,122 @@ BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om b
 | Tenant-eksport med filer | `POST /api/export-tenant` — GUID per eksport (`crypto.randomUUID()`), format-version `alphaflow-portable-v2`, compliance-metadata (Bogføringsloven BEK 98, 5-års retention), SHA-256 data-integrity checksum. |
 | Eksport-historik | `GET /api/company/export-info` — total eksporter, seneste eksport, datavolumen, audit-entries med GUIDs og checksums. |
 | Audit-trail | Alle eksporter logges uforanderligt i AuditLog. |
+
+### 2.10 Kryptografisk hash-chain på bogførte posteringer
+
+**Opfylder:** Bilag 1, 2, e + Bilag 1, 4, a (Rows 11, 15 — BEK 97 Bilag 1: "bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes").
+
+Tidligere (se afsnit 2.2 og 2.3) blev immutability alene håndhævet via AuditLog + PostgreSQL-triggers på `AuditLog`-tabellen — ikke på selve posteringerne. Erhvervsstyrelsen bemærkede, at en kompromitteret DB-forbindelse teknisk set kunne mutere bogførte posteringer direkte i DB'en uden hash-detektion. Dette er nu udbedret med en fuld kryptografisk SHA-256 hash-chain på `JournalEntry` og `Transaction`.
+
+#### 2.10.1 Design — SHA-256 chain via `previousHash`
+
+Hver `JournalEntry` (med `status = 'POSTED'`) og hver `Transaction` bærer nu tre felter:
+
+| Felt | Type | Beskrivelse |
+|------|------|-------------|
+| `recordHash` | `String?` | SHA-256 hash af posteringens kanoniske repræsentation (dato, beskrivelse, reference, bilagsnr, linjer) konkateneret med `previousHash`. NULL indtil posteringen bogføres. |
+| `previousHash` | `String?` | Den forrige bogførte postering's `recordHash` — kædemarkør. NULL for den første postering i kæden. |
+| `hashedAt` | `DateTime?` | Tidsstempel for hvornår hash'en blev beregnet (audit-spor). |
+
+Kæden er per-tenant: hver virksomhed har sin egen uafhængige kæde. At gå kæden igjen lader en revisor detektere **enhver** mutation af en bogført postering (fordi rekalkulation af hash'en fra aktuelle DB-felter ikke matcher den lagrede `recordHash`) eller **omsortering/indsættelse** (fordi `previousHash` ikke matcher den forrige postering's `recordHash`).
+
+Den kanoniske hash-input er deterministisk:
+
+```
+canonical = previousHash + '|' + ISO(date) + '|' + description + '|' + reference + '|' + voucherNumber + '|' +
+            sorted(lines by accountId+debit+credit).map(l => accountId+':'+debit.toFixed(2)+':'+credit.toFixed(2)+':'+vatCode).join('||')
+recordHash = SHA-256(canonical, UTF-8) → hex string
+```
+
+Beløb normaliseres til 2 decimaler (`100` og `100.00` hasher identisk). Linjer sorteres efter (accountId, debit, credit) så rækkefølge-omrokering ikke ændrer hash'en.
+
+**Filkilder:** `src/lib/journal-hash-chain.ts` (computeEntryHash, computeTransactionHash, sealJournalEntry, sealTransaction, verifyJournalEntryIntegrity, verifyTenantChainIntegrity, findClosedFiscalPeriod). `prisma/schema.prisma` linje 547-552 (Transaction) og 787-792 (JournalEntry).
+
+#### 2.10.2 Sealing — når posteringen bogføres
+
+Sealing (beregn + lagre hash) sker **inde i den samme `db.$transaction`** der sætter status til POSTED. Det betyder, at en ekstern DB-forbindelse aldrig kan observere en "POSTED men uforseglet" række — COMMIT gør begge synlige atomisk.
+
+| Flow | Hvor sealing kaldes |
+|------|---------------------|
+| POST `/api/journal-entries` (status=POSTED direkte) | Efter `assignVoucherNumberIfPosted`, før transaction-commit |
+| PUT `/api/journal-entries/[id]` (DRAFT→POSTED) | Efter `assignVoucherNumberIfPosted` og eventuel linje-erstatning, før transaction-commit |
+| POST `/api/transactions` (PURCHASE → opretter parret JournalEntry POSTED) | Efter `assignVoucherNumberIfPosted` på den parrede JournalEntry; Transaction selv forsegles også med `sealTransaction` |
+
+**Filkilder:** `src/app/api/journal-entries/route.ts` (POST, linje 209-216), `src/app/api/journal-entries/[id]/route.ts` (PUT, linje 202-208), `src/app/api/transactions/route.ts` (POST, linje 488-497).
+
+#### 2.10.3 Tilbagedaterings-beskyttelse (lukkede perioder)
+
+Før sealing kontrollerer API-ruterne, om posteringens dato falder inden for en **CLOSED** `FiscalPeriod`. Hvis ja, afvises anmodningen med HTTP 400 og en bilingual fejlmeddelelse:
+
+> "Kan ikke bogføre i en lukket periode (YYYY-MM). / Cannot post to a closed fiscal period (YYYY-MM)."
+
+| Rute | Hvor checken udføres |
+|------|---------------------|
+| POST `/api/journal-entries` (kun når `entryStatus === 'POSTED'`) | `findClosedFiscalPeriod()` før `db.$transaction` |
+| PUT `/api/journal-entries/[id]` (kun ved DRAFT→POSTED) | `findClosedFiscalPeriod()` med ny dato eller eksisterende dato |
+| POST `/api/transactions` (alle typer — Transaction oprettes altid final, og PURCHASE opretter POSTED JournalEntry) | `findClosedFiscalPeriod()` før `db.$transaction` |
+
+DRAFT-journalposter må godt have en dato i en lukket periode (brugeren komponerer stadig) — kun POSTED blokeres, fordi bogføring finaliserer posteringen i regnskabet.
+
+**Filkilde:** `src/lib/journal-hash-chain.ts` — `findClosedFiscalPeriod(companyId, entryDate)`.
+
+#### 2.10.4 Database-level immutability triggers
+
+Selvom hash-chain'en detekterer mutation efter fact, forhindrer PostgreSQL-triggers direkte mutation af forseglede rækker. Trigger-designet:
+
+| Trigger | Tabel | Betingelse for block | Undtagelse (allow) |
+|---------|-------|----------------------|---------------------|
+| `prevent_journal_entry_update_sealed` | `JournalEntry` | `OLD.status = 'POSTED' AND OLD.recordHash IS NOT NULL` | UPDATE hvor `OLD.status != 'POSTED'` (DRAFT-redigering) eller `OLD.recordHash IS NULL` (sealing-update i samme transaction) |
+| `prevent_journal_entry_delete_sealed` | `JournalEntry` | `OLD.status = 'POSTED'` | DELETE af DRAFT-rækker tillades |
+| `prevent_transaction_update_sealed` | `Transaction` | `OLD.recordHash IS NOT NULL` | Før sealing (kun i oprettelses-transaction) |
+| `prevent_transaction_delete_sealed` | `Transaction` | `OLD.recordHash IS NOT NULL` | Unsealed transactions (sjældent — kun ved oprettelsesfejl) |
+
+**Design-beslutning:** Triggeren tillader UPDATE på POSTED-rækker **mens** `recordHash IS NULL`. Dette vindue eksisterer kun inde i posting-transactionen (CREATE → assignVoucherNumber → sealJournalEntry → COMMIT). Udefra ses aldrig en "POSTED men uforseglet" række, fordi isolation-level READ COMMITTED (default) skjuler uforanskede transaktioner. Når først `recordHash` er sat (efter sealing-UPDATE), blokeres alle yderligere UPDATEs og DELETEs — selv af en DBA eller kompromitteret forbindelse.
+
+**Deployment:** `psql $DATABASE_URL -f prisma/journal-immutability.sql` (idempotent — `CREATE OR REPLACE FUNCTION` + `DROP TRIGGER IF EXISTS`).
+
+**Verifikation:**
+```sql
+SELECT tgname, tgrelid::regclass, tgtype
+FROM pg_trigger
+WHERE tgname IN (
+  'prevent_journal_entry_update_sealed',
+  'prevent_journal_entry_delete_sealed',
+  'prevent_transaction_update_sealed',
+  'prevent_transaction_delete_sealed'
+);
+-- Forventet: 4 rækker
+```
+
+**Filkilde:** `prisma/journal-immutability.sql`.
+
+#### 2.10.5 Verifikations-endpoint for revisorer
+
+Revisorer og brugere med `DATA_READ`-permission kan køre en fuld kæde-verifikation via:
+
+```
+GET /api/journal-entries/verify-integrity
+```
+
+Endpointet:
+- Gennemgår alle POSTED journalposter for den aktive tenant, sorteret efter `hashedAt ASC`.
+- For hver postering: (1) re-kalkulerer hash fra aktuelle DB-felter + forrige postering's `recordHash`, (2) sammenligner med den lagrede `recordHash`, (3) verificerer at `previousHash`-feltet matcher den forrige postering's `recordHash`.
+- Returnerer en rapport: `{ totalChecked, valid, broken, brokenEntries: [{ entryId, voucherNumber, date, reason }] }`.
+- Rate-limited 2/min/user (tung forespørgsel).
+- Audit-logger selve verifikations-kørslen (action: `OVERSIGHT`, metadata: `type=hash_chain_verification` + resultater) — så der er et tamper-evident spor af HVIS kørte revisionen og HVORNÅR.
+
+**Filkilde:** `src/app/api/journal-entries/verify-integrity/route.ts`.
+
+#### 2.10.6 Compliance-opfyldelse
+
+| Krav (Bilag 1, Row) | Opfyldt gennem |
+|----------------------|----------------|
+| Bilag 1, 2, e — "bogførte transaktioner ikke kan ændres" | SHA-256 hash-chain (recordHash/previousHash) + DB-triggers (prevent_*_update_sealed) |
+| Bilag 1, 2, e — "tilbagedateres" | `findClosedFiscalPeriod()` check i alle POSTED-ruter |
+| Bilag 1, 2, e — "slettes" | DB-triggers (prevent_*_delete_sealed) + soft-delete via modpostering (status=CANCELLED) |
+| Bilag 1, 4, a — detektering af mutation | `verifyTenantChainIntegrity()` + `/api/journal-entries/verify-integrity` endpoint |
+
+**Status:** ✅ Opfyldt (krav 11, 15 — Bogføringsloven §10-12, BEK 97 Bilag 1, 2, e).
 
 ---
 
@@ -548,6 +664,67 @@ Se afsnit 2.3 for fuld beskrivelse af 3-niveau immutability-strategien (applikat
 | `EmailLog` | Udsendte e-mails (modtager, emne, body-hash, status). |
 | `CronExecution` | Backup-cron udførelser (start, slut, status, fejlmeddelelse). |
 | `BankConnectionSync` | Bank-synkroniseringshistorik pr. BankConnection. |
+
+### 6.8 Log-overvågning og incident response
+
+Erhvervsstyrelsen anmodede (række 18) om en præcisering af fire forhold vedrørende logningen: **hvem** der står for logning, **hvor ofte** loggene gennemgås, om der udløses **advarsler**, og hvilket **beredskab** der er ved brud. Nedenstående dokumenterer AlphaFlow Consult ApS' proces.
+
+#### 6.8.1 Ansvar for logning (Hvem)
+
+| Rolle | Ansvar |
+|-------|--------|
+| **AlphaAI Consult ApS (SuperDev / systemadministrator)** | Overordnet ansvar for overvågning og gennemgang af AuditLoggen. SuperDev har read-only adgang på tværs af tenants via oversight-tilstand og har fuldt ejerskab i egen virksomhed. |
+| **Virksomhedsadministrator (ADMIN-rolle)** | Kan se sin egen virksomheds AuditLog via `/revisionslog` og `/api/audit-logs`. Kan se sikkerhedsadvarsler via `/api/audit-logs/alerts` (ADMIN+). Kan ikke slette eller ændre logposter (immutability enforced på database-niveau). |
+| **Automatiseret log-monitor (`src/lib/log-monitor.ts`)** | Kører daglig scanning og genererer `LogAlert`-objekter. Uafhængig af menneskelig indsats. |
+
+AuditLoggen er uforanderlig (se afsnit 2.3 og 6.1) — PostgreSQL BEFORE UPDATE/DELETE triggers forhindrer enhver ændring eller sletning, selv af en databaseadministrator eller en kompromitteret forbindelse. Dette garanterer at loggen altid er tilgængelig til gennemgang, uanset hvilken hændelse der undersøges.
+
+#### 6.8.2 Gennemgangshyppighed (Hvor ofte)
+
+| Aktivitet | Hyppighed | Udføres af |
+|-----------|-----------|------------|
+| **Automatisk scanning** | Daglig kl. 06:00 Europe/Copenhagen via node-cron (`src/lib/log-monitor-scheduler.ts`, startet fra `src/instrumentation.ts`). Scanner de seneste 24 timer og genererer aggregatede `LogAlert`-objekter. | Cron-job (automatisk) |
+| **Manuel gennemgang** | Ugentlig (hver mandag) — SuperDev gennemgår alert-panelet (`/revisionslog` → "Sikkerhedsadvarsler") og rå AuditLog for mistænkelige mønstre som ikke udløste en automatisk alert. | SuperDev |
+| **Ad-hoc gennemgang** | Straks ved mistænkelig aktivitet (f.eks. brugerrapporteret uregelmæssighed, mislykket backup, sikkerhedshændelse beskrevet i Bilag-09). | SuperDev / ADMIN |
+| **Oversight-gennemgang** | Efter hver oversight-session gennemgår SuperDev de genererede `OVERSIGHT` AuditLog-rækker og krydstjekker mod den relevante support-sag. | SuperDev |
+
+#### 6.8.3 Advarsler (Alerts)
+
+Den automatiske log-monitor (`scanAuditLogForAlerts()`) klassificerer hændelser i fire severitetsniveauer og genererer aggregatede `LogAlert`-objekter med `category`, `title`, `description`, `count`, `firstSeen`, `lastSeen`, `affectedUsers`, `affectedCompanies` og `recommendedAction`:
+
+| Severitet | Detektionskategorier | Reaktion |
+|-----------|----------------------|----------|
+| **Kritisk (red)** | `immutability_violation_attempt` — `DELETE_ATTEMPT` på bogført `JournalEntry` eller `Transaction` (overtrædelse af Bogføringsloven §10-12 immutability). | **Straks**: e-mail til `ALERT_EMAIL_RECIPIENT` (typisk SuperDev/ejer). Trigger Beredskabsplan trin 1 (inddæmmelse, isolering) — se Bilag-09. |
+| **Høj (orange)** | `brute_force_login` (>5 `LOGIN_FAILED` pr. IP i vinduet), `virus_upload_attempt` (`DELETE_ATTEMPT` med `metadata.virusName`), `backup_failure` (`BACKUP_*` med fejl-metadata — overtrædelse af Bogføringsloven §15). | **Sammme dag**: e-mail til `ALERT_EMAIL_RECIPIENT` (hvis sat). Gennemgås af SuperDev inden udgangen af dagen. |
+| **Medium (yellow)** | `oversight_access` (`OVERSIGHT`-hændelser), `account_deactivated` (`ACCOUNT_DEACTIVATED`), `session_invalidation_spike` (>10 `SESSION_INVALIDATE` — muligt brud-svar), `two_factor_disabled` (`TWO_FACTOR_DISABLED`). | **Ugentlig gennemgang**: manualt af SuperDev hver mandag. |
+| **Lav (blue)** | `rate_limit_hit` (metadata indikerer rate-limit 429). | **Ugentlig gennemgang**: indikator på mulig misbrug — krydstjekkes med `brute_force_login`. |
+
+**E-mail-notifikationer**: Hvis miljøvariablen `ALERT_EMAIL_RECIPIENT` er sat, sender log-monitor cron-jobbet automatisk en e-mail med alle kritiske og høje advarsler via `notifyAlertsViaEmail()` (bruger den eksisterende `sendEmail`-infrastruktur, som logger til `EmailLog`-tabellen). E-mail-notifikationen er **optional** — den er sikker (try/catch, fejl logges, cron krasjer aldrig) og er deaktiveret som standard.
+
+**UI-adgang**: Advarsler vises i `/revisionslog`-siden via `SecurityAlertsPanel`-komponenten (`src/components/audit-log/security-alerts-panel.tsx`), der henter data fra `/api/audit-logs/alerts` (rate-limited 5/min/bruger, ADMIN+ kun).
+
+#### 6.8.4 Beredskab ved brud (Incident response)
+
+Ved en sikkerhedshændelse (f.eks. en kritisk alert om forsøg på at slette en bogført postering, eller en bekræftet virus-upload der har nået disken) henvises til **Bilag-09_Beredskabsplan.md** for den fulde incident response-plan. Kort oversigt:
+
+1. **Inddæmmelse og isolering** — Beredskabsplan trin 1. Deaktiver den berørte brugerkonto (`ACCOUNT_DEACTIVATED` bevare alle AuditLog-rækker, da `onDelete: Restrict` forhindrer sletning). Afbryd berørte sessioner (`SESSION_INVALIDATE`). Bloker IP på Caddy/WAF-niveau.
+2. **Undersøgelse** — Brug AuditLoggen (uforanderlig) som bevismateriale. AuditLog-rækker kan **ikke** slettes eller ændres — hverken af en admin, en kompromitteret konto eller en DBA — fordi PostgreSQL-triggers fysisk blokerer `UPDATE` og `DELETE`.
+3. **Notifikation** — GDPR Art. 33-34 notifikation til Datatilsynet inden 72 timer ved persondataforstyrrelse (se afsnit 3.9). Erhvervsstyrelsen underrettes ved bogføringslovs-overtrædelser.
+4. **Genoprettelse** — Gendan fra seneste backup hvis data blev påvirket (`BACKUP_RESTORE` logges selv i AuditLoggen).
+5. **Evaluering** — Post-mortem og opdatering af Beredskabsplanen hvis nødvendigt.
+
+AuditLoggens uforanderlighed er fundamentet for hele beredskabet: beviserne kan ikke tilintetgøres, hvilket opfylder Bogføringsloven §10-12 og GDPR Art. 32(1)(b) (evnen til at opdage og dokumentere persondataforstyrrelser).
+
+#### 6.8.5 Kildekode-referencer
+
+| Fil | Formål |
+|-----|--------|
+| `src/lib/log-monitor.ts` | `scanAuditLogForAlerts()` + `notifyAlertsViaEmail()`. Defensiv (try/catch, kaster aldrig). |
+| `src/lib/log-monitor-scheduler.ts` | node-cron wrapper. Kører daglig kl. 06:00 Europe/Copenhagen. Idempotent (følger backup/billing/recurring-scheduler-mønsteret). |
+| `src/instrumentation.ts` | Starter log-monitor scheduleren sammen med backup/recurring/billing-schedulerne. |
+| `src/app/api/audit-logs/alerts/route.ts` | GET-endpoint. ADMIN+ kun (`Permission.COMPANY_EDIT_SETTINGS`). Rate-limited 5/min/bruger. |
+| `src/components/audit-log/security-alerts-panel.tsx` | 'use client' UI-komponent. Bilingual. Indlejret øverst i `/revisionslog`-siden. |
+| `prisma/audit-immutability.sql` | PostgreSQL-triggers der fysisk forhindrer UPDATE/DELETE på AuditLog-tabellen (eksisterende, se afsnit 2.3). |
 
 ---
 
