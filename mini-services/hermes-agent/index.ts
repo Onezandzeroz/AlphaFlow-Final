@@ -20,6 +20,14 @@ import { DatabaseTenantProvider } from './database-tenant-provider'
 import { splitIntoChunks, buildTenantContext } from './utils'
 import { getRateLimiter } from './rate-limiter'
 import { verifySession } from './session-verifier'
+import {
+  SOURCE_TOOL_DEFINITIONS,
+  executeSourceTool,
+  buildCodeAtlas,
+  isSourceCodeQuestion,
+  MAX_TOOL_ITERATIONS,
+  type ToolCall,
+} from './source-tools'
 
 // ─── Load parent .env if DATABASE_URL or OPENROUTER_API_KEY is not set ──
 // (Now handled by load-env.ts above — kept as documentation.)
@@ -47,8 +55,11 @@ const OPENROUTER_APP_NAME = process.env.OPENROUTER_APP_NAME || 'AlphaFlow'
 const OPENROUTER_APP_URL = process.env.APP_URL || process.env.OPENROUTER_APP_URL || 'https://alphaflow.dk'
 
 interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  tool_calls?: ToolCall[]
+  tool_call_id?: string
+  name?: string
 }
 
 // ============================================================
@@ -174,7 +185,8 @@ function parseRetryAfter(res: Response, bodyText: string): number | undefined {
   return undefined
 }
 
-async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
+async function callOpenRouter(messages: ChatMessage[], options?: { tools?: typeof SOURCE_TOOL_DEFINITIONS, maxTokens?: number }): Promise<{ content: string | null; toolCalls: ToolCall[] | null }> {
+  const { tools, maxTokens = 1024 } = options || {}
   if (!OPENROUTER_API_KEY) {
     throw new HermesLLMError(
       'missing_key',
@@ -208,7 +220,8 @@ async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
             model: OPENROUTER_MODEL,
             messages,
             temperature: 0.4,
-            max_tokens: 1024,
+            max_tokens: maxTokens,
+            ...(tools && tools.length > 0 ? { tools, tool_choice: 'auto' } : {}),
           }),
         })
       } catch (fetchErr: any) {
@@ -230,7 +243,12 @@ async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
       }
 
       const data = await res.json()
-      return data.choices?.[0]?.message?.content || 'Beklager, jeg kunne ikke generere et svar.'
+      const choice = data.choices?.[0]?.message
+      // When tool calls are present, the model returns tool_calls instead of content
+      if (choice?.tool_calls?.length > 0) {
+        return { content: choice.content || null, toolCalls: choice.tool_calls }
+      }
+      return { content: choice?.content || 'Beklager, jeg kunne ikke generere et svar.', toolCalls: null }
 
     } catch (err) {
       const typed = err instanceof HermesLLMError ? err : classifyLLMError(err)
@@ -268,6 +286,66 @@ async function callOpenRouter(messages: ChatMessage[]): Promise<string> {
 
   // Unreachable (loop throws on the last attempt), but keeps TS happy.
   throw lastError ?? new HermesLLMError('unknown', 'Unknown LLM error after retries')
+}
+
+// ============================================================
+// Tool-Calling Loop
+// ============================================================
+// When the LLM returns tool_calls, we execute them and re-prompt
+// the model with the tool results. This repeats until the model
+// returns a final text response or hits MAX_TOOL_ITERATIONS.
+// ============================================================
+
+async function chatWithTools(
+  messages: ChatMessage[],
+  tools: typeof SOURCE_TOOL_DEFINITIONS,
+  isSuperDev: boolean,
+): Promise<string> {
+  let currentMessages = [...messages]
+
+  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    const isLastIteration = iteration === MAX_TOOL_ITERATIONS - 1
+    const result = await callOpenRouter(currentMessages, {
+      tools,
+      maxTokens: isLastIteration ? 2048 : 1024,
+    })
+
+    // Model returned a final text response (no tool calls)
+    if (!result.toolCalls || result.toolCalls.length === 0) {
+      return result.content || 'Beklager, jeg kunne ikke generere et svar.'
+    }
+
+    // Append the assistant's tool-calling message to the conversation
+    currentMessages.push({
+      role: 'assistant',
+      content: result.content || '',
+      tool_calls: result.toolCalls,
+    })
+
+    // Execute each tool call and append results
+    for (const toolCall of result.toolCalls) {
+      const toolName = toolCall.function.name
+      const toolArgs = toolCall.function.arguments
+
+      console.log(`[Hermes] Tool call [${iteration + 1}/${MAX_TOOL_ITERATIONS}]: ${toolName}(${toolArgs.slice(0, 80)}...)`)
+
+      const toolResult = await executeSourceTool(toolName, toolArgs, isSuperDev)
+
+      console.log(`[Hermes] Tool result: ${toolResult.content.slice(0, 120)}...${toolResult.isError ? ' (ERROR)' : ''}`)
+
+      currentMessages.push({
+        role: 'tool',
+        content: toolResult.content,
+        tool_call_id: toolCall.id,
+        name: toolName,
+      })
+    }
+  }
+
+  // Max iterations reached — do one final call WITHOUT tools to force a text response
+  console.log(`[Hermes] Max tool iterations (${MAX_TOOL_ITERATIONS}) reached — requesting final text response`)
+  const finalResult = await callOpenRouter(currentMessages, { maxTokens: 4096 })
+  return finalResult.content || 'Beklager, jeg kunne ikke generere et svar efter at have undersøgt kildekoden.'
 }
 
 // --------------- Configuration ---------------
@@ -315,6 +393,7 @@ interface SocketMeta {
   tenantId: string
   userId: string
   userName: string
+  isSuperDev: boolean
 }
 
 const connectedSockets = new Map<string, SocketMeta>()   // socketId -> meta
@@ -385,6 +464,7 @@ io.on('connection', async (socket) => {
     tenantId: session.tenantId,
     userId: session.userId,
     userName: session.userName,
+    isSuperDev: session.isSuperDev,
   }
   connectedSockets.set(socket.id, meta)
   if (!tenantSockets.has(session.tenantId)) tenantSockets.set(session.tenantId, [])
@@ -537,7 +617,22 @@ io.on('connection', async (socket) => {
         // Skills are optional — continue without them
       }
 
-      const systemMessage = `${systemPrompt}\n\n${tenantContext}${skillsAwareness}${skillFragment}`
+      // Determine whether to use source code tools for this message.
+      // Tools are injected conditionally to avoid unnecessary overhead on
+      // regular accounting questions. The code atlas is only fetched and
+      // injected when the question appears to be about source code.
+      const useSourceTools = isSourceCodeQuestion(message)
+      let codeAtlasSection = ''
+      if (useSourceTools) {
+        try {
+          codeAtlasSection = await buildCodeAtlas(meta.isSuperDev)
+          console.log(`[Hermes] Source code tools activated for "${meta.userName}" (SuperDev: ${meta.isSuperDev})`)
+        } catch (err: any) {
+          console.warn(`[Hermes] Failed to build code atlas: ${err.message}`)
+        }
+      }
+
+      const systemMessage = `${systemPrompt}\n\n${tenantContext}${skillsAwareness}${skillFragment}${codeAtlasSection ? '\n\n---\n\n' + codeAtlasSection : ''}`
 
       const messages: ChatMessage[] = [
         { role: 'system', content: systemMessage },
@@ -548,8 +643,10 @@ io.on('connection', async (socket) => {
         { role: 'user', content: message },
       ]
 
-      // Call OpenRouter LLM
-      const fullResponse = await callOpenRouter(messages)
+      // Call OpenRouter LLM — with tools if this is a source code question
+      const fullResponse = useSourceTools
+        ? await chatWithTools(messages, SOURCE_TOOL_DEFINITIONS, meta.isSuperDev)
+        : (await callOpenRouter(messages)).content || 'Beklager, jeg kunne ikke generere et svar.'
 
       // Store assistant response
       tenantProvider.addMessage(tenantId, { role: 'assistant', content: fullResponse })
@@ -567,7 +664,7 @@ io.on('connection', async (socket) => {
       // Only successful responses consume quota — failed/429'd requests don't.
       rateLimiter.record(tenantId)
 
-      console.log(`[Hermes] Response sent to "${meta.userName}" (${fullResponse.length} chars)`)
+      console.log(`[Hermes] Response sent to "${meta.userName}" (${fullResponse.length} chars, tools: ${useSourceTools ? 'active' : 'none'})`)
     } catch (error: any) {
       // Classify the failure into a typed kind so the user gets a specific,
       // actionable message instead of a generic "Prøv igen senere".

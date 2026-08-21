@@ -144,6 +144,96 @@ async function main() {
   })
 
   console.log(`  ✅ Upserted skill: ${stopSlop.name} (id: ${stopSlop.id})`)
+
+  // ── Source Code Explorer skill ──
+  const sourceCodeExplorer = await db.hermesSkill.upsert({
+    where: { name: 'source-code-explorer' },
+    create: {
+      name: 'source-code-explorer',
+      version: '1.0.0',
+      descriptionEn: 'Read and explain AlphaFlow platform source code. Hermes can explore the codebase, read specific files, and provide detailed technical explanations of how features work — beyond what the user manual covers.',
+      descriptionDa: 'Læs og forklar AlphaFlow-platformens kildekode. Hermes kan udforske koden, læse specifikke filer og give detaljerede tekniske forklaringer af hvordan funktioner virker — udover hvad brugermanualen dækker.',
+      author: 'AlphaFlow',
+      sourceUrl: null,
+      promptEn: `# Source Code Explorer
+
+You have the ability to read the AlphaFlow source code directly. When a user asks about how a feature works, how the platform is built, or wants technical details beyond the user manual:
+
+1. **Use the code atlas** in your system prompt to identify the relevant directories and files.
+2. **Call \\'list_source_directory\\' first** to explore the structure and find the right files.
+3. **Call \\'read_source_file\\'** to read the actual code of relevant files.
+4. **Follow imports and references** — if a file imports from another module, read that module too.
+5. **Explain clearly** — describe the architecture, data flow, and key functions in a way that a technically-minded business owner can understand.
+
+Guidelines:
+- Always cite the file path and line numbers when referencing specific code.
+- Explain WHY the code does something, not just WHAT it does.
+- Use diagrams (ASCII or markdown) when explaining flows or architectures.
+- If the user asks about security or internal SuperDev mechanisms, note that some files are restricted.
+- Respond in the user's language (Danish or English).`,
+      promptDa: `# Kildekode-udforsker
+
+Du har mulighed for at læse AlphaFlow-kildekoden direkte. Når en bruger spørger om hvordan en funktion virker, hvordan platformen er bygget, eller vil have tekniske detaljer udover brugermanualen:
+
+1. **Brug kode-atlaset** i din system-prompt til at identificere de relevante mapper og filer.
+2. **Kald \\'list_source_directory\\' først** for at udforske strukturen og finde de rigtige filer.
+3. **Kald \\'read_source_file\\'** for at læse den faktiske kode i relevante filer.
+4. **Følg imports og referencer** — hvis en fil importerer fra et andet modul, læs det modul også.
+5. **Forklar tydeligt** — beskriv arkitekturen, dataflow og nøglefunktioner på en måde som en teknisk interesseret virksomhedsejer kan forstå.
+
+Retningslinjer:
+- Citer altid filstien og linjenumre når du refererer til specifik kode.
+- Forklar HVORFØR koden gør noget, ikke kun HVAD den gør.
+- Brug diagrammer (ASCII eller markdown) når du forklarer flows eller arkitektur.
+- Hvis brugeren spørger om sikkerhed eller interne SuperDev-mekanismer, så noter at visse filer er begrænsede.
+- Svar på brugerens sprog (dansk eller engelsk).`,
+      enabledByDefault: true,
+      isBuiltIn: true,
+      category: 'productivity',
+    },
+    update: {
+      version: '1.0.0',
+      descriptionEn: 'Read and explain AlphaFlow platform source code. Hermes can explore the codebase, read specific files, and provide detailed technical explanations of how features work — beyond what the user manual covers.',
+      descriptionDa: 'Læs og forklar AlphaFlow-platformens kildekode. Hermes kan udforske koden, læse specifikke filer og give detaljerede tekniske forklaringer af hvordan funktioner virker — udover hvad brugermanualen dækker.',
+      promptEn: `# Source Code Explorer
+
+You have the ability to read the AlphaFlow source code directly. When a user asks about how a feature works, how the platform is built, or wants technical details beyond the user manual:
+
+1. **Use the code atlas** in your system prompt to identify the relevant directories and files.
+2. **Call \\'list_source_directory\\' first** to explore the structure and find the right files.
+3. **Call \\'read_source_file\\'** to read the actual code of relevant files.
+4. **Follow imports and references** — if a file imports from another module, read that module too.
+5. **Explain clearly** — describe the architecture, data flow, and key functions in a way that a technically-minded business owner can understand.
+
+Guidelines:
+- Always cite the file path and line numbers when referencing specific code.
+- Explain WHY the code does something, not just WHAT it does.
+- Use diagrams (ASCII or markdown) when explaining flows or architectures.
+- If the user asks about security or internal SuperDev mechanisms, note that some files are restricted.
+- Respond in the user's language (Danish or English).`,
+      promptDa: `# Kildekode-udforsker
+
+Du har mulighed for at læse AlphaFlow-kildekoden direkte. Når en bruger spørger om hvordan en funktion virker, hvordan platformen er bygget, eller vil have tekniske detaljer udover brugermanualen:
+
+1. **Brug kode-atlaset** i din system-prompt til at identificere de relevante mapper og filer.
+2. **Kald \\'list_source_directory\\' først** for at udforske strukturen og finde de rigtige filer.
+3. **Kald \\'read_source_file\\'** for at læse den faktiske kode i relevante filer.
+4. **Følg imports og referencer** — hvis en fil importerer fra et andet modul, læs det modul også.
+5. **Forklar tydeligt** — beskriv arkitekturen, dataflow og nøglefunktioner på en måde som en teknisk interesseret virksomhedsejer kan forstå.
+
+Retningslinjer:
+- Citer altid filstien og linjenumre når du refererer til specifik kode.
+- Forklar HVORFØR koden gør noget, ikke kun HVAD den gør.
+- Brug diagrammer (ASCII eller markdown) når du forklarer flows eller arkitektur.
+- Hvis brugeren spørger om sikkerhed eller interne SuperDev-mekanismer, så noter at visse filer er begrænsede.
+- Svar på brugerens sprog (dansk eller engelsk).`,
+      enabledByDefault: true,
+      isBuiltIn: true,
+      category: 'productivity',
+    },
+  })
+
+  console.log(`  ✅ Upserted skill: ${sourceCodeExplorer.name} (id: ${sourceCodeExplorer.id})`)
   console.log('🌱 Done!')
 }
 

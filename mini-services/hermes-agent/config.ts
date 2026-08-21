@@ -17,6 +17,10 @@ export interface HermesConfig {
   reminderCheckInterval: number  // 60000 (ms)
   reminderWindowDays: number      // 7
 
+  // Source code tools
+  sourceCodeToolsEnabled: boolean // Enable function calling for source code reading
+  sourceCodeRootPath: string       // Absolute path to the project root (auto-detected)
+
   // CORS (for development)
   corsOrigin: string             // "*" or specific origin
 }
@@ -30,5 +34,7 @@ export const defaultConfig: HermesConfig = {
   streamingChunkDelay: 30,
   reminderCheckInterval: 60_000,
   reminderWindowDays: 7,
+  sourceCodeToolsEnabled: true,
+  sourceCodeRootPath: '', // Auto-detected from process.env.ALPHAFLOW_ROOT or ../
   corsOrigin: '*',
 }

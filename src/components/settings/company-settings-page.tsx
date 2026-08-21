@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { CvrVerifyButton, mapCvrFormToCompanyType, type CvrInfo } from '@/components/shared/cvr-verify-button';
+import { useAuthStore } from '@/lib/auth-store';
 import {
   Settings,
   Building2,
@@ -46,6 +47,8 @@ import {
   EyeOff,
   Briefcase,
   ShieldCheck,
+  FlaskConical,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/page-header';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -135,6 +138,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [isTogglingProjectMode, setIsTogglingProjectMode] = useState(false);
+  const [isTogglingDemoMode, setIsTogglingDemoMode] = useState(false);
 
   // ── SuperDev: toggle project mode for this tenant (FASE 4) ──
   // PATCH /api/company with projectModeEnabled. Only SuperDev sees the card.
@@ -1398,6 +1402,128 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Demo-virksomhed (Demo Mode) ──
+          Allows the user to enter or exit the shared demo company ("Nordisk Erhverv ApS").
+          The demo company contains realistic seed data and is read-only for non-SuperDev users.
+          Available from settings so the option persists after onboarding is completed. */}
+      {companyInfo && (
+        <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5 mt-2">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                user.isDemoCompany
+                  ? 'bg-gradient-to-br from-amber-500 to-orange-500'
+                  : 'bg-gradient-to-br from-amber-400 to-amber-600'
+              }`}>
+                <FlaskConical className="h-4 w-4 text-white" />
+              </div>
+              {language === 'da' ? 'Demo-virksomhed' : 'Demo Company'}
+              {user.isDemoCompany && (
+                <Badge variant="outline" className="ml-2 text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-700">
+                  {user.isSuperDev
+                    ? (language === 'da' ? 'AppOwner-tilstand' : 'AppOwner Mode')
+                    : (language === 'da' ? 'Skrivebeskyttet' : 'Read-only')}
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
+              {user.isDemoCompany
+                ? (language === 'da'
+                  ? 'Du viser nu den delte demo-virksomhed med realistiske regnskabsdata. Skift tilbage til din egen virksomhed for at arbejde med dine egne data.'
+                  : 'You are viewing the shared demo company with realistic accounting data. Switch back to your own company to work with your own data.')
+                : (language === 'da'
+                  ? 'Prøv systemet med en forudfyldt demo-virksomhed. Demo-virksomheden indeholder realistiske regnskabsdata, kontoplan, fakturaer og bankposter, som du kan udforske. Alle ændringer forsvinder, når du forlader demo-tilstanden.'
+                  : 'Try the system with a pre-filled demo company. The demo company contains realistic accounting data, chart of accounts, invoices, and bank entries that you can explore. All changes are discarded when you leave demo mode.')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between gap-4 p-4 rounded-lg bg-gray-50 dark:bg-white/[0.03] border border-gray-100 dark:border-white/[0.06]">
+              <div className="flex items-start gap-3 min-w-0">
+                <ArrowRightLeft className={`h-5 w-5 shrink-0 mt-0.5 ${user.isDemoCompany ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}`} />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {user.isDemoCompany
+                      ? (language === 'da' ? 'Tilbage til min virksomhed' : 'Back to my company')
+                      : (language === 'da' ? 'Åbn demo-virksomhed' : 'Open demo company')}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {user.isDemoCompany
+                      ? (language === 'da'
+                        ? `Du er i: ${user.activeCompanyName || 'Nordisk Erhverv ApS'} (demo)`
+                        : `You are in: ${user.activeCompanyName || 'Nordisk Erhverv ApS'} (demo)`)
+                      : (language === 'da'
+                        ? 'Skifter til "Nordisk Erhverv ApS" — en delt demo med fiktive data.'
+                        : 'Switches to "Nordisk Erhverv ApS" — a shared demo with fictional data.')}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant={user.isDemoCompany ? 'outline' : 'default'}
+                size="sm"
+                disabled={isTogglingDemoMode}
+                onClick={async () => {
+                  setIsTogglingDemoMode(true);
+                  try {
+                    const action = user.isDemoCompany ? 'exit' : 'enter';
+                    const res = await fetch('/api/demo-mode', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action }),
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      const currentUser = useAuthStore.getState().user;
+                      if (currentUser) {
+                        useAuthStore.getState().setUser({
+                          ...currentUser,
+                          demoModeEnabled: data.demoModeEnabled ?? action === 'enter',
+                          isDemoCompany: data.isDemoCompany ?? (action === 'enter'),
+                          activeCompanyId: data.activeCompanyId ?? currentUser.activeCompanyId,
+                          activeCompanyName: data.activeCompanyName ?? currentUser.activeCompanyName,
+                        });
+                      }
+                      if (typeof window !== 'undefined') {
+                        window.location.reload();
+                      }
+                    } else {
+                      const errData = await res.json().catch(() => null);
+                      toast.error(errData?.error || (language === 'da' ? 'Kunne ikke skifte demo-tilstand' : 'Could not toggle demo mode'));
+                    }
+                  } catch (error) {
+                    toast.error(language === 'da' ? 'Netværksfejl' : 'Network error');
+                  } finally {
+                    setIsTogglingDemoMode(false);
+                  }
+                }}
+              >
+                {isTogglingDemoMode ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : user.isDemoCompany ? (
+                  <>
+                    <ArrowLeft className="h-4 w-4" />
+                    {language === 'da' ? 'Tilbage' : 'Back'}
+                  </>
+                ) : (
+                  <>
+                    <FlaskConical className="h-4 w-4" />
+                    {language === 'da' ? 'Prøv demo' : 'Try Demo'}
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-3 leading-relaxed">
+              {user.isDemoCompany
+                ? (language === 'da'
+                  ? 'Bemærk: Når du forlader demo-tilstanden, slettes alle ændringer du har lavet i demo-virksomheden ikke — men de er kun synlige for dig som AppOwner. Almindelige brugere ser en skrivebeskyttet kopi.'
+                  : 'Note: When you leave demo mode, any changes you made in the demo company are not deleted — but they are only visible to you as AppOwner. Regular users see a read-only copy.')
+                : (language === 'da'
+                  ? 'Bemærk: Demo-virksomheden deles af alle brugere på systemet. Data nulstilles hver gang en bruger går ind, så du altid starter med friske, realistiske data. Ingen af dine ændringer gemmes permanent.'
+                  : 'Note: The demo company is shared by all users on the system. Data is reset each time a user enters, so you always start with fresh, realistic data. None of your changes are saved permanently.')}
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── SuperDev: Project Mode gate (FASE 4) ──
