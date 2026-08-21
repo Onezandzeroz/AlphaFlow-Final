@@ -607,7 +607,7 @@ io.on('connection', async (socket) => {
       let skillFragment = ''
       let skillsAwareness = ''
       try {
-        const skillPrompts = await fetchSkillPrompts(tenant.companyId, config.defaultLanguage)
+        const skillPrompts = await fetchSkillPrompts(tenantId, config.defaultLanguage)
         if (skillPrompts.length > 0) {
           skillFragment = '\n\n---\n\n# Active Skills\n\n' + skillPrompts.map(s => `## Skill: ${s.name}\n\n${s.prompt}`).join('\n\n---\n\n')
         }
