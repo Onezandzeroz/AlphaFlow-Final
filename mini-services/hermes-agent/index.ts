@@ -24,7 +24,6 @@ import {
   SOURCE_TOOL_DEFINITIONS,
   executeSourceTool,
   buildCodeAtlas,
-  isSourceCodeQuestion,
   MAX_TOOL_ITERATIONS,
   type ToolCall,
 } from './source-tools'
@@ -660,27 +659,32 @@ io.on('connection', async (socket) => {
       // Fetch enabled skill prompts and inject into system prompt
       let skillFragment = ''
       let skillsAwareness = ''
+      let hasSourceCodeSkill = false
       try {
         const skillPrompts = await fetchSkillPrompts(tenantId, config.defaultLanguage)
         if (skillPrompts.length > 0) {
           skillFragment = '\n\n---\n\n# Active Skills\n\n' + skillPrompts.map(s => `## Skill: ${s.name}\n\n${s.prompt}`).join('\n\n---\n\n')
         }
+        // Track whether source-code-explorer skill is active — if so,
+        // we MUST send tool definitions so they match what the skill
+        // prompt tells the model to use. Without this, the model sees
+        // tool names in the prompt but can't actually call them, causing
+        // it to hallucinate tool calls as plain text.
+        hasSourceCodeSkill = skillPrompts.some(s => s.name === 'source-code-explorer')
         // Add skills awareness so tenants can ask "what skills do you have?"
         skillsAwareness = buildSkillsAwareness(skillPrompts, config.defaultLanguage)
       } catch {
         // Skills are optional — continue without them
       }
 
-      // Determine whether to use source code tools for this message.
-      // Tools are injected conditionally to avoid unnecessary overhead on
-      // regular accounting questions. The code atlas is only fetched and
-      // injected when the question appears to be about source code.
-      const useSourceTools = isSourceCodeQuestion(message)
+      // Build code atlas when source-code-explorer skill is active.
+      // The atlas is cached (5 min TTL) so the cost is negligible after
+      // the first build. We always inject it when the skill is present
+      // so the model has a map of where to look BEFORE calling tools.
       let codeAtlasSection = ''
-      if (useSourceTools) {
+      if (hasSourceCodeSkill) {
         try {
           codeAtlasSection = await buildCodeAtlas(meta.isSuperDev)
-          console.log(`[Hermes] Source code tools activated for "${meta.userName}" (SuperDev: ${meta.isSuperDev})`)
         } catch (err: any) {
           console.warn(`[Hermes] Failed to build code atlas: ${err.message}`)
         }
@@ -697,9 +701,13 @@ io.on('connection', async (socket) => {
         { role: 'user', content: message },
       ]
 
-      // Call OpenRouter LLM — with tools if this is a source code question
+      // Call OpenRouter LLM — with tools if source-code-explorer skill is active.
+      // The model uses tool_choice='auto' so it will ONLY call tools when
+      // the question actually requires reading source code. Regular accounting
+      // questions get a normal text response with no tool overhead.
       let fullResponse: string
-      if (useSourceTools) {
+      if (hasSourceCodeSkill) {
+        console.log(`[Hermes] Source code tools available for "${meta.userName}" (SuperDev: ${meta.isSuperDev})`)
         fullResponse = await chatWithTools(messages, SOURCE_TOOL_DEFINITIONS, meta.isSuperDev)
       } else {
         const plainResult = await callOpenRouter(messages, { maxTokens: 2048 })
@@ -722,7 +730,7 @@ io.on('connection', async (socket) => {
       // Only successful responses consume quota — failed/429'd requests don't.
       rateLimiter.record(tenantId)
 
-      console.log(`[Hermes] Response sent to "${meta.userName}" (${fullResponse.length} chars, tools: ${useSourceTools ? 'active' : 'none'})`)
+      console.log(`[Hermes] Response sent to "${meta.userName}" (${fullResponse.length} chars, skill: ${hasSourceCodeSkill ? 'source-code' : 'none'})`)
     } catch (error: any) {
       // Classify the failure into a typed kind so the user gets a specific,
       // actionable message instead of a generic "Prøv igen senere".
@@ -974,7 +982,7 @@ httpServer.listen(config.port, () => {
     console.log(`[Hermes]                   ecosystem.config.js -> apps[hermes-agent] -> env.OPENROUTER_API_KEY`)
     console.log(`[Hermes]                   Get a key at https://openrouter.ai/keys  (then: pm2 delete hermes-agent && pm2 start ecosystem.config.js --only hermes-agent)`)
   }
-  console.log(`[Hermes]    Source tools  : ${config.sourceCodeToolsEnabled ? 'enabled' : 'disabled'} (conditional activation via isSourceCodeQuestion)`)
+  console.log(`[Hermes]    Source tools  : ${config.sourceCodeToolsEnabled ? 'enabled' : 'disabled'} (activated when source-code-explorer skill is present)`)
 })
 
 // ============================================================
