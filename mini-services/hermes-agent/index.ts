@@ -244,11 +244,16 @@ async function callOpenRouter(messages: ChatMessage[], options?: { tools?: typeo
 
       const data = await res.json()
       const choice = data.choices?.[0]?.message
+      const finishReason = data.choices?.[0]?.finish_reason
       // When tool calls are present, the model returns tool_calls instead of content
       if (choice?.tool_calls?.length > 0) {
-        return { content: choice.content || null, toolCalls: choice.tool_calls }
+        return { content: choice.content ?? null, toolCalls: choice.tool_calls }
       }
-      return { content: choice?.content || 'Beklager, jeg kunne ikke generere et svar.', toolCalls: null }
+      // Log when model returns null/empty content so we can diagnose issues
+      if (!choice?.content) {
+        console.warn(`[Hermes] LLM returned null/empty content (finish_reason: ${finishReason}). Model: ${OPENROUTER_MODEL}`)
+      }
+      return { content: choice?.content ?? null, toolCalls: null }
 
     } catch (err) {
       const typed = err instanceof HermesLLMError ? err : classifyLLMError(err)
@@ -302,17 +307,58 @@ async function chatWithTools(
   isSuperDev: boolean,
 ): Promise<string> {
   let currentMessages = [...messages]
+  let toolsUsedCount = 0
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     const isLastIteration = iteration === MAX_TOOL_ITERATIONS - 1
+    // Use higher token limit for the last iteration so the model has room
+    // to synthesize tool results into a full answer.
     const result = await callOpenRouter(currentMessages, {
       tools,
-      maxTokens: isLastIteration ? 2048 : 1024,
+      maxTokens: isLastIteration ? 4096 : 2048,
     })
 
     // Model returned a final text response (no tool calls)
     if (!result.toolCalls || result.toolCalls.length === 0) {
-      return result.content || 'Beklager, jeg kunne ikke generere et svar.'
+      if (result.content) {
+        return result.content
+      }
+
+      // Model returned null/empty content with no tool calls.
+      // This can happen when:
+      //   a) Model doesn't support function calling — first iteration, no tools used
+      //   b) Model is confused after tool execution — tools were used but response is empty
+      console.warn(`[Hermes] Null content, no tool calls on iteration ${iteration + 1} (tools used so far: ${toolsUsedCount})`)
+
+      if (iteration === 0 && toolsUsedCount === 0) {
+        // Likely the model doesn't support function calling.
+        // Fall back to a plain call WITHOUT tools.
+        console.log('[Hermes] Falling back to no-tools call (model may not support function calling)')
+        const fallback = await callOpenRouter(currentMessages, { maxTokens: 4096 })
+        if (fallback.content) return fallback.content
+        // Still null — one more attempt with an explicit system nudge
+        currentMessages.push({
+          role: 'user',
+          content: 'Besvar venligst brugerens spørgsmål så detaljeret som muligt på dansk.',
+        })
+        const nudge = await callOpenRouter(currentMessages, { maxTokens: 4096 })
+        return nudge.content || 'Beklager, jeg kunne ikke generere et svar.'
+      }
+
+      if (toolsUsedCount > 0) {
+        // Tools were executed but model returned null content.
+        // Add a nudge to force the model to produce a text answer.
+        console.log('[Hermes] Nudging model to produce text response after tool execution')
+        currentMessages.push({
+          role: 'user',
+          content: 'Du har nu modtaget alle nødvendige oplysninger fra værktøjerne. Besvar venligst brugerens oprindelige spørgsmål detaljeret på dansk baseret på det du har fundet.',
+        })
+        const nudge = await callOpenRouter(currentMessages, { maxTokens: 4096 })
+        if (nudge.content) return nudge.content
+        return 'Beklager, jeg kunne ikke generere et svar efter at have undersøgt kildekoden.'
+      }
+
+      return 'Beklager, jeg kunne ikke generere et svar.'
     }
 
     // Append the assistant's tool-calling message to the conversation
@@ -324,6 +370,7 @@ async function chatWithTools(
 
     // Execute each tool call and append results
     for (const toolCall of result.toolCalls) {
+      toolsUsedCount++
       const toolName = toolCall.function.name
       const toolArgs = toolCall.function.arguments
 
@@ -345,7 +392,14 @@ async function chatWithTools(
   // Max iterations reached — do one final call WITHOUT tools to force a text response
   console.log(`[Hermes] Max tool iterations (${MAX_TOOL_ITERATIONS}) reached — requesting final text response`)
   const finalResult = await callOpenRouter(currentMessages, { maxTokens: 4096 })
-  return finalResult.content || 'Beklager, jeg kunne ikke generere et svar efter at have undersøgt kildekoden.'
+  if (finalResult.content) return finalResult.content
+  // Last resort: nudge the model
+  currentMessages.push({
+    role: 'user',
+    content: 'Besvar venligst brugerens spørgsmål detaljeret på dansk baseret på de oplysninger du har indsamlet.',
+  })
+  const nudgeResult = await callOpenRouter(currentMessages, { maxTokens: 4096 })
+  return nudgeResult.content || 'Beklager, jeg kunne ikke generere et svar efter at have undersøgt kildekoden.'
 }
 
 // --------------- Configuration ---------------
@@ -644,9 +698,13 @@ io.on('connection', async (socket) => {
       ]
 
       // Call OpenRouter LLM — with tools if this is a source code question
-      const fullResponse = useSourceTools
-        ? await chatWithTools(messages, SOURCE_TOOL_DEFINITIONS, meta.isSuperDev)
-        : (await callOpenRouter(messages)).content || 'Beklager, jeg kunne ikke generere et svar.'
+      let fullResponse: string
+      if (useSourceTools) {
+        fullResponse = await chatWithTools(messages, SOURCE_TOOL_DEFINITIONS, meta.isSuperDev)
+      } else {
+        const plainResult = await callOpenRouter(messages, { maxTokens: 2048 })
+        fullResponse = plainResult.content || 'Beklager, jeg kunne ikke generere et svar.'
+      }
 
       // Store assistant response
       tenantProvider.addMessage(tenantId, { role: 'assistant', content: fullResponse })
@@ -916,6 +974,7 @@ httpServer.listen(config.port, () => {
     console.log(`[Hermes]                   ecosystem.config.js -> apps[hermes-agent] -> env.OPENROUTER_API_KEY`)
     console.log(`[Hermes]                   Get a key at https://openrouter.ai/keys  (then: pm2 delete hermes-agent && pm2 start ecosystem.config.js --only hermes-agent)`)
   }
+  console.log(`[Hermes]    Source tools  : ${config.sourceCodeToolsEnabled ? 'enabled' : 'disabled'} (conditional activation via isSourceCodeQuestion)`)
 })
 
 // ============================================================
