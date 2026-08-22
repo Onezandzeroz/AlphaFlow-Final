@@ -26,9 +26,12 @@ import * as path from 'node:path'
 
 // ─── Configuration ─────────────────────────────────────────────
 
-/** Root of the AlphaFlow project. Defaults to parent of mini-services/. */
+/** Root of the AlphaFlow project. Two levels up from this file:
+ *  source-tools.ts lives in mini-services/hermes-agent/,
+ *  so '..'  → mini-services/,
+ *  and '../..' → project root (where src/, prisma/, etc. live). */
 export function getProjectRoot(): string {
-  return process.env.ALPHAFLOW_ROOT || path.resolve(import.meta.dir, '..')
+  return process.env.ALPHAFLOW_ROOT || path.resolve(import.meta.dir, '../..')
 }
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024   // 50 KB per file
