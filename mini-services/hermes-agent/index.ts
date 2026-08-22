@@ -351,7 +351,7 @@ async function chatWithTools(
         console.log('[Hermes] Nudging model to produce text response after tool execution')
         currentMessages.push({
           role: 'user',
-          content: 'Du har nu modtaget alle nødvendige oplysninger fra værktøjerne. Besvar venligst brugerens oprindelige spørgsmål detaljeret på dansk baseret på det du har fundet.',
+          content: 'Du har nu modtaget alle nødvendige oplysninger fra værktøjerne. Besvar brugerens oprindelige spørgsmål detaljeret på dansk baseret på det du har fundet. Husk: Vis ALDRIG kode eller filstier. Skriv i løbende prosa med overskrifter — brug punktopstillinger med måde. Forklar i almindeligt sprog hvordan AlphaFlow opfylder kravet i henhold til dansk bogføringslovgivning.',
         })
         const nudge = await callOpenRouter(currentMessages, { maxTokens: 4096 })
         if (nudge.content) return nudge.content
@@ -396,7 +396,7 @@ async function chatWithTools(
   // Last resort: nudge the model
   currentMessages.push({
     role: 'user',
-    content: 'Besvar venligst brugerens spørgsmål detaljeret på dansk baseret på de oplysninger du har indsamlet.',
+    content: 'Besvar brugerens spørgsmål detaljeret på dansk baseret på de oplysninger du har indsamlet. Husk: Vis ALDRIG kode eller filstier. Skriv i løbende prosa med overskrifter — brug punktopstillinger med måde. Forklar i almindeligt sprog med fokus på dansk bogføringslovgivning.',
   })
   const nudgeResult = await callOpenRouter(currentMessages, { maxTokens: 4096 })
   return nudgeResult.content || 'Beklager, jeg kunne ikke generere et svar efter at have undersøgt kildekoden.'

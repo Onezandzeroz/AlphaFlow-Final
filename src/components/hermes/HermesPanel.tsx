@@ -204,69 +204,63 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           <div className="hermes-markdown px-4 py-3 text-sm leading-relaxed">
             <ReactMarkdown
               components={{
-                // Headings — clear hierarchy with spacing
+                // Headings — elegant hierarchy with teal accent line
                 h1: ({ children }) => (
-                  <h1 className="text-base font-bold text-teal-900 dark:text-teal-100 mt-4 mb-2 first:mt-0">{children}</h1>
+                  <h1 className="text-base font-bold text-teal-900 dark:text-teal-100 mt-1 mb-3 first:mt-0 pb-2 border-b border-teal-200/40 dark:border-teal-700/30">{children}</h1>
                 ),
                 h2: ({ children }) => (
-                  <h2 className="text-[15px] font-semibold text-teal-800 dark:text-teal-200 mt-4 mb-2 first:mt-0">{children}</h2>
+                  <h2 className="text-[15px] font-semibold text-teal-900 dark:text-teal-100 mt-5 mb-2 first:mt-0">{children}</h2>
                 ),
                 h3: ({ children }) => (
-                  <h3 className="text-sm font-semibold text-teal-700 dark:text-teal-300 mt-3 mb-1.5 first:mt-0">{children}</h3>
+                  <h3 className="text-[13px] font-semibold text-teal-800 dark:text-teal-200 mt-4 mb-1.5 first:mt-0">{children}</h3>
                 ),
-                // Paragraphs — clear spacing between them
+                // Paragraphs — generous line height for readability
                 p: ({ children }) => (
-                  <p className="my-2 first:mt-0 last:mb-0 leading-relaxed">{children}</p>
+                  <p className="my-1.5 first:mt-0 last:mb-0 leading-[1.7]">{children}</p>
                 ),
-                // Unordered lists — teal bullets, proper indentation
-                ul: ({ children }) => (
-                  <ul className="hermes-ul my-2 space-y-1 first:mt-0 last:mb-0">{children}</ul>
-                ),
-                // Ordered lists — custom counter, proper indentation
-                ol: ({ children }) => (
-                  <ol className="hermes-ol my-2 space-y-1 first:mt-0 last:mb-0">{children}</ol>
-                ),
-                // List items — proper padding (markers handled via CSS ::before)
-                li: ({ children }) => (
-                  <li className="pl-5 relative leading-relaxed">
-                    {children}
-                  </li>
-                ),
-                // Horizontal rule — subtle divider with margin
-                hr: () => (
-                  <hr className="my-4 border-teal-200/50 dark:border-teal-700/40" />
-                ),
-                // Code blocks
-                pre: ({ children }) => (
-                  <pre className="my-3 rounded-lg bg-teal-900/5 p-3 text-xs overflow-x-auto dark:bg-teal-900/20">{children}</pre>
-                ),
-                // Inline code
+                // Code blocks — HIDDEN (Hermes should never show code to users)
+                pre: () => null,
+                // Inline code — rendered as subtle emphasis, not monospace
                 code: ({ children, className }) => {
-                  const isBlock = className?.includes('language-')
-                  if (isBlock) return <code>{children}</code>
+                  if (className?.includes('language-')) return null
                   return (
-                    <code className="rounded bg-teal-100/70 px-1.5 py-0.5 text-[13px] font-mono text-teal-800 dark:bg-teal-900/40 dark:text-teal-200">
+                    <span className="font-medium text-teal-800 dark:text-teal-200">
                       {children}
-                    </code>
+                    </span>
                   )
                 },
-                // Blockquote — styled callout
+                // Unordered lists — soft styling, custom bullet
+                ul: ({ children }) => (
+                  <ul className="my-2 list-none space-y-0.5 first:mt-0 last:mb-0">{children}</ul>
+                ),
+                // Ordered lists — custom number styling
+                ol: ({ children }) => (
+                  <ol className="my-2 list-none space-y-0.5 first:mt-0 last:mb-0">{children}</ol>
+                ),
+                li: ({ children, index }) => (
+                  <li className="pl-4 relative leading-[1.7] before:content-['•'] before:absolute before:left-0 before:text-teal-400/70 before:top-[3px]">{children}</li>
+                ),
+                // Horizontal rule — elegant divider
+                hr: () => (
+                  <hr className="my-4 border-teal-200/30 dark:border-teal-700/20" />
+                ),
+                // Blockquote — clean callout
                 blockquote: ({ children }) => (
-                  <blockquote className="my-3 border-l-3 border-teal-400/50 pl-3 italic text-teal-700/80 dark:text-teal-300/80">
+                  <blockquote className="my-3 border-l-2 border-teal-400/40 pl-3 py-1 italic text-teal-700/80 dark:text-teal-300/80">
                     {children}
                   </blockquote>
                 ),
-                // Strong/bold
+                // Strong/bold — subtle emphasis
                 strong: ({ children }) => (
                   <strong className="font-semibold text-teal-900 dark:text-teal-100">{children}</strong>
                 ),
                 // Emphasis/italic
                 em: ({ children }) => (
-                  <em className="italic text-teal-700 dark:text-teal-300">{children}</em>
+                  <em className="italic text-teal-700/90 dark:text-teal-300/90">{children}</em>
                 ),
                 // Links
                 a: ({ children, href }) => (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-teal-600 underline decoration-teal-400/40 underline-offset-2 hover:decoration-teal-500 dark:text-teal-300">
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-teal-600 underline decoration-teal-400/30 underline-offset-2 hover:decoration-teal-500 transition-colors dark:text-teal-300">
                     {children}
                   </a>
                 ),

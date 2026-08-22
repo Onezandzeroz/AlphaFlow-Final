@@ -439,22 +439,33 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** Check whether a message involves source code questions (for conditional tool injection). */
+/** Check whether a message involves source code questions (for conditional tool injection).
+ *  We keep the trigger list TIGHT to avoid sending `tools` to the LLM on
+ *  ordinary accounting questions (which most models handle worse when tools
+ *  are present, especially free-tier models that don't truly support
+ *  function calling). */
 export function isSourceCodeQuestion(message: string): boolean {
   const lower = message.toLowerCase()
-  const triggers = [
-    'kildekode', 'source code', 'koden', 'the code', 'implementering', 'implementation',
-    'hvordan fungerer', 'how does', 'how do', 'hvorfor', 'why does',
+  // Strong source-code-only indicators (must be present)
+  const strongTriggers = [
+    'kildekode', 'source code', 'koden', 'the code',
+    'implementering', 'implementation',
     'filen', 'the file', 'funktionen', 'the function', 'komponenten', 'the component',
-    'api-rute', 'api route', 'endpoint', 'backend', 'frontend',
+    'api-rute', 'api route', 'endpoint',
+    'backend', 'frontend',
     'databasen', 'database', 'prisma', 'schema',
-    'regnskabssystemet', 'accounting system', 'platformen', 'the platform',
-    'alphaflow', 'teknisk', 'technical', 'arkitektur', 'architecture',
-    'vis mig', 'show me', 'læs', 'read the', 'find',
+    'teknisk', 'technical', 'arkitektur', 'architecture',
+    'vis mig', 'show me', 'læs', 'read the', 'find filen',
     'feature', 'funktionalitet', 'modul', 'module',
     'integration', 'flow', 'processen', 'the process',
+    'hvordan fungerer', 'how does', 'how do',
+    'hvorfor', 'why does',
   ]
-  return triggers.some(t => lower.includes(t))
+  // If the message mentions source-code tool names explicitly, always activate
+  const toolMention = /list_source_directory|read_source_file/.test(lower)
+  if (toolMention) return true
+
+  return strongTriggers.some(t => lower.includes(t))
 }
 
 export { MAX_TOOL_ITERATIONS }
