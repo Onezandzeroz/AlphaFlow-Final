@@ -105,6 +105,17 @@ interface Transaction {
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
   currency?: string | null;
   exchangeRate?: number | string | null;
+  amountDKK?: number | string | null;
+}
+
+/** Get the DKK amount for a transaction.
+ *  For foreign-currency transactions, amountDKK holds the converted DKK amount.
+ *  For DKK transactions, amount is already in DKK.
+ *  Falls back to amount when amountDKK is not available (legacy data).
+ */
+function getDKKAmount(tx: Transaction): number {
+  if (tx.amountDKK != null) return Number(tx.amountDKK);
+  return Number(tx.amount);
 }
 
 interface Invoice {
@@ -132,12 +143,13 @@ function getDisplayVAT(tx: Transaction): { rate: number; amount: number } {
     return { rate: tx.journalVAT.rate, amount: tx.journalVAT.amount };
   }
   const rate = tx.vatPercent || 0;
-  if (rate === 0 || tx.amount <= 0) return { rate: 0, amount: 0 };
+  const dkkAmt = getDKKAmount(tx);
+  if (rate === 0 || dkkAmt <= 0) return { rate: 0, amount: 0 };
   // Virtual invoice-derived transactions have net amounts
   const isVirtual = tx.id?.startsWith('inv-');
   const netVat = isVirtual || tx.type !== 'SALE'
-    ? tx.amount * rate / 100
-    : tx.amount * rate / (100 + rate);
+    ? dkkAmt * rate / 100
+    : dkkAmt * rate / (100 + rate);
   return { rate, amount: Math.round(netVat * 100) / 100 };
 }
 
@@ -460,7 +472,8 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
       result = result.filter(
         (t) =>
           t.description.toLowerCase().includes(query) ||
-          t.amount.toString().includes(query)
+          t.amount.toString().includes(query) ||
+          (t.amountDKK != null && t.amountDKK.toString().includes(query))
       );
     }
 
@@ -480,7 +493,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
       if (sortField === 'date') {
         comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
       } else if (sortField === 'amount') {
-        comparison = a.amount - b.amount;
+        comparison = getDKKAmount(a) - getDKKAmount(b);
       } else if (sortField === 'vatPercent') {
         comparison = a.vatPercent - b.vatPercent;
       }
@@ -561,8 +574,8 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
     const sales = active.filter(t => t.type === 'SALE' || !t.type);
     const purchases = active.filter(t => t.type === 'PURCHASE');
 
-    const salesAmount = sales.reduce((sum, t) => sum + Number(t.amount), 0);
-    const purchasesAmount = purchases.reduce((sum, t) => sum + Number(t.amount), 0);
+    const salesAmount = sales.reduce((sum, t) => sum + getDKKAmount(t), 0);
+    const purchasesAmount = purchases.reduce((sum, t) => sum + getDKKAmount(t), 0);
 
     const outputVAT = active
       .filter(t => t.type === 'SALE' || !t.type)
@@ -876,7 +889,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                             "text-base font-bold whitespace-nowrap",
                             isCancelled ? "text-gray-400 dark:text-gray-500" : typeInfo.amountClass
                           )}>
-                            {tc(transaction.amount)}
+                            {tc(getDKKAmount(transaction))}
                           </span>
                           {transaction.currency && transaction.currency !== 'DKK' && transaction.exchangeRate && (
                             <Badge variant="outline" className="text-[10px] font-mono bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20 gap-0.5 shrink-0">
@@ -1030,7 +1043,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                   <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{t('total')}</span>
                   <div className="text-right">
                     <span className="text-base font-bold text-gray-900 dark:text-white">
-                      {tc(activeFiltered.reduce((sum, tx) => sum + tx.amount, 0))}
+                      {tc(activeFiltered.reduce((sum, tx) => sum + getDKKAmount(tx), 0))}
                     </span>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
                       {filteredTransactions.length} {t('transactionsWord')}
@@ -1165,7 +1178,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       </TableCell>
                       <TableCell className={cn("text-right whitespace-nowrap font-medium", isCancelled && "text-gray-400 dark:text-gray-500")}>
                         <div className="flex items-center justify-end gap-1.5">
-                          <span>{tc(transaction.amount)}</span>
+                          <span>{tc(getDKKAmount(transaction))}</span>
                           {transaction.currency && transaction.currency !== 'DKK' && transaction.exchangeRate && (
                             <Badge variant="outline" className="text-[10px] font-mono bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20 gap-0.5">
                               {getCurrencySymbol(transaction.currency)}
@@ -1336,7 +1349,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                     <TableCell />
                     <TableCell />
                     <TableCell className="font-semibold">{t('total')}</TableCell>
-                    <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + Math.abs(Number(tx.amount)), 0))}</TableCell>
+                    <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + Math.abs(getDKKAmount(tx)), 0))}</TableCell>
                     <TableCell />
                     <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + Math.abs(getDisplayVAT(tx).amount), 0))}</TableCell>
                     <TableCell />

@@ -114,6 +114,7 @@ interface Transaction {
   date: string;
   type: 'SALE' | 'PURCHASE' | 'SALARY' | 'BANK' | 'Z_REPORT' | 'PRIVATE' | 'ADJUSTMENT';
   amount: number;
+  amountDKK?: number | string | null;
   description: string;
   vatPercent: number;
   receiptImage: string | null;
@@ -3115,7 +3116,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                         <span className={`text-sm font-semibold tabular-nums ${
                           tx.type === 'PURCHASE' ? 'text-amber-600 dark:text-amber-400' : tx.type === 'SALARY' ? 'text-purple-600 dark:text-purple-400' : tx.type === 'BANK' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'
                         }`}>
-                          {tx.type === 'PURCHASE' ? '-' : tx.type === 'SALE' ? '+' : ''}{tc(tx.amount)}
+                          {tx.type === 'PURCHASE' ? '-' : tx.type === 'SALE' ? '+' : ''}{tc(tx.amountDKK != null ? Number(tx.amountDKK) : tx.amount)}
                         </span>
                       </div>
                     );
