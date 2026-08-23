@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
@@ -988,168 +989,306 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
 
       {/* Detail Dialog */}
       <Dialog open={!!detailLog} onOpenChange={(open) => { if (!open) setDetailLog(null); }}>
-        <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-2xl max-h-[85vh] overflow-y-auto">
-          {detailLog && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="dark:text-white flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-[#0d9488]" />
-                  {isDanish ? 'Logdetaljer' : 'Log Entry Details'}
-                </DialogTitle>
-                <DialogDescription className="dark:text-gray-400">
-                  {formatTimestamp(detailLog.createdAt, language)}
-                </DialogDescription>
-              </DialogHeader>
+        <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-2xl max-h-[85vh] overflow-hidden p-0 gap-0">
+          {detailLog && (() => {
+            const changes = parseChanges(detailLog.changes);
+            const meta = detailLog.metadata as Record<string, any> | null;
 
-              <div className="space-y-4 mt-4">
-                {/* Action & Entity */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      {isDanish ? 'Handling' : 'Action'}
-                    </p>
-                    <Badge
-                      variant="outline"
-                      className={`text-xs font-medium ${getActionBadgeStyle(detailLog.action)}`}
-                    >
-                      {getActionLabel(detailLog.action, language)}
-                    </Badge>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      {isDanish ? 'Entitetstype' : 'Entity Type'}
-                    </p>
-                    <span className="text-sm text-gray-900 dark:text-white font-medium">
-                      {getEntityTypeLabel(detailLog.entityType, language)}
-                    </span>
-                  </div>
-                </div>
+            // ── Syntax-highlighted value renderer ────────────────────────
+            const renderPrimitiveValue = (value: unknown): React.ReactNode => {
+              if (value === null) {
+                return <span className="text-gray-400 dark:text-gray-500 italic">null</span>;
+              }
+              if (value === undefined) {
+                return <span className="text-gray-400 dark:text-gray-500 italic">undefined</span>;
+              }
+              if (typeof value === 'boolean') {
+                return <span className="text-gray-500 dark:text-gray-400">{String(value)}</span>;
+              }
+              if (typeof value === 'number') {
+                return <span className="text-teal-600 dark:text-teal-400">{value}</span>;
+              }
+              if (typeof value === 'string') {
+                return <span className="text-green-600 dark:text-green-400">&quot;{value}&quot;</span>;
+              }
+              return <span className="text-gray-600 dark:text-gray-400">{JSON.stringify(value)}</span>;
+            };
 
-                {/* IDs */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      {isDanish ? 'Log-ID' : 'Log ID'}
-                    </p>
-                    <ReadableId id={detailLog.id} label={isDanish ? 'Log-ID' : 'Log ID'} />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      {isDanish ? 'Bruger-ID' : 'User ID'}
-                    </p>
-                    <ReadableId id={detailLog.userId} label={isDanish ? 'Bruger-ID' : 'User ID'} />
-                  </div>
-                </div>
+            const isComplexValue = (value: unknown): boolean => {
+              return value !== null && typeof value === 'object' && !Array.isArray(value);
+            };
 
-                {detailLog.entityId && (
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
-                      {isDanish ? 'Entitets-ID' : 'Entity ID'}
-                    </p>
-                    <ReadableId id={detailLog.entityId} label={isDanish ? 'Entitets-ID' : 'Entity ID'} />
-                  </div>
-                )}
+            const isArrayValue = (value: unknown): boolean => {
+              return Array.isArray(value);
+            };
 
-                {/* Changes Diff */}
-                {(() => {
-                  const changes = parseChanges(detailLog.changes);
-                  if (changes.length === 0) return null;
-                  return (
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                        {isDanish ? 'Ændringer' : 'Changes'}
-                      </p>
-                      <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                        <div className="grid grid-cols-[1fr_auto_1fr] gap-2 px-3 py-2 bg-gray-100 dark:bg-white/5 text-xs font-medium text-gray-500 dark:text-gray-400">
-                          <span>{isDanish ? 'Felt' : 'Field'}</span>
-                          <span className="w-6" />
-                          <span>{isDanish ? 'Værdi' : 'Value'}</span>
-                        </div>
-                        {changes.map((change, idx) => (
-                          <div
-                            key={idx}
-                            className={`grid grid-cols-[1fr_auto_1fr] gap-2 px-3 py-2 text-sm items-start ${
-                              idx < changes.length - 1 ? 'border-t border-gray-100/50' : ''
-                            }`}
-                          >
-                            <span className="font-medium text-gray-700 dark:text-gray-300 text-xs break-all">
-                              {change.field}
-                            </span>
-                            <ArrowRight className="h-3 w-3 text-gray-400 mt-0.5 shrink-0" />
-                            <div className="flex flex-col gap-0.5">
-                              {change.oldValue !== null && (
-                                <span className="text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-1.5 py-0.5 rounded font-mono text-xs break-all">
-                                  {formatValue(change.oldValue)}
-                                </span>
-                              )}
-                              <span className="text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-1.5 py-0.5 rounded font-mono text-xs break-all">
-                                {formatValue(change.newValue)}
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
+            // ── Recursive key-value pair renderer ────────────────────────
+            const renderKeyValuePairs = (
+              data: Record<string, any> | any[],
+              depth: number = 0
+            ): React.ReactNode => {
+              const entries = Array.isArray(data)
+                ? data.map((v, i) => [String(i), v] as [string, any])
+                : Object.entries(data as Record<string, any>);
 
-                {/* Raw JSON changes */}
-                {detailLog.changes && (
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                      {isDanish ? 'Rå JSON-ændringer' : 'Raw JSON Changes'}
-                    </p>
-                    <ScrollArea className="max-h-48">
-                      <pre className="text-xs bg-gray-100 dark:bg-white/5 p-3 rounded-lg font-mono text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words">
-                        {(() => {
-                          try {
-                            return JSON.stringify(detailLog.changes, null, 2);
-                          } catch {
-                            return String(detailLog.changes);
-                          }
-                        })()}
-                      </pre>
-                      <ScrollBar />
-                    </ScrollArea>
-                  </div>
-                )}
+              if (entries.length === 0) {
+                return (
+                  <span className="text-gray-400 dark:text-gray-500 italic text-xs pl-2">
+                    {Array.isArray(data) ? '[]' : '{}'}
+                  </span>
+                );
+              }
 
-                {/* Metadata */}
-                {detailLog.metadata && (
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
-                      {isDanish ? 'Metadata' : 'Metadata'}
-                    </p>
-                    {(() => {
-                      const meta = detailLog.metadata as Record<string, any>;
-                      if (!meta) return null;
-                      const entries = Object.entries(meta);
-                      if (entries.length === 0) return null;
-                      return (
-                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                          {entries.map(([key, value], idx) => (
-                            <div
-                              key={key}
-                              className={`flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 px-3 py-2 text-sm ${
-                                idx > 0 ? 'border-t border-gray-100/50' : ''
-                              }`}
-                            >
-                              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[80px]">
+              return (
+                <div className={depth > 0 ? 'ml-4 border-l border-gray-200 dark:border-gray-700 pl-3' : ''}>
+                  {entries.map(([key, value], idx) => {
+                    const isComplex = isComplexValue(value);
+                    const isArr = isArrayValue(value);
+
+                    return (
+                      <div
+                        key={`${key}-${idx}`}
+                        className={`py-2 px-3 rounded-md ${
+                          idx % 2 === 0
+                            ? 'bg-gray-50/70 dark:bg-white/[0.02]'
+                            : 'bg-transparent'
+                        } ${depth === 0 && idx > 0 ? 'mt-0.5' : ''}`}
+                      >
+                        {isComplex || isArr ? (
+                          <details className="group">
+                            <summary className="flex items-center gap-2 cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden">
+                              <ChevronRight className="h-3 w-3 text-gray-400 dark:text-gray-500 shrink-0 transition-transform group-open:rotate-90" />
+                              <span className="inline-flex items-center rounded-full bg-gray-200/70 dark:bg-gray-700/50 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400 font-mono">
                                 {key}
                               </span>
-                              <span className="text-xs text-gray-700 dark:text-gray-300 font-mono break-all">
-                                {typeof value === 'string' ? value : JSON.stringify(value)}
+                              <span className="text-xs text-gray-400 dark:text-gray-500">
+                                {isArr ? `[${(value as any[]).length}]` : `{${Object.keys(value as Record<string, any>).length}}`}
                               </span>
+                            </summary>
+                            <div className="mt-1.5">
+                              {renderKeyValuePairs(value, depth + 1)}
+                            </div>
+                          </details>
+                        ) : (
+                          <div className="flex items-start gap-3 min-w-0">
+                            <span className="inline-flex items-center shrink-0 rounded-full bg-gray-200/70 dark:bg-gray-700/50 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-400 font-mono">
+                              {key}
+                            </span>
+                            <span className="text-xs font-mono break-all leading-relaxed">
+                              {renderPrimitiveValue(value)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            };
+
+            return (
+              <>
+                {/* ── Gradient Accent Bar ──────────────────────────── */}
+                <div className="h-1.5 w-full bg-gradient-to-r from-[#0d9488] via-teal-400 to-emerald-400 shrink-0" />
+
+                <div className="overflow-y-auto max-h-[calc(85vh-6px)] px-6 py-5 space-y-5">
+                  {/* ── Header ────────────────────────────────────── */}
+                  <div>
+                    <DialogHeader>
+                      <DialogTitle className="dark:text-white flex items-center gap-2.5 text-lg">
+                        <Shield className="h-5 w-5 text-[#0d9488]" />
+                        {isDanish ? 'Logdetaljer' : 'Log Entry Details'}
+                      </DialogTitle>
+                      <DialogDescription className="sr-only">
+                        {formatTimestamp(detailLog.createdAt, language)}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {/* Action badge + Entity type + Timestamp — one clean row */}
+                    <div className="flex flex-wrap items-center gap-2.5 mt-3">
+                      <Badge
+                        variant="outline"
+                        className={`text-xs font-semibold px-2.5 py-0.5 ${getActionBadgeStyle(detailLog.action)}`}
+                      >
+                        {getActionLabel(detailLog.action, language)}
+                      </Badge>
+                      <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                        {getEntityTypeLabel(detailLog.entityType, language)}
+                      </span>
+                      <span className="mx-1 text-gray-300 dark:text-gray-600">·</span>
+                      <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        <Clock className="h-3.5 w-3.5" />
+                        {formatTimestamp(detailLog.createdAt, language)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <Separator className="bg-gray-200/80 dark:bg-gray-700/60" />
+
+                  {/* ── IDs Section ───────────────────────────────── */}
+                  <div className="rounded-xl bg-gray-50/80 dark:bg-white/[0.03] p-4 space-y-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                      {isDanish ? 'Identifikatorer' : 'Identifiers'}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs text-gray-400 dark:text-gray-500 min-w-[65px]">
+                          {isDanish ? 'Log-ID' : 'Log ID'}
+                        </span>
+                        <ReadableId id={detailLog.id} label={isDanish ? 'Log-ID' : 'Log ID'} />
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs text-gray-400 dark:text-gray-500 min-w-[65px]">
+                          {isDanish ? 'Bruger-ID' : 'User ID'}
+                        </span>
+                        <ReadableId id={detailLog.userId} label={isDanish ? 'Bruger-ID' : 'User ID'} />
+                      </div>
+                      {detailLog.entityId && (
+                        <div className="flex items-center gap-2.5 sm:col-span-2">
+                          <span className="text-xs text-gray-400 dark:text-gray-500 min-w-[65px]">
+                            {isDanish ? 'Entitets-ID' : 'Entity ID'}
+                          </span>
+                          <ReadableId id={detailLog.entityId} label={isDanish ? 'Entitets-ID' : 'Entity ID'} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── Changes Diff Section ──────────────────────── */}
+                  {changes.length > 0 && (
+                    <>
+                      <Separator className="bg-gray-200/80 dark:bg-gray-700/60" />
+                      <div className="rounded-xl bg-gray-50/80 dark:bg-white/[0.03] p-4 space-y-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                          {isDanish ? 'Ændringer' : 'Changes'}
+                        </p>
+                        <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/50 overflow-hidden">
+                          {/* Table header */}
+                          <div className="grid grid-cols-[1fr_auto_1fr] gap-2 px-4 py-2.5 bg-gray-100/80 dark:bg-white/5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                            <span>{isDanish ? 'Felt' : 'Field'}</span>
+                            <span className="w-6" />
+                            <span>{isDanish ? 'Værdi' : 'Value'}</span>
+                          </div>
+                          {/* Rows */}
+                          {changes.map((change, idx) => (
+                            <div
+                              key={idx}
+                              className={`grid grid-cols-[1fr_auto_1fr] gap-2 px-4 py-3 text-sm items-start transition-colors ${
+                                idx % 2 === 0
+                                  ? 'bg-white dark:bg-transparent'
+                                  : 'bg-gray-50/60 dark:bg-white/[0.015]'
+                              } ${
+                                idx < changes.length - 1 ? 'border-t border-gray-100 dark:border-gray-800/60' : ''
+                              }`}
+                            >
+                              <span className="font-semibold text-gray-700 dark:text-gray-300 text-xs pt-0.5 break-all">
+                                {change.field}
+                              </span>
+                              <ArrowRight className="h-3.5 w-3.5 text-gray-300 dark:text-gray-600 mt-0.5 shrink-0" />
+                              <div className="flex flex-col gap-1.5">
+                                {change.oldValue !== null && (
+                                  <span className="text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded-md font-mono text-xs break-all leading-relaxed">
+                                    {formatValue(change.oldValue)}
+                                  </span>
+                                )}
+                                <span className="text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded-md font-mono text-xs break-all leading-relaxed">
+                                  {formatValue(change.newValue)}
+                                </span>
+                              </div>
                             </div>
                           ))}
                         </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+                      </div>
+                    </>
+                  )}
+
+                  {/* ── Raw JSON Key-Value Table ─────────────────── */}
+                  {detailLog.changes && (() => {
+                    let parsed: any;
+                    try {
+                      parsed = typeof detailLog.changes === 'string'
+                        ? JSON.parse(detailLog.changes)
+                        : detailLog.changes;
+                    } catch {
+                      return null;
+                    }
+                    if (!parsed || typeof parsed !== 'object') return null;
+
+                    // Flatten old/new structure into a combined view
+                    let kvData: Record<string, any>;
+                    if (parsed.old !== undefined || parsed.new !== undefined) {
+                      // Show as two sub-sections: old and new
+                      kvData = parsed as Record<string, any>;
+                    } else {
+                      kvData = parsed;
+                    }
+
+                    const hasOldNew = parsed.old !== undefined || parsed.new !== undefined;
+
+                    return (
+                      <>
+                        <Separator className="bg-gray-200/80 dark:bg-gray-700/60" />
+                        <div className="rounded-xl bg-gray-50/80 dark:bg-white/[0.03] p-4 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <FileJson className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                              {isDanish ? 'JSON-ændringer' : 'JSON Changes'}
+                            </p>
+                          </div>
+                          <ScrollArea className="max-h-72">
+                            {hasOldNew ? (
+                              <div className="space-y-3">
+                                {parsed.old && (
+                                  <div>
+                                    <span className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-red-600 dark:text-red-400 mb-2">
+                                      {isDanish ? 'Tidligere' : 'Before'}
+                                    </span>
+                                    <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/50 overflow-hidden">
+                                      {renderKeyValuePairs(parsed.old as Record<string, any>, 0)}
+                                    </div>
+                                  </div>
+                                )}
+                                {parsed.new && (
+                                  <div>
+                                    <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-green-600 dark:text-green-400 mb-2">
+                                      {isDanish ? 'Ny' : 'After'}
+                                    </span>
+                                    <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/50 overflow-hidden">
+                                      {renderKeyValuePairs(parsed.new as Record<string, any>, 0)}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/50 overflow-hidden">
+                                {renderKeyValuePairs(kvData, 0)}
+                              </div>
+                            )}
+                            <ScrollBar />
+                          </ScrollArea>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                  {/* ── Metadata Section ───────────────────────────── */}
+                  {meta && Object.keys(meta).length > 0 && (
+                    <>
+                      <Separator className="bg-gray-200/80 dark:bg-gray-700/60" />
+                      <div className="rounded-xl bg-gray-50/80 dark:bg-white/[0.03] p-4 space-y-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                          {isDanish ? 'Metadata' : 'Metadata'}
+                        </p>
+                        <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/50 overflow-hidden">
+                          {renderKeyValuePairs(meta, 0)}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
