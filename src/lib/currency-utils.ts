@@ -264,15 +264,21 @@ async function getCachedRates(): Promise<{ rates: Record<string, number>; date: 
 /**
  * Get the exchange rate between two currencies.
  *
- * The rate returned is: "how many units of `from` equals 1 unit of `to`".
- * For example, getExchangeRate('DKK', 'EUR') ≈ 7.46 means 7.46 DKK = 1 EUR.
+ * The rate returned is the multiplier to convert FROM currency TO currency:
+ *   result = amountInFROM × rate  →  amountInTO
  *
- * Uses the Frankfurter API (ECB reference rates, free, EU-based) with 1-hour in-memory caching.
- * Falls back to stale cache if the API is temporarily unavailable.
+ * Examples (when 1 DKK = 0.134 EUR):
+ *   getExchangeRate('DKK', 'EUR') = 0.134  →  100 DKK × 0.134 = 13.4 EUR
+ *   getExchangeRate('EUR', 'DKK') = 7.46   →  100 EUR × 7.46  = 746 DKK
+ *   getExchangeRate('EUR', 'USD') = 1.17   →  100 EUR × 1.17  = 117 USD
  *
- * @param from - Source currency code (e.g. 'DKK')
- * @param to - Target currency code (e.g. 'EUR')
- * @returns Exchange rate, or null if unavailable
+ * Uses the Frankfurter API (ECB reference rates, free, EU-based) with 1-hour
+ * in-memory caching. Falls back to stale cache if the API is temporarily
+ * unavailable.
+ *
+ * @param from - Source currency code (e.g. 'EUR')
+ * @param to - Target currency code (e.g. 'DKK')
+ * @returns Multiplier rate, or null if unavailable
  */
 export async function getExchangeRate(
   from: string,
@@ -292,37 +298,30 @@ export async function getExchangeRate(
     return null;
   }
 
-  const dkkToForeign = data.rates; // e.g., { EUR: 0.134, USD: 0.144, ... }
+  const dkkToForeign = data.rates; // e.g. { EUR: 0.134, USD: 0.156, ... } meaning "1 DKK = 0.134 EUR"
 
-  // DKK → foreign: rate is directly in the cache
-  // getExchangeRate('DKK', 'EUR') = 1 / dkkToForeign.EUR
-  // Wait — the Frankfurter API returns rates as: 1 DKK = X foreign.
-  // So dkkToForeign.EUR = 0.134 means 1 DKK = 0.134 EUR.
-  // We want: how many DKK per 1 EUR = 1 / 0.134 ≈ 7.46
-  // But the function returns "units of `from` per 1 unit of `to`":
-  //   getExchangeRate('DKK', 'EUR') = units of DKK per 1 EUR = 1 / 0.134
-  //   getExchangeRate('EUR', 'DKK') = units of EUR per 1 DKK = 0.134
-  //   getExchangeRate('EUR', 'USD') = units of EUR per 1 USD = dkkToForeign.USD / dkkToForeign.EUR
-
+  // DKK → foreign: multiply DKK amount by this to get foreign amount
+  //   getExchangeRate('DKK', 'EUR') = dkkToForeign.EUR = 0.134
   if (normalizedFrom === 'DKK' && normalizedTo !== 'DKK') {
     const foreignRate = dkkToForeign[normalizedTo];
     if (foreignRate == null || foreignRate === 0) return null;
-    // How many DKK per 1 unit of foreign
-    return 1 / foreignRate;
-  }
-
-  if (normalizedFrom !== 'DKK' && normalizedTo === 'DKK') {
-    const foreignRate = dkkToForeign[normalizedFrom];
-    if (foreignRate == null) return null;
-    // How many foreign per 1 DKK (this is the direct rate)
     return foreignRate;
   }
 
+  // foreign → DKK: multiply foreign amount by this to get DKK amount
+  //   getExchangeRate('EUR', 'DKK') = 1 / dkkToForeign.EUR = 7.46
+  if (normalizedFrom !== 'DKK' && normalizedTo === 'DKK') {
+    const foreignRate = dkkToForeign[normalizedFrom];
+    if (foreignRate == null || foreignRate === 0) return null;
+    return 1 / foreignRate;
+  }
+
   // Foreign → Foreign cross-rate
+  //   getExchangeRate('EUR', 'USD') = (1/dkkToForeign.EUR) × dkkToForeign.USD
+  //                               = dkkToForeign.USD / dkkToForeign.EUR
   const fromRate = dkkToForeign[normalizedFrom];
   const toRate = dkkToForeign[normalizedTo];
   if (fromRate == null || fromRate === 0 || toRate == null || toRate === 0) return null;
-  // Cross-rate: (1/fromRate) / (1/toRate) = toRate / fromRate
   return toRate / fromRate;
 }
 

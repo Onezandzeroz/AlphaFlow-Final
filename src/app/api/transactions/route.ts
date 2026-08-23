@@ -91,7 +91,7 @@ export const POST = withGuard({
 }, async (request, ctx) => {
   try {
     const body = await request.json();
-    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId, lineItems, documentType, originalTransactionId } = body;
+    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId, lineItems, documentType, originalTransactionId, currency, exchangeRate } = body;
 
     // Purchase credit notes: a supplier credit note received by the tenant.
     // Marked via documentType='PURCHASE_CREDIT_NOTE' on a PURCHASE row. The
@@ -261,6 +261,11 @@ export const POST = withGuard({
             type: txType,
             date: new Date(date),
             amount: parsedAmount,
+            currency: (currency && currency !== 'DKK') ? currency : 'DKK',
+            exchangeRate: (currency && currency !== 'DKK' && exchangeRate) ? exchangeRate : null,
+            amountDKK: (currency && currency !== 'DKK' && exchangeRate)
+              ? Math.round(parsedAmount * Number(exchangeRate) * 100) / 100
+              : parsedAmount,
             description,
             vatPercent: vatPercent ?? 25.0,
             receiptImage,
