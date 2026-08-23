@@ -262,8 +262,8 @@ export const GET = withGuard(
         { code: 'K25', description: 'Input VAT 25%', percentage: 25 },
         { code: 'K12', description: 'Input VAT 12%', percentage: 12 },
         { code: 'K0', description: 'Input VAT 0%', percentage: 0 },
-        { code: 'KEU', description: 'EU Input VAT 0%', percentage: 0 },
-        { code: 'KUF', description: 'Reverse charge 0%', percentage: 0 },
+        { code: 'KEU', description: 'EU Input VAT (reverse charge) 25%', percentage: 25 },
+        { code: 'KUF', description: 'Import VAT (reverse charge) 25%', percentage: 25 },
       ];
 
       standardDanishCodes.forEach((tc) => {
@@ -512,8 +512,8 @@ function getVatCodeDescription(code: string): string {
     K25: 'Input VAT 25% (Købsmoms)',
     K12: 'Input VAT 12% (Købsmoms)',
     K0: 'Input VAT 0%',
-    KEU: 'EU Input VAT 0% (Varekøb EU)',
-    KUF: 'Reverse charge 0%',
+    KEU: 'EU Input VAT 25% (reverse charge)',
+    KUF: 'Import VAT 25% (reverse charge)',
     NONE: 'No VAT',
   };
   return descriptions[code] || code;

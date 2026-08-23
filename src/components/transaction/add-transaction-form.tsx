@@ -48,7 +48,7 @@ import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { ClearFormButton } from '@/components/ui/clear-form-button';
 import { VATCodeSelect } from '@/components/shared/vat-code-select';
-import { VAT_RATE_MAP } from '@/lib/vat-codes';
+import { VAT_RATE_MAP, REVERSE_CHARGE_CODES } from '@/lib/vat-codes';
 import {
   Popover,
   PopoverContent,
@@ -197,6 +197,12 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
 
   const [vatPercent, setVatPercent] = useState('25');
   const [vatCode, setVatCode] = useState('K25');
+
+  // Reverse-charge: supplier doesn't add VAT, so "inkl. moms" toggle is forced off
+  const isReverseCharge = REVERSE_CHARGE_CODES.has(vatCode);
+  useEffect(() => {
+    if (isReverseCharge && includesVAT) setIncludesVAT(false);
+  }, [isReverseCharge]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Recurring purchase state ───
   const [isRecurring, setIsRecurring] = useState(false);
@@ -1320,7 +1326,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         <Label className="dark:text-gray-300 text-sm font-medium">{t('amount')}</Label>
         <div className="flex items-center gap-1.5">
           <Label className="text-[11px] text-[#0d9488] dark:text-[#2dd4bf] cursor-pointer">{t('amountIncludesVAT')}</Label>
-          <ResponsiveSwitch checked={includesVAT} onCheckedChange={setIncludesVAT} disabled={isLoading} />
+          <ResponsiveSwitch checked={includesVAT} onCheckedChange={setIncludesVAT} disabled={isLoading || !!isReverseCharge} />
         </div>
       </div>
       <div className="relative">

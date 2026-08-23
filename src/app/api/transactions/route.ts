@@ -9,7 +9,7 @@ import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { enrichTransactionsWithVAT } from '@/lib/vat-utils';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { notifyDataChanges } from '@/lib/notify-data-change';
-import { VAT_RATE_MAP } from '@/lib/vat-codes';
+import { VAT_RATE_MAP, REVERSE_CHARGE_CODES } from '@/lib/vat-codes';
 import { sealJournalEntry, sealTransaction, findClosedFiscalPeriod } from '@/lib/journal-hash-chain';
 
 // GET - Fetch all non-cancelled transactions for the logged-in user
@@ -91,7 +91,7 @@ export const POST = withGuard({
 }, async (request, ctx) => {
   try {
     const body = await request.json();
-    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId, lineItems, documentType, originalTransactionId, currency, exchangeRate } = body;
+    const { type, date, amount, description, vatPercent, receiptImage, accountId, projectId, lineItems, documentType, originalTransactionId, currency, exchangeRate, vatCode: bodyVatCode } = body;
 
     // Purchase credit notes: a supplier credit note received by the tenant.
     // Marked via documentType='PURCHASE_CREDIT_NOTE' on a PURCHASE row. The
@@ -338,6 +338,24 @@ export const POST = withGuard({
               }
             }
 
+            // ── Reverse-charge (omvendt betalingspligt) output VAT account ──
+            // For KEU/KUF, we need an output VAT account to record the self-assessed
+            // output VAT. Try well-known numbers first, then fall back to group.
+            let outputVatAccountId: string | null = null;
+            let outputVatAccount12Id: string | null = null;
+            const hasReverseCharge = lineItems.some((li: { vatCode: string }) => REVERSE_CHARGE_CODES.has(li.vatCode));
+            if (hasReverseCharge) {
+              // Try FSR numbers first, then standard chart numbers, then any OUTPUT_VAT group
+              const outputVat25 = await tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: { in: ['4510', '7100'] }, isActive: true } })
+                ?? await tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, group: 'OUTPUT_VAT', isActive: true } });
+              outputVatAccountId = outputVat25?.id ?? null;
+              if (!outputVatAccountId) throw new Error('Output VAT account (udgående moms) not found for reverse charge');
+
+              // Also look up 12% output VAT in case mixed
+              const outputVat12 = await tx.account.findFirst({ where: { companyId: ctx.activeCompanyId!, number: { in: ['4520', '7110'] }, isActive: true } });
+              outputVatAccount12Id = outputVat12?.id ?? null;
+            }
+
             for (const li of lineItems) {
               const foreignNetAmount = Number(li.netAmount);
               if (!isFinite(foreignNetAmount)) {
@@ -346,10 +364,13 @@ export const POST = withGuard({
 
               const vatCode = li.vatCode as VATCode;
               const rate = VAT_RATE_MAP[li.vatCode] ?? 0;
+              const isReverseCharge = REVERSE_CHARGE_CODES.has(li.vatCode);
               // Convert to DKK before computing VAT (VAT is always calculated on DKK)
               const netAmount = r2(foreignNetAmount * dkkMultiplier);
               const vatAmount = r2((netAmount * rate) / 100);
-              const lineGross = r2(netAmount + vatAmount);
+              // For reverse charge: bank pays NET only (supplier adds no VAT)
+              // For normal: bank pays GROSS (net + VAT)
+              const lineGross = isReverseCharge ? netAmount : r2(netAmount + vatAmount);
               totalGross += lineGross;
 
               // Validate the expense account belongs to this company
@@ -391,10 +412,30 @@ export const POST = withGuard({
                   projectId: null,
                 });
                 if (isNegative) totalCredit += r2(absVat); else totalDebit += r2(absVat);
+
+                // ── Reverse charge: output VAT line (CR) ──
+                // The buyer self-assesses output VAT (omvendt betalingspligt).
+                // This creates a CR on the output VAT account, balancing the DR
+                // on the input VAT account. Net effect on VAT return: 0.
+                if (isReverseCharge) {
+                  const outVatId = rate === 12 ? (outputVatAccount12Id ?? outputVatAccountId) : outputVatAccountId;
+                  if (!outVatId) throw new Error(`Output VAT account for rate ${rate}% not found for reverse charge`);
+                  // Output VAT: credit when normal, debit when negative (reversal)
+                  jeLines.push({
+                    accountId: outVatId,
+                    debit: isNegative ? r2(absVat) : 0,
+                    credit: isNegative ? 0 : r2(absVat),
+                    description: `${lineDesc} – Udgående moms ${rate}% (omvendt betalingspligt)`,
+                    vatCode,
+                    companyId: ctx.activeCompanyId!,
+                    projectId: null,
+                  });
+                  if (isNegative) totalDebit += r2(absVat); else totalCredit += r2(absVat);
+                }
               }
             }
 
-            // Bank line — total gross
+            // Bank line — total gross (or net for reverse charge lines)
             const absGross = Math.abs(totalGross);
             const grossNegative = totalGross < 0;
             jeLines.push({
@@ -415,7 +456,10 @@ export const POST = withGuard({
             const netAmount = r2(parsedAmount * dkkMultiplier);
             const vatPct = vatPercent ?? 25;
             const vatAmount = r2((netAmount * vatPct) / 100);
-            const grossAmount = r2(netAmount + vatAmount);
+            const isReverseCharge = !!(bodyVatCode && REVERSE_CHARGE_CODES.has(bodyVatCode));
+            // For reverse charge: bank pays NET only (supplier adds no VAT)
+            // For normal: bank pays GROSS (net + VAT)
+            const grossAmount = isReverseCharge ? netAmount : r2(netAmount + vatAmount);
 
             if (!isFinite(netAmount) || !isFinite(grossAmount)) {
               throw new Error(`Invalid amount: net=${netAmount}, gross=${grossAmount}`);
@@ -436,27 +480,47 @@ export const POST = withGuard({
             const absVat = Math.abs(vatAmount);
             const absGross = Math.abs(grossAmount);
 
+            const solAVatCode: VATCode = bodyVatCode as VATCode || (vatPct === 25 ? 'K25' : vatPct === 12 ? 'K12' : 'K0');
+
             jeLines.push({
               accountId: expenseAccount.id,
               debit: isNegative ? 0 : r2(absNet),
               credit: isNegative ? r2(absNet) : 0,
               description,
-              vatCode: null,
+              vatCode: solAVatCode,
               companyId: ctx.activeCompanyId!,
               projectId: effectiveProjectId || null,
             });
 
             if (inputVatAccount && absVat > 0) {
-              const vatCode: VATCode = vatPct === 25 ? 'K25' : vatPct === 12 ? 'K12' : 'K0';
               jeLines.push({
                 accountId: inputVatAccount.id,
                 debit: isNegative ? 0 : r2(absVat),
                 credit: isNegative ? r2(absVat) : 0,
                 description: `${description} – Indgående moms ${vatPct}%`,
-                vatCode,
+                vatCode: solAVatCode,
                 companyId: ctx.activeCompanyId!,
                 projectId: null,
               });
+
+              // ── Reverse charge: output VAT line (CR) ──
+              if (isReverseCharge) {
+                const outputVatAcc = await tx.account.findFirst({
+                  where: { companyId: ctx.activeCompanyId!, number: { in: ['4510', '7100'] }, isActive: true },
+                }) ?? await tx.account.findFirst({
+                  where: { companyId: ctx.activeCompanyId!, group: 'OUTPUT_VAT', isActive: true },
+                });
+                if (!outputVatAcc) throw new Error('Output VAT account (udgående moms) not found for reverse charge');
+                jeLines.push({
+                  accountId: outputVatAcc.id,
+                  debit: isNegative ? r2(absVat) : 0,
+                  credit: isNegative ? 0 : r2(absVat),
+                  description: `${description} – Udgående moms ${vatPct}% (omvendt betalingspligt)`,
+                  vatCode: solAVatCode,
+                  companyId: ctx.activeCompanyId!,
+                  projectId: null,
+                });
+              }
             }
 
             jeLines.push({
