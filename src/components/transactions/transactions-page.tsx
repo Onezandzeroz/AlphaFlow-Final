@@ -82,6 +82,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { getCurrencySymbol } from '@/lib/currency-utils';
 import { useDataVersion } from '@/hooks/use-data-version';
 
 interface Transaction {
@@ -102,6 +103,8 @@ interface Transaction {
   // Journal-entry-derived VAT (authoritative) — from double-entry journal.
   // null when no journal entry exists.
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
+  currency?: string | null;
+  exchangeRate?: number | string | null;
 }
 
 interface Invoice {
@@ -868,12 +871,21 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                             )}
                           </div>
                         </div>
-                        <span className={cn(
-                          "text-base font-bold whitespace-nowrap",
-                          isCancelled ? "text-gray-400 dark:text-gray-500" : typeInfo.amountClass
-                        )}>
-                          {tc(transaction.amount)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn(
+                            "text-base font-bold whitespace-nowrap",
+                            isCancelled ? "text-gray-400 dark:text-gray-500" : typeInfo.amountClass
+                          )}>
+                            {tc(transaction.amount)}
+                          </span>
+                          {transaction.currency && transaction.currency !== 'DKK' && transaction.exchangeRate && (
+                            <Badge variant="outline" className="text-[10px] font-mono bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20 gap-0.5 shrink-0">
+                              {getCurrencySymbol(transaction.currency)}
+                              <span className="text-blue-500 dark:text-blue-400/70">@</span>
+                              {Number(transaction.exchangeRate).toFixed(4)}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       {/* Row 2: Date + Type Badge */}
@@ -1152,7 +1164,16 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                         </div>
                       </TableCell>
                       <TableCell className={cn("text-right whitespace-nowrap font-medium", isCancelled && "text-gray-400 dark:text-gray-500")}>
-                        {tc(transaction.amount)}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span>{tc(transaction.amount)}</span>
+                          {transaction.currency && transaction.currency !== 'DKK' && transaction.exchangeRate && (
+                            <Badge variant="outline" className="text-[10px] font-mono bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20 gap-0.5">
+                              {getCurrencySymbol(transaction.currency)}
+                              <span className="text-blue-500 dark:text-blue-400/70">@</span>
+                              {Number(transaction.exchangeRate).toFixed(4)}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <span className={cn("text-sm", isCancelled ? "text-gray-400 dark:text-gray-500" : "text-gray-600 dark:text-gray-400")}>
