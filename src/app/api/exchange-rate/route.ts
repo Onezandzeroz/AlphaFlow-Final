@@ -47,7 +47,7 @@ export const GET = withGuard(
             // Return "how many DKK per 1 unit of foreign"
             const rawRate = allRates.rates[currency];
             if (rawRate !== 0) {
-              filteredRates[currency] = Number((1 / rawRate).toFixed(6));
+              filteredRates[currency] = Number((1 / rawRate).toFixed(4));
             }
           }
         }
@@ -82,7 +82,7 @@ export const GET = withGuard(
       const allRates = await getLatestExchangeRates();
 
       return NextResponse.json({
-        rate: Number(rate.toFixed(6)),
+        rate: Number(rate.toFixed(4)),
         date: allRates?.date ?? null,
         source: allRates?.source ?? 'frankfurter-api',
       });

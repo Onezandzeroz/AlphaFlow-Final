@@ -248,7 +248,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
       if (res.ok) {
         const data = await res.json();
         if (data.rate != null) {
-          setExchangeRate(String(data.rate));
+          setExchangeRate(String(Math.round(data.rate * 10000) / 10000));
           setRateDate(data.date ?? null);
         } else {
           setExchangeRate('');
@@ -1150,7 +1150,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
           date: txDate,
           amount: txAmount,
           currency: receiptCardHasData && currency !== 'DKK' ? currency : undefined,
-          exchangeRate: receiptCardHasData && currency !== 'DKK' && exchangeRate ? parseFloat(exchangeRate) : undefined,
+          exchangeRate: receiptCardHasData && currency !== 'DKK' && exchangeRate ? Math.round(parseFloat(exchangeRate) * 10000) / 10000 : undefined,
           description: txDescription,
           vatPercent: txVatPercent,
           receiptImage: receiptImagePath,
@@ -1460,7 +1460,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
         {t('exchangeRate')} ({currency} → DKK)
         {rateLoading && <Loader2 className="inline h-3 w-3 ml-1.5 animate-spin text-[#0d9488]" />}
       </Label>
-      <Input type="number" step="0.0001" min="0" placeholder={rateLoading ? (isDa ? 'Henter kurs…' : 'Fetching rate…') : '0.0000'} value={exchangeRate} onChange={(e) => { setExchangeRate(e.target.value); exchangeRateManualRef.current = true; }} disabled={isLoading} className="bg-gray-50 dark:bg-white/5" />
+      <Input type="number" step="0.0001" min="0" placeholder={rateLoading ? (isDa ? 'Henter kurs…' : 'Fetching rate…') : '0.0000'} value={exchangeRate} onChange={(e) => { setExchangeRate(e.target.value); exchangeRateManualRef.current = true; }} onBlur={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) setExchangeRate(String(Math.round(v * 10000) / 10000)); }} disabled={isLoading} className="bg-gray-50 dark:bg-white/5" />
       {rateDate && !exchangeRateManualRef.current && (
         <p className="text-[10px] text-gray-400 flex items-center gap-1">
           <Info className="h-3 w-3" />
@@ -2160,7 +2160,7 @@ export function AddTransactionForm({ onSuccess, preloadedReceiptFile, onPreloade
               {currency !== 'DKK' && (
                 <div className="space-y-1.5">
                   <Label className="dark:text-gray-300 text-sm font-medium">{t('exchangeRate')} ({currency} → DKK)</Label>
-                  <Input type="number" step="0.0001" min="0" placeholder="0.0000" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} disabled={isLoading} className="bg-gray-50 dark:bg-white/5" />
+                  <Input type="number" step="0.0001" min="0" placeholder="0.0000" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} onBlur={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) setExchangeRate(String(Math.round(v * 10000) / 10000)); }} disabled={isLoading} className="bg-gray-50 dark:bg-white/5" />
                 </div>
               )}
             </div>
