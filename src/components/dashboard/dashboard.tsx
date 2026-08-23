@@ -854,6 +854,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
     if (vatRegister?.outputVAT && vatRegister.outputVAT.length > 0) {
       return vatRegister.outputVAT.map((entry) => ({
         rate: entry.rate,
+        code: entry.code,
         totalVAT: entry.netAmount,
       }));
     }
@@ -862,7 +863,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
 
   const outputPieData = useMemo(() => {
     return outputVATBreakdown.map((item, index) => ({
-      name: `${item.rate}%`,
+      name: item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`,
       value: item.totalVAT,
       fill: VAT_OUTPUT_COLORS[index % VAT_OUTPUT_COLORS.length],
     }));
@@ -873,6 +874,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
     if (vatRegister?.inputVAT && vatRegister.inputVAT.length > 0) {
       return vatRegister.inputVAT.map((entry) => ({
         rate: entry.rate,
+        code: entry.code,
         totalVAT: entry.netAmount,
       }));
     }
@@ -881,7 +883,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
 
   const inputPieData = useMemo(() => {
     return inputVATBreakdown.map((item, index) => ({
-      name: `${item.rate}%`,
+      name: item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`,
       value: item.totalVAT,
       fill: VAT_INPUT_COLORS[index % VAT_INPUT_COLORS.length],
     }));
@@ -2559,10 +2561,10 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                           </TableHeader>
                           <TableBody>
                             {outputVATBreakdown.map((item) => (
-                              <TableRow key={`out-${item.rate}`} className="border-b border-gray-50 dark:border-gray-800/50">
+                              <TableRow key={`out-${item.code || item.rate}`} className="border-b border-gray-50 dark:border-gray-800/50">
                                 <TableCell className="py-1.5">
                                   <Badge variant="outline" className="text-[#0d9488] border-[#0d9488]/30 bg-[#0d9488]/5 text-[11px] font-medium">
-                                    {item.rate}%
+                                    {item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right py-1.5 font-medium text-[#0d9488] dark:text-[#2dd4bf] tabular-nums text-xs">
@@ -2651,10 +2653,10 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                           </TableHeader>
                           <TableBody>
                             {inputVATBreakdown.map((item) => (
-                              <TableRow key={`in-${item.rate}`} className="border-b border-gray-50 dark:border-gray-800/50">
+                              <TableRow key={`in-${item.code || item.rate}`} className="border-b border-gray-50 dark:border-gray-800/50">
                                 <TableCell className="py-1.5">
                                   <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/5 text-[11px] font-medium">
-                                    {item.rate}%
+                                    {item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`}
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right py-1.5 font-medium text-amber-600 dark:text-amber-400 tabular-nums text-xs">

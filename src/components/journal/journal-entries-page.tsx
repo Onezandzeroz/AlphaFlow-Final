@@ -93,6 +93,7 @@ interface JournalLine {
   debit: number;
   credit: number;
   description?: string;
+  vatCode?: string | null;
   account?: AccountOption;
 }
 
@@ -1142,9 +1143,14 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                                 <div className={isDimmed ? 'col-span-3 sm:col-span-2 text-right font-mono text-gray-400 dark:text-gray-500' : 'col-span-3 sm:col-span-2 text-right font-mono text-gray-900 dark:text-white'}>
                                   {line.credit ? formatCurrencyValue(Number(line.credit), language) : ''}
                                 </div>
-                                {/* Description */}
-                                <div className="col-span-2 sm:col-span-3 text-xs text-gray-500 dark:text-gray-400 hidden sm:block truncate">
-                                  {line.description || ''}
+                                {/* Description + VAT Code */}
+                                <div className="col-span-2 sm:col-span-3 text-xs text-gray-500 dark:text-gray-400 hidden sm:flex items-center gap-1.5 truncate">
+                                  {line.vatCode && line.vatCode !== 'NONE' && (
+                                    <span className="shrink-0 inline-flex items-center justify-center min-w-[1.75rem] px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 border border-teal-200 dark:border-teal-800 leading-none">
+                                      {line.vatCode}
+                                    </span>
+                                  )}
+                                  <span className="truncate">{line.description || ''}</span>
                                 </div>
                               </div>
                             ))}

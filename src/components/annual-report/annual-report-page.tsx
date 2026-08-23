@@ -217,8 +217,8 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
     outputVat: number;
     inputVat: number;
     netVat: number;
-    outputVATBreakdown: Array<{ rate: number; netAmount: number }>;
-    inputVATBreakdown: Array<{ rate: number; netAmount: number }>;
+    outputVATBreakdown: Array<{ rate: number; code?: string; netAmount: number }>;
+    inputVATBreakdown: Array<{ rate: number; code?: string; netAmount: number }>;
   } | null>(null);
   const [isSubmittingVAT, setIsSubmittingVAT] = useState(false);
   const [isLoadingVAT, setIsLoadingVAT] = useState(true);
@@ -392,12 +392,12 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
           netVat: data.netVATPayable ?? 0,
           outputVATBreakdown: Array.isArray(data.outputVAT)
             ? data.outputVAT.map(
-                (e: { rate: number; netAmount: number }) => ({ rate: e.rate, netAmount: e.netAmount }),
+                (e: { rate: number; code?: string; netAmount: number }) => ({ rate: e.rate, code: e.code, netAmount: e.netAmount }),
               )
             : [],
           inputVATBreakdown: Array.isArray(data.inputVAT)
             ? data.inputVAT.map(
-                (e: { rate: number; netAmount: number }) => ({ rate: e.rate, netAmount: e.netAmount }),
+                (e: { rate: number; code?: string; netAmount: number }) => ({ rate: e.rate, code: e.code, netAmount: e.netAmount }),
               )
             : [],
         });
@@ -1079,10 +1079,10 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                         </TableHeader>
                         <TableBody>
                           {outputVATBreakdown.map((item) => (
-                            <TableRow key={`out-${item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
+                            <TableRow key={`out-${item.code || item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
                               <TableCell className="py-2 w-[40%]">
                                 <Badge className="status-badge status-badge-sent">
-                                  {item.rate}%
+                                  {item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right py-2 w-[30%] font-medium text-[#0d9488] dark:text-[#2dd4bf]">
@@ -1111,10 +1111,10 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                         </TableHeader>
                         <TableBody>
                           {inputVATBreakdown.map((item) => (
-                            <TableRow key={`in-${item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
+                            <TableRow key={`in-${item.code || item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
                               <TableCell className="py-2 w-[40%]">
                                 <Badge className="status-badge status-badge-overdue">
-                                  {item.rate}%
+                                  {item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right py-2 w-[30%] font-medium text-amber-600 dark:text-amber-400">

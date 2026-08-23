@@ -74,8 +74,14 @@ export function VATCodeSelect({
     return { code, rate: m.rate, name: m.publicName, description: m.description };
   });
 
-  // The display rate for the trigger (compact: just the % number).
+  // The display rate for the trigger.
   const displayRate = VAT_RATE_MAP[value] ?? 0;
+  // Show the code when it differs from the "default" code at that rate
+  // (e.g. KEU, KUF, SEU are non-standard 25%/0% codes). K25 is the default
+  // input-25% code, S25 is the default output-25% code, K0 is the default
+  // input-0% code, S0 is the default output-0% code. Always show the code
+  // so the user can distinguish KEU from K25, KUF from K25, SEU from S0, etc.
+  const showCodeInTrigger = value && value !== 'NONE';
 
   // Render a single group of codes. Each item uses the CODE as its value
   // (unique per code) and displays a badge + rate + name.
@@ -105,9 +111,18 @@ export function VATCodeSelect({
       disabled={disabled}
     >
       <SelectTrigger className={`${triggerClassName} ${className || ''}`}>
-        {/* Compact trigger: show the rate only (fits narrow w-20 containers).
-            The full code badge + name appears in the dropdown items below. */}
-        <span className="font-medium tabular-nums">{displayRate}%</span>
+        {/* Show code badge + rate in trigger so user can distinguish
+            KEU from K25, KUF from K25, SEU from S0, etc. */}
+        {showCodeInTrigger ? (
+          <span className="flex items-center gap-1.5 font-medium tabular-nums">
+            <span className="inline-flex items-center justify-center min-w-[1.75rem] px-1 py-0.5 rounded text-[9px] font-bold tracking-wide bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300 border border-teal-200 dark:border-teal-800 leading-none">
+              {value}
+            </span>
+            {displayRate}%
+          </span>
+        ) : (
+          <span className="font-medium tabular-nums">{displayRate}%</span>
+        )}
       </SelectTrigger>
       <SelectContent className="bg-white dark:bg-[#1a1f1e] dark:border-[#232740] max-h-80 overflow-y-auto min-w-[16rem]">
         {direction === 'output' && renderGroup(isDa ? 'Salg (udgående moms)' : 'Sales (output VAT)', outputCodes)}

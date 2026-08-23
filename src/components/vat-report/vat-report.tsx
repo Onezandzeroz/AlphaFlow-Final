@@ -223,6 +223,7 @@ export function VATReport({ user }: VATReportProps) {
     if (vatRegisterData) {
       return vatRegisterData.outputVAT.map((entry) => ({
         rate: entry.rate,
+        code: entry.code,
         count: 0,
         totalAmount: entry.netAmount,
         totalVAT: entry.netAmount,
@@ -236,6 +237,7 @@ export function VATReport({ user }: VATReportProps) {
     if (vatRegisterData) {
       return vatRegisterData.inputVAT.map((entry) => ({
         rate: entry.rate,
+        code: entry.code,
         count: 0,
         totalAmount: entry.netAmount,
         totalVAT: entry.netAmount,
@@ -266,7 +268,7 @@ export function VATReport({ user }: VATReportProps) {
 
   const outputPieData = useMemo(() => {
     return outputVATBreakdown.map((item, index) => ({
-      name: `${item.rate}%`,
+      name: item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`,
       value: item.totalVAT,
       count: item.count,
       fill: CHART_COLORS[index % CHART_COLORS.length],
@@ -275,7 +277,7 @@ export function VATReport({ user }: VATReportProps) {
 
   const inputPieData = useMemo(() => {
     return inputVATBreakdown.map((item, index) => ({
-      name: `${item.rate}%`,
+      name: item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`,
       value: item.totalVAT,
       count: item.count,
       fill: PURCHASE_COLORS[index % PURCHASE_COLORS.length],
@@ -478,10 +480,10 @@ export function VATReport({ user }: VATReportProps) {
                     </TableHeader>
                     <TableBody>
                       {outputVATBreakdown.map((item) => (
-                        <TableRow key={`out-${item.rate}`} className="border-b border-gray-50 dark:border-gray-800/50">
+                        <TableRow key={`out-${item.code || item.rate}`} className="border-b border-gray-50 dark:border-gray-800/50">
                           <TableCell className="py-2">
                             <Badge variant="outline" className="text-[#0d9488] border-[#0d9488]/30 bg-[#0d9488]/5 text-xs font-medium">
-                              {item.rate}%
+                              {item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right py-2 font-medium text-[#0d9488] dark:text-[#2dd4bf] tabular-nums text-sm">
@@ -577,10 +579,10 @@ export function VATReport({ user }: VATReportProps) {
                     </TableHeader>
                     <TableBody>
                       {inputVATBreakdown.map((item) => (
-                        <TableRow key={`in-${item.rate}`} className="border-b border-gray-50 dark:border-gray-800/50">
+                        <TableRow key={`in-${item.code || item.rate}`} className="border-b border-gray-50 dark:border-gray-800/50">
                           <TableCell className="py-2">
                             <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/5 text-xs font-medium">
-                              {item.rate}%
+                              {item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right py-2 font-medium text-amber-600 dark:text-amber-400 tabular-nums text-sm">
@@ -629,10 +631,10 @@ export function VATReport({ user }: VATReportProps) {
                     </TableHeader>
                     <TableBody>
                       {outputVATBreakdown.map((item) => (
-                        <TableRow key={`out-${item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
+                        <TableRow key={`out-${item.code || item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
                           <TableCell className="py-2 w-[40%]">
                             <Badge className="status-badge status-badge-sent">
-                              {item.rate}%
+                              {item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right py-2 w-[30%] font-medium text-[#0d9488] dark:text-[#2dd4bf]">
@@ -661,10 +663,10 @@ export function VATReport({ user }: VATReportProps) {
                     </TableHeader>
                     <TableBody>
                       {inputVATBreakdown.map((item) => (
-                        <TableRow key={`in-${item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
+                        <TableRow key={`in-${item.code || item.rate}`} className="border-b border-gray-100 dark:border-gray-800 table-row-teal-hover">
                           <TableCell className="py-2 w-[40%]">
                             <Badge className="status-badge status-badge-overdue">
-                              {item.rate}%
+                              {item.code ? `${item.code} · ${item.rate}%` : `${item.rate}%`}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right py-2 w-[30%] font-medium text-amber-600 dark:text-amber-400">

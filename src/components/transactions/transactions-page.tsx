@@ -138,19 +138,24 @@ interface Invoice {
  *    - Real SALE transactions carry GROSS amounts → VAT = gross × rate / (100 + rate)
  *    - Real PURCHASE/other transactions carry NET amounts → VAT = net × rate / 100
  */
-function getDisplayVAT(tx: Transaction): { rate: number; amount: number } {
+function getDisplayVAT(tx: Transaction): { rate: number; amount: number; code: string | null } {
   if (tx.journalVAT && tx.journalVAT.amount > 0) {
-    return { rate: tx.journalVAT.rate, amount: tx.journalVAT.amount };
+    return { rate: tx.journalVAT.rate, amount: tx.journalVAT.amount, code: tx.journalVAT.code };
   }
   const rate = tx.vatPercent || 0;
   const dkkAmt = getDKKAmount(tx);
-  if (rate === 0 || dkkAmt <= 0) return { rate: 0, amount: 0 };
+  if (rate === 0 || dkkAmt <= 0) return { rate: 0, amount: 0, code: null };
   // Virtual invoice-derived transactions have net amounts
   const isVirtual = tx.id?.startsWith('inv-');
   const netVat = isVirtual || tx.type !== 'SALE'
     ? dkkAmt * rate / 100
     : dkkAmt * rate / (100 + rate);
-  return { rate, amount: Math.round(netVat * 100) / 100 };
+  return { rate, amount: Math.round(netVat * 100) / 100, code: null };
+}
+
+/** Format VAT rate+code for display, e.g. "K25 · 25%" or just "25%". */
+function formatVATLabel(rate: number, code: string | null): string {
+  return code ? `${code} · ${rate}%` : `${rate}%`;
 }
 
 interface TransactionsPageProps {
@@ -921,7 +926,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       {!transaction.id.startsWith('inv-') && (
                         <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-white/5">
                           <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {t('vatPercent')}: {getDisplayVAT(transaction).rate}% · {tc(getDisplayVAT(transaction).amount)}
+                            {t('vatPercent')}: {(() => { const v = getDisplayVAT(transaction); return formatVATLabel(v.rate, v.code); })()} · {tc(getDisplayVAT(transaction).amount)}
                           </span>
                           <div className="flex items-center gap-0.5">
                             {transaction.receiptImage ? (
@@ -1190,7 +1195,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       </TableCell>
                       <TableCell className="text-right">
                         <span className={cn("text-sm", isCancelled ? "text-gray-400 dark:text-gray-500" : "text-gray-600 dark:text-gray-400")}>
-                          {getDisplayVAT(transaction).rate}%
+                          {(() => { const v = getDisplayVAT(transaction); return formatVATLabel(v.rate, v.code); })()}
                         </span>
                       </TableCell>
                       <TableCell className={cn(
