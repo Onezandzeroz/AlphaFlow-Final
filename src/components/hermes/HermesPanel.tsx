@@ -237,7 +237,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                 ol: ({ children }) => (
                   <ol className="my-2 list-none space-y-0.5 first:mt-0 last:mb-0">{children}</ol>
                 ),
-                li: ({ children, index }) => (
+                li: ({ children }) => (
                   <li className="pl-4 relative leading-[1.7] before:content-['•'] before:absolute before:left-0 before:text-teal-400/70 before:top-[3px]">{children}</li>
                 ),
                 // Horizontal rule — elegant divider
