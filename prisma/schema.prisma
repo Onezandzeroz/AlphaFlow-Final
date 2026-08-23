@@ -797,6 +797,12 @@ model JournalEntry {
   recordHash    String? // This entry's hash
   previousHash  String? // Previous POSTED entry's recordHash (chain link)
   hashedAt      DateTime? // When the hash was computed (audit)
+  // ─── Foreign currency (valuta) ───
+  // When a transaction is in a foreign currency, the journal entry stores
+  // the original currency and exchange rate used to convert line amounts
+  // to DKK. All debit/credit amounts on the lines are always in DKK.
+  currency     String     @default("DKK")
+  exchangeRate Decimal?   @db.Decimal(12, 6) // Multiply foreign amount by this to get DKK
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   userId        String?

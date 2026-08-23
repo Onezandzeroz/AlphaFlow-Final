@@ -313,6 +313,15 @@ export const POST = withGuard({
           let totalCredit = 0;
           const r2 = (n: number) => Math.round(n * 100) / 100;
 
+          // ── Foreign currency conversion ──
+          // Journal entry lines must ALWAYS be in DKK (Danish accounting standard).
+          // When the transaction is in a foreign currency, we multiply all amounts
+          // by the exchange rate to get DKK before creating journal lines.
+          const isForeign = !!(currency && currency !== 'DKK' && exchangeRate);
+          const dkkMultiplier = isForeign ? Number(exchangeRate) : 1;
+          const jeCurrency = isForeign ? currency : 'DKK';
+          const jeExchangeRate = isForeign ? exchangeRate : null;
+
           if (lineItems && Array.isArray(lineItems) && lineItems.length > 0) {
             // ── Solution B: multi-line path ──
             // Pre-fetch system accounts inside the transaction (consistent read)
@@ -330,15 +339,17 @@ export const POST = withGuard({
             }
 
             for (const li of lineItems) {
-              const netAmount = Number(li.netAmount);
-              if (!isFinite(netAmount)) {
+              const foreignNetAmount = Number(li.netAmount);
+              if (!isFinite(foreignNetAmount)) {
                 throw new Error(`Invalid line amount: ${li.netAmount}`);
               }
 
               const vatCode = li.vatCode as VATCode;
               const rate = VAT_RATE_MAP[li.vatCode] ?? 0;
-              const vatAmount = (netAmount * rate) / 100;
-              const lineGross = netAmount + vatAmount;
+              // Convert to DKK before computing VAT (VAT is always calculated on DKK)
+              const netAmount = r2(foreignNetAmount * dkkMultiplier);
+              const vatAmount = r2((netAmount * rate) / 100);
+              const lineGross = r2(netAmount + vatAmount);
               totalGross += lineGross;
 
               // Validate the expense account belongs to this company
@@ -400,10 +411,11 @@ export const POST = withGuard({
           } else {
             // ── Backward compatibility: Solution A (single-line) path ──
             // Used by old clients / recurring entries that don't send lineItems.
-            const netAmount = parsedAmount;
+            // Convert to DKK if foreign currency.
+            const netAmount = r2(parsedAmount * dkkMultiplier);
             const vatPct = vatPercent ?? 25;
-            const vatAmount = (netAmount * vatPct) / 100;
-            const grossAmount = netAmount + vatAmount;
+            const vatAmount = r2((netAmount * vatPct) / 100);
+            const grossAmount = r2(netAmount + vatAmount);
 
             if (!isFinite(netAmount) || !isFinite(grossAmount)) {
               throw new Error(`Invalid amount: net=${netAmount}, gross=${grossAmount}`);
@@ -473,6 +485,8 @@ export const POST = withGuard({
               status: 'POSTED',
               userId: ctx.id,
               companyId: ctx.activeCompanyId!,
+              currency: jeCurrency,
+              exchangeRate: jeExchangeRate ? Number(jeExchangeRate) : null,
               lines: {
                 create: jeLines.map(l => ({
                   companyId: l.companyId,
@@ -703,6 +717,8 @@ export const DELETE = withGuard({
           status: 'POSTED',
           userId: ctx.id,
           companyId: ctx.activeCompanyId!,
+          currency: originalJE.currency || 'DKK',
+          exchangeRate: originalJE.exchangeRate ? Number(originalJE.exchangeRate) : null,
           lines: {
             create: originalJE.lines.map((line) => ({
               companyId: line.companyId,

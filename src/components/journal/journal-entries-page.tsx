@@ -76,6 +76,7 @@ import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';
 import { readDraft } from '@/lib/draft-store';
 import { ClearFormButton } from '@/components/ui/clear-form-button';
+import { getCurrencySymbol } from '@/lib/currency-utils';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,8 @@ interface JournalEntry {
   status: 'DRAFT' | 'POSTED' | 'CANCELLED';
   cancelled: boolean;
   cancelReason: string | null;
+  currency?: string | null;
+  exchangeRate?: number | string | null;
   lines: JournalLine[];
 }
 
@@ -1006,8 +1009,8 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           {getStatusLabel(entry.status, isDanish)}
                         </Badge>
 
-                        {/* Balance Indicator */}
-                        <div className="flex items-center gap-1 text-xs shrink-0">
+                        {/* Balance Indicator + Foreign Currency Info */}
+                        <div className="flex items-center gap-1.5 text-xs shrink-0">
                           {isEntryBalanced ? (
                             <CheckCircle2 className="h-4 w-4 text-green-500" />
                           ) : (
@@ -1016,6 +1019,13 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           <span className="hidden sm:inline text-gray-500 dark:text-gray-400">
                             {formatCurrencyValue(entryTotalDebit, language)} kr
                           </span>
+                          {entry.currency && entry.currency !== 'DKK' && entry.exchangeRate && (
+                            <Badge variant="outline" className="hidden sm:inline-flex text-[10px] font-mono bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20 gap-0.5">
+                              {getCurrencySymbol(entry.currency)}
+                              <span className="text-blue-500 dark:text-blue-400/70">@</span>
+                              {Number(entry.exchangeRate).toFixed(4)}
+                            </Badge>
+                          )}
                         </div>
 
                         {/* Actions */}
@@ -1099,6 +1109,15 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                                 {isDanish ? 'Beskrivelse' : 'Description'}
                               </div>
                             </div>
+
+                            {/* Foreign currency info banner */}
+                            {entry.currency && entry.currency !== 'DKK' && entry.exchangeRate && isExpanded && (
+                              <div className="col-span-12 px-3 py-1.5 bg-blue-50/50 dark:bg-blue-500/5 border-b border-blue-100 dark:border-blue-500/10">
+                                <span className="text-[11px] text-blue-600 dark:text-blue-400">
+                                  {isDanish ? 'Konverteret fra' : 'Converted from'} {entry.currency} (kurs: {Number(entry.exchangeRate).toFixed(4)}) — {isDanish ? 'beløb i DKK' : 'amounts in DKK'}
+                                </span>
+                              </div>
+                            )}
 
                             {/* Lines */}
                             {entry.lines.map((line, idx) => (
