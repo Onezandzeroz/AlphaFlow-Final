@@ -1170,10 +1170,10 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
                           <div className="flex items-center gap-2">
                             <FileJson className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" />
                             <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                              {isDanish ? 'JSON-ændringer' : 'JSON Changes'}
+                              {isDanish ? 'Log-ændringer' : 'Log Changes'}
                             </p>
                           </div>
-                          <div className="max-h-72 overflow-y-auto">
+                          <div>
                             {hasOldNew ? (
                               <div className="space-y-3">
                                 {parsed.old && (
