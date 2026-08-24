@@ -47,10 +47,6 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import {
-  ScrollArea,
-  ScrollBar,
-} from '@/components/ui/scroll-area';
-import {
   Shield,
   Search,
   Filter,
@@ -991,7 +987,6 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
       <Dialog open={!!detailLog} onOpenChange={(open) => { if (!open) setDetailLog(null); }}>
         <DialogContent className="bg-white dark:bg-[#1a1f1e] max-w-2xl max-h-[85vh] overflow-hidden p-0 gap-0">
           {detailLog && (() => {
-            const changes = parseChanges(detailLog.changes);
             const meta = detailLog.metadata as Record<string, any> | null;
 
             // ── Syntax-highlighted value renderer ────────────────────────
@@ -1154,55 +1149,7 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
                     </div>
                   </div>
 
-                  {/* ── Changes Diff Section ──────────────────────── */}
-                  {changes.length > 0 && (
-                    <>
-                      <Separator className="bg-gray-200/80 dark:bg-gray-700/60" />
-                      <div className="rounded-xl bg-gray-50/80 dark:bg-white/[0.03] p-4 space-y-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                          {isDanish ? 'Ændringer' : 'Changes'}
-                        </p>
-                        <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/50 overflow-hidden">
-                          {/* Table header */}
-                          <div className="grid grid-cols-[1fr_auto_1fr] gap-2 px-4 py-2.5 bg-gray-100/80 dark:bg-white/5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                            <span>{isDanish ? 'Felt' : 'Field'}</span>
-                            <span className="w-6" />
-                            <span>{isDanish ? 'Værdi' : 'Value'}</span>
-                          </div>
-                          {/* Rows */}
-                          {changes.map((change, idx) => (
-                            <div
-                              key={idx}
-                              className={`grid grid-cols-[1fr_auto_1fr] gap-2 px-4 py-3 text-sm items-start transition-colors ${
-                                idx % 2 === 0
-                                  ? 'bg-white dark:bg-transparent'
-                                  : 'bg-gray-50/60 dark:bg-white/[0.015]'
-                              } ${
-                                idx < changes.length - 1 ? 'border-t border-gray-100 dark:border-gray-800/60' : ''
-                              }`}
-                            >
-                              <span className="font-semibold text-gray-700 dark:text-gray-300 text-xs pt-0.5 break-all">
-                                {change.field}
-                              </span>
-                              <ArrowRight className="h-3.5 w-3.5 text-gray-300 dark:text-gray-600 mt-0.5 shrink-0" />
-                              <div className="flex flex-col gap-1.5">
-                                {change.oldValue !== null && (
-                                  <span className="text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 px-2 py-1 rounded-md font-mono text-xs break-all leading-relaxed">
-                                    {formatValue(change.oldValue)}
-                                  </span>
-                                )}
-                                <span className="text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded-md font-mono text-xs break-all leading-relaxed">
-                                  {formatValue(change.newValue)}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {/* ── Raw JSON Key-Value Table ─────────────────── */}
+                  {/* ── JSON-ændringer ─────────────────────────── */}
                   {detailLog.changes && (() => {
                     let parsed: any;
                     try {
@@ -1213,15 +1160,6 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
                       return null;
                     }
                     if (!parsed || typeof parsed !== 'object') return null;
-
-                    // Flatten old/new structure into a combined view
-                    let kvData: Record<string, any>;
-                    if (parsed.old !== undefined || parsed.new !== undefined) {
-                      // Show as two sub-sections: old and new
-                      kvData = parsed as Record<string, any>;
-                    } else {
-                      kvData = parsed;
-                    }
 
                     const hasOldNew = parsed.old !== undefined || parsed.new !== undefined;
 
@@ -1235,7 +1173,7 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
                               {isDanish ? 'JSON-ændringer' : 'JSON Changes'}
                             </p>
                           </div>
-                          <ScrollArea className="max-h-72">
+                          <div className="max-h-72 overflow-y-auto">
                             {hasOldNew ? (
                               <div className="space-y-3">
                                 {parsed.old && (
@@ -1261,11 +1199,10 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
                               </div>
                             ) : (
                               <div className="rounded-lg border border-gray-200/80 dark:border-gray-700/50 overflow-hidden">
-                                {renderKeyValuePairs(kvData, 0)}
+                                {renderKeyValuePairs(parsed, 0)}
                               </div>
                             )}
-                            <ScrollBar />
-                          </ScrollArea>
+                          </div>
                         </div>
                       </>
                     );
