@@ -155,6 +155,8 @@ export const POST = withGuard(
 
       // ─── PHASE 1: Execute the entire import inside a database transaction ───
       const result = await db.$transaction(async (tx) => {
+        // Bypass immutability triggers for admin import operation
+        await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
         const scope = { companyId };
 
         await tx.eInvoiceSending.deleteMany({ where: scope });

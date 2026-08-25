@@ -53,21 +53,22 @@ export const POST = withGuard({
         return NextResponse.json({ error: 'Demo company not found' }, { status: 404 });
       }
 
-      await db.$transaction([
-        db.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: demoCompany.id } } }),
-        db.journalEntry.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.bankStatementLine.deleteMany({ where: { bankStatement: { companyId: demoCompany.id } } }),
-        db.bankStatement.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.budgetEntry.deleteMany({ where: { budget: { companyId: demoCompany.id } } }),
-        db.budget.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.transaction.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.invoice.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.fiscalPeriod.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.contact.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.account.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.recurringEntry.deleteMany({ where: { companyId: demoCompany.id } }),
-        db.bankConnection.deleteMany({ where: { companyId: demoCompany.id } }),
-      ]);
+      await db.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
+        await tx.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: demoCompany.id } } });
+        await tx.journalEntry.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.bankStatementLine.deleteMany({ where: { bankStatement: { companyId: demoCompany.id } } });
+        await tx.bankStatement.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.budgetEntry.deleteMany({ where: { budget: { companyId: demoCompany.id } } });
+        await tx.budget.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.transaction.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.invoice.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.fiscalPeriod.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.contact.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.account.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.recurringEntry.deleteMany({ where: { companyId: demoCompany.id } });
+        await tx.bankConnection.deleteMany({ where: { companyId: demoCompany.id } });
+      });
 
       await seedDemoCompany(demoCompany.id, ctx.id);
 
@@ -137,21 +138,22 @@ export const POST = withGuard({
       } else {
         demoCompanyId = demoCompany.id;
 
-        await db.$transaction([
-          db.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: demoCompany.id } } }),
-          db.journalEntry.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.bankStatementLine.deleteMany({ where: { bankStatement: { companyId: demoCompany.id } } }),
-          db.bankStatement.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.budgetEntry.deleteMany({ where: { budget: { companyId: demoCompany.id } } }),
-          db.budget.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.transaction.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.invoice.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.fiscalPeriod.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.contact.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.account.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.recurringEntry.deleteMany({ where: { companyId: demoCompany.id } }),
-          db.bankConnection.deleteMany({ where: { companyId: demoCompany.id } }),
-        ]);
+        await db.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
+          await tx.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: demoCompanyId } } });
+          await tx.journalEntry.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.bankStatementLine.deleteMany({ where: { bankStatement: { companyId: demoCompanyId } } });
+          await tx.bankStatement.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.budgetEntry.deleteMany({ where: { budget: { companyId: demoCompanyId } } });
+          await tx.budget.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.transaction.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.invoice.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.fiscalPeriod.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.contact.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.account.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.recurringEntry.deleteMany({ where: { companyId: demoCompanyId } });
+          await tx.bankConnection.deleteMany({ where: { companyId: demoCompanyId } });
+        });
 
         await seedDemoCompany(demoCompanyId, ctx.id);
         logger.info('[Demo Mode] Re-seeded existing demo company:', demoCompanyId);

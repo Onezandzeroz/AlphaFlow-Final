@@ -658,6 +658,8 @@ async function restoreTenantSnapshot(
 
     // 3. Delete + import inside a transaction (atomic — rolls back on failure)
     const importedCounts = await db.$transaction(async (tx) => {
+      // Bypass immutability triggers for admin restore operation
+      await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
       // Delete existing tenant data (FK-safe order)
       await tx.bankStatementLine.deleteMany({ where: { bankStatement: { companyId } } });
       await tx.budgetEntry.deleteMany({ where: { budget: { companyId } } });
@@ -774,6 +776,8 @@ export async function restoreBackupFromBuffer(
   try {
     // Delete + import inside a transaction (atomic — rolls back on failure)
     const importedCounts = await db.$transaction(async (tx) => {
+      // Bypass immutability triggers for admin restore operation
+      await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
       // Delete existing tenant data (FK-safe order)
       await tx.bankStatementLine.deleteMany({ where: { bankStatement: { companyId } } });
       await tx.budgetEntry.deleteMany({ where: { budget: { companyId } } });
