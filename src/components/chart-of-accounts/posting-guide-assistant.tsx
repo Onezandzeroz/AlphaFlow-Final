@@ -208,16 +208,16 @@ const POSTING_RULES: PostingRule[] = [
 
 const SKAT_REFERENCES = [
   {
-    title: 'Bogføringsloven (Bek. 1331)',
-    url: 'https://www.retsinformation.dk/eli/lta/2023/1331',
-    description: 'Lov om bogføring af certain erhvervsdrivende',
-    descriptionEn: 'Danish Bookkeeping Act',
+    title: 'Bogføringsloven (Lov nr. 700 af 2022)',
+    url: 'https://www.retsinformation.dk/eli/lta/2022/700',
+    description: 'Lov om bogføring — dansk bogføringslov',
+    descriptionEn: 'Danish Bookkeeping Act (Lov om bogføring)',
   },
   {
-    title: 'Bekendtgørelse om standard bogføringssystemer (BEK 98)',
-    url: 'https://www.retsinformation.dk/eli/lta/2023/98',
-    description: 'Krav til godkendelse af standard bogføringssystemer',
-    descriptionEn: 'Requirements for standard bookkeeping system approval',
+    title: 'Kravbekendtgørelsen (BEK nr. 97 af 2023)',
+    url: 'https://www.retsinformation.dk/eli/lta/2023/97',
+    description: 'Bekendtgørelse om krav til digitale standard bogføringssystemer',
+    descriptionEn: 'Executive Order on requirements for digital standard bookkeeping systems',
   },
   {
     title: 'SKAT — Moms',
@@ -227,9 +227,9 @@ const SKAT_REFERENCES = [
   },
   {
     title: 'Fællesoffentlig Standardkontoplan',
-    url: 'https://www.oesta.dk/standardkontoplan',
-    description: 'Økonomistyrelsens standardkontoplan for den offentlige sektor',
-    descriptionEn: 'Standard chart of accounts for the Danish public sector',
+    url: 'https://erhvervsstyrelsen.dk/standardkontoplan-saf-t',
+    description: 'Erhvervsstyrelsens fællesoffentlige standardkontoplan og SAF-T',
+    descriptionEn: 'Danish Business Authority common standard chart of accounts and SAF-T',
   },
 ];
 
@@ -421,8 +421,8 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
               </p>
               <p>
                 {isDanish
-                  ? 'Denne guide indeholder de mest almindelige bogføringsregler for dansk regnskab. Den er baseret på Bogføringsloven (BEK 1331) og standard dansk regnskabspraksis. Hvert regelsæt viser dekontokonto og kreditkonto med forklaring.'
-                  : 'This guide contains the most common posting rules for Danish accounting. It is based on the Danish Bookkeeping Act (BEK 1331) and standard Danish accounting practice. Each rule set shows debit and credit accounts with explanation.'}
+                  ? 'Denne guide indeholder de mest almindelige bogføringsregler for dansk regnskab. Den er baseret på Bogføringsloven (Lov nr. 700 af 24. maj 2022) og standard dansk regnskabspraksis. Hvert regelsæt viser dekontokonto og kreditkonto med forklaring.'
+                  : 'This guide contains the most common posting rules for Danish accounting. It is based on the Danish Bookkeeping Act (Lov nr. 700 of 24 May 2022) and standard Danish accounting practice. Each rule set shows debit and credit accounts with explanation.'}
               </p>
               <p>
                 {isDanish

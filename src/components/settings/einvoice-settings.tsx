@@ -930,8 +930,8 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                     <ul className="list-disc list-inside space-y-0.5">
                       <li>
                         {isDa
-                          ? 'Lovkrav ifølge bogføringslovens krav til standard bogføringssystemer (BEK 98)'
-                          : 'Legal requirement per the Danish Bookkeeping Act standard accounting system requirements (BEK 98)'}
+                          ? 'Lovkrav ifølge bogføringsloven og Kravbekendtgørelsen (BEK nr. 97 af 2023)'
+                          : 'Legal requirement per the Danish Bookkeeping Act and the Requirements Executive Order (BEK 97 of 2023)'}
                       </li>
                       <li>
                         {isDa

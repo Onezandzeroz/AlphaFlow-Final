@@ -171,7 +171,9 @@ export const GET = withGuard(
         companyId,
         alphaFlowVersion: '1.0.0',
         compliance: {
-          bogforingsloven: 'BEK nr. 98 af 15. februar 2023',
+          bogforingsloven: 'Lov nr. 700 af 24. maj 2022 (Lov om bogføring)',
+          kravbekendtgorelsen: 'BEK nr. 97 af 26. januar 2023',
+          anmeldelsesbekendtgorelsen: 'BEK nr. 98 af 26. januar 2023',
           opbevaringspligt: '5 år',
           standard: 'Erhvervsstyrelsen godkendt',
         },

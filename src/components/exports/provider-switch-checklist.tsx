@@ -333,8 +333,8 @@ export function ProviderSwitchChecklist({ user }: ProviderSwitchChecklistProps) 
               </div>
               <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-1">
                 {isDa
-                  ? 'Gem denne GUID som bevis for datadannelsen. Krav jf. BEK 98.'
-                  : 'Save this GUID as proof of data transfer. Required per BEK 98.'}
+                  ? 'Gem denne GUID som bevis for datadannelsen. Krav jf. Bogføringsloven og Kravbekendtgørelsen (BEK 97).'
+                  : 'Save this GUID as proof of data transfer. Required per the Danish Bookkeeping Act and the Requirements Executive Order (BEK 97).'}
               </p>
             </div>
           )}
@@ -410,8 +410,8 @@ export function ProviderSwitchChecklist({ user }: ProviderSwitchChecklistProps) 
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             <p>
               {isDa
-                ? 'Jf. Bogføringslovens § 12, stk. 1, og Bekendtgørelse nr. 98 af 15. februar 2023 (BEK 98) skal alle bilag opbevares i mindst 5 år. Ved skift af udbyder skal data overføres sikkert med mulighed for verifikation. AlphaFlow\'s portable eksportformat inkluderer GUID og SHA-256 kontrolsum som dokumentation.'
-                : 'Per the Danish Bookkeeping Act § 12(1) and Executive Order No. 98 of February 15, 2023 (BEK 98), all vouchers must be retained for at least 5 years. When switching providers, data must be transferred securely with verification capability. AlphaFlow\'s portable export format includes a GUID and SHA-256 checksum as documentation.'}
+                ? 'Jf. Bogføringsloven (Lov nr. 700 af 24. maj 2022) og Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) skal alle bilag opbevares i mindst 5 år. Ved skift af udbyder skal data overføres sikkert med mulighed for verifikation. AlphaFlow\'s portable eksportformat inkluderer GUID og SHA-256 kontrolsum som dokumentation.'
+                : 'Per the Danish Bookkeeping Act (Lov nr. 700 of 24 May 2022) and the Requirements Executive Order (BEK nr. 97 of 26 January 2023), all vouchers must be retained for at least 5 years. When switching providers, data must be transferred securely with verification capability. AlphaFlow\'s portable export format includes a GUID and SHA-256 checksum as documentation.'}
             </p>
           </div>
         </CardContent>

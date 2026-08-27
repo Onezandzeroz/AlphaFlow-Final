@@ -458,7 +458,7 @@ Hver regel vises som et T-diagram med:
 
 Brugeren kan enten **søge** efter en regel via et fritekstsøgefelt eller **browse** kategorierne ved at klikke på dem (collapsible Cards med `ChevronRight`-ikon der roterer ved åbning). Søgningen matcher mod titel (DA/EN), beskrivelse (DA/EN) og debit-/kreditkontonavn, så man f.eks. kan skrive *"moms"*, *"løn"* eller *"EU"* og få de relevante konteringsregler frem.
 
-Videnbasen er baseret på Bogføringsloven (BEK 1331) og standard dansk regnskabspraksis. Det fremgår direkte af grænsefladens infoboks, at *"Denne guide indeholder de mest almindelige bogføringsregler for dansk regnskab. Den er baseret på Bogføringsloven (BEK 1331) og standard dansk regnskabspraksis."*
+Videnbasen er baseret på Bogføringsloven (Lov nr. 700 af 24. maj 2022) og standard dansk regnskabspraksis. Det fremgår direkte af grænsefladens infoboks, at *"Denne guide indeholder de mest almindelige bogføringsregler for dansk regnskab. Den er baseret på Bogføringsloven (Lov nr. 700 af 24. maj 2022) og standard dansk regnskabspraksis."*
 
 > **Skærmbillede:** ![PostingGuideAssistant — POSTING_RULES kategorier med T-diagram](./screenshots/posting-guide-assistant-categories.png)
 > *(Vil blive indsat ved produktionsgennemgang — viser de fire kategorier udfoldet med debet/kredit-konti og beskrivelser)*
@@ -471,18 +471,18 @@ Videnbasen er baseret på Bogføringsloven (BEK 1331) og standard dansk regnskab
 
 Systemet indeholder to typer af konteringsvejledning, der tilsammen opfylder kravet:
 
-**1. Indbygget konteringsvejledning i standardkontoplanen.** Den Fællesoffentlige Standardkontoplan (`PUBLIC_STANDARD_CHART` i `src/lib/standard-chart-of-accounts.ts`) er Skats og Økonomistyrelsens officielle standardkontoplan. Hver standardkonto har et indbygget `description`-felt (på dansk) samt et engelsk navn (`nameEn`) og forslag til tilsvarende FSR-konti (`suggestedFSR`). Eksempelvis er konto `5610 — Momsgæld til Skattestyrelsen` beskrevet som *"Skyldig udgående moms til Skattestyrelsen (netto)"*. Standardkontoplanen omfatter konti fordelt på driftsomkostninger (0xxx), driftsindtægter (1xxx), varelager/vareforbrug (2xxx), aktiver (3xxx), gæld (4xxx), egenkapital (5xxx), finansielle poster (6xxx), skat og moms (7xxx), årsafslutning (8xxx) og statistiske konti (9xxx).
+**1. Indbygget konteringsvejledning i standardkontoplanen.** Den Fællesoffentlige Standardkontoplan (`PUBLIC_STANDARD_CHART` i `src/lib/standard-chart-of-accounts.ts`) er Erhvervsstyrelsens officielle standardkontoplan (til brug for SAF-T-indberetning). Hver standardkonto har et indbygget `description`-felt (på dansk) samt et engelsk navn (`nameEn`) og forslag til tilsvarende FSR-konti (`suggestedFSR`). Eksempelvis er konto `5610 — Momsgæld til Skattestyrelsen` beskrevet som *"Skyldig udgående moms til Skattestyrelsen (netto)"*. Standardkontoplanen omfatter konti fordelt på driftsomkostninger (0xxx), driftsindtægter (1xxx), varelager/vareforbrug (2xxx), aktiver (3xxx), gæld (4xxx), egenkapital (5xxx), finansielle poster (6xxx), skat og moms (7xxx), årsafslutning (8xxx) og statistiske konti (9xxx).
 
 **2. Links til officielle 3.-partskilder.** PostingGuideAssistant-komponenten indeholder en konstant `SKAT_REFERENCES` med direkte links til de officielle danske konteringsvejledninger. Links vises i et dedikeret kort mærket *"Officiel konteringsvejledning (3. part)"* med `ExternalLink`-ikoner, og åbner i en ny fane (`target="_blank"`, `rel="noopener noreferrer"`):
 
 | Titel | URL | Beskrivelse |
 |-------|-----|-------------|
-| Bogføringsloven (Bek. 1331) | `https://www.retsinformation.dk/eli/lta/2023/1331` | Lov om bogføring af visse erhvervsdrivende |
-| Bekendtgørelse om standard bogføringssystemer (BEK 98) | `https://www.retsinformation.dk/eli/lta/2023/98` | Krav til godkendelse af standard bogføringssystemer |
+| Bogføringsloven (Lov nr. 700 af 2022) | `https://www.retsinformation.dk/eli/lta/2022/700` | Lov om bogføring — dansk bogføringslov |
+| Kravbekendtgørelsen (BEK nr. 97 af 2023) | `https://www.retsinformation.dk/eli/lta/2023/97` | Bekendtgørelse om krav til digitale standard bogføringssystemer |
 | SKAT — Moms | `https://skat.dk/moms` | Skattestyrelsens momsguide |
-| Fællesoffentlig Standardkontoplan | `https://www.oesta.dk/standardkontoplan` | Økonomistyrelsens standardkontoplan for den offentlige sektor |
+| Fællesoffentlig Standardkontoplan | `https://erhvervsstyrelsen.dk/standardkontoplan-saf-t` | Erhvervsstyrelsens fællesoffentlige standardkontoplan og SAF-T |
 
-> **Skærmbillede:** ![PostingGuideAssistant — officiel 3.-partskonteringsvejledning (SKAT/Retsinformation/Økonomistyrelsen)](./screenshots/posting-guide-assistant-skat-references.png)
+> **Skærmbillede:** ![PostingGuideAssistant — officiel 3.-partskonteringsvejledning (SKAT/Retsinformation/Erhvervsstyrelsen)](./screenshots/posting-guide-assistant-skat-references.png)
 > *(Vil blive indsat ved produktionsgennemgang — viser kortet med de fire officielle referencelinks)*
 
 **Filreferencer:**
@@ -1436,11 +1436,11 @@ Gå til **Eksport** i sidebjælken (`/exports`) for at få adgang til alle ekspo
 3. Systemet pakker alle data (virksomhedsoplysninger, kontoplan, journalposter, fakturaer, bilag, momskoder, standard-mapping) i en JSON-fil + en ZIP med filer.
 4. En **SHA-256 checksum** genereres til verifikation af filintegritet.
 
-Denne eksport opfylder GDPR's krav om dataportabilitet (Art. 20) og BEK 98's krav om udbyderskift.
+Denne eksport opfylder GDPR's krav om dataportabilitet (Art. 20) og Bogføringslovens og Kravbekendtgørelsens (BEK 97) krav om udbyderskift.
 
 ### 15.3 ProviderSwitchChecklist (udbyderskift)
 
-Under Eksport findes `ProviderSwitchChecklist` — en guide, der forklarer, hvordan man flytter til et andet regnskabsprogram i overensstemmelse med Bogføringsloven og BEK 98:
+Under Eksport findes `ProviderSwitchChecklist` — en guide, der forklarer, hvordan man flytter til et andet regnskabsprogram i overensstemmelse med Bogføringsloven og Kravbekendtgørelsen (BEK 97):
 
 | Trin | Handling |
 |------|----------|
