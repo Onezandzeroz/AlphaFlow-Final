@@ -2,11 +2,12 @@
 
 import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Wifi, WifiOff, RotateCcw } from 'lucide-react';
+import { X, Send, Wifi, WifiOff, RotateCcw, Sparkles, BookOpen } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from '@/lib/use-translation';
 import type { ChatMessage } from './types';
+import type { ResponseMode } from './useHermesSocket';
 
 interface HermesPanelProps {
   isOpen: boolean;
@@ -18,6 +19,10 @@ interface HermesPanelProps {
   onSendMessage: (content: string) => void;
   /** Start a fresh chat session (clears history + tells server to reset context). */
   onNewSession?: () => void;
+  /** Current response mode shown in the toggle. */
+  responseMode?: ResponseMode;
+  /** Toggle between 'complex' and 'simplified' modes (persisted server-side). */
+  onToggleResponseMode?: () => void;
   /** Display name for the agent (default: "Hermes") */
   agentName?: string;
   /** Agent greeting override for empty state */
@@ -33,6 +38,8 @@ export function HermesPanel({
   isTyping,
   onSendMessage,
   onNewSession,
+  responseMode = 'complex',
+  onToggleResponseMode,
   agentName = 'Hermes',
   greeting,
 }: HermesPanelProps) {
@@ -98,7 +105,7 @@ export function HermesPanel({
               <h2 className="text-sm font-semibold text-teal-900 dark:text-teal-100 tracking-tight">
                 {agentName}
               </h2>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
                 {isConnected ? (
                   <>
                     <Wifi className="h-3 w-3 text-teal-500" />
@@ -109,6 +116,32 @@ export function HermesPanel({
                     <WifiOff className="h-3 w-3 text-gray-400" />
                     <span className="text-[11px] text-gray-500">{t('hermesDisconnected')}</span>
                   </>
+                )}
+                {/* ── Response-mode toggle (Simplificering / Kompleks) ── */}
+                {onToggleResponseMode && (
+                  <button
+                    onClick={onToggleResponseMode}
+                    disabled={!isConnected || !agentEnabled}
+                    title={
+                      responseMode === 'complex'
+                        ? t('hermesModeComplexHint')
+                        : t('hermesModeSimplifiedHint')
+                    }
+                    className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                      responseMode === 'simplified'
+                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30'
+                        : 'bg-teal-100 text-teal-700 hover:bg-teal-200 dark:bg-teal-500/20 dark:text-teal-300 dark:hover:bg-teal-500/30'
+                    }`}
+                    aria-label={t('hermesToggleMode')}
+                    aria-pressed={responseMode === 'simplified'}
+                  >
+                    {responseMode === 'simplified' ? (
+                      <Sparkles className="h-3 w-3" />
+                    ) : (
+                      <BookOpen className="h-3 w-3" />
+                    )}
+                    {responseMode === 'simplified' ? t('hermesModeSimplified') : t('hermesModeComplex')}
+                  </button>
                 )}
               </div>
             </div>

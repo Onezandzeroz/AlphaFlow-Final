@@ -4,17 +4,23 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { ChatMessage, HermesNotification } from './types';
 
+export type ResponseMode = 'complex' | 'simplified';
+
 interface UseHermesSocketReturn {
   isConnected: boolean;
   agentEnabled: boolean;
   messages: ChatMessage[];
   notifications: HermesNotification[];
   isTyping: boolean;
+  /** Current chat response mode ('complex' or 'simplified'). */
+  responseMode: ResponseMode;
   sendMessage: (content: string) => void;
   dismissNotification: (id: string) => void;
   /** Start a fresh chat session: clears visible messages and tells the server
    *  to drop the previous session's in-memory history so the LLM starts blank. */
   startNewSession: () => void;
+  /** Toggle between 'complex' and 'simplified' response modes (persisted server-side). */
+  toggleResponseMode: () => void;
 }
 
 export function useHermesSocket(options: {
@@ -35,6 +41,7 @@ export function useHermesSocket(options: {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [notifications, setNotifications] = useState<HermesNotification[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [responseMode, setResponseMode] = useState<ResponseMode>('complex');
   const streamingIdRef = useRef<string | null>(null);
 
   // ── Chat session identity ────────────────────────────────────────────
@@ -111,9 +118,10 @@ export function useHermesSocket(options: {
     });
 
     // ─── join-ack: Server confirms join + sends initial agent state ───
-    socket.on('join-ack', (data: { status: string; agentEnabled: boolean; tenantName: string }) => {
+    socket.on('join-ack', (data: { status: string; agentEnabled: boolean; tenantName: string; responseMode?: ResponseMode }) => {
       console.log('[Hermes UI] Join acknowledged:', data);
       setAgentEnabled(data.agentEnabled);
+      if (data.responseMode) setResponseMode(data.responseMode);
     });
 
     // ─── agent-welcome: Welcome message from agent ───
@@ -231,6 +239,12 @@ export function useHermesSocket(options: {
       console.log('[Hermes UI] New session acknowledged by server');
     });
 
+    // ─── response-mode-changed: server broadcasts a mode change (from this
+    // tab or another open tab of the same tenant) so all stay in sync.
+    socket.on('response-mode-changed', (data: { mode: ResponseMode }) => {
+      setResponseMode(data.mode);
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -279,6 +293,14 @@ export function useHermesSocket(options: {
     }
   }, [isConnected, SESSION_STORAGE_KEY]);
 
+  const toggleResponseMode = useCallback(() => {
+    const next: ResponseMode = responseMode === 'complex' ? 'simplified' : 'complex';
+    setResponseMode(next); // optimistic — server broadcasts the authoritative value
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit('set-response-mode', { mode: next });
+    }
+  }, [isConnected, responseMode]);
+
   const dismissNotification = useCallback(
     (id: string) => {
       // Remove locally
@@ -297,8 +319,10 @@ export function useHermesSocket(options: {
     messages,
     notifications,
     isTyping,
+    responseMode,
     sendMessage,
     dismissNotification,
     startNewSession,
+    toggleResponseMode,
   };
 }

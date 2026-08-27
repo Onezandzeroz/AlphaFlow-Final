@@ -1140,6 +1140,10 @@ model HermesAgent {
   enabled           Boolean  @default(false) // App Owner enables Hermes for this tenant
   dataAccessEnabled Boolean  @default(false) // Tenant owner opts in to sharing accounting data
   personality       String   @default("professional") // professional | friendly | concise
+  // Response mode toggled per-tenant in the chat UI.
+  // 'complex' (default) = full detailed answers; 'simplified' = short, plain-
+  // language answers (~1/3 length, lower lixtal) for owners new to accounting.
+  responseMode      String   @default("complex") // complex | simplified
   greeting          String?
   systemPrompt      String?
   createdAt         DateTime @default(now())

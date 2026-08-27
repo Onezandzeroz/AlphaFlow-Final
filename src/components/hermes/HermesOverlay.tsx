@@ -33,9 +33,11 @@ export function HermesOverlay({
     messages,
     notifications,
     isTyping,
+    responseMode,
     sendMessage,
     dismissNotification,
     startNewSession,
+    toggleResponseMode,
   } = useHermesSocket({ tenantId, userId, userName, servicePort });
 
   if (!visible) return null;
@@ -86,6 +88,8 @@ export function HermesOverlay({
         isTyping={isTyping}
         onSendMessage={sendMessage}
         onNewSession={startNewSession}
+        responseMode={responseMode}
+        onToggleResponseMode={toggleResponseMode}
         agentName={agentName}
         greeting={greeting}
       />
