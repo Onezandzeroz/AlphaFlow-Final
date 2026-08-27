@@ -12,6 +12,9 @@ interface UseHermesSocketReturn {
   isTyping: boolean;
   sendMessage: (content: string) => void;
   dismissNotification: (id: string) => void;
+  /** Start a fresh chat session: clears visible messages and tells the server
+   *  to drop the previous session's in-memory history so the LLM starts blank. */
+  startNewSession: () => void;
 }
 
 export function useHermesSocket(options: {
@@ -33,6 +36,34 @@ export function useHermesSocket(options: {
   const [notifications, setNotifications] = useState<HermesNotification[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const streamingIdRef = useRef<string | null>(null);
+
+  // ── Chat session identity ────────────────────────────────────────────
+  // Each "conversation" gets a client-generated UUID, persisted in
+  // localStorage so reopening the panel resumes the same session. "New chat"
+  // rotates the id → the server isolates history per session, so the LLM only
+  // sees the current conversation (not every prior message ever exchanged).
+  const sessionIdRef = useRef<string | null>(null);
+  const SESSION_STORAGE_KEY = `hermes:sessionId:${tenantId}`;
+
+  const ensureSessionId = useCallback((): string => {
+    if (sessionIdRef.current) return sessionIdRef.current;
+    try {
+      const stored = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (stored) {
+        sessionIdRef.current = stored;
+        return stored;
+      }
+    } catch { /* localStorage unavailable (private mode) — fall through */ }
+    const fresh = crypto.randomUUID();
+    sessionIdRef.current = fresh;
+    try { localStorage.setItem(SESSION_STORAGE_KEY, fresh); } catch { /* ignore */ }
+    return fresh;
+  }, [SESSION_STORAGE_KEY]);
+
+  // Initialise the session id on mount (client-only).
+  useEffect(() => {
+    ensureSessionId();
+  }, [ensureSessionId]);
 
   // Connect to the Hermes Agent mini-service
   useEffect(() => {
@@ -192,6 +223,14 @@ export function useHermesSocket(options: {
       setNotifications((prev) => prev.filter((n) => n.id !== data.notificationId));
     });
 
+    // ─── new-session-ack: Server confirmed the session cache was cleared ───
+    socket.on('new-session-ack', () => {
+      // Nothing further to do — the visible messages were already cleared in
+      // startNewSession(). This ack just confirms the server dropped the old
+      // session's in-memory history.
+      console.log('[Hermes UI] New session acknowledged by server');
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -212,13 +251,33 @@ export function useHermesSocket(options: {
 
       // Emit to server (event name is 'chat')
       // SECURITY (U-5): tenantId is no longer sent — the server uses the
-      // verified session meta. Only the message text is sent.
+      // verified session meta. The message text + chat sessionId are sent.
+      const sid = ensureSessionId();
       socketRef.current.emit('chat', {
         message: content,
+        sessionId: sid,
       });
     },
-    [isConnected, agentEnabled, tenantId]
+    [isConnected, agentEnabled, tenantId, ensureSessionId]
   );
+
+  const startNewSession = useCallback(() => {
+    const previousSessionId = sessionIdRef.current;
+    // Rotate to a fresh session id and persist it.
+    const fresh = crypto.randomUUID();
+    sessionIdRef.current = fresh;
+    try { localStorage.setItem(SESSION_STORAGE_KEY, fresh); } catch { /* ignore */ }
+    // Clear the visible conversation immediately for instant UI feedback,
+    // and reset any in-flight streaming state.
+    setMessages([]);
+    setIsTyping(false);
+    streamingIdRef.current = null;
+    // Tell the server to drop the old session's in-memory history so the next
+    // message starts with a blank LLM context.
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit('new-session', { previousSessionId });
+    }
+  }, [isConnected, SESSION_STORAGE_KEY]);
 
   const dismissNotification = useCallback(
     (id: string) => {
@@ -240,5 +299,6 @@ export function useHermesSocket(options: {
     isTyping,
     sendMessage,
     dismissNotification,
+    startNewSession,
   };
 }

@@ -59,8 +59,36 @@ export interface TenantProvider {
   setAgentEnabled(tenantId: string, enabled: boolean): void
   getReminders(tenantId: string): AgentNotification[]
   dismissReminder(tenantId: string, reminderId: string): void
-  getConversationHistory(tenantId: string): ConversationMessage[]
-  addMessage(tenantId: string, message: ConversationMessage): void
+  /**
+   * Return the conversation history for a specific chat session.
+   * When `sessionId` is provided, only messages belonging to that session
+   * are returned (so the LLM sees just the current conversation, not every
+   * message ever exchanged with the tenant). When omitted, legacy behaviour
+   * returns the unfiltered tenant-wide history.
+   */
+  getConversationHistory(tenantId: string, sessionId?: string | null): ConversationMessage[]
+  /**
+   * Append a message, tagging it with the active `sessionId` so it can be
+   * isolated from other conversations when history is replayed.
+   */
+  addMessage(tenantId: string, message: ConversationMessage, sessionId?: string | null): void
+  /**
+   * Clear the in-memory cache for a session so subsequent reads start fresh.
+   * (Database rows are governed by the retention cap — see pruneMessages.)
+   */
+  clearSessionCache(tenantId: string, sessionId?: string | null): void
+  /**
+   * Hard-delete AgentMessage rows beyond the `keepCount` most recent for this
+   * tenant. Chat sessions are NOT preserved — only the newest N messages
+   * survive. Returns the number of rows deleted.
+   */
+  pruneMessages(tenantId: string, keepCount: number): Promise<number>
+  /**
+   * One-time global sweep: prune EVERY tenant's messages to its applicable
+   * cap (`normalKeep` for regular tenants, `superDevKeep` for tenants that
+   * have a SuperDev member). Runs on service boot. Returns total rows deleted.
+   */
+  pruneAllTenants(normalKeep: number, superDevKeep: number): Promise<number>
 }
 
 // --------------- Helpers ---------------
@@ -110,13 +138,28 @@ export class MockTenantProvider implements TenantProvider {
     if (notif) notif.dismissed = true
   }
 
-  getConversationHistory(tenantId: string): ConversationMessage[] {
+  getConversationHistory(tenantId: string, _sessionId?: string | null): ConversationMessage[] {
     return this.tenants.get(tenantId)?.conversationHistory ?? []
   }
 
-  addMessage(tenantId: string, message: ConversationMessage): void {
+  addMessage(tenantId: string, message: ConversationMessage, _sessionId?: string | null): void {
     const tenant = this.tenants.get(tenantId)
     if (tenant) tenant.conversationHistory.push(message)
+  }
+
+  clearSessionCache(tenantId: string, _sessionId?: string | null): void {
+    // Mock provider keeps a single in-memory history per tenant; clear it.
+    const tenant = this.tenants.get(tenantId)
+    if (tenant) tenant.conversationHistory = []
+  }
+
+  // Mock provider has no database — pruning is a no-op.
+  async pruneMessages(_tenantId: string, _keepCount: number): Promise<number> {
+    return 0
+  }
+
+  async pruneAllTenants(_normalKeep: number, _superDevKeep: number): Promise<number> {
+    return 0
   }
 
   // --------------- Private: Mock Data ---------------

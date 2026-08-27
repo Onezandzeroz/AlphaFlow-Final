@@ -594,8 +594,8 @@ io.on('connection', async (socket) => {
   })
 
   // ----- chat -----
-  socket.on('chat', async (data: { message: string }) => {
-    const { message } = data
+  socket.on('chat', async (data: { message: string; sessionId?: string }) => {
+    const { message, sessionId } = data
     const meta = connectedSockets.get(socket.id)
 
     // meta was set during the verified connection handshake. If it's missing
@@ -638,15 +638,19 @@ io.on('connection', async (socket) => {
       return
     }
 
-    // Store user message
-    tenantProvider.addMessage(tenantId, { role: 'user', content: message })
+    // NOTE: The user message is persisted AFTER building the LLM context
+    // below. Storing it before would include it in `history`, and then it
+    // would ALSO be appended as the final `{ role: 'user' }` turn — sending
+    // the same message to the model twice (a pre-existing bug).
 
     // Emit typing indicator
     socket.emit('chat-typing', { typing: true })
 
     try {
-      // Build conversation history for context
-      const history = tenantProvider.getConversationHistory(tenantId).slice(-config.maxConversationHistory)
+      // Build conversation history for context — scoped to THIS chat session
+      // so the model only sees the current conversation, not every message
+      // ever exchanged with the tenant.
+      const history = tenantProvider.getConversationHistory(tenantId, sessionId).slice(-config.maxConversationHistory)
 
       // Build OpenRouter/OpenAI-compatible message array with proper roles.
       // System prompt + tenant context go in the system message; history is
@@ -701,6 +705,10 @@ io.on('connection', async (socket) => {
         { role: 'user', content: message },
       ]
 
+      // Persist the user message now that the LLM context is built (avoids
+      // the duplicate-message bug — see note above). Tagged with sessionId.
+      tenantProvider.addMessage(tenantId, { role: 'user', content: message }, sessionId)
+
       // Call OpenRouter LLM — with tools if source-code-explorer skill is active.
       // The model uses tool_choice='auto' so it will ONLY call tools when
       // the question actually requires reading source code. Regular accounting
@@ -715,7 +723,18 @@ io.on('connection', async (socket) => {
       }
 
       // Store assistant response
-      tenantProvider.addMessage(tenantId, { role: 'assistant', content: fullResponse })
+      tenantProvider.addMessage(tenantId, { role: 'assistant', content: fullResponse }, sessionId)
+
+      // ── Retention: hard-delete old messages beyond the cap ───────────────
+      // Chat sessions are NOT preserved. After each exchange we prune the
+      // tenant's AgentMessage rows so only the N most recent survive:
+      //   • normal tenants → 20 messages
+      //   • SuperDev tenants → 40 messages (more exploratory debugging)
+      // Failures are swallowed — the boot sweep + next exchange will retry.
+      const keepCount = meta.isSuperDev ? config.retentionKeepCountSuperDev : config.retentionKeepCount
+      tenantProvider.pruneMessages(tenantId, keepCount).catch((err) => {
+        console.warn(`[Hermes] Retention prune failed for tenant ${tenantId}:`, err)
+      })
 
       // Simulate streaming
       const chunks = splitIntoChunks(fullResponse, config.streamingChunkSize)
@@ -781,6 +800,20 @@ io.on('connection', async (socket) => {
     tenantProvider.dismissReminder(meta.tenantId, notificationId)
     console.log(`[Hermes] Notification "${notificationId}" dismissed by "${meta.userName}"`)
     socket.emit('notification-dismissed', { notificationId })
+  })
+
+  // ----- new-session -----
+  // Client requests a fresh chat session. We drop the in-memory history cache
+  // for the given (previous) sessionId so the next 'chat' event with the NEW
+  // sessionId starts with an empty context. Database rows are NOT preserved
+  // long-term either — the retention cap (20 normal / 40 SuperDev) hard-
+  // deletes older messages after each exchange.
+  socket.on('new-session', (data: { previousSessionId?: string }) => {
+    const meta = connectedSockets.get(socket.id)
+    if (!meta) return
+    tenantProvider.clearSessionCache(meta.tenantId, data?.previousSessionId)
+    console.log(`[Hermes] New chat session started by "${meta.userName}" (tenant ${meta.tenantId}, prev=${data?.previousSessionId ?? 'none'})`)
+    socket.emit('new-session-ack', { ok: true })
   })
 
   // ----- disconnect -----
@@ -983,6 +1016,21 @@ httpServer.listen(config.port, () => {
     console.log(`[Hermes]                   Get a key at https://openrouter.ai/keys  (then: pm2 delete hermes-agent && pm2 start ecosystem.config.js --only hermes-agent)`)
   }
   console.log(`[Hermes]    Source tools  : ${config.sourceCodeToolsEnabled ? 'enabled' : 'disabled'} (activated when source-code-explorer skill is present)`)
+  console.log(`[Hermes]    LLM context   : ${config.maxConversationHistory} prior messages`)
+  console.log(`[Hermes]    Retention     : keep last ${config.retentionKeepCount} (SuperDev ${config.retentionKeepCountSuperDev}) — older deleted`)
+
+  // ── Global retention sweep on boot ───────────────────────────────────
+  // Trims EVERY tenant's AgentMessage rows to the applicable cap so existing
+  // piles are cleaned up immediately on (re)deploy — not just going forward.
+  // 10s delay lets the DB connection warm up before the sweep runs.
+  setTimeout(() => {
+    tenantProvider.pruneAllTenants(config.retentionKeepCount, config.retentionKeepCountSuperDev)
+      .then((n) => {
+        if (n > 0) console.log(`[Hermes] Boot retention sweep: deleted ${n} stale messages across all tenants`)
+        else console.log(`[Hermes] Boot retention sweep: no stale messages found`)
+      })
+      .catch((err) => console.warn('[Hermes] Boot retention sweep failed:', err))
+  }, 10_000)
 })
 
 // ============================================================

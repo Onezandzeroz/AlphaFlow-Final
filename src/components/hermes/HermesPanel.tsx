@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Wifi, WifiOff } from 'lucide-react';
+import { X, Send, Wifi, WifiOff, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useTranslation } from '@/lib/use-translation';
@@ -16,6 +16,8 @@ interface HermesPanelProps {
   messages: ChatMessage[];
   isTyping: boolean;
   onSendMessage: (content: string) => void;
+  /** Start a fresh chat session (clears history + tells server to reset context). */
+  onNewSession?: () => void;
   /** Display name for the agent (default: "Hermes") */
   agentName?: string;
   /** Agent greeting override for empty state */
@@ -30,6 +32,7 @@ export function HermesPanel({
   messages,
   isTyping,
   onSendMessage,
+  onNewSession,
   agentName = 'Hermes',
   greeting,
 }: HermesPanelProps) {
@@ -109,6 +112,15 @@ export function HermesPanel({
                 )}
               </div>
             </div>
+            <button
+              onClick={onNewSession}
+              disabled={!isConnected || !agentEnabled || messages.length === 0}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-teal-600/70 transition-colors hover:bg-teal-100/80 hover:text-teal-800 disabled:cursor-not-allowed disabled:opacity-40 dark:text-teal-400/70 dark:hover:bg-teal-800/40 dark:hover:text-teal-200"
+              aria-label={t('hermesNewChat')}
+              title={t('hermesNewChat')}
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
             <button
               onClick={onClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-teal-600/70 transition-colors hover:bg-teal-100/80 hover:text-teal-800 dark:text-teal-400/70 dark:hover:bg-teal-800/40 dark:hover:text-teal-200"

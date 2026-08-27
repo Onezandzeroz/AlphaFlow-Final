@@ -87,6 +87,15 @@ function setCachedEnabled(tenantId: string, value: boolean): void {
   enabledCache.set(tenantId, { value, timestamp: Date.now() })
 }
 
+/**
+ * Build the in-memory cache key for a tenant + chat session pair.
+ * `null`/`undefined` sessionId maps to the 'default' (legacy, session-less)
+ * bucket so callers that don't pass a sessionId still get a usable view.
+ */
+function messagesCacheKey(tenantId: string, sessionId: string | null): string {
+  return `${tenantId}:${sessionId ?? 'default'}`
+}
+
 // ================================================================
 // Accounting Helpers
 // ================================================================
@@ -218,7 +227,9 @@ function emptyAccountingData(): AccountingData {
  *   persist to the database as fire-and-forget async operations.
  */
 export class DatabaseTenantProvider implements TenantProvider {
-  // In-memory caches populated by getTenant() for synchronous reads
+  // In-memory caches populated by getTenant() for synchronous reads.
+  // Keyed by `${tenantId}:${sessionId ?? 'default'}` so each chat session
+  // has an isolated history view.
   private remindersCache = new Map<string, AgentNotification[]>()
   private messagesCache = new Map<string, ConversationMessage[]>()
 
@@ -279,8 +290,12 @@ export class DatabaseTenantProvider implements TenantProvider {
           hermesAgent: {
             include: {
               reminders: true,
+              // Load the 20 MOST RECENT messages (newest-first, then we reverse
+              // below). The previous `orderBy: asc, take: 20` loaded the OLDEST
+              // 20 — a bug that surfaced once a tenant exceeded 20 lifetime
+              // messages.
               messages: {
-                orderBy: { createdAt: 'asc' },
+                orderBy: { createdAt: 'desc' },
                 take: 20,
               },
             },
@@ -329,13 +344,16 @@ export class DatabaseTenantProvider implements TenantProvider {
           dismissed: false,
         }))
 
-      // --- Conversation history (last 20 messages, oldest first) ---
-      const conversationHistory: ConversationMessage[] = (agent?.messages ?? []).map(
-        (m) => ({
+      // --- Conversation history (last 20 messages, oldest-first) ---
+      // `messages` was fetched newest-first above; reverse to chronological
+      // (oldest-first) order for replay into the LLM.
+      const conversationHistory: ConversationMessage[] = (agent?.messages ?? [])
+        .slice()
+        .reverse()
+        .map((m) => ({
           role: (m.role === 'user' ? 'user' : 'assistant') as ConversationMessage['role'],
           content: m.content,
-        }),
-      )
+        }))
 
       // --- Accounting data ---
       const parsedTransactions: ParsedTransaction[] = company.transactions.map((tx) => ({
@@ -349,8 +367,10 @@ export class DatabaseTenantProvider implements TenantProvider {
         : emptyAccountingData()
 
       // --- Populate caches for synchronous access ---
+      // Key by the 'default' (legacy, session-less) view so getTenant()'s
+      // data is available to callers that don't yet pass a sessionId.
       this.remindersCache.set(tenantId, notifications)
-      this.messagesCache.set(tenantId, conversationHistory)
+      this.messagesCache.set(messagesCacheKey(tenantId, null), conversationHistory)
 
       // Update enabled cache from the agent record
       setCachedEnabled(tenantId, agent?.enabled ?? false)
@@ -499,23 +519,24 @@ export class DatabaseTenantProvider implements TenantProvider {
   // TenantProvider — getConversationHistory (sync from cache)
   // ----------------------------------------------------------------
 
-  getConversationHistory(tenantId: string): ConversationMessage[] {
-    return this.messagesCache.get(tenantId) ?? []
+  getConversationHistory(tenantId: string, sessionId?: string | null): ConversationMessage[] {
+    return this.messagesCache.get(messagesCacheKey(tenantId, sessionId ?? null)) ?? []
   }
 
   // ----------------------------------------------------------------
   // TenantProvider — addMessage (sync cache update, async persist)
   // ----------------------------------------------------------------
 
-  addMessage(tenantId: string, message: ConversationMessage): void {
+  addMessage(tenantId: string, message: ConversationMessage, sessionId?: string | null): void {
     // Append to in-memory cache immediately so getConversationHistory()
-    // returns the new message on subsequent calls
-    const messages = this.messagesCache.get(tenantId) ?? []
+    // returns the new message on subsequent calls. Cache is per-session.
+    const key = messagesCacheKey(tenantId, sessionId ?? null)
+    const messages = this.messagesCache.get(key) ?? []
     messages.push(message)
-    this.messagesCache.set(tenantId, messages)
+    this.messagesCache.set(key, messages)
 
     // Persist to database (fire-and-forget)
-    this.persistMessage(tenantId, message).catch((err) => {
+    this.persistMessage(tenantId, message, sessionId ?? null).catch((err) => {
       console.error(
         `[DatabaseTenantProvider] Failed to persist message for ${tenantId}:`,
         err,
@@ -526,9 +547,13 @@ export class DatabaseTenantProvider implements TenantProvider {
   /**
    * Persists a conversation message to the database.
    * Ensures a HermesAgent record exists for the tenant before
-   * inserting the message.
+   * inserting the message, tagged with the active sessionId.
    */
-  private async persistMessage(tenantId: string, message: ConversationMessage): Promise<void> {
+  private async persistMessage(
+    tenantId: string,
+    message: ConversationMessage,
+    sessionId: string | null,
+  ): Promise<void> {
     const db = getPrismaClient()
 
     // Find or create the HermesAgent record
@@ -553,8 +578,103 @@ export class DatabaseTenantProvider implements TenantProvider {
         agentId,
         role: message.role,
         content: message.content,
+        ...(sessionId ? { sessionId } : {}),
       },
     })
+  }
+
+  // ----------------------------------------------------------------
+  // TenantProvider — clearSessionCache
+  // ----------------------------------------------------------------
+
+  clearSessionCache(tenantId: string, sessionId?: string | null): void {
+    this.messagesCache.delete(messagesCacheKey(tenantId, sessionId ?? null))
+  }
+
+  // ----------------------------------------------------------------
+  // TenantProvider — pruneMessages (hard-delete old AgentMessage rows)
+  // ----------------------------------------------------------------
+
+  /**
+   * Hard-delete every AgentMessage older than the `keepCount`-th newest for
+   * this tenant. Chat sessions are NOT preserved — only the most recent N
+   * messages survive in the database. Returns the number of rows deleted.
+   *
+   * Implementation: find the createdAt of the (keepCount+1)-th newest message
+   * (skip keepCount, take 1), then deleteMany everything older than that
+   * cutoff. Two queries total — efficient even for large histories.
+   */
+  async pruneMessages(tenantId: string, keepCount: number): Promise<number> {
+    try {
+      const db = getPrismaClient()
+      const agent = await db.hermesAgent.findUnique({
+        where: { companyId: tenantId },
+        select: { id: true },
+      })
+      if (!agent) return 0
+
+      // Find the cutoff: the createdAt of the first message BEYOND keepCount
+      // (newest-first). If there are ≤ keepCount messages, this returns [].
+      const cutoff = await db.agentMessage.findMany({
+        where: { agentId: agent.id },
+        orderBy: { createdAt: 'desc' },
+        skip: keepCount,
+        take: 1,
+        select: { createdAt: true },
+      })
+      if (cutoff.length === 0) return 0 // nothing to prune
+
+      const result = await db.agentMessage.deleteMany({
+        where: { agentId: agent.id, createdAt: { lt: cutoff[0].createdAt } },
+      })
+      return result.count
+    } catch (err: any) {
+      console.error(`[DatabaseTenantProvider] pruneMessages failed for ${tenantId}:`, err.message || err)
+      return 0
+    }
+  }
+
+  // ----------------------------------------------------------------
+  // TenantProvider — pruneAllTenants (global boot-time sweep)
+  // ----------------------------------------------------------------
+
+  /**
+   * Iterate every HermesAgent record and prune its messages to the applicable
+   * cap: `superDevKeep` if the tenant has any SuperDev member, else
+   * `normalKeep`. Runs once on service boot so existing piles are trimmed
+   * immediately on (re)deploy — not just going forward.
+   */
+  async pruneAllTenants(normalKeep: number, superDevKeep: number): Promise<number> {
+    let totalDeleted = 0
+    try {
+      const db = getPrismaClient()
+      const agents = await db.hermesAgent.findMany({
+        select: {
+          id: true,
+          companyId: true,
+          company: {
+            select: {
+              members: {
+                select: { user: { select: { isSuperDev: true } } },
+              },
+            },
+          },
+        },
+      })
+
+      for (const agent of agents) {
+        const isSuperDev = agent.company.members.some((uc) => uc.user.isSuperDev)
+        const keepCount = isSuperDev ? superDevKeep : normalKeep
+        const deleted = await this.pruneMessages(agent.companyId, keepCount)
+        if (deleted > 0) {
+          console.log(`[DatabaseTenantProvider] Boot sweep: pruned ${deleted} messages for tenant ${agent.companyId} (keep=${keepCount}, superDev=${isSuperDev})`)
+        }
+        totalDeleted += deleted
+      }
+    } catch (err: any) {
+      console.error('[DatabaseTenantProvider] pruneAllTenants failed:', err.message || err)
+    }
+    return totalDeleted
   }
 
   // ----------------------------------------------------------------
@@ -563,12 +683,18 @@ export class DatabaseTenantProvider implements TenantProvider {
 
   /**
    * Invalidates all in-memory caches for a specific tenant,
-   * forcing fresh data on the next getTenant() call.
+   * forcing fresh data on the next getTenant() call. Clears every session
+   * bucket belonging to the tenant (keys prefixed with `${tenantId}:`).
    */
   invalidateTenantCache(tenantId: string): void {
     this.remindersCache.delete(tenantId)
-    this.messagesCache.delete(tenantId)
     enabledCache.delete(tenantId)
+    // Drop every session bucket for this tenant (default + any sessionIds).
+    for (const key of this.messagesCache.keys()) {
+      if (key.startsWith(`${tenantId}:`)) {
+        this.messagesCache.delete(key)
+      }
+    }
   }
 
   /**

@@ -1239,11 +1239,17 @@ model AgentMessage {
   agentId   String
   role      String // "user" | "assistant"
   content   String
+  // Chat session identifier (client-generated UUID). Groups messages into
+  // discrete conversations so the LLM only sees the current session's history
+  // — not every message ever exchanged with the tenant. NULL = legacy rows
+  // written before sessions existed (excluded from session-filtered queries).
+  sessionId String?
   createdAt DateTime @default(now())
 
   agent HermesAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([agentId, createdAt])
+  @@index([agentId, sessionId, createdAt])
 }
 
 // ─── HERMES SKILLS (App Owner installs, tenants enable) ────────

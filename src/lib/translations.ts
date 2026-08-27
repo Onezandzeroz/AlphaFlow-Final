@@ -2272,6 +2272,7 @@ export const translations = {
   hermesConnected: { da: 'Forbundet', en: 'Connected' },
   hermesDisconnected: { da: 'Ikke forbundet', en: 'Not connected' },
   hermesCloseChat: { da: 'Luk chat', en: 'Close chat' },
+  hermesNewChat: { da: 'Ny chat', en: 'New chat' },
   hermesStartConversation: { da: 'Start en samtale med', en: 'Start a conversation with' },
   hermesThinking: { da: 'tænker…', en: 'is thinking…' },
   hermesAskPlaceholder: { da: 'Spørg', en: 'Ask' },
