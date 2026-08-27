@@ -1388,12 +1388,23 @@ async function importTenantDataFromZip(
 }
 
 /**
- * Clean up expired backups for a company
+ * Clean up expired backups for a company.
+ *
+ * @param companyId  The tenant whose backups to clean.
+ * @param onlyType   Optional: enforce the count-limit for ONLY this backup type
+ *                   (in addition to the always-run expiry sweep). Used by the
+ *                   scheduler right after creating a backup of `onlyType`, so
+ *                   the just-created type is trimmed to its retention limit
+ *                   immediately instead of waiting for the daily 03:00 sweep.
+ *                   Omit to enforce count-limits for ALL types (daily sweep).
  */
-export async function cleanupExpiredBackups(companyId: string): Promise<number> {
+export async function cleanupExpiredBackups(
+  companyId: string,
+  onlyType?: BackupType,
+): Promise<number> {
   let deleted = 0;
 
-  // 1. Delete expired backups (past their expiresAt date)
+  // 1. Delete expired backups (past their expiresAt date) — always all types
   const expired = await db.backup.findMany({
     where: { companyId, expiresAt: { lt: new Date() } },
   });
@@ -1403,8 +1414,10 @@ export async function cleanupExpiredBackups(companyId: string): Promise<number> 
     deleted++;
   }
 
-  // 2. Enforce retention count limits per type (keep only N most recent)
-  const types: BackupType[] = ['hourly', 'daily', 'weekly', 'monthly', 'manual'];
+  // 2. Enforce retention count limits per type (keep only N most recent).
+  //    When onlyType is given, trim just that type (hot path after each backup);
+  //    otherwise sweep every type (daily 03:00 safety-net pass).
+  const types: BackupType[] = onlyType ? [onlyType] : ['hourly', 'daily', 'weekly', 'monthly', 'manual'];
   for (const backupType of types) {
     const maxCount = RETENTION[backupType]?.count;
     if (!maxCount) continue;
@@ -1465,15 +1478,14 @@ export async function runAutomaticBackup(userId: string, companyId: string, back
     throw new Error(`Automatic ${backupType} backup failed for company ${companyId}: ${detail}`);
   }
 
-  // NOTE: Retention cleanup is NOT called here. It ran previously after every
-  // successful backup, which caused existing backup files to be deleted on
-  // server restart/reboot (the first cron tick after restart would create a
-  // new backup and immediately trigger cleanup, deleting older files).
-  //
-  // Retention is now enforced SOLELY by the daily cleanup cron at 03:00
-  // (see backup-scheduler.ts `cleanupTask`). This ensures restarts never
-  // touch existing backup files — the scheduler only creates new ones going
-  // forward, as required for data safety.
+  // NOTE: Per-backup retention cleanup is NOT called here inside createBackup's
+  // caller path. Instead, the scheduler invokes cleanupExpiredBackups(companyId,
+  // backupType) immediately after each successful scheduled backup (see
+  // runScheduledBackupCycle in backup-scheduler.ts). This trims the just-created
+  // type to its retention limit at once, so e.g. hourly backups (24×/day) never
+  // pile up beyond their 24-copy cap between daily sweeps. A full all-types
+  // cleanup also still runs daily at 03:00 as a safety net. Cleanup failures are
+  // caught in the scheduler and never affect the backup's own success status.
 }
 
 /**

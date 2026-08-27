@@ -568,6 +568,20 @@ async function runScheduledBackupCycle(
         if (attempts > 1) {
           logger.info(`[BACKUP-SCHEDULER] ${backupType} backup for company ${companyId} succeeded after ${attempts} attempts`);
         }
+
+        // ── Enforce retention immediately after a successful backup ──────────
+        // Without this, hourly backups (24×/day) would pile up to ~45 before the
+        // daily 03:00 cleanup trimmed them back to 24 (the "45/24" bug). Trimming
+        // the just-created type right now keeps the count at its cap at all times.
+        // Failures are swallowed so they never affect this backup's success status.
+        try {
+          const removed = await cleanupExpiredBackups(companyId, backupType);
+          if (removed > 0) {
+            logger.info(`[BACKUP-SCHEDULER] Post-backup retention: removed ${removed} excess/expired ${backupType} backups for company ${companyId}`);
+          }
+        } catch (cleanupErr) {
+          logger.warn(`[BACKUP-SCHEDULER] Post-backup retention cleanup failed for company ${companyId} (${backupType}) — daily 03:00 sweep will still run.`, cleanupErr);
+        }
       } else {
         const msg = `Failed after ${attempts} attempts`;
         updateCompanyCronHealthError(companyId, backupType, msg);
@@ -716,6 +730,30 @@ export function startBackupScheduler(): void {
  */
 async function runStartupCatchup(): Promise<void> {
   logger.info('[BACKUP-SCHEDULER] Checking for missed cron windows...');
+
+  // ── Startup retention sweep ─────────────────────────────────────────────
+  // Before catching up missed backups, trim any existing pile-up back to each
+  // type's retention cap. This is critical because the OLD scheduler only ran
+  // cleanup once daily at 03:00, so hourly backups could accumulate up to ~47
+  // between sweeps (the "45/24" bug). Running a full sweep on startup means an
+  // operator who deploys this fix immediately sees the over-count corrected,
+  // without having to wait for the next 03:00 tick.
+  try {
+    const companies = await getActiveCompaniesWithData();
+    let startupCleaned = 0;
+    for (const { companyId } of companies) {
+      try {
+        startupCleaned += await cleanupExpiredBackups(companyId);
+      } catch (err) {
+        logger.warn(`[BACKUP-SCHEDULER] Startup cleanup failed for company ${companyId}`, err);
+      }
+    }
+    if (startupCleaned > 0) {
+      logger.info(`[BACKUP-SCHEDULER] Startup retention sweep: removed ${startupCleaned} excess/expired backups across ${companies.length} companies`);
+    }
+  } catch (err) {
+    logger.warn('[BACKUP-SCHEDULER] Startup retention sweep could not run', err);
+  }
 
   let catchupsRun = 0;
   for (const { type, jobType } of SCHEDULES) {
