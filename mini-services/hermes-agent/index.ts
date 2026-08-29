@@ -1026,7 +1026,11 @@ io.on('connection', async (socket) => {
 
       // Count this successful request against the tenant's rate-limit windows.
       // Only successful responses consume quota — failed/429'd requests don't.
-      rateLimiter.record(tenantId)
+      // record() is async (persists to DB fire-and-forget) but we don't need
+      // to await it — the counters are already incremented in-memory.
+      rateLimiter.record(tenantId).catch((err) => {
+        console.warn(`[Hermes] rateLimiter.record failed for ${tenantId}:`, err)
+      })
 
       console.log(`[Hermes] Response sent to "${meta.userName}" (${fullResponse.length} chars, skill: ${hasSourceCodeSkill ? 'source-code' : 'none'})`)
     } catch (error: any) {

@@ -9,16 +9,16 @@
 //
 // CONFIG is read from the database (HermesAgent model) with a
 // 60-second in-memory cache so the chat handler isn't blocked
-// by a DB round-trip on every message. Updates made via the
-// App Owner oversight page (Next.js API → DB) propagate within
-// the cache TTL.
+// by a DB round-trip on every message.
 //
-// COUNTERS are in-memory only. They reset on window rollover and
-// on service restart. This is acceptable for "current window"
-// usage display; persistent billing counters are out of scope.
+// COUNTERS are persisted to the HermesUsageRecord table so they survive
+// service restarts (PM2 reloads, deploys, crashes). On startup the
+// in-memory counters are hydrated from the DB; on every record() the DB
+// is updated (fire-and-forget). This makes the oversight dashboard
+// reflect real usage instead of resetting to 0 on every restart.
 //
 // When DATABASE_URL is not set (Mock mode), default limits are
-// used and no DB calls are made.
+// used and counters stay in-memory only.
 // ============================================================
 
 import { getPrismaClient } from './database-tenant-provider'
@@ -201,11 +201,18 @@ export class TenantRateLimiter {
 
   // ─── Counters ──────────────────────────────────────────
 
-  private getCounters(tenantId: string): TenantCounters {
+  private async getCounters(tenantId: string): Promise<TenantCounters> {
     let c = this.counters.get(tenantId)
     if (!c) {
-      c = freshCounters(Date.now())
-      this.counters.set(tenantId, c)
+      // Hydrate from DB on first access (survives restarts)
+      if (this.useDatabase) {
+        await this.hydrateFromDb(tenantId)
+        c = this.counters.get(tenantId)
+      }
+      if (!c) {
+        c = freshCounters(Date.now())
+        this.counters.set(tenantId, c)
+      }
     }
     return c
   }
@@ -221,7 +228,7 @@ export class TenantRateLimiter {
     if (!config.enabled) return { allowed: true }
 
     const now = Date.now()
-    const c = this.getCounters(tenantId)
+    const c = await this.getCounters(tenantId)
 
     // Rollover all windows
     c.minute = rollover(c.minute, now, MINUTE_MS)
@@ -256,10 +263,12 @@ export class TenantRateLimiter {
    * Increments all four window counters by 1.
    * Call this ONLY after a successful LLM response (not on errors),
    * so failed requests don't consume a tenant's quota.
+   *
+   * Persisted to DB (fire-and-forget) so usage survives restarts.
    */
-  record(tenantId: string): void {
+  async record(tenantId: string): Promise<void> {
     const now = Date.now()
-    const c = this.getCounters(tenantId)
+    const c = await this.getCounters(tenantId)
     c.minute = rollover(c.minute, now, MINUTE_MS)
     c.hour = rollover(c.hour, now, HOUR_MS)
     c.day = rollover(c.day, now, DAY_MS)
@@ -268,6 +277,78 @@ export class TenantRateLimiter {
     c.hour.count += 1
     c.day.count += 1
     c.month.count += 1
+
+    // Persist to DB so the oversight dashboard sees real usage even
+    // after a service restart. Fire-and-forget so the chat path isn't blocked.
+    if (this.useDatabase) {
+      this.persistCounters(tenantId, c).catch((err) => {
+        console.error(`[RateLimiter] Failed to persist counters for ${tenantId}:`, err.message || err)
+      })
+    }
+  }
+
+  /**
+   * Upserts the tenant's HermesUsageRecord with the current counter values.
+   * Called fire-and-forget after every record().
+   */
+  private async persistCounters(tenantId: string, c: TenantCounters): Promise<void> {
+    try {
+      const db = getPrismaClient()
+      await db.hermesUsageRecord.upsert({
+        where: { companyId: tenantId },
+        create: {
+          companyId: tenantId,
+          minuteStart: new Date(c.minute.windowStart),
+          minuteCount: c.minute.count,
+          hourStart: new Date(c.hour.windowStart),
+          hourCount: c.hour.count,
+          dayStart: new Date(c.day.windowStart),
+          dayCount: c.day.count,
+          monthStart: new Date(c.month.windowStart),
+          monthCount: c.month.count,
+        },
+        update: {
+          minuteStart: new Date(c.minute.windowStart),
+          minuteCount: c.minute.count,
+          hourStart: new Date(c.hour.windowStart),
+          hourCount: c.hour.count,
+          dayStart: new Date(c.day.windowStart),
+          dayCount: c.day.count,
+          monthStart: new Date(c.month.windowStart),
+          monthCount: c.month.count,
+        },
+      })
+    } catch (err: any) {
+      console.error(`[RateLimiter] persistCounters failed for ${tenantId}:`, err.message || err)
+    }
+  }
+
+  /**
+   * Loads counters from the DB into the in-memory map.
+   * Called lazily by getCounters() on first access for a tenant, so the
+   * rate-limiter picks up persisted usage even after a restart.
+   */
+  private async hydrateFromDb(tenantId: string): Promise<void> {
+    if (!this.useDatabase) return
+    // Already hydrated in this process? Skip.
+    if (this.counters.has(tenantId)) return
+    try {
+      const db = getPrismaClient()
+      const rec = await db.hermesUsageRecord.findUnique({
+        where: { companyId: tenantId },
+      })
+      if (rec) {
+        this.counters.set(tenantId, {
+          minute: { windowStart: rec.minuteStart.getTime(), count: rec.minuteCount },
+          hour:   { windowStart: rec.hourStart.getTime(),   count: rec.hourCount },
+          day:    { windowStart: rec.dayStart.getTime(),    count: rec.dayCount },
+          month:  { windowStart: rec.monthStart.getTime(),  count: rec.monthCount },
+        })
+      }
+    } catch (err: any) {
+      // DB not reachable — leave counters absent; getCounters() will
+      // create fresh zeroed counters as the fallback.
+    }
   }
 
   // ─── Stats (for oversight page) ────────────────────────
@@ -278,7 +359,7 @@ export class TenantRateLimiter {
   async getUsage(tenantId: string): Promise<TenantUsage> {
     const config = await this.getConfig(tenantId)
     const now = Date.now()
-    const c = this.getCounters(tenantId)
+    const c = await this.getCounters(tenantId)
     c.minute = rollover(c.minute, now, MINUTE_MS)
     c.hour = rollover(c.hour, now, HOUR_MS)
     c.day = rollover(c.day, now, DAY_MS)
@@ -297,11 +378,28 @@ export class TenantRateLimiter {
   }
 
   /**
-   * Returns usage for ALL tenants that have any counter state.
-   * Tenants never seen by the rate liminter are omitted (they have 0 usage).
-   * Used by the HTTP /admin/stats endpoint for the oversight page.
+   * Returns usage for ALL tenants.
+   * In DB mode, queries every company that has a HermesAgent record so
+   * tenants with zero usage (never chatted, or counters rolled over to 0)
+   * still appear in the oversight dashboard. Hydrates each from the
+   * HermesUsageRecord table if present.
+   * In mock mode, returns only tenants with in-memory counters.
    */
   async getAllUsage(): Promise<TenantUsage[]> {
+    if (this.useDatabase) {
+      try {
+        const db = getPrismaClient()
+        // Fetch every company that has Hermes enabled — so all monitored
+        // tenants appear in the oversight dashboard, even with 0 usage.
+        const agents = await db.hermesAgent.findMany({
+          select: { companyId: true },
+        })
+        return Promise.all(agents.map((a) => this.getUsage(a.companyId)))
+      } catch (err: any) {
+        console.error('[RateLimiter] getAllUsage DB query failed:', err.message || err)
+        // Fall through to in-memory fallback
+      }
+    }
     const tenantIds = Array.from(this.counters.keys())
     return Promise.all(tenantIds.map((id) => this.getUsage(id)))
   }

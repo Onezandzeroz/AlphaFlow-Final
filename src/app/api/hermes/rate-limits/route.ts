@@ -204,9 +204,10 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
 
     // Notify hermes-agent to clear its config cache so the new limits
     // take effect immediately (instead of waiting up to 60s).
+    // Uses the gateway-compliant XTransformPort pattern (relative URL).
     // Non-blocking — cache TTL is the fallback.
     if (HERMES_ADMIN_KEY) {
-      fetch(`http://localhost:${HERMES_SERVICE_PORT}/admin/invalidate`, {
+      fetch(`/admin/invalidate?XTransformPort=${HERMES_SERVICE_PORT}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

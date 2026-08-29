@@ -61,13 +61,16 @@ export const GET = withGuard(routeConfig['/api/hermes/usage-stats'].GET!, async 
     });
 
     // 2. Fetch live usage from hermes-agent (best-effort).
+    //    Uses the gateway-compliant XTransformPort pattern (relative URL)
+    //    so the request goes through Caddy on port 81 → hermes-agent on 3004.
+    //    This works in all environments: local dev, sandbox, and production.
     //    If the service is unreachable, we still return the tenant list
     //    with zeroed usage so the oversight page renders.
     let agentStats: AgentUsageEntry[] = [];
     if (HERMES_ADMIN_KEY) {
       try {
         const res = await fetch(
-          `http://localhost:${HERMES_SERVICE_PORT}/admin/stats`,
+          `/admin/stats?XTransformPort=${HERMES_SERVICE_PORT}`,
           {
             headers: { 'Authorization': `Bearer ${HERMES_ADMIN_KEY}` },
             // Short timeout — the oversight page should not hang if
@@ -82,8 +85,37 @@ export const GET = withGuard(routeConfig['/api/hermes/usage-stats'].GET!, async 
           logger.warn('[HERMES USAGE-STATS] hermes-agent returned non-OK', { status: res.status });
         }
       } catch (err) {
-        // hermes-agent may be down/restarting — degrade gracefully
-        logger.warn('[HERMES USAGE-STATS] Could not reach hermes-agent, returning zeroed usage', err);
+        // hermes-agent may be down/restarting — degrade gracefully.
+        // Fall back to reading persisted usage directly from the DB
+        // (HermesUsageRecord table) so the dashboard still shows real numbers.
+        logger.warn('[HERMES USAGE-STATS] Could not reach hermes-agent via gateway, falling back to DB-persisted usage', err);
+        try {
+          const records = await db.hermesUsageRecord.findMany();
+          agentStats = records.map((r) => {
+            const now = Date.now();
+            const minuteStart = r.minuteStart.getTime();
+            const hourStart = r.hourStart.getTime();
+            const dayStart = r.dayStart.getTime();
+            const monthStart = r.monthStart.getTime();
+            // Apply lazy rollover for display
+            const minuteUsed = now - minuteStart < 60_000 ? r.minuteCount : 0;
+            const hourUsed = now - hourStart < 3_600_000 ? r.hourCount : 0;
+            const dayUsed = now - dayStart < 86_400_000 ? r.dayCount : 0;
+            const monthUsed = now - monthStart < 2_592_000_000 ? r.monthCount : 0;
+            return {
+              tenantId: r.companyId,
+              config: { enabled: true, burst: 10, hour: 40, day: 120, month: 2000 },
+              usage: {
+                minute: { used: minuteUsed, limit: 10, resetsInSeconds: Math.max(0, Math.ceil((minuteStart + 60_000 - now) / 1000)) },
+                hour: { used: hourUsed, limit: 40, resetsInSeconds: Math.max(0, Math.ceil((hourStart + 3_600_000 - now) / 1000)) },
+                day: { used: dayUsed, limit: 120, resetsInSeconds: Math.max(0, Math.ceil((dayStart + 86_400_000 - now) / 1000)) },
+                month: { used: monthUsed, limit: 2000, resetsInSeconds: Math.max(0, Math.ceil((monthStart + 2_592_000_000 - now) / 1000)) },
+              },
+            } as AgentUsageEntry;
+          });
+        } catch (dbErr) {
+          logger.error('[HERMES USAGE-STATS] DB fallback also failed:', dbErr);
+        }
       }
     }
 

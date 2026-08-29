@@ -1163,6 +1163,39 @@ model HermesAgent {
   reminders AgentReminder[]
   messages  AgentMessage[]
   skills    HermesAgentSkill[]
+  usageRecord HermesUsageRecord?
+}
+
+// ─── HERMES USAGE COUNTERS (persisted, survives restarts) ──────
+// The rate-limiter's in-memory counters reset on every service restart,
+// which made the oversight dashboard show 0/0 after every PM2 reload.
+// This model persists the four rolling-window counters (minute/hour/day/
+// month) per tenant so usage survives restarts and can be queried by the
+// oversight API even when the hermes-agent process is down.
+//
+// windowStart = epoch-ms when the current window began.
+// count       = requests accumulated in that window so far.
+// Rollover happens lazily in the rate-limiter when now - windowStart >= duration.
+model HermesUsageRecord {
+  id              String   @id @default(cuid())
+  companyId       String   @unique
+  // Minute window (burst protection)
+  minuteStart     DateTime @default(now())
+  minuteCount     Int      @default(0)
+  // Hour window
+  hourStart       DateTime @default(now())
+  hourCount       Int      @default(0)
+  // Day window
+  dayStart        DateTime @default(now())
+  dayCount        Int      @default(0)
+  // Month window (30-day rolling)
+  monthStart      DateTime @default(now())
+  monthCount      Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  agent HermesAgent @relation(fields: [companyId], references: [companyId], onDelete: Cascade)
+
+  @@index([companyId])
 }
 
 // ─── HERMES RAG KNOWLEDGE BASE (pgvector) ──────────────────────
