@@ -20,6 +20,8 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
+import { OFFICIAL_STANDARD_CHART, STANDARDKONTOPLAN_VERSION } from './official-standard-chart';
+
 export interface StandardAccount {
   number: string
   name: string
@@ -620,8 +622,17 @@ export const PUBLIC_STANDARD_CHART: StandardAccount[] = [
 
 /**
  * Get a standard account by number
+ *
+ * Searches BOTH the official 2026 standardkontoplan (603 accounts) AND the
+ * legacy AlphaFlow-specific chart (0xxx-9xxx, ~50 accounts). The official
+ * chart takes precedence; the legacy chart is kept for backward compatibility
+ * with tenants that mapped to the older public-sector account numbers.
  */
 export function getStandardAccount(number: string): StandardAccount | undefined {
+  // First, check the official 2026 standardkontoplan (603 accounts)
+  const official = OFFICIAL_STANDARD_CHART.find(a => a.number === number)
+  if (official) return official
+  // Fallback to the legacy AlphaFlow chart
   return PUBLIC_STANDARD_CHART.find(a => a.number === number)
 }
 
@@ -630,7 +641,12 @@ export function getStandardAccount(number: string): StandardAccount | undefined 
  */
 export function getStandardAccountsByType(): Record<StandardAccountType, StandardAccount[]> {
   const grouped: Record<string, StandardAccount[]> = {}
-  for (const account of PUBLIC_STANDARD_CHART) {
+  // Merge both charts (official takes precedence; legacy fills gaps)
+  const merged = [...OFFICIAL_STANDARD_CHART, ...PUBLIC_STANDARD_CHART]
+  const seen = new Set<string>()
+  for (const account of merged) {
+    if (seen.has(account.number)) continue
+    seen.add(account.number)
     if (!grouped[account.type]) {
       grouped[account.type] = []
     }
@@ -643,13 +659,26 @@ export function getStandardAccountsByType(): Record<StandardAccountType, Standar
  * Get standard accounts in the 7xxx range (VAT/Tax accounts)
  */
 export function getVATAccounts(): StandardAccount[] {
-  return PUBLIC_STANDARD_CHART.filter(a => a.number.startsWith('7'))
+  const merged = [...OFFICIAL_STANDARD_CHART, ...PUBLIC_STANDARD_CHART]
+  const seen = new Set<string>()
+  return merged.filter(a => {
+    if (seen.has(a.number)) return false
+    seen.add(a.number)
+    return a.number.startsWith('7')
+  })
 }
 
 /**
  * Get auto-mapping suggestions from FSR account number to standard account
  */
 export function suggestStandardMapping(fsrNumber: string): StandardAccount | null {
+  // Search official chart first
+  for (const stdAccount of OFFICIAL_STANDARD_CHART) {
+    if (stdAccount.suggestedFSR?.includes(fsrNumber)) {
+      return stdAccount
+    }
+  }
+  // Fallback to legacy chart
   for (const stdAccount of PUBLIC_STANDARD_CHART) {
     if (stdAccount.suggestedFSR?.includes(fsrNumber)) {
       return stdAccount

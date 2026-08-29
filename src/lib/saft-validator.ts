@@ -1,7 +1,8 @@
 import { logger } from '@/lib/logger';
 import { VALID_VAT_PERCENTAGES } from '@/lib/vat-utils';
 // SAF-T Danish Schema Validation Utility
-// Validates mandatory elements according to Danish SAF-T Financial Schema v1.0
+// Validates mandatory elements according to Danish SAF-T Financial DK v2.1
+// (Danish_SAF-T_Financial_Schema_v_2_1.xsd, Erhvervsstyrelsen 2026-07-03)
 
 export interface ValidationResult {
   isValid: boolean;
@@ -23,9 +24,9 @@ export interface ValidationError {
   suggestion?: string;
 }
 
-// Mandatory tags for SAF-T Financial DK v1.0
+// Mandatory tags for SAF-T Financial DK v2.1
 const MANDATORY_HEADER_TAGS = [
-  { path: 'AuditFileVersion', description: 'SAF-T version (must be 1.0)' },
+  { path: 'AuditFileVersion', description: 'SAF-T version (must be 2.1)' },
   { path: 'AuditFileCountry', description: 'Country code (must be DK)' },
   { path: 'AuditFileDateCreated', description: 'Creation timestamp' },
   { path: 'SoftwareCompanyName', description: 'Software vendor name' },
@@ -37,8 +38,14 @@ const MANDATORY_HEADER_TAGS = [
 
 const MANDATORY_MASTERFILE_TAGS = [
   { path: 'GeneralLedgerAccounts', description: 'Chart of accounts' },
-  { path: 'TaxCodeTable', description: 'VAT code definitions' },
+  { path: 'TaxTable', description: 'VAT code definitions (renamed from TaxCodeTable in v2.1)' },
 ];
+
+// SAF-T v2.1 namespace (urn:StandardAuditFile-Taxation-Financial:DK)
+const SAFT_V21_NAMESPACE = 'urn:StandardAuditFile-Taxation-Financial:DK';
+
+// Valid AccountType values per XSD v2.1 (closed enum)
+const VALID_ACCOUNT_TYPES = ['Asset', 'Liability', 'Sale', 'Expense', 'Other'];
 
 // VAT code validation for Danish rates — imported from vat-utils (single source of truth)
 // const VALID_DANISH_VAT_RATES moved to VALID_VAT_PERCENTAGES in vat-utils.ts
@@ -81,17 +88,32 @@ export function validateSAFT(xmlContent: string): ValidationResult {
   } else {
     passed++;
     
-    // Check namespace
+    // Check namespace — must be the official v2.1 namespace
     totalChecks++;
-    if (!xmlContent.includes('xmlns') || !xmlContent.includes('SAF-T')) {
-      warnings.push({
-        code: 'NAMESPACE_WARNING',
-        message: 'Missing or incorrect SAF-T namespace',
+    if (!xmlContent.includes(SAFT_V21_NAMESPACE)) {
+      errors.push({
+        code: 'INVALID_NAMESPACE',
+        message: `Missing or incorrect SAF-T namespace. Must be: ${SAFT_V21_NAMESPACE}`,
         path: 'AuditFile',
-        severity: 'warning',
-        suggestion: 'Add xmlns="urn:Oasis/Tax/Accounting/SAF-T/Financial/DK"',
+        severity: 'error',
+        suggestion: `Add xmlns="${SAFT_V21_NAMESPACE}"`,
       });
     } else {
+      passed++;
+    }
+
+    // Check AuditFileVersion is 2.1
+    totalChecks++;
+    const versionMatch = xmlContent.match(/<AuditFileVersion>([^<]+)<\/AuditFileVersion>/);
+    if (versionMatch && versionMatch[1].trim() !== '2.1') {
+      errors.push({
+        code: 'INVALID_VERSION',
+        message: `AuditFileVersion must be "2.1", found "${versionMatch[1].trim()}"`,
+        path: 'Header/AuditFileVersion',
+        severity: 'error',
+        suggestion: 'Set <AuditFileVersion>2.1</AuditFileVersion>',
+      });
+    } else if (versionMatch) {
       passed++;
     }
   }
@@ -243,36 +265,60 @@ export function validateSAFT(xmlContent: string): ValidationResult {
       passed++;
     }
 
-    // Validate tax codes
+    // Validate tax codes — v2.1 uses <TaxTable><TaxCodeDetails><TaxCode>
     totalChecks++;
     const taxCodeMatches = xmlContent.match(/<TaxCode>[^<]*<\/TaxCode>/g);
     if (!taxCodeMatches || taxCodeMatches.length === 0) {
       warnings.push({
         code: 'NO_TAX_CODES',
-        message: 'No tax codes defined in TaxCodeTable',
-        path: 'MasterFiles/TaxCodeTable',
+        message: 'No tax codes defined in TaxTable',
+        path: 'MasterFiles/TaxTable',
         severity: 'warning',
-        suggestion: 'Add tax codes for VAT rates used in transactions',
+        suggestion: 'Add TaxCodeDetails entries for VAT rates used in transactions',
       });
     } else {
       passed++;
     }
+
+    // Validate AccountType values match the v2.1 XSD enum
+    totalChecks++;
+    const accountTypeMatches = xmlContent.match(/<AccountType>([^<]*)<\/AccountType>/g);
+    if (accountTypeMatches) {
+      const invalidTypes: string[] = [];
+      for (const match of accountTypeMatches) {
+        const value = match.replace(/<\/?AccountType>/g, '').trim();
+        if (!VALID_ACCOUNT_TYPES.includes(value)) {
+          invalidTypes.push(value);
+        }
+      }
+      if (invalidTypes.length > 0) {
+        errors.push({
+          code: 'INVALID_ACCOUNT_TYPE',
+          message: `Invalid AccountType value(s): ${invalidTypes.join(', ')}. Valid values: ${VALID_ACCOUNT_TYPES.join(', ')}`,
+          path: 'MasterFiles/GeneralLedgerAccounts/Account/AccountType',
+          severity: 'error',
+          suggestion: `Use one of: ${VALID_ACCOUNT_TYPES.join(', ')}`,
+        });
+      } else {
+        passed++;
+      }
+    }
   }
 
-  // 4. Validate Totals (recommended for Danish compliance)
+  // 4. Validate GeneralLedgerEntries totals (v2.1: NumberOfEntries/TotalDebit/TotalCredit are direct children)
   totalChecks++;
-  if (!xmlContent.includes('<Totals>')) {
-    warnings.push({
-      code: 'MISSING_TOTALS',
-      message: 'Missing Totals section (recommended for Danish compliance)',
+  if (!xmlContent.includes('<GeneralLedgerEntries>')) {
+    errors.push({
+      code: 'MISSING_GENERAL_LEDGER_ENTRIES',
+      message: 'Missing mandatory GeneralLedgerEntries section',
       path: 'AuditFile',
-      severity: 'warning',
-      suggestion: 'Add <Totals> section with transaction counts and amounts',
+      severity: 'error',
+      suggestion: 'Add <GeneralLedgerEntries> with NumberOfEntries, TotalDebit, TotalCredit',
     });
   } else {
     passed++;
 
-    // Validate debit/credit balance in Totals
+    // Validate debit/credit balance in GeneralLedgerEntries
     totalChecks++;
     const totalDebitMatch = xmlContent.match(/<TotalDebit>([^<]*)<\/TotalDebit>/);
     const totalCreditMatch = xmlContent.match(/<TotalCredit>([^<]*)<\/TotalCredit>/);
@@ -283,7 +329,7 @@ export function validateSAFT(xmlContent: string): ValidationResult {
         errors.push({
           code: 'BALANCE_MISMATCH',
           message: `Total debit (${totalDebit.toFixed(2)}) does not equal total credit (${totalCredit.toFixed(2)}). Difference: ${(totalDebit - totalCredit).toFixed(2)}`,
-          path: 'Totals',
+          path: 'GeneralLedgerEntries',
           severity: 'error',
           suggestion: 'All journal entries must be balanced (debits = credits)',
         });
@@ -419,6 +465,132 @@ export function validateSAFT(xmlContent: string): ValidationResult {
     });
   } else if (xmlContent.includes('<GeneralLedgerEntries>')) {
     passed++;
+  }
+
+  // ── Referential integrity checks (XSD xs:key / xs:keyref constraints) ──
+  // These mirror the 13 xs:key + ~30 xs:keyref constraints in the official
+  // Danish_SAF-T_Financial_Schema_v_2_1.xsd. A regex-based validator can't
+  // fully replicate XSD validation, but it catches the most common violations.
+
+  // 13. Collect all defined AccountIDs from MasterFiles
+  const masterFilesMatch = xmlContent.match(/<MasterFiles>([\s\S]*?)<\/MasterFiles>/);
+  const masterFilesContent = masterFilesMatch ? masterFilesMatch[1] : '';
+
+  const definedAccountIDs = new Set<string>();
+  const accountIDMatches = masterFilesContent.match(/<AccountID>([^<]+)<\/AccountID>/g);
+  if (accountIDMatches) {
+    for (const m of accountIDMatches) {
+      definedAccountIDs.add(m.replace(/<\/?AccountID>/g, '').trim());
+    }
+  }
+
+  // Collect all referenced AccountIDs from GeneralLedgerEntries lines
+  const glEntriesMatch = xmlContent.match(/<GeneralLedgerEntries>([\s\S]*?)<\/GeneralLedgerEntries>/);
+  const glEntriesContent = glEntriesMatch ? glEntriesMatch[1] : '';
+
+  const referencedAccountIDs = new Set<string>();
+  const glAccountRefs = glEntriesContent.match(/<AccountID>([^<]+)<\/AccountID>/g);
+  if (glAccountRefs) {
+    for (const m of glAccountRefs) {
+      referencedAccountIDs.add(m.replace(/<\/?AccountID>/g, '').trim());
+    }
+  }
+
+  // Check: every referenced AccountID must exist in MasterFiles
+  totalChecks++;
+  if (definedAccountIDs.size > 0 && referencedAccountIDs.size > 0) {
+    const dangling = Array.from(referencedAccountIDs).filter(id => !definedAccountIDs.has(id));
+    if (dangling.length > 0) {
+      errors.push({
+        code: 'DANGLING_ACCOUNT_REF',
+        message: `${dangling.length} AccountID(s) referenced in transactions but not defined in MasterFiles/GeneralLedgerAccounts: ${dangling.slice(0, 5).join(', ')}${dangling.length > 5 ? '...' : ''}`,
+        path: 'GeneralLedgerEntries/Journal/Transaction/Lines/Line/AccountID',
+        severity: 'error',
+        suggestion: 'Ensure every AccountID used in transactions is defined in <MasterFiles><GeneralLedgerAccounts><Account>',
+      });
+    } else {
+      passed++;
+    }
+  }
+
+  // 14. Collect CustomerIDs + SupplierIDs and check references in SourceDocuments
+  const definedCustomerIDs = new Set<string>();
+  const customerIDMatches = masterFilesContent.match(/<CustomerID>([^<]+)<\/CustomerID>/g);
+  if (customerIDMatches) {
+    for (const m of customerIDMatches) {
+      definedCustomerIDs.add(m.replace(/<\/?CustomerID>/g, '').trim());
+    }
+  }
+
+  const definedSupplierIDs = new Set<string>();
+  const supplierIDMatches = masterFilesContent.match(/<SupplierID>([^<]+)<\/SupplierID>/g);
+  if (supplierIDMatches) {
+    for (const m of supplierIDMatches) {
+      definedSupplierIDs.add(m.replace(/<\/?SupplierID>/g, '').trim());
+    }
+  }
+
+  // Check CustomerID references in SalesInvoices
+  const sourceDocsMatch = xmlContent.match(/<SourceDocuments>([\s\S]*?)<\/SourceDocuments>/);
+  const sourceDocsContent = sourceDocsMatch ? sourceDocsMatch[1] : '';
+
+  const referencedCustomerIDs = new Set<string>();
+  const invoiceCustomerRefs = sourceDocsContent.match(/<CustomerID>([^<]+)<\/CustomerID>/g);
+  if (invoiceCustomerRefs) {
+    for (const m of invoiceCustomerRefs) {
+      referencedCustomerIDs.add(m.replace(/<\/?CustomerID>/g, '').trim());
+    }
+  }
+
+  totalChecks++;
+  if (definedCustomerIDs.size > 0 && referencedCustomerIDs.size > 0) {
+    const dangling = Array.from(referencedCustomerIDs).filter(id => !definedCustomerIDs.has(id));
+    if (dangling.length > 0) {
+      errors.push({
+        code: 'DANGLING_CUSTOMER_REF',
+        message: `${dangling.length} CustomerID(s) referenced in invoices but not defined in MasterFiles/Customers: ${dangling.slice(0, 5).join(', ')}`,
+        path: 'SourceDocuments/SalesInvoices/Invoice/CustomerID',
+        severity: 'error',
+        suggestion: 'Ensure every CustomerID in invoices is defined in <MasterFiles><Customers><Customer>',
+      });
+    } else {
+      passed++;
+    }
+  }
+
+  // 15. Collect defined TaxCodes and check references in transactions
+  const definedTaxCodes = new Set<string>();
+  const taxCodeDefMatches = masterFilesContent.match(/<TaxCodeDetails>[\s\S]*?<TaxCode>([^<]+)<\/TaxCode>/g);
+  if (taxCodeDefMatches) {
+    for (const m of taxCodeDefMatches) {
+      const codeMatch = m.match(/<TaxCode>([^<]+)<\/TaxCode>/);
+      if (codeMatch) definedTaxCodes.add(codeMatch[1].trim());
+    }
+  }
+
+  // Collect referenced TaxCodes from transactions + invoices
+  const referencedTaxCodes = new Set<string>();
+  const allTaxCodeRefs = (glEntriesContent + sourceDocsContent).match(/<TaxCode>([^<]+)<\/TaxCode>/g);
+  if (allTaxCodeRefs) {
+    for (const m of allTaxCodeRefs) {
+      referencedTaxCodes.add(m.replace(/<\/?TaxCode>/g, '').trim());
+    }
+  }
+
+  totalChecks++;
+  if (definedTaxCodes.size > 0 && referencedTaxCodes.size > 0) {
+    const dangling = Array.from(referencedTaxCodes).filter(code => !definedTaxCodes.has(code));
+    if (dangling.length > 0) {
+      errors.push({
+        code: 'DANGLING_TAXCODE_REF',
+        message: `${dangling.length} TaxCode(s) referenced in transactions/invoices but not defined in MasterFiles/TaxTable: ${dangling.join(', ')}`,
+        path: 'GeneralLedgerEntries + SourceDocuments',
+        severity: 'error',
+        suggestion: 'Ensure every TaxCode used is defined in <MasterFiles><TaxTable><TaxCodeDetails>',
+      });
+    } else {
+      passed++;
+    }
   }
 
   return createResult(errors, warnings, totalChecks, passed);
