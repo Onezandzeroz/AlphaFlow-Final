@@ -256,8 +256,9 @@ export function validateOIOUBL(xml: string): ValidationResult {
   // ── 8. Payment means validation ─────────────────────────────────────
 
   const paymentMeansMatch = xml.match(/cbc:PaymentMeansCode[^>]*>([^<]+)/);
+  let meansCode: string | undefined;
   if (paymentMeansMatch) {
-    const meansCode = paymentMeansMatch[1].trim();
+    meansCode = paymentMeansMatch[1].trim();
     if (!VALID_PAYMENT_MEANS_CODES.has(meansCode)) {
       errors.push(`Invalid PaymentMeansCode "${meansCode}". Must be a valid UN/ECE 4461 code.`);
     }
@@ -287,12 +288,38 @@ export function validateOIOUBL(xml: string): ValidationResult {
 
   // ── 10. ProfileID and CustomizationID ───────────────────────────────
 
-  if (!xml.includes('cbc:CustomizationID')) {
-    warnings.push('Missing CustomizationID. Expected "urn:cen.eu:en16931:2017" for Peppol BIS Billing 3.0.');
+  // Peppol BIS Billing 3.0 requires the COMPLIANT customization variant
+  // (not the bare EN 16931 base). Receiving Access Points may reject the bare form.
+  const PEPPOL_BIS3_CUSTOMIZATION_ID = 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0';
+  const PEPPOL_BIS3_PROFILE_ID = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
+
+  const customizationMatch = xml.match(/<cbc:CustomizationID[^>]*>([^<]+)<\/cbc:CustomizationID>/);
+  if (!customizationMatch) {
+    errors.push('Missing CustomizationID. Expected the Peppol BIS Billing 3.0 compliant variant: ' + PEPPOL_BIS3_CUSTOMIZATION_ID);
+  } else {
+    const cid = customizationMatch[1].trim();
+    if (cid === 'urn:cen.eu:en16931:2017') {
+      errors.push(
+        'CustomizationID is the bare EN 16931 base ("urn:cen.eu:en16931:2017"). ' +
+        'Peppol BIS Billing 3.0 requires the compliant variant: ' + PEPPOL_BIS3_CUSTOMIZATION_ID + '. ' +
+        'Receiving Access Points will reject the bare form.'
+      );
+    } else if (cid !== PEPPOL_BIS3_CUSTOMIZATION_ID) {
+      warnings.push(
+        'CustomizationID "' + cid + '" is not the standard Peppol BIS Billing 3.0 value. ' +
+        'Expected: ' + PEPPOL_BIS3_CUSTOMIZATION_ID
+      );
+    }
   }
 
-  if (!xml.includes('cbc:ProfileID')) {
-    warnings.push('Missing ProfileID. Expected "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0" for Peppol BIS Billing 3.0.');
+  const profileMatch = xml.match(/<cbc:ProfileID[^>]*>([^<]+)<\/cbc:ProfileID>/);
+  if (!profileMatch) {
+    errors.push('Missing ProfileID. Expected "' + PEPPOL_BIS3_PROFILE_ID + '" for Peppol BIS Billing 3.0.');
+  } else {
+    const pid = profileMatch[1].trim();
+    if (pid !== PEPPOL_BIS3_PROFILE_ID) {
+      warnings.push('ProfileID "' + pid + '" is not the standard Peppol BIS 3.0 value. Expected: ' + PEPPOL_BIS3_PROFILE_ID);
+    }
   }
 
   const invoiceTypeMatch = xml.match(/cbc:InvoiceTypeCode[^>]*>([^<]+)/);
@@ -302,6 +329,43 @@ export function validateOIOUBL(xml: string): ValidationResult {
     const typeCode = invoiceTypeMatch[1].trim();
     if (typeCode !== '380' && typeCode !== '381' && typeCode !== '384' && typeCode !== '389') {
       warnings.push(`InvoiceTypeCode "${typeCode}" is not standard. Expected 380 (Commercial invoice), 381 (Credit note), 384 (Corrected invoice), or 389 (Self-billed invoice).`);
+    }
+  }
+
+  // ── 10b. Peppol BIS 3.0 DK-R rules (Danish subset) ────────────────
+  // Source: Erhvervsstyrelsen PEPPOL_DK_CIUS v1.17.0 (2026-08-03)
+  // These are the active DK-R rules enforced by the Danish CIUS schematron.
+  // See: https://docs.peppol.eu/poacc/billing/3.0/rules/ubl-peppol/
+
+  // DK-R-002: Seller Danish CVR required for Danish B2B invoices
+  // (checked below in the NemHandel section — supplier EndpointID scheme=0184)
+
+  // DK-R-005/006: Payment means code must be in the allowed Danish set
+  // Reuse the paymentMeansMatch from section 7 (line ~258) — it's already parsed.
+  // The meansCode variable holds the PaymentMeansCode value.
+  if (typeof meansCode !== 'undefined') {
+    const ALLOWED_DK_PAYMENT_MEANS = ['1', '10', '31', '42', '48', '49', '50', '58', '59', '93', '97'];
+    if (!ALLOWED_DK_PAYMENT_MEANS.includes(meansCode)) {
+      warnings.push(
+        `DK-R-005: PaymentMeansCode "${meansCode}" is not in the Danish allowed set ` +
+        `(${ALLOWED_DK_PAYMENT_MEANS.join(', ')}). ` +
+        `The Danish CIUS may reject this invoice.`
+      );
+    }
+  }
+
+  // DK-R-016: CreditNote PayableAmount must not be negative
+  const typeCodeForTotal = invoiceTypeMatch ? invoiceTypeMatch[1].trim() : '';
+  if (typeCodeForTotal === '381') {
+    const payableMatch = xml.match(/<cbc:PayableAmount[^>]*>([^<]+)<\/cbc:PayableAmount>/);
+    if (payableMatch) {
+      const payable = parseFloat(payableMatch[1]);
+      if (!isNaN(payable) && payable < 0) {
+        errors.push(
+          'DK-R-016: CreditNote PayableAmount is negative (' + payable.toFixed(2) + '). ' +
+          'Danish CIUS requires CreditNote totals to be non-negative.'
+        );
+      }
     }
   }
 
