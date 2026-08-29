@@ -293,6 +293,172 @@ async function callOpenRouter(messages: ChatMessage[], options?: { tools?: typeo
 }
 
 // ============================================================
+// Streaming LLM Call (real SSE — emits tokens as they arrive)
+// ============================================================
+// This is the streaming variant of callOpenRouter, used for the plain chat
+// path (no tool-calling). Instead of waiting for the full response and then
+// dripping it in fake chunks, it reads the OpenRouter SSE stream and calls
+// `onChunk` for each delta as the model generates it. This cuts perceived
+// "thinking" latency from full-generation-time to time-to-first-token (~1-2s).
+//
+// Retry policy: same as callOpenRouter for pre-connection errors (429, 5xx,
+// network). BUT once any chunks have been emitted, retries are suppressed —
+// returning partial content is better than duplicating the start of a response.
+// ============================================================
+
+async function callOpenRouterStream(
+  messages: ChatMessage[],
+  onChunk: (delta: string) => void,
+  options?: { maxTokens?: number },
+): Promise<string> {
+  const { maxTokens = 2048 } = options || {}
+  if (!OPENROUTER_API_KEY) {
+    throw new HermesLLMError(
+      'missing_key',
+      'OPENROUTER_API_KEY er ikke sat — Hermes kan ikke tilkalde en LLM. Sæt den i .env / PM2 env (ecosystem.config.js -> hermes-agent -> env).'
+    )
+  }
+
+  let lastError: HermesLLMError | null = null
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const isLastAttempt = attempt === MAX_RETRIES
+    let emittedAny = false
+    let accumulated = ''
+
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+      let res: Response
+      try {
+        res = await fetch(`${OPENROUTER_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': OPENROUTER_APP_URL,
+            'X-Title': OPENROUTER_APP_NAME,
+          },
+          body: JSON.stringify({
+            model: OPENROUTER_MODEL,
+            messages,
+            temperature: 0.4,
+            max_tokens: maxTokens,
+            stream: true,
+          }),
+        })
+      } catch (fetchErr: any) {
+        throw classifyLLMError(fetchErr)
+      }
+
+      if (!res.ok) {
+        clearTimeout(timeout)
+        const errText = await res.text().catch(() => res.statusText)
+        const typed = classifyLLMError(new Error(`OpenRouter ${res.status}: ${errText}`))
+        if (typed.kind === 'rate_limited') {
+          typed.retryAfterSeconds = parseRetryAfter(res, errText)
+        }
+        throw typed
+      }
+
+      if (!res.body) {
+        clearTimeout(timeout)
+        throw new HermesLLMError('server_error', 'No response body from OpenRouter stream')
+      }
+
+      // ── Parse the SSE stream ────────────────────────────────────────
+      // OpenRouter sends `data: {json}\n\n` lines, terminated by `data: [DONE]`.
+      // Each JSON object has choices[0].delta.content with the next token(s).
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+
+          // SSE events are separated by \n\n. Split on newlines and process
+          // complete `data:` lines; keep the trailing partial line in buffer.
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || ''
+
+          for (const line of lines) {
+            const trimmed = line.trim()
+            if (!trimmed || !trimmed.startsWith('data:')) continue
+
+            const data = trimmed.slice(5).trim()
+            if (data === '[DONE]') {
+              clearTimeout(timeout)
+              return accumulated
+            }
+
+            try {
+              const parsed = JSON.parse(data)
+              const delta = parsed.choices?.[0]?.delta?.content
+              if (delta) {
+                emittedAny = true
+                accumulated += delta
+                onChunk(delta)
+              }
+            } catch {
+              // Malformed/partial JSON — skip; the next read will complete it
+            }
+          }
+        }
+        // Stream ended without [DONE] marker — return what we accumulated
+        clearTimeout(timeout)
+        return accumulated
+      } finally {
+        clearTimeout(timeout)
+      }
+
+    } catch (err) {
+      const typed = err instanceof HermesLLMError ? err : classifyLLMError(err)
+      lastError = typed
+
+      // Once we've emitted chunks to the client, do NOT retry — a retry would
+      // duplicate the beginning of the response. Return the partial content.
+      if (emittedAny) {
+        console.warn(
+          `[Hermes] Stream error after partial output (${typed.kind}) — ` +
+          `returning ${accumulated.length} chars of partial content`
+        )
+        return accumulated
+      }
+
+      const retriable: LLMErrorKind[] = ['rate_limited', 'server_error', 'network']
+      const shouldRetry = !isLastAttempt && retriable.includes(typed.kind)
+      if (!shouldRetry) {
+        throw typed
+      }
+
+      let waitMs: number
+      if (typed.kind === 'rate_limited' && typed.retryAfterSeconds != null) {
+        waitMs = typed.retryAfterSeconds * 1000
+      } else {
+        waitMs = Math.pow(2, attempt) * 1000
+      }
+      waitMs = Math.min(waitMs, MAX_BACKOFF_MS)
+
+      console.log(
+        `[Hermes] [${typed.kind}]${typed.status ? ` (HTTP ${typed.status})` : ''} on stream attempt ${attempt + 1}/${MAX_RETRIES + 1}` +
+        (typed.retryAfterSeconds ? ` (retry_after=${typed.retryAfterSeconds}s)` : '') +
+        ` — retrying in ${(waitMs / 1000).toFixed(1)}s...`
+      )
+
+      await sleep(waitMs)
+    }
+  }
+
+  throw lastError ?? new HermesLLMError('unknown', 'Unknown streaming error after retries')
+}
+
+// ============================================================
 // Tool-Calling Loop
 // ============================================================
 // When the LLM returns tool_calls, we execute them and re-prompt
@@ -808,13 +974,37 @@ io.on('connection', async (socket) => {
       // The model uses tool_choice='auto' so it will ONLY call tools when
       // the question actually requires reading source code. Regular accounting
       // questions get a normal text response with no tool overhead.
+      //
+      // ── Streaming strategy ─────────────────────────────────────────────
+      // Plain chat path uses REAL SSE streaming (callOpenRouterStream) — tokens
+      // are emitted to the client as the model generates them, so the user sees
+      // the first word within ~1-2s instead of waiting for the full response.
+      // The tool-calling path stays non-streaming (callOpenRouter + chatWithTools)
+      // because tool_calls require a complete message to parse; it falls back to
+      // chunked fake-streaming for UI consistency.
       let fullResponse: string
       if (hasSourceCodeSkill) {
         console.log(`[Hermes] Source code tools available for "${meta.userName}" (SuperDev: ${meta.isSuperDev})`)
         fullResponse = await chatWithTools(messages, SOURCE_TOOL_DEFINITIONS, meta.isSuperDev)
+
+        // Tool path: fake-stream the complete response for UI consistency
+        const chunks = splitIntoChunks(fullResponse, config.streamingChunkSize)
+        for (const chunk of chunks) {
+          socket.emit('chat-response', { chunk, done: false })
+          await new Promise(resolve => setTimeout(resolve, config.streamingChunkDelay))
+        }
       } else {
-        const plainResult = await callOpenRouter(messages, { maxTokens: 2048 })
-        fullResponse = plainResult.content || 'Beklager, jeg kunne ikke generere et svar.'
+        // Plain chat: real SSE streaming — emit tokens as they arrive
+        const streamStart = Date.now()
+        fullResponse = await callOpenRouterStream(
+          messages,
+          (delta) => {
+            socket.emit('chat-response', { chunk: delta, done: false })
+          },
+          { maxTokens: 2048 },
+        ) || 'Beklager, jeg kunne ikke generere et svar.'
+        const elapsed = Date.now() - streamStart
+        console.log(`[Hermes] Stream complete: ${fullResponse.length} chars in ${elapsed}ms (${(fullResponse.length / 4).toFixed(0)} approx tokens)`)
       }
 
       // Store assistant response
@@ -831,13 +1021,7 @@ io.on('connection', async (socket) => {
         console.warn(`[Hermes] Retention prune failed for tenant ${tenantId}:`, err)
       })
 
-      // Simulate streaming
-      const chunks = splitIntoChunks(fullResponse, config.streamingChunkSize)
-      for (const chunk of chunks) {
-        socket.emit('chat-response', { chunk, done: false })
-        await new Promise(resolve => setTimeout(resolve, config.streamingChunkDelay))
-      }
-
+      // Signal completion (chunks were already emitted during streaming above)
       socket.emit('chat-complete', { fullResponse, done: true })
 
       // Count this successful request against the tenant's rate-limit windows.

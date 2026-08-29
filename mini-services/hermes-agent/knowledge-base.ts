@@ -466,9 +466,22 @@ Du har fået aktiveret SIMPLIFICERET svartilstand. Følg disse regler STRENGT fo
 Bevar din ekspertise og korrekthed — simplificér kun FREMSTILLINGEN, ikke fakta. Et forkert svar er aldrig acceptabelt, heller ikke i simplificeret tilstand.
 `
 
+// ── System prompt cache ──────────────────────────────────────────────
+// buildSystemPrompt() concatenates the ~25 KB DANISH_ACCOUNTING_KNOWLEDGE
+// constant with variable identity/mode sections on EVERY chat request.
+// Since the knowledge base is a compile-time constant and the only variables
+// (agentName, language, mode) produce at most a handful of distinct prompts,
+// we cache the assembled string. This avoids re-concatenating ~25 KB of text
+// on every message — a cheap but repeated allocation that showed up in profiling.
+const systemPromptCache = new Map<string, string>()
+
 /**
  * Wraps the knowledge base into a complete system prompt with the
  * agent's identity, preferred response language, and response mode.
+ *
+ * Results are cached by `(agentName, language, mode)` — these values are
+ * effectively fixed at runtime (agentName="Hermes", language="da", mode is
+ * per-tenant but only 2 values), so the cache will hold at most ~2 entries.
  *
  * @param agentName - The display name of the agent (e.g. "Hermes")
  * @param language  - ISO-639-1 language code (e.g. "da" for Danish)
@@ -479,6 +492,10 @@ export function buildSystemPrompt(
   language: string,
   mode: ResponseMode = 'complex',
 ): string {
+  const cacheKey = `${agentName}|${language}|${mode}`
+  const cached = systemPromptCache.get(cacheKey)
+  if (cached !== undefined) return cached
+
   const languageNote =
     language === 'da'
       ? 'You always respond in Danish unless the user writes in another language.'
@@ -486,9 +503,12 @@ export function buildSystemPrompt(
 
   const modeSection = mode === 'simplified' ? SIMPLIFICATION_PROMPT : ''
 
-  return `${DANISH_ACCOUNTING_KNOWLEDGE}
+  const prompt = `${DANISH_ACCOUNTING_KNOWLEDGE}
 
 IDENTITY:
 - Agent name: ${agentName}
 - ${languageNote}${modeSection}`
+
+  systemPromptCache.set(cacheKey, prompt)
+  return prompt
 }
