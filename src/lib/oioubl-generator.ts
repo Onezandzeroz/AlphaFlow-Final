@@ -140,8 +140,12 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       '@xmlns:cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
       
       // Document identification
+      // CustomizationID: Peppol BIS Billing 3.0 compliant variant (EN 16931 + Peppol extension).
+      // The bare 'urn:cen.eu:en16931:2017' is the EN 16931 base — receiving Access Points
+      // may reject it. The compliant variant is required for Peppol/NemHandel eDelivery.
+      // See: https://docs.peppol.eu/poacc/billing/3.0/rules/ubl-peppol/
       'cbc:UBLVersionID': '2.1',
-      'cbc:CustomizationID': 'urn:cen.eu:en16931:2017',
+      'cbc:CustomizationID': 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0',
       'cbc:ProfileID': 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0',
       'cbc:ID': data.invoiceId,
       'cbc:IssueDate': data.issueDate,

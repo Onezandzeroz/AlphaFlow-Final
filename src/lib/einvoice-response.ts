@@ -59,7 +59,7 @@ export function generateApplicationResponse(params: {
   doc.ele('cbc:CustomizationID').txt('urn:oioubl:applicationresponse:1.0').up();
 
   // ProfileID
-  doc.ele('cbc:ProfileID').txt('urn:oioubl:profil: faktura:1.0').up();
+  doc.ele('cbc:ProfileID').txt('urn:oioubl:profil:faktura:1.0').up();
 
   // ID
   doc.ele('cbc:ID').txt(responseId).up();
