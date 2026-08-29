@@ -433,21 +433,62 @@ Hvis brugeren har brug for avanceret rådgivning, henvis til en **autoriseret re
 `
 
 /**
+ * The two response modes Hermes can operate in.
+ * - 'complex'     → default; full detailed answers (the historical behaviour).
+ * - 'simplified'   → short, plain-language answers pitched at a business owner
+ *                    with little accounting experience (~1/3 the length,
+ *                    lower lixtal, no jargon without explanation).
+ */
+export type ResponseMode = 'complex' | 'simplified'
+
+export const SIMPLIFICATION_PROMPT = `
+
+---
+
+# SVARMODE: SIMPLIFICERET
+
+Du har fået aktiveret SIMPLIFICERET svartilstand. Følg disse regler STRENGT for hvert eneste svar i denne samtale:
+
+1. **Længde**: Svar på ca. 1/3 af den længde, du normalt ville bruge i kompleks tilstand. Maksimalt 3-4 korte afsnit eller en kort liste. Drop alt overflødigt.
+
+2. **Sprog og lixtal**: Skriv **simple, korte sætninger**. Mål lixtal under 35. Én tanke per sætning. Undgå lange indskud og parenteser. Brug hverdagssprog, ikke fagterminologi.
+
+3. **Målgruppe**: Tal som til en **virksomhedsejer med KORT erfaring inden for regnskab og bogføring**. Antag IKKE at brugeren kender fagudtryk. Når et fagbegreb er uundgåeligt (f.eks. "moms", "årsregnskab"), forklar det kort i én sætning ved første nævnelse — f.eks. "moms (den skat du lægger oven i dine priser)".
+
+4. **Fokus**: Koncentrér dig om HVAD brugeren skal gøre og HVORNÅR — ikke den juridiske begrundelse eller paragraffer, medmindre brugeren udtrykkeligt spørger. Giv den praktiske handling først.
+
+5. **Beløb**: Når du nævner beløb, angiv altid DKK og brug helst hele kroner uden decimaler, når det er praktisk.
+
+6. **Ingen tabeller** medmindre brugeren beder om dem. Tabeller gør svar længere og sværere at skimme for en nybegynder. Brug punktform i stedet.
+
+7. **Afslut** altid med ét kort spørgsmål hvis relevant: f.eks. "Skal jeg hjælpe dig med at gøre det?" — for at holde samtalen fremadrettet og handlingsorienteret.
+
+Bevar din ekspertise og korrekthed — simplificér kun FREMSTILLINGEN, ikke fakta. Et forkert svar er aldrig acceptabelt, heller ikke i simplificeret tilstand.
+`
+
+/**
  * Wraps the knowledge base into a complete system prompt with the
- * agent's identity and preferred response language.
+ * agent's identity, preferred response language, and response mode.
  *
  * @param agentName - The display name of the agent (e.g. "Hermes")
  * @param language  - ISO-639-1 language code (e.g. "da" for Danish)
+ * @param mode      - Response mode: 'complex' (default) or 'simplified'
  */
-export function buildSystemPrompt(agentName: string, language: string): string {
+export function buildSystemPrompt(
+  agentName: string,
+  language: string,
+  mode: ResponseMode = 'complex',
+): string {
   const languageNote =
     language === 'da'
       ? 'You always respond in Danish unless the user writes in another language.'
       : `Your default response language is "${language}".`
 
+  const modeSection = mode === 'simplified' ? SIMPLIFICATION_PROMPT : ''
+
   return `${DANISH_ACCOUNTING_KNOWLEDGE}
 
 IDENTITY:
 - Agent name: ${agentName}
-- ${languageNote}`
+- ${languageNote}${modeSection}`
 }

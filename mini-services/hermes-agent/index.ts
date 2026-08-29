@@ -13,7 +13,7 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 
 import { defaultConfig, type HermesConfig } from './config'
-import { buildSystemPrompt } from './knowledge-base'
+import { buildSystemPrompt, type ResponseMode } from './knowledge-base'
 import { fetchSkillPrompts, buildSkillsAwareness } from './skills-loader'
 import { MockTenantProvider, type TenantProvider, type TenantData } from './tenant-provider'
 import { DatabaseTenantProvider } from './database-tenant-provider'
@@ -476,6 +476,65 @@ const io = new Server(httpServer, {
 })
 
 // ============================================================
+// Dynamic Welcome Generator
+// ============================================================
+// Instead of a hardcoded static greeting (which piled up on every reconnect),
+// this calls the LLM to produce a short, contextual, varied welcome message.
+// Context includes: time of day, tenant name/industry, pending reminders,
+// and the current response mode (simplified vs complex).
+
+async function generateWelcome(
+  tenant: TenantData,
+  userName: string,
+  mode: ResponseMode,
+): Promise<string> {
+  const hour = new Date().getHours()
+  const greeting =
+    hour < 6 ? 'god nat' : hour < 12 ? 'god morgen' : hour < 18 ? 'god dag' : 'god aften'
+
+  const pendingReminders = tenantProvider.getReminders(tenant.tenantId).filter((n) => !n.dismissed)
+  const reminderHint =
+    pendingReminders.length > 0
+      ? `Der er ${pendingReminders.length} afventende påmindelse(r) — den næste er "${pendingReminders[0].title}" (forfaldsdato: ${pendingReminders[0].dueDate}).`
+      : 'Der er ingen afventende påmindelser i øjeblikket.'
+
+  const systemPrompt = buildSystemPrompt(config.agentName, config.defaultLanguage, mode)
+
+  const welcomeRequest = `Generér en kort, personlig velkomstbesked på dansk til ${userName} fra virksomheden "${tenant.name}" (branche: ${tenant.industry}).
+
+Krav:
+- Start med "${greeting}, ${userName}!"
+- Introducer dig kort som ${config.agentName}, AI-regnskabskonsulent.
+- Nævn KORT: ${reminderHint}
+- Afslut med at spørge, om der er noget specifikt du kan hjælpe med.
+- MAKSIMUM 2-3 korte sætninger. Vær præcis og overskuelig.
+- VARIÉR din formulering — lad være med at bruge nøjagtig de samme ord som sidste gang.
+- Brug IKKE emojis mere end én gang.`
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: welcomeRequest },
+  ]
+
+  try {
+    const result = await callOpenRouter(messages, { maxTokens: 250 })
+    return (
+      result.content ||
+      `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent for ${tenant.name}. Hvad kan jeg hjælpe dig med i dag?`
+    )
+  } catch (err: any) {
+    console.warn(`[Hermes] Dynamic welcome generation failed: ${err.message || err}`)
+    // Fallback to a simple varied greeting (not the exact same string every time)
+    const fallbacks = [
+      `Hej ${userName}! Jeg er ${config.agentName}, din AI-regnskabskonsulent for ${tenant.name}. Hvad kan jeg hjælpe med?`,
+      `Goddag ${userName}! ${config.agentName} her — din regnskabsassistent for ${tenant.name}. Hvad har du brug for hjælp til?`,
+      `Velkommen, ${userName}! Jeg er ${config.agentName} for ${tenant.name}. Lad mig vide, hvad jeg kan hjælpe dig med.`,
+    ]
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)]
+  }
+}
+
+// ============================================================
 // Connection Handler
 // ============================================================
 
@@ -529,8 +588,9 @@ io.on('connection', async (socket) => {
   // The client still emits 'join' (for backwards-compat with the frontend),
   // but we IGNORE its payload — tenantId/userId/userName all come from the
   // verified session above. The event now just triggers the welcome flow.
-  socket.on('join', async () => {
+  socket.on('join', async (data: { sessionId?: string } = {}) => {
     const { tenantId, userName } = meta
+    const sessionId = data.sessionId ?? null
 
     try {
       // Get or create tenant (cached fallback keeps join + chat consistent)
@@ -547,19 +607,61 @@ io.on('connection', async (socket) => {
         status: 'joined',
         agentEnabled: tenant.agentEnabled,
         tenantName: tenant.name,
+        responseMode: tenantProvider.getResponseMode(tenantId),
       })
 
-      // If agent is enabled, send welcome
-      if (tenant.agentEnabled) {
-        // Friendly welcome — only mention the company name when we actually
-        // know it (a real DB-backed tenant). For fallback tenants we use a
-        // generic greeting so the user never sees a raw CUID like
-        // "cmqwqfxld0006jxua9q4sqf1r".
-        const welcomeMessage = isFallback
-          ? `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent. Hvad kan jeg hjælpe dig med i dag?`
-          : `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent for ${tenant.name}. Hvad kan jeg hjælpe dig med i dag?`
+      // ── Session retention + dynamic welcome ──────────────────────────
+      // On join we load the session's message history from the DB (not just
+      // the in-memory cache, which may be empty after a server restart) and
+      // send it to the client so reopening the chat shows the previous
+      // conversation. If the session has NO messages yet (first visit or new
+      // session), we ask the LLM to generate a fresh, contextual welcome —
+      // NOT a hardcoded static string (which used to pile up on every
+      // reconnect, as seen in the "6 identical welcomes" bug).
+      if (tenant.agentEnabled && sessionId) {
+        const history = await tenantProvider.loadSessionHistory(tenantId, sessionId)
+
+        if (history.length > 0) {
+          // ── Existing session: replay it ──
+          socket.emit('session-history', {
+            sessionId,
+            messages: history.map((m) => ({
+              role: m.role === 'user' ? 'user' : 'hermes',
+              content: m.content,
+              createdAt: m.createdAt ? m.createdAt.toISOString() : new Date().toISOString(),
+            })),
+          })
+        } else {
+          // ── Empty session: generate a dynamic LLM welcome ──
+          // This fires "before first session" (brand-new tenant) and when
+          // the user just clicked "New chat" (new sessionId, no messages).
+          const mode = tenantProvider.getResponseMode(tenantId)
+          const welcomeContent = isFallback
+            ? `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent. Hvad kan jeg hjælpe dig med?`
+            : await generateWelcome(tenant, userName, mode)
+
+          // Store the welcome as the first message of the session so it's
+          // retained across reopens.
+          tenantProvider.addMessage(
+            tenantId,
+            { role: 'assistant', content: welcomeContent },
+            sessionId,
+          )
+
+          socket.emit('agent-welcome', {
+            message: welcomeContent,
+            tenantName: tenant.name,
+          })
+        }
+      } else if (tenant.agentEnabled && !sessionId) {
+        // No sessionId provided (legacy client) — fall back to a single
+        // dynamic welcome without session-scoped storage.
+        const mode = tenantProvider.getResponseMode(tenantId)
+        const welcomeContent = isFallback
+          ? `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent. Hvad kan jeg hjælpe dig med?`
+          : await generateWelcome(tenant, userName, mode)
         socket.emit('agent-welcome', {
-          message: welcomeMessage,
+          message: welcomeContent,
           tenantName: tenant.name,
         })
       }
@@ -577,17 +679,10 @@ io.on('connection', async (socket) => {
       }
     } catch (error) {
       // CRITICAL: The join handler MUST always emit join-ack, even on error.
-      // Without it, the client stays with agentEnabled=false (initial state)
-      // which greys out the input and prevents any interaction.
       console.error(`[Hermes] Join handler error for tenant "${tenantId}":`, error)
       socket.emit('join-ack', {
         status: 'error',
         agentEnabled: true,   // Optimistically enable so user can still chat
-        tenantName: 'din virksomhed',
-      })
-      // Still send a welcome so the user sees something
-      socket.emit('agent-welcome', {
-        message: `Hej ${userName}! 👋 Jeg er ${config.agentName}, din AI-regnskabskonsulent. Hvad kan jeg hjælpe dig med i dag?`,
         tenantName: 'din virksomhed',
       })
     }
@@ -657,7 +752,7 @@ io.on('connection', async (socket) => {
       // replayed as real user/assistant turns so the model understands the
       // conversation flow (this works far better than stuffing everything
       // into a single assistant message).
-      const systemPrompt = buildSystemPrompt(config.agentName, config.defaultLanguage)
+      const systemPrompt = buildSystemPrompt(config.agentName, config.defaultLanguage, tenantProvider.getResponseMode(tenantId))
       const tenantContext = buildTenantContext(tenant)
 
       // Fetch enabled skill prompts and inject into system prompt
@@ -804,16 +899,70 @@ io.on('connection', async (socket) => {
 
   // ----- new-session -----
   // Client requests a fresh chat session. We drop the in-memory history cache
-  // for the given (previous) sessionId so the next 'chat' event with the NEW
-  // sessionId starts with an empty context. Database rows are NOT preserved
-  // long-term either — the retention cap (20 normal / 40 SuperDev) hard-
-  // deletes older messages after each exchange.
-  socket.on('new-session', (data: { previousSessionId?: string }) => {
+  // for the given (previous) sessionId, then generate a fresh dynamic LLM
+  // welcome for the new session so the user is greeted personally (not with
+  // a static string). The welcome is stored as the first AgentMessage of the
+  // new session so it's retained across reopens.
+  socket.on('new-session', async (data: { previousSessionId?: string; newSessionId?: string }) => {
     const meta = connectedSockets.get(socket.id)
     if (!meta) return
-    tenantProvider.clearSessionCache(meta.tenantId, data?.previousSessionId)
-    console.log(`[Hermes] New chat session started by "${meta.userName}" (tenant ${meta.tenantId}, prev=${data?.previousSessionId ?? 'none'})`)
+    const { tenantId, userName } = meta
+
+    tenantProvider.clearSessionCache(tenantId, data?.previousSessionId)
+    console.log(`[Hermes] New chat session started by "${userName}" (tenant ${tenantId}, prev=${data?.previousSessionId ?? 'none'})`)
+
+    // Ack immediately so the client can clear its UI
     socket.emit('new-session-ack', { ok: true })
+
+    // Generate a dynamic welcome for the new session
+    const newSessionId = data?.newSessionId
+    if (newSessionId) {
+      try {
+        const { tenant, isFallback } = await getOrCreateTenant(tenantId)
+        const mode = tenantProvider.getResponseMode(tenantId)
+        const welcomeContent = isFallback
+          ? `Hej ${userName}! 👋 Jeg er ${config.agentName}. Hvad kan jeg hjælpe dig med?`
+          : await generateWelcome(tenant, userName, mode)
+
+        // Store as the first message of the new session
+        tenantProvider.addMessage(
+          tenantId,
+          { role: 'assistant', content: welcomeContent },
+          newSessionId,
+        )
+
+        socket.emit('agent-welcome', {
+          message: welcomeContent,
+          tenantName: tenant.name,
+        })
+      } catch (err: any) {
+        console.warn(`[Hermes] New-session welcome generation failed: ${err.message || err}`)
+        // Fallback: simple greeting (varied)
+        const fallback = `Hej ${userName}! ${config.agentName} her. Hvad kan jeg hjælpe med?`
+        if (newSessionId) {
+          tenantProvider.addMessage(tenantId, { role: 'assistant', content: fallback }, newSessionId)
+        }
+        socket.emit('agent-welcome', { message: fallback, tenantName: 'din virksomhed' })
+      }
+    }
+  })
+
+  // ----- set-response-mode -----
+  // Client toggles between 'complex' (full detailed answers) and 'simplified'
+  // (short, plain-language answers for owners new to accounting). Persisted
+  // per-tenant on HermesAgent.responseMode. The new mode takes effect on the
+  // NEXT chat message (system prompt is rebuilt every request).
+  socket.on('set-response-mode', (data: { mode: ResponseMode }) => {
+    const meta = connectedSockets.get(socket.id)
+    if (!meta) return
+    const mode = data.mode === 'simplified' ? 'simplified' : 'complex'
+    tenantProvider.setResponseMode(meta.tenantId, mode)
+    console.log(`[Hermes] Response mode set to "${mode}" by "${meta.userName}" (tenant ${meta.tenantId})`)
+    // Broadcast to all sockets for this tenant so other open tabs stay in sync
+    const socketIds = tenantSockets.get(meta.tenantId) || []
+    for (const sid of socketIds) {
+      io.to(sid).emit('response-mode-changed', { mode })
+    }
   })
 
   // ----- disconnect -----

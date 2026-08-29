@@ -49,7 +49,10 @@ export function useHermesSocket(options: {
   // localStorage so reopening the panel resumes the same session. "New chat"
   // rotates the id → the server isolates history per session, so the LLM only
   // sees the current conversation (not every prior message ever exchanged).
+  // We keep BOTH a ref (for synchronous access in callbacks) and state (so
+  // localStorage key computation re-renders when the id changes).
   const sessionIdRef = useRef<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const SESSION_STORAGE_KEY = `hermes:sessionId:${tenantId}`;
 
   const ensureSessionId = useCallback((): string => {
@@ -58,11 +61,13 @@ export function useHermesSocket(options: {
       const stored = localStorage.getItem(SESSION_STORAGE_KEY);
       if (stored) {
         sessionIdRef.current = stored;
+        setSessionId(stored);
         return stored;
       }
     } catch { /* localStorage unavailable (private mode) — fall through */ }
     const fresh = crypto.randomUUID();
     sessionIdRef.current = fresh;
+    setSessionId(fresh);
     try { localStorage.setItem(SESSION_STORAGE_KEY, fresh); } catch { /* ignore */ }
     return fresh;
   }, [SESSION_STORAGE_KEY]);
@@ -71,6 +76,57 @@ export function useHermesSocket(options: {
   useEffect(() => {
     ensureSessionId();
   }, [ensureSessionId]);
+
+  // ── Message persistence (localStorage) ──────────────────────────────
+  // Saves the visible conversation so reopening the chat panel instantly
+  // shows the last session — before the socket round-trip to the server
+  // completes. When 'session-history' arrives from the server (authoritative
+  // DB version), it replaces the localStorage-restored version.
+  const messagesStorageKey = `hermes:messages:${tenantId}:${sessionId ?? 'default'}`;
+
+  // Restore from localStorage on mount / when sessionId changes.
+  useEffect(() => {
+    try {
+      const key = `hermes:messages:${tenantId}:${sessionId ?? 'default'}`;
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Array<{
+          id: string;
+          role: string;
+          content: string;
+          timestamp: string;
+        }>;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(
+            parsed.map((m) => ({
+              id: m.id,
+              role: (m.role === 'user' ? 'user' : 'hermes') as ChatMessage['role'],
+              content: m.content,
+              timestamp: new Date(m.timestamp),
+            })),
+          );
+        }
+      }
+    } catch { /* corrupt JSON or localStorage unavailable — ignore */ }
+  }, [tenantId, messagesStorageKey]);
+
+  // Save to localStorage whenever messages change.
+  useEffect(() => {
+    try {
+      const key = `hermes:messages:${tenantId}:${sessionId ?? 'default'}`;
+      if (messages.length > 0) {
+        const serializable = messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp.toISOString(),
+        }));
+        localStorage.setItem(key, JSON.stringify(serializable));
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch { /* quota exceeded or unavailable — ignore */ }
+  }, [messages, tenantId, messagesStorageKey]);
 
   // Connect to the Hermes Agent mini-service
   useEffect(() => {
@@ -103,9 +159,10 @@ export function useHermesSocket(options: {
       // socket.handshake.headers.cookie, verifies it against the DB, and
       // derives userId + tenantId server-side. We no longer send
       // tenantId/userId in the join payload — they're ignored if sent.
-      // The join event just triggers the welcome flow; the verified
-      // identity is already registered on the socket.
-      socket.emit('join', {});
+      // We DO send the chat sessionId so the server can load the correct
+      // session history and send it back via 'session-history'.
+      const sid = ensureSessionId();
+      socket.emit('join', { sessionId: sid });
     });
 
     socket.on('disconnect', () => {
@@ -124,7 +181,10 @@ export function useHermesSocket(options: {
       if (data.responseMode) setResponseMode(data.responseMode);
     });
 
-    // ─── agent-welcome: Welcome message from agent ───
+    // ─── agent-welcome: Dynamic LLM-generated welcome (new session / first visit) ───
+    // This is now APPENDED (not prepended) since the welcome is the first
+    // message chronologically in a fresh session. It replaces the old static
+    // hardcoded greeting that piled up on every reconnect.
     socket.on('agent-welcome', (data: { message: string; tenantName: string }) => {
       if (data.message) {
         const welcomeMsg: ChatMessage = {
@@ -133,8 +193,22 @@ export function useHermesSocket(options: {
           content: data.message,
           timestamp: new Date(),
         };
-        setMessages((prev) => [welcomeMsg, ...prev]);
+        setMessages((prev) => [...prev, welcomeMsg]);
       }
+    });
+
+    // ─── session-history: Server replays the session's prior messages ───
+    // Fires on join when the session has existing messages (user reopened
+    // the chat). Replaces the entire visible conversation with the
+    // server-authoritative version (from the DB, with original timestamps).
+    socket.on('session-history', (data: { sessionId: string; messages: Array<{ role: string; content: string; createdAt: string }> }) => {
+      const restored: ChatMessage[] = data.messages.map((m) => ({
+        id: crypto.randomUUID(),
+        role: (m.role === 'user' ? 'user' : 'hermes') as ChatMessage['role'],
+        content: m.content,
+        timestamp: new Date(m.createdAt),
+      }));
+      setMessages(restored);
     });
 
     // ─── agent-status: Agent enabled/disabled toggle ───
@@ -280,18 +354,23 @@ export function useHermesSocket(options: {
     // Rotate to a fresh session id and persist it.
     const fresh = crypto.randomUUID();
     sessionIdRef.current = fresh;
+    setSessionId(fresh);
     try { localStorage.setItem(SESSION_STORAGE_KEY, fresh); } catch { /* ignore */ }
     // Clear the visible conversation immediately for instant UI feedback,
     // and reset any in-flight streaming state.
     setMessages([]);
     setIsTyping(false);
     streamingIdRef.current = null;
-    // Tell the server to drop the old session's in-memory history so the next
-    // message starts with a blank LLM context.
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit('new-session', { previousSessionId });
+    // Clear old session's localStorage messages
+    if (previousSessionId) {
+      try { localStorage.removeItem(`hermes:messages:${tenantId}:${previousSessionId}`); } catch { /* ignore */ }
     }
-  }, [isConnected, SESSION_STORAGE_KEY]);
+    // Tell the server to drop the old session's in-memory history and
+    // generate a dynamic welcome for the new session.
+    if (socketRef.current && isConnected) {
+      socketRef.current.emit('new-session', { previousSessionId, newSessionId: fresh });
+    }
+  }, [isConnected, SESSION_STORAGE_KEY, tenantId]);
 
   const toggleResponseMode = useCallback(() => {
     const next: ResponseMode = responseMode === 'complex' ? 'simplified' : 'complex';

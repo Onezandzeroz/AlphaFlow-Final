@@ -26,6 +26,7 @@ import type {
   AccountingData,
   AgentNotification,
   ConversationMessage,
+  ResponseMode,
 } from './tenant-provider'
 
 // ================================================================
@@ -85,6 +86,23 @@ function getCachedEnabled(tenantId: string): boolean | null {
  */
 function setCachedEnabled(tenantId: string, value: boolean): void {
   enabledCache.set(tenantId, { value, timestamp: Date.now() })
+}
+
+// ── Response-mode cache (no TTL — only invalidated on explicit set/toggle) ──
+// Mode changes rarely and must be instantly consistent, so we don't expire it.
+const responseModeCache = new Map<string, ResponseMode>()
+
+function getCachedResponseMode(tenantId: string): ResponseMode {
+  return responseModeCache.get(tenantId) ?? 'complex'
+}
+
+function setCachedResponseMode(tenantId: string, mode: ResponseMode): void {
+  responseModeCache.set(tenantId, mode)
+}
+
+/** Coerce any DB value (string | null | undefined) into a valid ResponseMode. */
+function normalizeResponseMode(raw: string | null | undefined): ResponseMode {
+  return raw === 'simplified' ? 'simplified' : 'complex'
 }
 
 /**
@@ -269,6 +287,7 @@ export class DatabaseTenantProvider implements TenantProvider {
       this.remindersCache.clear()
       this.messagesCache.clear()
       enabledCache.clear()
+      responseModeCache.clear()
       console.log('[DatabaseTenantProvider] Disconnected from database')
     }
   }
@@ -374,6 +393,8 @@ export class DatabaseTenantProvider implements TenantProvider {
 
       // Update enabled cache from the agent record
       setCachedEnabled(tenantId, agent?.enabled ?? false)
+      // Update response-mode cache from the agent record
+      setCachedResponseMode(tenantId, normalizeResponseMode(agent?.responseMode))
 
       // --- Build and return TenantData ---
       const tenantData: TenantData = {
@@ -474,6 +495,39 @@ export class DatabaseTenantProvider implements TenantProvider {
   }
 
   // ----------------------------------------------------------------
+  // TenantProvider — getResponseMode (sync from cache)
+  // ----------------------------------------------------------------
+
+  getResponseMode(tenantId: string): ResponseMode {
+    return getCachedResponseMode(tenantId)
+  }
+
+  // ----------------------------------------------------------------
+  // TenantProvider — setResponseMode (sync cache update, async persist)
+  // ----------------------------------------------------------------
+
+  setResponseMode(tenantId: string, mode: ResponseMode): void {
+    // Update cache immediately so the very next chat request uses the new mode
+    setCachedResponseMode(tenantId, mode)
+    // Persist to database (fire-and-forget)
+    this.persistResponseMode(tenantId, mode).catch((err) => {
+      console.error(
+        `[DatabaseTenantProvider] Failed to persist responseMode for ${tenantId}:`,
+        err,
+      )
+    })
+  }
+
+  private async persistResponseMode(tenantId: string, mode: ResponseMode): Promise<void> {
+    const db = getPrismaClient()
+    await db.hermesAgent.upsert({
+      where: { companyId: tenantId },
+      create: { companyId: tenantId, responseMode: mode },
+      update: { responseMode: mode },
+    })
+  }
+
+  // ----------------------------------------------------------------
   // TenantProvider — getReminders (sync from cache)
   // ----------------------------------------------------------------
 
@@ -521,6 +575,54 @@ export class DatabaseTenantProvider implements TenantProvider {
 
   getConversationHistory(tenantId: string, sessionId?: string | null): ConversationMessage[] {
     return this.messagesCache.get(messagesCacheKey(tenantId, sessionId ?? null)) ?? []
+  }
+
+  // ----------------------------------------------------------------
+  // TenantProvider — loadSessionHistory (DB query, populates cache)
+  // ----------------------------------------------------------------
+
+  /**
+   * Query the database for a session's messages (filtered by sessionId),
+   * populate the in-memory cache, and return them in chronological order.
+   * Called on join so the user sees their previous conversation even after
+   * a server restart that cleared the cache. Also captures createdAt so the
+   * join handler can send timestamps to the frontend.
+   */
+  async loadSessionHistory(
+    tenantId: string,
+    sessionId: string,
+  ): Promise<Array<ConversationMessage & { createdAt: Date }>> {
+    try {
+      const db = getPrismaClient()
+      const agent = await db.hermesAgent.findUnique({
+        where: { companyId: tenantId },
+        select: { id: true },
+      })
+      if (!agent) return []
+
+      // Newest-first, take the retention cap, then reverse to chronological.
+      const rows = await db.agentMessage.findMany({
+        where: { agentId: agent.id, sessionId },
+        orderBy: { createdAt: 'desc' },
+        take: 60, // generous upper bound; retention cap prunes anyway
+        select: { role: true, content: true, createdAt: true },
+      })
+
+      const history = rows.reverse().map((r) => ({
+        role: (r.role === 'user' ? 'user' : 'assistant') as ConversationMessage['role'],
+        content: r.content,
+        createdAt: r.createdAt,
+      }))
+
+      // Populate the cache (without createdAt — cache stores ConversationMessage)
+      const cacheHistory: ConversationMessage[] = history.map(({ role, content }) => ({ role, content }))
+      this.messagesCache.set(messagesCacheKey(tenantId, sessionId), cacheHistory)
+
+      return history
+    } catch (err: any) {
+      console.error(`[DatabaseTenantProvider] loadSessionHistory failed for ${tenantId}/${sessionId}:`, err.message || err)
+      return []
+    }
   }
 
   // ----------------------------------------------------------------
@@ -689,6 +791,7 @@ export class DatabaseTenantProvider implements TenantProvider {
   invalidateTenantCache(tenantId: string): void {
     this.remindersCache.delete(tenantId)
     enabledCache.delete(tenantId)
+    responseModeCache.delete(tenantId)
     // Drop every session bucket for this tenant (default + any sessionIds).
     for (const key of this.messagesCache.keys()) {
       if (key.startsWith(`${tenantId}:`)) {
@@ -704,6 +807,7 @@ export class DatabaseTenantProvider implements TenantProvider {
     this.remindersCache.clear()
     this.messagesCache.clear()
     enabledCache.clear()
+    responseModeCache.clear()
   }
 
   /**

@@ -53,10 +53,17 @@ export interface TenantData {
 
 // --------------- Provider Interface ---------------
 
+/** Response mode for the chat — see knowledge-base.ts ResponseMode. */
+export type ResponseMode = 'complex' | 'simplified'
+
 export interface TenantProvider {
   getTenant(tenantId: string): Promise<TenantData | null>
   isAgentEnabled(tenantId: string): boolean
   setAgentEnabled(tenantId: string, enabled: boolean): void
+  /** Current chat response mode ('complex' or 'simplified'). */
+  getResponseMode(tenantId: string): ResponseMode
+  /** Set the chat response mode (persisted per-tenant). */
+  setResponseMode(tenantId: string, mode: ResponseMode): void
   getReminders(tenantId: string): AgentNotification[]
   dismissReminder(tenantId: string, reminderId: string): void
   /**
@@ -72,6 +79,15 @@ export interface TenantProvider {
    * isolated from other conversations when history is replayed.
    */
   addMessage(tenantId: string, message: ConversationMessage, sessionId?: string | null): void
+  /**
+   * Load a session's message history from the database (not just the cache).
+   * Used on join so the user sees their previous conversation when reopening
+   * the chat — even after a server restart that cleared the in-memory cache.
+   * Also populates the cache so subsequent getConversationHistory() calls work.
+   * Returns createdAt when available (DB-backed provider) so the frontend can
+   * display original timestamps.
+   */
+  loadSessionHistory(tenantId: string, sessionId: string): Promise<Array<ConversationMessage & { createdAt?: Date }>>
   /**
    * Clear the in-memory cache for a session so subsequent reads start fresh.
    * (Database rows are governed by the retention cap — see pruneMessages.)
@@ -127,6 +143,15 @@ export class MockTenantProvider implements TenantProvider {
     if (tenant) tenant.agentEnabled = enabled
   }
 
+  // Mock keeps a simple in-memory map; default to 'complex'.
+  private responseModes = new Map<string, ResponseMode>()
+  getResponseMode(tenantId: string): ResponseMode {
+    return this.responseModes.get(tenantId) ?? 'complex'
+  }
+  setResponseMode(tenantId: string, mode: ResponseMode): void {
+    this.responseModes.set(tenantId, mode)
+  }
+
   getReminders(tenantId: string): AgentNotification[] {
     return this.tenants.get(tenantId)?.notifications ?? []
   }
@@ -151,6 +176,11 @@ export class MockTenantProvider implements TenantProvider {
     // Mock provider keeps a single in-memory history per tenant; clear it.
     const tenant = this.tenants.get(tenantId)
     if (tenant) tenant.conversationHistory = []
+  }
+
+  // Mock has no DB — return from the in-memory history.
+  async loadSessionHistory(tenantId: string, _sessionId: string): Promise<ConversationMessage[]> {
+    return this.tenants.get(tenantId)?.conversationHistory ?? []
   }
 
   // Mock provider has no database — pruning is a no-op.
