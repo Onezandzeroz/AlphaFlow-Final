@@ -2282,6 +2282,7 @@ export const translations = {
   hermesThinking: { da: 'tænker…', en: 'is thinking…' },
   hermesAskPlaceholder: { da: 'Spørg', en: 'Ask' },
   hermesOpenAssistant: { da: 'Åbn Hermes AI assistent', en: 'Open Hermes AI assistant' },
+  hermesRevealTab: { da: 'Vis Hermes — før musen til øverste højre hjørne', en: 'Reveal Hermes — move cursor to top-right corner' },
   hermesDismissNotification: { da: 'Luk meddelelse', en: 'Dismiss notification' },
   hermesMessageInput: { da: 'Chat besked input', en: 'Chat message input' },
   hermesSendMessage: { da: 'Send besked', en: 'Send message' },
