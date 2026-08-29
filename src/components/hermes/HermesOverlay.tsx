@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useHermesSocket } from './useHermesSocket';
 import { HermesFab } from './HermesFab';
@@ -15,6 +15,9 @@ const DEFAULT_SERVICE_PORT = 3004;
 const DEFAULT_AGENT_NAME = 'Hermes';
 const DEFAULT_MAX_NOTIFICATIONS = 3;
 
+/** Seconds after chat close before the owl FAB fades off-screen. */
+const FAB_AUTO_HIDE_DELAY_MS = 5000;
+
 export function HermesOverlay({
   tenantId = DEFAULT_TENANT_ID,
   userId = DEFAULT_USER_ID,
@@ -26,6 +29,36 @@ export function HermesOverlay({
   visible = true,
 }: HermesOverlayProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  // ── Owl FAB auto-hide ──────────────────────────────────────────────
+  // After the user closes the chat, wait 5 seconds, then fade the owl
+  // off-screen to the right. The user reveals it again by hovering the
+  // mouse (or tapping on mobile) the top-right corner hot zone.
+  const [fabHidden, setFabHidden] = useState(false);
+  const prevIsOpenRef = useRef(false);
+
+  useEffect(() => {
+    const wasOpen = prevIsOpenRef.current;
+
+    if (wasOpen && !isOpen) {
+      // Chat just closed → start the auto-hide timer.
+      const timer = setTimeout(() => {
+        setFabHidden(true);
+      }, FAB_AUTO_HIDE_DELAY_MS);
+      prevIsOpenRef.current = isOpen;
+      return () => clearTimeout(timer);
+    }
+
+    if (!wasOpen && isOpen) {
+      // Chat just opened → cancel any pending hide, ensure owl is visible.
+      setFabHidden(false);
+    }
+
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  // Reveal the owl when the hot zone is hovered/tapped.
+  const revealFab = () => setFabHidden(false);
 
   const {
     isConnected,
@@ -47,13 +80,24 @@ export function HermesOverlay({
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999]" aria-label={`${agentName} AI assistant overlay`}>
-      {/* ── Mobile: owl in header, rightmost (menu is to its left) ── */}
+      {/* ── Mobile: owl in header, rightmost ── */}
       <div className="lg:hidden fixed right-1 top-1 z-[10002]">
         <HermesFab
           onClick={() => setIsOpen((prev) => !prev)}
           hasNotifications={hasUnread}
           isTyping={isTyping && !isOpen}
+          fabHidden={fabHidden}
         />
+        {/* Hot zone — invisible tap target that reveals the owl when hidden */}
+        {fabHidden && (
+          <div
+            className="absolute inset-0 pointer-events-auto cursor-pointer"
+            style={{ minWidth: 70, minHeight: 70 }}
+            onClick={revealFab}
+            aria-label="Reveal Hermes"
+            role="button"
+          />
+        )}
       </div>
 
       {/* ── Desktop: owl over banner area ── */}
@@ -62,7 +106,18 @@ export function HermesOverlay({
           onClick={() => setIsOpen((prev) => !prev)}
           hasNotifications={hasUnread}
           isTyping={isTyping && !isOpen}
+          fabHidden={fabHidden}
         />
+        {/* Hot zone — invisible hover target that reveals the owl when hidden */}
+        {fabHidden && (
+          <div
+            className="absolute inset-0 pointer-events-auto cursor-pointer"
+            style={{ minWidth: 140, minHeight: 140 }}
+            onMouseEnter={revealFab}
+            aria-label="Reveal Hermes"
+            role="button"
+          />
+        )}
       </div>
 
       {/* ── Notification cards (below owl feet, top-right) ── */}
