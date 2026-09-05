@@ -80,6 +80,77 @@ function daysBetween(a: Date, b: Date): number {
   return Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24);
 }
 
+// ─── Reference Normalization ───────────────────────────────────────
+//
+// Problem: Tenants can set a custom invoice prefix (Company.invoicePrefix,
+// e.g. "NE", "AF", "INV"). The full invoice number is `{prefix}-{year}-{seq}`
+// e.g. "NE-2026-0037". When customers pay, they type the invoice number
+// into their bank's payment reference — but often NOT verbatim:
+//
+//   • "Faktura NE-2026-0037"     (Danish word "Faktura" prepended)
+//   • "Invoice NE-2026-37"       (English word + leading zeros dropped)
+//   • "ne20260037"               (hyphens + spaces removed, lowercased)
+//   • "NE-2026-0037-IND"         (payment-suffix appended by accounting)
+//
+// Without normalization, the +0.15 reference bonus in ruleBasedMatch is lost
+// in all of the above cases, which can downgrade an otherwise-auto-match
+// (≥0.95) to a manual suggestion (~0.85). This does NOT cause wrong matches
+// (amount+date anchoring prevents that), but it reduces automation.
+//
+// The normalizer strips common prefixes/suffixes and punctuation so that
+// the CORE invoice number can be compared regardless of how the customer
+// typed it.
+
+const INVOICE_REF_NOISE_WORDS = [
+  'faktura', 'invoice', 'factuur', 'rechnung', 'bill',
+  'ind', 'betaling', 'payment', 'kredit', 'credit',
+];
+
+/**
+ * Normalize an invoice/bank reference for robust matching.
+ *
+ * Strips:
+ *   - Common words: "Faktura", "Invoice", "IND", etc.
+ *   - Hyphens, spaces, underscores, periods, slashes
+ *   - Leading zeros in numeric segments (e.g. "0037" → "37", "2026" stays "2026")
+ *   - Case (everything lowercased)
+ *
+ * Leading zeros are stripped PER SEGMENT (split by non-alphanumeric characters)
+ * so that "NE-2026-0037" → segments ["ne","2026","0037"] → ["ne","2026","37"]
+ * → "ne202637". This is critical: if we removed punctuation first, "NE-2026-0037"
+ * would become "ne20260037" and we couldn't distinguish "2026" from "0037".
+ *
+ * Examples:
+ *   "Faktura NE-2026-0037"     → "ne202637"
+ *   "NE-2026-0037"             → "ne202637"
+ *   "Invoice AF-2026-001"      → "af20261"
+ *   "NE-2026-0037-IND"         → "ne202637"
+ */
+export function normalizeReference(ref: string): string {
+  if (!ref) return '';
+
+  let s = ref.toLowerCase().trim();
+
+  // Split into alphanumeric segments (preserving boundaries so we can strip
+  // leading zeros per-segment before concatenation).
+  const segments = s.split(/[^a-z0-9æøå]+/).filter(Boolean);
+
+  // Remove noise-word segments (e.g. "faktura", "invoice", "ind")
+  const filtered = segments.filter(
+    (seg) => !INVOICE_REF_NOISE_WORDS.includes(seg),
+  );
+
+  // Strip leading zeros from purely-numeric segments (keep at least one digit)
+  const normalized = filtered.map((seg) => {
+    if (/^\d+$/.test(seg)) {
+      return String(parseInt(seg, 10));
+    }
+    return seg;
+  });
+
+  return normalized.join('');
+}
+
 // ─── Rule-Based Matching ───────────────────────────────────────────
 
 function ruleBasedMatch(
@@ -116,13 +187,26 @@ function ruleBasedMatch(
     return null; // Date too far for rule-based
   }
 
-  // Reference match (bonus)
+  // Reference match (bonus) — with normalization
+  //
+  // Compares the bank line's reference against the journal line's description
+  // (which embeds the invoice number, e.g. "Kundebetaling modtaget – DataDrift ApS (NE-2026-0037)").
+  //
+  // We normalize BOTH sides before comparing so that common variations don't
+  // lose the +0.15 bonus:
+  //   • "Faktura NE-2026-0037"  vs  "Kundebetaling ... (NE-2026-0037)"
+  //   • "NE-2026-37"            vs  "...(NE-2026-0037)"
+  //   • "ne20260037"            vs  "...(NE-2026-0037)"
+  //
+  // Normalization strips "Faktura"/"Invoice", hyphens, spaces, and leading zeros.
   if (bankLine.reference && journalLine.description) {
-    const refLower = bankLine.reference.toLowerCase();
-    const descLower = journalLine.description.toLowerCase();
-    if (descLower.includes(refLower) || refLower.includes(descLower)) {
-      confidence += 0.15;
-      reasons.push('Reference matcher beskrivelse');
+    const refNorm = normalizeReference(bankLine.reference);
+    const descNorm = normalizeReference(journalLine.description);
+    if (refNorm && descNorm) {
+      if (descNorm.includes(refNorm) || refNorm.includes(descNorm)) {
+        confidence += 0.15;
+        reasons.push('Reference matcher beskrivelse (normaliseret)');
+      }
     }
   }
 

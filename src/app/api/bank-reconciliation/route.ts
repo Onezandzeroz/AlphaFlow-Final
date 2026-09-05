@@ -97,7 +97,9 @@ async function getCandidates(request: Request, ctx: AuthContext) {
       accountName: jl.account.name,
       debit: r(Number(jl.debit) || 0),
       credit: r(Number(jl.credit) || 0),
-      amount: r(Number(jl.debit) > 0 ? -Number(jl.debit) : Number(jl.credit)), // Bank perspective
+      // Sign convention: debit (money in) = positive, credit (money out) = negative.
+      // Matches normal bank statement convention (incoming = +, outgoing = -).
+      amount: r(Number(jl.debit) > 0 ? Number(jl.debit) : -Number(jl.credit)), // Bank perspective
     }))
     .filter((c) => Math.abs(c.amount - Number(bankLine.amount)) < 1.0); // Within 1 DKK tolerance
 
@@ -167,10 +169,14 @@ async function runAiMatch(request: Request, ctx: AuthContext) {
     const journalLineInputs = journalLines.map(jl => ({
       id: jl.id,
       date: new Date(jl.journalEntry.date),
-      description: jl.journalEntry.description || '',
+      description: jl.journalEntry.description || jl.journalEntry.reference || '',
       accountNumber: jl.account.number,
       accountName: jl.account.name,
-      amount: Number(jl.debit) > 0 ? -Number(jl.debit) : Number(jl.credit),
+      // Sign convention: debit (money INTO bank) = positive bank statement amount;
+      // credit (money OUT of bank) = negative bank statement amount.
+      // This matches the normal Danish bank statement convention where
+      // incoming payments are positive and outgoing are negative.
+      amount: Number(jl.debit) > 0 ? Number(jl.debit) : -Number(jl.credit),
     }));
 
     // First run rule-based + fuzzy matching (synchronous, deterministic)
@@ -447,7 +453,9 @@ export const POST = withGuard(
 
           if (daysDiff > 3) continue;
 
-          const journalAmount = Number(jl.debit) > 0 ? -Number(jl.debit) : Number(jl.credit);
+          // Sign convention: debit (money in) = positive, credit (money out) = negative.
+          // Matches normal bank statement convention (incoming = +, outgoing = -).
+          const journalAmount = Number(jl.debit) > 0 ? Number(jl.debit) : -Number(jl.credit);
           const amountDiff = Math.abs(Number(bankLine.amount) - journalAmount);
 
           if (amountDiff <= 0.01) {
