@@ -103,6 +103,8 @@ interface ReceivedInvoice {
   validationWarnings?: string | null;
   createdAt: string;
   journalEntryId?: string | null;
+  /** When present and containing "Storecove webhook", the invoice was auto-received. */
+  notes?: string | null;
 }
 
 interface EInvoiceInboxProps {
@@ -492,9 +494,16 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
                       <TableRow key={inv.id} className="group">
                         <TableCell>
                           <div className="flex flex-col gap-0.5">
-                            <span className="font-medium text-sm truncate max-w-[200px]">
-                              {inv.supplierName}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-sm truncate max-w-[200px]">
+                                {inv.supplierName}
+                              </span>
+                              {inv.notes && inv.notes.includes('Storecove webhook') && (
+                                <Badge variant="outline" className="shrink-0 text-[10px] py-0 px-1.5 font-normal text-emerald-700 border-emerald-300 bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:bg-emerald-950/40" title={inv.notes}>
+                                  Auto
+                                </Badge>
+                              )}
+                            </div>
                             <span className="text-xs text-muted-foreground md:hidden">
                               {inv.invoiceNumber}
                             </span>

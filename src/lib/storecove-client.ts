@@ -128,9 +128,17 @@ export interface StorecoveParticipantResult {
   }>;
 }
 
-/** Storecove webhook event payload */
-export interface StorecoveWebhookEvent {
-  event: 'invoice_submission.status_changed' | 'invoice_submission.created' | 'legal_entity.updated';
+/**
+ * Storecove webhook event: outbound submission status change.
+ *
+ * Sent by Storecove when an invoice_submissions delivery status changes
+ * (processing → delivered → accepted / rejected / failed).
+ */
+export interface StorecoveSubmissionWebhookEvent {
+  event:
+    | 'invoice_submission.status_changed'
+    | 'invoice_submission.created'
+    | 'legal_entity.updated';
   timestamp: string;
   data: {
     id: string;
@@ -144,6 +152,74 @@ export interface StorecoveWebhookEvent {
     receiver_scheme?: string;
     receiver_identifier?: string;
   };
+}
+
+/**
+ * Storecove webhook event: an inbound e-invoice was received for one of our
+ * legal entities.
+ *
+ * Storecove delivers received documents via webhook (push) and/or a pull
+ * queue. This event signals that a document is available for retrieval via
+ * GET /received_documents/{document_guid}/{original|json}.
+ *
+ * The `tenant_id` is the free-form key we set when creating the legal entity;
+ * `legal_entity_id` is the numeric Storecove legal entity id (matches
+ * Company.storecoveLegalEntityId).
+ */
+export interface StorecoveReceivedDocumentWebhookEvent {
+  event: 'received_document';
+  timestamp: string;
+  data: {
+    /** Unique document identifier — used to fetch the document content. */
+    document_guid: string;
+    /** The legal entity the document was addressed to. */
+    legal_entity_id?: number;
+    /** Free-form tenant key set during legal entity creation (our Company.id). */
+    tenant_id?: string;
+    /** Whether Storecove could parse the document. If false, fetch `original` for raw XML. */
+    parseable?: boolean;
+    /** Recipient endpoint (may be present for quick tenant resolution). */
+    receiver_endpoint_id?: string;
+    receiver_scheme?: string;
+    receiver_identifier?: string;
+    /** Sender endpoint, when available. */
+    sender_endpoint_id?: string;
+    sender_scheme?: string;
+    sender_identifier?: string;
+  };
+}
+
+/**
+ * Discriminated union of all Storecove webhook events AlphaFlow handles.
+ *
+ * Outbound: invoice_submission.* + legal_entity.updated → update EInvoiceSending status.
+ * Inbound:  received_document                       → fetch + parse + store ReceivedInvoice.
+ */
+export type StorecoveWebhookEvent =
+  | StorecoveSubmissionWebhookEvent
+  | StorecoveReceivedDocumentWebhookEvent;
+
+/**
+ * Parsed received document metadata (GET /received_documents/{guid}/json).
+ *
+ * Used as a fallback for tenant resolution when the webhook payload does not
+ * include legal_entity_id: the recipient endpoint (scheme:identifier) is
+ * matched against Company.einvoiceEndpointId.
+ */
+export interface StorecoveReceivedDocumentJson {
+  document_guid: string;
+  /** Recipient legal entity. */
+  legal_entity_id?: number;
+  /** Recipient Peppol participant, e.g. { scheme: '0184', identifier: '12345678' }. */
+  recipient?: { scheme?: string; identifier?: string };
+  /** Sender Peppol participant. */
+  sender?: { scheme?: string; identifier?: string };
+  /** Document type, e.g. 'invoice', 'creditnote'. */
+  document_type?: string;
+  /** Whether Storecove successfully parsed the document. */
+  parseable?: boolean;
+  /** ISO timestamp of receipt. */
+  created_at?: string;
 }
 
 /** Storecove legal entity */
@@ -531,6 +607,91 @@ export class StorecoveClient {
     }
   }
 
+  // ─── RECEIVED DOCUMENTS (INBOUND) ─────────────────────────────────
+  //
+  // Erhvervsstyrelsen requires platforms to both SEND and RECEIVE e-invoices.
+  // When Storecove receives an inbound e-invoice addressed to one of our
+  // legal entities, it delivers a `received_document` webhook. The webhook
+  // carries a `document_guid`; we then fetch the document content here.
+  //
+  // Two retrieval formats:
+  //   /received_documents/{guid}/original → raw XML (text/xml)  — primary
+  //   /received_documents/{guid}/json     → parsed metadata     — fallback for tenant resolution
+
+  /**
+   * Fetch the original raw XML of a received e-invoice.
+   *
+   * @param documentGuid - The document_guid from the received_document webhook
+   * @returns The UBL 2.1 / OIOUBL XML string, or null on failure
+   */
+  async getReceivedDocumentOriginal(documentGuid: string): Promise<string | null> {
+    if (this.simulationMode) {
+      return this.simulateGetReceivedDocumentOriginal(documentGuid);
+    }
+
+    try {
+      const response = await this.makeRequest(
+        'GET',
+        `/received_documents/${encodeURIComponent(documentGuid)}/original`,
+      );
+
+      if (!response.ok) {
+        const error = await this.parseError(response);
+        logger.error('[STORECOVE] Failed to fetch received document original:', {
+          documentGuid,
+          status: response.status,
+          error: error.message,
+        });
+        return null;
+      }
+
+      // Storecove returns the raw XML as text (content-type: text/xml or application/xml)
+      return await response.text();
+    } catch (error) {
+      logger.error('[STORECOVE] Received document original fetch exception:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch the parsed JSON metadata of a received e-invoice.
+   *
+   * Used as a fallback for tenant resolution when the webhook payload does
+   * not include legal_entity_id: the recipient endpoint
+   * (scheme:identifier) is matched against Company.einvoiceEndpointId.
+   *
+   * @param documentGuid - The document_guid from the received_document webhook
+   * @returns Parsed document metadata, or null on failure
+   */
+  async getReceivedDocumentJson(documentGuid: string): Promise<StorecoveReceivedDocumentJson | null> {
+    if (this.simulationMode) {
+      return this.simulateGetReceivedDocumentJson(documentGuid);
+    }
+
+    try {
+      const response = await this.makeRequest(
+        'GET',
+        `/received_documents/${encodeURIComponent(documentGuid)}/json`,
+      );
+
+      if (!response.ok) {
+        const error = await this.parseError(response);
+        logger.warn('[STORECOVE] Failed to fetch received document json:', {
+          documentGuid,
+          status: response.status,
+          error: error.message,
+        });
+        return null;
+      }
+
+      const result = await response.json() as StorecoveReceivedDocumentJson;
+      return result;
+    } catch (error) {
+      logger.warn('[STORECOVE] Received document json fetch exception:', error);
+      return null;
+    }
+  }
+
   // ─── WEBHOOK VERIFICATION ─────────────────────────────────────────
 
   /**
@@ -827,6 +988,125 @@ export class StorecoveClient {
       accessPoints: isDanishCvr
         ? [{ id: 'storecove-ap', name: 'Storecove Access Point' }]
         : undefined,
+    };
+  }
+
+  /**
+   * Simulate fetching the original XML of a received document.
+   * Returns a minimal but valid Peppol BIS Billing 3.0 invoice so the full
+   * inbound webhook → parse → store flow can be exercised in dev/sandbox
+   * without a real Storecove account.
+   */
+  private async simulateGetReceivedDocumentOriginal(documentGuid: string): Promise<string | null> {
+    await this.simulateLatency(50, 150);
+
+    const now = new Date();
+    const issueDate = now.toISOString().slice(0, 10);
+    const dueDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const invoiceNumber = `SIM-${now.getTime().toString().slice(-6)}`;
+
+    logger.info('[STORECOVE_SIM] Simulated received document fetch', {
+      documentGuid,
+      invoiceNumber,
+    });
+
+    // Minimal Peppol BIS Billing 3.0 (UBL 2.1) invoice XML.
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"
+         xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
+         xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
+  <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
+  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>
+  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</cbc:ProfileID>
+  <cbc:ID>${invoiceNumber}</cbc:ID>
+  <cbc:IssueDate>${issueDate}</cbc:IssueDate>
+  <cbc:DueDate>${dueDate}</cbc:DueDate>
+  <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode>DKK</cbc:DocumentCurrencyCode>
+  <cac:AccountingSupplierParty>
+    <cac:Party>
+      <cac:PartyName><cbc:Name>Simuleret Leverandør ApS</cbc:Name></cac:PartyName>
+      <cac:PostalAddress>
+        <cbc:StreetName>Testvej 1</cbc:StreetName>
+        <cbc:CityName>København</cbc:CityName>
+        <cac:Country><cbc:IdentificationCode>DK</cbc:IdentificationCode></cac:Country>
+      </cac:PostalAddress>
+      <cac:PartyTaxScheme>
+        <cbc:CompanyID>DK87654321</cbc:CompanyID>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:PartyTaxScheme>
+      <cac:Contact>
+        <cbc:ElectronicMail>faktura@simuleret-leverandoor.dk</cbc:ElectronicMail>
+      </cac:Contact>
+    </cac:Party>
+  </cac:AccountingSupplierParty>
+  <cac:AccountingCustomerParty>
+    <cac:Party>
+      <cac:PartyName><cbc:Name>AlphaFlow Demo ApS</cbc:Name></cac:PartyName>
+      <cac:PartyIdentification>
+        <cbc:ID schemeID="0184">12345678</cbc:ID>
+      </cac:PartyIdentification>
+    </cac:Party>
+  </cac:AccountingCustomerParty>
+  <cac:PaymentMeans>
+    <cbc:PaymentMeansCode>30</cbc:PaymentMeansCode>
+    <cac:PayeeFinancialAccount>
+      <cbc:ID>DK00BANK1234567890</cbc:ID>
+    </cac:PayeeFinancialAccount>
+  </cac:PaymentMeans>
+  <cac:TaxTotal>
+    <cbc:TaxAmount currencyID="DKK">625.00</cbc:TaxAmount>
+    <cac:TaxSubtotal>
+      <cbc:TaxableAmount currencyID="DKK">2500.00</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="DKK">625.00</cbc:TaxAmount>
+      <cac:TaxCategory>
+        <cbc:ID>S</cbc:ID>
+        <cbc:Percent>25</cbc:Percent>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:TaxCategory>
+    </cac:TaxSubtotal>
+  </cac:TaxTotal>
+  <cac:LegalMonetaryTotal>
+    <cbc:TaxExclusiveAmount currencyID="DKK">2500.00</cbc:TaxExclusiveAmount>
+    <cbc:TaxAmount currencyID="DKK">625.00</cbc:TaxAmount>
+    <cbc:TaxInclusiveAmount currencyID="DKK">3125.00</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="DKK">3125.00</cbc:PayableAmount>
+  </cac:LegalMonetaryTotal>
+  <cac:InvoiceLine>
+    <cbc:ID>1</cbc:ID>
+    <cbc:InvoicedQuantity unitCode="C62">10</cbc:InvoicedQuantity>
+    <cbc:LineExtensionAmount currencyID="DKK">2500.00</cbc:LineExtensionAmount>
+    <cac:Item>
+      <cbc:Name>Konsulenttimer</cbc:Name>
+      <cbc:Description>Simuleret konsulentbistand</cbc:Description>
+      <cac:ClassifiedTaxCategory>
+        <cbc:ID>S</cbc:ID>
+        <cbc:Percent>25</cbc:Percent>
+        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
+      </cac:ClassifiedTaxCategory>
+    </cac:Item>
+    <cac:Price>
+      <cbc:PriceAmount currencyID="DKK">250.00</cbc:PriceAmount>
+    </cac:Price>
+  </cac:InvoiceLine>
+</Invoice>`;
+  }
+
+  /**
+   * Simulate fetching parsed metadata of a received document.
+   */
+  private async simulateGetReceivedDocumentJson(
+    documentGuid: string,
+  ): Promise<StorecoveReceivedDocumentJson | null> {
+    await this.simulateLatency(30, 100);
+    return {
+      document_guid: documentGuid,
+      legal_entity_id: 1,
+      recipient: { scheme: '0184', identifier: '12345678' },
+      sender: { scheme: '0184', identifier: '87654321' },
+      document_type: 'invoice',
+      parseable: true,
+      created_at: new Date().toISOString(),
     };
   }
 

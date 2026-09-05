@@ -91,7 +91,12 @@ interface AuditOptions {
   action: AuditAction;
   entityType: EntityType;
   entityId: string;
-  userId: string;
+  /**
+   * The user who triggered the action. Pass `null` for system-initiated
+   * events (e.g. Storecove inbound webhook delivering an e-invoice with no
+   * authenticated user in context). The AuditLog.userId column is nullable.
+   */
+  userId: string | null;
   companyId?: string | null;
   performedByUserId?: string | null;
   /** JSON object of changed fields: { field: { old, new } } */
@@ -128,7 +133,7 @@ export async function auditLog(opts: AuditOptions): Promise<void> {
  * Convenience: log a creation event
  */
 export async function auditCreate(
-  userId: string,
+  userId: string | null,
   entityType: EntityType,
   entityId: string,
   newData?: Record<string, unknown>,
