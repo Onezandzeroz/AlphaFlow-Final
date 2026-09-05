@@ -792,6 +792,96 @@ function buildJournalEntries(
           ],
         })
       }
+
+      // ── Miscellaneous near-match JEs for August 2026 ──────────────
+      //
+      // These 6 journal entries correspond to the 6 "unmatched" bank
+      // statement lines in docs/test-data/kontoudtog-eksempel-august-2026.csv.
+      // They are deliberately given:
+      //   • Slightly DIFFERENT descriptions (exercises fuzzy/AI matching)
+      //   • Small AMOUNT MISMATCHES (0.45–2.50 DKK) so the inline auto-matcher
+      //     (±0.01 tolerance) does NOT auto-match them, but they DO appear as
+      //     top candidates in the manual-match dialog (sorted by amount
+      //     proximity) and as pre-filtered candidates for batchAiMatch.
+      //
+      // This lets users practice manual matching and AI suggestions against
+      // realistic near-matches rather than an empty candidate list.
+      //
+      // All use vatCode 'NONE' so they don't affect the seed's carefully
+      // computed quarterly VAT figures.
+      if (year === CURRENT_YEAR && m === 8) {
+        // 1. MobilePay +450.00 → JE +449.50 (mismatch 0.50, diff name)
+        entries.push({
+          date: d(year, m, 7),
+          description: 'Kundebetaling – MobilePay julie',
+          reference: 'MISC-MOBILEPAY-1',
+          status: 'POSTED',
+          lines: [
+            { accountNumber: '1100', debit: 449.50, credit: 0, vatCode: 'NONE', description: 'Indbetaling MobilePay' },
+            { accountNumber: '5000', debit: 0, credit: 449.50, vatCode: 'NONE', description: 'Andre driftsindtægter – MobilePay' },
+          ],
+        })
+
+        // 2. Dankort Føtex -412.50 → JE -410.00 (mismatch 2.50, diff name, 1 day earlier)
+        entries.push({
+          date: d(year, m, 11),
+          description: 'Repræsentation Føtex',
+          reference: 'MISC-FOETEX',
+          status: 'POSTED',
+          lines: [
+            { accountNumber: '8300', debit: 410.00, credit: 0, vatCode: 'NONE', description: 'Repræsentation – Føtex' },
+            { accountNumber: '1100', debit: 0, credit: 410.00, vatCode: 'NONE', description: 'Dankortbetaling Føtex' },
+          ],
+        })
+
+        // 3. MobilePay +125.00 → JE +125.50 (mismatch 0.50, diff name, 1 day later)
+        entries.push({
+          date: d(year, m, 19),
+          description: 'Kontantsalg MobilePay',
+          reference: 'MISC-MOBILEPAY-2',
+          status: 'POSTED',
+          lines: [
+            { accountNumber: '1100', debit: 125.50, credit: 0, vatCode: 'NONE', description: 'Indbetaling MobilePay' },
+            { accountNumber: '5000', debit: 0, credit: 125.50, vatCode: 'NONE', description: 'Kontantsalg via MobilePay' },
+          ],
+        })
+
+        // 4. GLS -389.00 → JE -390.00 (mismatch 1.00, diff name)
+        entries.push({
+          date: d(year, m, 20),
+          description: 'Forsendelse GLS pakke',
+          reference: 'MISC-GLS',
+          status: 'POSTED',
+          lines: [
+            { accountNumber: '8700', debit: 390.00, credit: 0, vatCode: 'NONE', description: 'Porto og forsendelse – GLS' },
+            { accountNumber: '1100', debit: 0, credit: 390.00, vatCode: 'NONE', description: 'Betalingservice GLS' },
+          ],
+        })
+
+        // 5. Bankgebyr -25.00 → JE -24.50 (mismatch 0.50, diff name, 1 day earlier)
+        entries.push({
+          date: d(year, m, 27),
+          description: 'Bankgebyr Nordea',
+          reference: 'MISC-BANKGEBYR',
+          status: 'POSTED',
+          lines: [
+            { accountNumber: '9000', debit: 24.50, credit: 0, vatCode: 'NONE', description: 'Finansielle omkostninger – bankgebyr' },
+            { accountNumber: '1100', debit: 0, credit: 24.50, vatCode: 'NONE', description: 'Bankgebyr trukket' },
+          ],
+        })
+
+        // 6. Renter +23.45 → JE +23.00 (mismatch 0.45, diff name)
+        entries.push({
+          date: d(year, m, 30),
+          description: 'Renteindtægt bank',
+          reference: 'MISC-RENTER',
+          status: 'POSTED',
+          lines: [
+            { accountNumber: '1100', debit: 23.00, credit: 0, vatCode: 'NONE', description: 'Rente kredit bank' },
+            { accountNumber: '9300', debit: 0, credit: 23.00, vatCode: 'NONE', description: 'Renteindtægter' },
+          ],
+        })
+      }
     }
   }
 
