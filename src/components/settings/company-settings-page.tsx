@@ -139,6 +139,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
   const [hasChanges, setHasChanges] = useState(false);
   const [isTogglingProjectMode, setIsTogglingProjectMode] = useState(false);
   const [isTogglingDemoMode, setIsTogglingDemoMode] = useState(false);
+  const [isReseeding, setIsReseeding] = useState(false);
 
   // ── SuperDev: toggle project mode for this tenant (FASE 4) ──
   // PATCH /api/company with projectModeEnabled. Only SuperDev sees the card.
@@ -1522,6 +1523,62 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                   ? 'Bemærk: Demo-virksomheden deles af alle brugere på systemet. Data nulstilles hver gang en bruger går ind, så du altid starter med friske, realistiske data. Ingen af dine ændringer gemmes permanent.'
                   : 'Note: The demo company is shared by all users on the system. Data is reset each time a user enters, so you always start with fresh, realistic data. None of your changes are saved permanently.')}
             </p>
+            {user.isDemoCompany && (
+              <div className="flex items-center justify-between gap-4 p-3 mt-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/20">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <RefreshCw className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {language === 'da' ? 'Nulstil demo-data' : 'Reset demo data'}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {language === 'da'
+                        ? 'Sletter alle poster, fakturaer og bankkontoudtog og genskaber dem fra bunden. Bankafstemning starter tom så du kan uploade kontoudtoget manuelt.'
+                        : 'Deletes all entries, invoices and bank statements and recreates them from scratch. Bank reconciliation starts empty so you can upload the statement manually.'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isReseeding || isTogglingDemoMode}
+                  onClick={async () => {
+                    setIsReseeding(true);
+                    try {
+                      const res = await fetch('/api/demo-mode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'reseed' }),
+                      });
+                      if (res.ok) {
+                        toast.success(language === 'da'
+                          ? 'Demo-data nulstillet. Bankafstemning er nu tom.'
+                          : 'Demo data reset. Bank reconciliation is now empty.');
+                        if (typeof window !== 'undefined') {
+                          window.location.reload();
+                        }
+                      } else {
+                        const errData = await res.json().catch(() => null);
+                        toast.error(errData?.error || (language === 'da' ? 'Kunne ikke nulstille demo-data' : 'Could not reset demo data'));
+                      }
+                    } catch {
+                      toast.error(language === 'da' ? 'Netværksfejl' : 'Network error');
+                    } finally {
+                      setIsReseeding(false);
+                    }
+                  }}
+                >
+                  {isReseeding ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      {language === 'da' ? 'Nulstil' : 'Reset'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

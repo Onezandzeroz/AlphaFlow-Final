@@ -63,12 +63,19 @@ async function getCandidates(request: Request, ctx: AuthContext) {
     return NextResponse.json({ candidates: [] });
   }
 
-  // Fetch unmatched journal entry lines on bank accounts within ±7 days
+  // Fetch unmatched journal entry lines on bank accounts within ±30 days.
+  //
+  // The wider ±30 day window (vs ±7 for auto-match) gives the user a broader
+  // pool of candidates when manually matching — a bank line from Aug 7 might
+  // correspond to a JE from late July or mid-August. We NO LONGER hard-filter
+  // by amount; instead we sort by amount proximity (closest first) so the
+  // most likely matches appear at the top, while still showing less-likely
+  // candidates for the user to choose from.
   const lineDate = new Date(bankLine.date);
   const searchStart = new Date(lineDate);
-  searchStart.setDate(searchStart.getDate() - 7);
+  searchStart.setDate(searchStart.getDate() - 30);
   const searchEnd = new Date(lineDate);
-  searchEnd.setDate(searchEnd.getDate() + 7);
+  searchEnd.setDate(searchEnd.getDate() + 30);
 
   const journalLines = await db.journalEntryLine.findMany({
     where: {
@@ -89,19 +96,36 @@ async function getCandidates(request: Request, ctx: AuthContext) {
   });
 
   const candidates = journalLines
-    .map((jl) => ({
-      id: jl.id,
-      date: jl.journalEntry.date.toISOString().split('T')[0],
-      description: jl.journalEntry.description || jl.journalEntry.reference || '',
-      accountNumber: jl.account.number,
-      accountName: jl.account.name,
-      debit: r(Number(jl.debit) || 0),
-      credit: r(Number(jl.credit) || 0),
-      // Sign convention: debit (money in) = positive, credit (money out) = negative.
-      // Matches normal bank statement convention (incoming = +, outgoing = -).
-      amount: r(Number(jl.debit) > 0 ? Number(jl.debit) : -Number(jl.credit)), // Bank perspective
-    }))
-    .filter((c) => Math.abs(c.amount - Number(bankLine.amount)) < 1.0); // Within 1 DKK tolerance
+    .map((jl) => {
+      const jlAmount = Number(jl.debit) > 0 ? Number(jl.debit) : -Number(jl.credit);
+      return {
+        id: jl.id,
+        date: jl.journalEntry.date.toISOString().split('T')[0],
+        description: jl.journalEntry.description || jl.journalEntry.reference || '',
+        accountNumber: jl.account.number,
+        accountName: jl.account.name,
+        debit: r(Number(jl.debit) || 0),
+        credit: r(Number(jl.credit) || 0),
+        // Sign convention: debit (money in) = positive, credit (money out) = negative.
+        amount: r(jlAmount), // Bank perspective
+        // Amount difference for sorting (closest amounts first)
+        _amountDiff: Math.abs(jlAmount - Number(bankLine.amount)),
+      };
+    })
+    // Sort by amount proximity (closest first), then by date proximity
+    .sort((a, b) => {
+      const diffDiff = a._amountDiff - b._amountDiff;
+      if (Math.abs(diffDiff) > 0.01) return diffDiff;
+      // If amounts are equally close, sort by date proximity
+      const aDate = new Date(a.date).getTime();
+      const bDate = new Date(b.date).getTime();
+      const aDateDiff = Math.abs(aDate - lineDate.getTime());
+      const bDateDiff = Math.abs(bDate - lineDate.getTime());
+      return aDateDiff - bDateDiff;
+    })
+    .slice(0, 50) // Limit to 50 candidates to keep the UI manageable
+    // Remove the internal _amountDiff field from the response
+    .map(({ _amountDiff, ...rest }) => rest);
 
   return NextResponse.json({ candidates });
 }

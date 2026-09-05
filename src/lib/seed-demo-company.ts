@@ -1421,7 +1421,23 @@ export async function seedDemoCompany(demoCompanyId: string, systemUserId: strin
   })
   console.log(`[seed-demo-company] Created bank connection: ${bankConnection.id}`)
 
-  // ─── 8. Bank Statements ───────────────────────────────────────
+  // ─── 8. Bank Statements (SKIPPED) ──────────────────────────────
+  //
+  // Bank statement creation is intentionally SKIPPED so that the Bank
+  // Reconciliation page starts EMPTY. This lets users (and Erhvervsstyrelsen
+  // demos) manually upload the mock CSV
+  // (docs/test-data/kontoudtog-eksempel-august-2026.csv) and exercise the
+  // full import → auto-match → manual-match → AI-suggestion flow from a
+  // clean slate.
+  //
+  // The journal entries (section 6) are still created, so when the user
+  // uploads the mock CSV, the 5 matchable lines find their corresponding
+  // bank-account JEs (rent, telecom, salary, customer payments) and
+  // auto-match. The remaining 6 unmatched lines (MobilePay, Dankort, etc.)
+  // are available for manual matching and AI suggestions.
+  //
+  // To re-enable pre-seeded bank statements, uncomment the block below.
+  /*
   console.log('[seed-demo-company] Creating bank statements...')
   const statementSeeds = buildBankStatements()
   let stmtCount = 0
@@ -1464,6 +1480,8 @@ export async function seedDemoCompany(demoCompanyId: string, systemUserId: strin
     stmtLineCount += ss.lines.length
   }
   console.log(`[seed-demo-company] Created ${stmtCount} bank statements with ${stmtLineCount} lines`)
+  */
+  console.log('[seed-demo-company] Bank statements skipped — Bank Reconciliation page starts empty for manual CSV upload')
 
   // ─── 9. Budgets ───────────────────────────────────────────────
   console.log('[seed-demo-company] Creating budgets...')
