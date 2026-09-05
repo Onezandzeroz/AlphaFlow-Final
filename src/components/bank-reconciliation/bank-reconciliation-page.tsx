@@ -288,6 +288,31 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
   }, []);
 
   // ──────────────── CSV parsing ────────────────
+  //
+  // Danish bank statements (Danske Bank, Nordea, Jyske Bank, Sydbank) use
+  // semicolon (;) as the CSV delimiter and comma (,) as the decimal separator.
+  //
+  // The previous parser split on /[,;\t]/ — a regex that treats commas as
+  // delimiters, which MANGLED Danish decimal amounts ("12500,00" became two
+  // fields "12500" and "00"). This made it impossible to import authentic
+  // Danish bank statements.
+  //
+  // The fix: detect the delimiter ONCE from the first row (the header or the
+  // first data row) by counting occurrences of each candidate character, then
+  // use ONLY that delimiter for all rows. This way, a semicolon-delimited file
+  // with comma-decimals parses correctly, and a comma-delimited file with
+  // dot-decimals also works.
+
+  const detectDelimiter = (row: string): string => {
+    const counts: Record<string, number> = { ';': 0, '\t': 0, ',': 0 };
+    for (const ch of row) {
+      if (ch === ';' || ch === '\t' || ch === ',') counts[ch]++;
+    }
+    // Pick the delimiter with the highest count. Semicolon wins ties (Danish default).
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    // If no delimiter found at all, default to semicolon.
+    return entries[0][1] > 0 ? entries[0][0] : ';';
+  };
 
   const parseCSVFile = useCallback((file: File) => {
     setIsParsing(true);
@@ -307,16 +332,28 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
           return;
         }
 
+        // Detect the field delimiter from the first row.
+        // Danish bank exports → semicolon; English/US exports → comma; some → tab.
+        const delimiter = detectDelimiter(rows[0]);
+
+        const splitRow = (row: string): string[] =>
+          row
+            .split(delimiter)
+            .map((p) => p.trim().replace(/^"|"$/g, ''));
+
         const parsed: ImportParsedLine[] = [];
-        // Skip potential header row
-        const startIdx = isNaN(Date.parse(rows[0].split(/[,;\t]/)[0])) ? 1 : 0;
+        // Skip potential header row (if first cell isn't a parseable date)
+        const firstCells = splitRow(rows[0]);
+        const startIdx = isNaN(Date.parse(firstCells[0])) ? 1 : 0;
 
         for (let i = startIdx; i < rows.length; i++) {
-          const parts = rows[i].split(/[,;\t]/).map((p) => p.trim().replace(/^"|"$/g, ''));
+          const parts = splitRow(rows[i]);
           if (parts.length >= 5) {
             const dateStr = parts[0];
             const desc = parts[1] || '';
             const ref = parts[2] || '';
+            // Convert Danish decimal comma to dot before parsing.
+            // Safe now because the split no longer breaks on commas.
             const amount = parseFloat(parts[3].replace(',', '.')) || 0;
             const balance = parseFloat(parts[4].replace(',', '.')) || 0;
 
