@@ -1633,7 +1633,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
 
       {/* ── Manual Match Dialog ── */}
       <Dialog open={matchDialogOpen} onOpenChange={setMatchDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl lg:max-w-4xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Link2 className="h-5 w-5 text-[#0d9488]" />
@@ -1649,12 +1649,12 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
           {selectedBankLine && (
             <div className="space-y-4">
               {/* Bank line details */}
-              <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-4 space-y-2">
+              <div className="rounded-lg bg-gray-50 dark:bg-white/5 p-4 space-y-2 overflow-hidden">
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
                   {language === 'da' ? 'Banktransaktion' : 'Bank Transaction'}
                 </h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-gray-500 dark:text-gray-400">
                       {language === 'da' ? 'Dato' : 'Date'}:{' '}
                     </span>
@@ -1662,7 +1662,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                       {selectedBankLine.date}
                     </span>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-gray-500 dark:text-gray-400">
                       {language === 'da' ? 'Beløb' : 'Amount'}:{' '}
                     </span>
@@ -1676,19 +1676,19 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                       {tc(selectedBankLine.amount)}
                     </span>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 min-w-0">
                     <span className="text-gray-500 dark:text-gray-400">
                       {language === 'da' ? 'Tekst' : 'Description'}:{' '}
                     </span>
-                    <span className="text-gray-900 dark:text-white">
+                    <span className="text-gray-900 dark:text-white break-words">
                       {selectedBankLine.description}
                     </span>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-2 min-w-0">
                     <span className="text-gray-500 dark:text-gray-400">
                       {language === 'da' ? 'Reference' : 'Reference'}:{' '}
                     </span>
-                    <span className="text-gray-900 dark:text-white font-mono">
+                    <span className="text-gray-900 dark:text-white font-mono break-all">
                       {selectedBankLine.reference || '—'}
                     </span>
                   </div>
@@ -1725,13 +1725,13 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                           <TableHead className="w-[90px] text-xs">
                             {language === 'da' ? 'Dato' : 'Date'}
                           </TableHead>
-                          <TableHead className="text-xs">
+                          <TableHead className="text-xs min-w-[200px]">
                             {language === 'da' ? 'Tekst' : 'Description'}
                           </TableHead>
                           <TableHead className="hidden sm:table-cell text-xs w-[80px]">
                             {language === 'da' ? 'Konto' : 'Account'}
                           </TableHead>
-                          <TableHead className="text-right text-xs w-[100px]">
+                          <TableHead className="text-right text-xs w-[110px]">
                             {language === 'da' ? 'Beløb' : 'Amount'}
                           </TableHead>
                         </TableRow>
@@ -1760,10 +1760,10 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="font-mono text-xs text-gray-600 dark:text-gray-400">
+                            <TableCell className="font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
                               {candidate.date}
                             </TableCell>
-                            <TableCell className="text-xs text-gray-900 dark:text-white">
+                            <TableCell className="text-xs text-gray-900 dark:text-white max-w-[280px] truncate" title={candidate.description}>
                               {candidate.description}
                             </TableCell>
                             <TableCell className="hidden sm:table-cell">
@@ -1772,7 +1772,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                               </Badge>
                             </TableCell>
                             <TableCell
-                              className={`text-right font-mono text-xs ${
+                              className={`text-right font-mono text-xs whitespace-nowrap ${
                                 candidate.amount >= 0
                                   ? 'text-green-600 dark:text-green-400'
                                   : 'text-red-600 dark:text-red-400'
