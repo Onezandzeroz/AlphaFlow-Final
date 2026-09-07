@@ -289,30 +289,203 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
 
   // ──────────────── CSV parsing ────────────────
   //
-  // Danish bank statements (Danske Bank, Nordea, Jyske Bank, Sydbank) use
-  // semicolon (;) as the CSV delimiter and comma (,) as the decimal separator.
+  // Supports real Danish bank CSV exports from multiple banks:
+  //   • Danske Bank, Nordea, Jyske Bank, Sydbank — semicolon (;) delimiter,
+  //     comma (,) decimal separator, dot (.) thousand separator
+  //   • Lunar Bank — comma (,) delimiter, quoted fields (RFC 4180),
+  //     comma (,) decimal separator, dot (.) thousand separator,
+  //     DD.MM.YYYY date format, 6 columns (Dato, Tid, Titel, Beløb, Balance, ID)
   //
-  // The previous parser split on /[,;\t]/ — a regex that treats commas as
-  // delimiters, which MANGLED Danish decimal amounts ("12500,00" became two
-  // fields "12500" and "00"). This made it impossible to import authentic
-  // Danish bank statements.
-  //
-  // The fix: detect the delimiter ONCE from the first row (the header or the
-  // first data row) by counting occurrences of each candidate character, then
-  // use ONLY that delimiter for all rows. This way, a semicolon-delimited file
-  // with comma-decimals parses correctly, and a comma-delimited file with
-  // dot-decimals also works.
+  // Three problems the old parser had (fixed below):
+  //   1. No RFC 4180 quoted-field handling — `"-43,94"` was split into two
+  //      fields because the naive split(',') broke on the comma inside quotes.
+  //   2. DD.MM.YYYY dates not recognized — Date.parse("31.08.2026") = NaN
+  //      (only days ≤ 12 were accidentally valid due to MM.DD ambiguity).
+  //   3. Thousand separators not stripped — "4.334,12" was parsed as 4.334
+  //      (decimal) instead of 4334.12 (thousand + decimal).
 
+  /** Detect the CSV delimiter by counting ;, comma, tab in the first row. */
   const detectDelimiter = (row: string): string => {
     const counts: Record<string, number> = { ';': 0, '\t': 0, ',': 0 };
     for (const ch of row) {
       if (ch === ';' || ch === '\t' || ch === ',') counts[ch]++;
     }
-    // Pick the delimiter with the highest count. Semicolon wins ties (Danish default).
     const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    // If no delimiter found at all, default to semicolon.
     return entries[0][1] > 0 ? entries[0][0] : ';';
   };
+
+  /**
+   * Parse a single CSV line respecting quoted fields (RFC 4180).
+   *
+   * Handles:
+   *   • Fields enclosed in double quotes (commas/delimiters inside quotes are literal)
+   *   • Escaped quotes ("") inside quoted fields
+   *   • Fields like `"-43,94"` and `"4.334,12"` from Lunar Bank
+   */
+  function parseCSVLine(line: string, delimiter: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (inQuotes) {
+        if (char === '"') {
+          if (i + 1 < line.length && line[i + 1] === '"') {
+            // Escaped quote ("") → literal "
+            current += '"';
+            i++;
+          } else {
+            // End of quoted field
+            inQuotes = false;
+          }
+        } else {
+          current += char;
+        }
+      } else {
+        if (char === '"') {
+          inQuotes = true;
+        } else if (char === delimiter) {
+          result.push(current);
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+    }
+    result.push(current);
+
+    return result.map((s) => s.trim());
+  }
+
+  /**
+   * Parse a Danish date string into an ISO date string (YYYY-MM-DD).
+   *
+   * Supports:
+   *   • DD.MM.YYYY    (Danish: 31.08.2026) — Lunar Bank, Danske Bank
+   *   • DD/MM/YYYY    (Danish alt: 31/08/2026)
+   *   • DD-MM-YYYY    (ISO-ish: 31-08-2026)
+   *   • YYYY-MM-DD    (ISO: 2026-08-31) — our mock CSV, Nordea Business
+   *
+   * Returns null if the date can't be parsed.
+   */
+  function parseDanishDate(s: string): string | null {
+    const trimmed = s.trim();
+
+    // ISO format: YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const d = new Date(trimmed + 'T00:00:00.000Z');
+      return isNaN(d.getTime()) ? null : trimmed;
+    }
+
+    // Danish format: DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY
+    const m = trimmed.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/);
+    if (m) {
+      const day = parseInt(m[1], 10);
+      const month = parseInt(m[2], 10);
+      const year = parseInt(m[3], 10);
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const d = new Date(iso + 'T00:00:00.000Z');
+        if (!isNaN(d.getTime())) return iso;
+      }
+    }
+
+    // Fallback: try native Date.parse (handles some browser-specific formats)
+    const native = new Date(trimmed);
+    if (!isNaN(native.getTime())) {
+      return native.toISOString().slice(0, 10);
+    }
+
+    return null;
+  }
+
+  /**
+   * Parse a Danish number string into a float.
+   *
+   * Handles:
+   *   • Decimal comma + thousand dot:  "4.334,12" → 4334.12
+   *   • Decimal comma only:            "-43,94"   → -43.94
+   *   • Quoted:                        '"-43,94"' → -43.94
+   *   • Currency suffix:               "-43,94 kr." → -43.94
+   *   • Dot decimal (English):         "4334.12"  → 4334.12
+   *
+   * If both dot and comma are present, dot = thousand separator, comma = decimal.
+   * If only comma, it's the decimal separator.
+   */
+  function parseDanishNumber(s: string): number {
+    if (!s) return 0;
+    let cleaned = s
+      .trim()
+      .replace(/["']/g, '')   // strip quotes
+      .replace(/\s/g, '')     // strip spaces
+      .replace(/kr\.?/gi, '') // strip "kr" / "kr."
+      .replace(/DKK/gi, '');  // strip DKK
+
+    if (cleaned === '' || cleaned === '-') return 0;
+
+    // Both dot and comma → dot = thousands, comma = decimal
+    if (cleaned.includes(',') && cleaned.includes('.')) {
+      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    } else if (cleaned.includes(',')) {
+      // Only comma → decimal separator
+      cleaned = cleaned.replace(',', '.');
+    }
+    // Only dot → leave as-is (could be decimal 4.33 or thousand 4.334)
+
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  }
+
+  /**
+   * Detect column indices from a header row.
+   *
+   * Different banks use different column names and orders:
+   *   • Lunar Bank:     Dato, Tid, Titel, Beløb, Balance, Transaktions-ID (6 cols)
+   *   • Danske Bank:    Dato, Tekst, Beløb, Saldo (4 cols)
+   *   • Our mock CSV:   Dato, Tekst, Reference, Beløb, Saldo (5 cols)
+   *
+   * This function maps header names to semantic roles (date, description,
+   * reference, amount, balance) so any column order works.
+   */
+  function detectColumns(
+    headers: string[]
+  ): { date: number; desc: number; ref: number; amount: number; balance: number } {
+    const lower = headers.map((h) => h.toLowerCase().trim());
+
+    const findCol = (patterns: RegExp[]): number => {
+      for (let i = 0; i < lower.length; i++) {
+        if (patterns.some((p) => p.test(lower[i]))) return i;
+      }
+      return -1;
+    };
+
+    const dateCol = findCol([/^dato$/, /^date$/, /^bogføringsdato$/, /^valørdato$/, /^postering$/]);
+    const descCol = findCol([
+      /^titel$/, /^tekst$/, /^beskrivelse$/, /^text$/, /^description$/,
+      /^navn$/, /^detaljer$/, /^modtager$/, /^afsender$/,
+    ]);
+    const refCol = findCol([
+      /^transaktions-id$/, /^transaktions id$/, /^reference$/, /^ref$/,
+      /^id$/, /^betaling-id$/, /^kreditornr$/, /^fakturanr$/,
+    ]);
+    const amountCol = findCol([
+      /^beløb$/, /^belob$/, /^amount$/, /^beløb \(kr\)$/, /^pris$/,
+      /^beløb dkk$/, /^ændring$/,
+    ]);
+    const balanceCol = findCol([
+      /^balance$/, /^saldo$/, /^restsaldo$/, /^ny saldo$/, /^balance \(kr\)$/,
+    ]);
+
+    return {
+      date: dateCol >= 0 ? dateCol : 0,
+      desc: descCol >= 0 ? descCol : 1,
+      ref: refCol >= 0 ? refCol : -1, // -1 = no reference column
+      amount: amountCol >= 0 ? amountCol : 3,
+      balance: balanceCol >= 0 ? balanceCol : 4,
+    };
+  }
 
   const parseCSVFile = useCallback((file: File) => {
     setIsParsing(true);
@@ -332,48 +505,60 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
           return;
         }
 
-        // Detect the field delimiter from the first row.
-        // Danish bank exports → semicolon; English/US exports → comma; some → tab.
         const delimiter = detectDelimiter(rows[0]);
 
-        const splitRow = (row: string): string[] =>
-          row
-            .split(delimiter)
-            .map((p) => p.trim().replace(/^"|"$/g, ''));
+        // Parse the first row to check if it's a header
+        const firstCells = parseCSVLine(rows[0], delimiter);
+        const firstDate = parseDanishDate(firstCells[0]);
+
+        // If the first cell isn't a valid date, it's a header row — use it
+        // for column detection. Otherwise fall back to positional defaults.
+        let cols: ReturnType<typeof detectColumns>;
+        let startIdx: number;
+
+        if (firstDate === null) {
+          // Header row detected
+          cols = detectColumns(firstCells);
+          startIdx = 1;
+        } else {
+          // No header — use positional defaults (date, desc, ref, amount, balance)
+          cols = { date: 0, desc: 1, ref: 2, amount: 3, balance: 4 };
+          startIdx = 0;
+        }
 
         const parsed: ImportParsedLine[] = [];
-        // Skip potential header row (if first cell isn't a parseable date)
-        const firstCells = splitRow(rows[0]);
-        const startIdx = isNaN(Date.parse(firstCells[0])) ? 1 : 0;
 
         for (let i = startIdx; i < rows.length; i++) {
-          const parts = splitRow(rows[i]);
-          if (parts.length >= 5) {
-            const dateStr = parts[0];
-            const desc = parts[1] || '';
-            const ref = parts[2] || '';
-            // Convert Danish decimal comma to dot before parsing.
-            // Safe now because the split no longer breaks on commas.
-            const amount = parseFloat(parts[3].replace(',', '.')) || 0;
-            const balance = parseFloat(parts[4].replace(',', '.')) || 0;
+          const parts = parseCSVLine(rows[i], delimiter);
+          if (parts.length === 0) continue;
 
-            // Validate date
-            if (!isNaN(Date.parse(dateStr))) {
-              parsed.push({ date: dateStr, description: desc, reference: ref, amount, balance });
-            }
-          } else if (parts.length >= 4) {
-            const dateStr = parts[0];
-            const desc = parts[1] || '';
-            const ref = parts[2] || '';
-            const amount = parseFloat(parts[3].replace(',', '.')) || 0;
+          const dateStr = parts[cols.date] || '';
+          const isoDate = parseDanishDate(dateStr);
 
-            if (!isNaN(Date.parse(dateStr))) {
-              const runningBalance = parsed.length > 0
-                ? parsed[parsed.length - 1].balance + amount
-                : amount;
-              parsed.push({ date: dateStr, description: desc, reference: ref, amount, balance: runningBalance });
-            }
+          if (!isoDate) continue; // Skip rows with unparseable dates
+
+          const desc = parts[cols.desc] || '';
+          const ref = cols.ref >= 0 ? (parts[cols.ref] || '') : '';
+          const amount = parseDanishNumber(parts[cols.amount] || '0');
+
+          // Balance: use the detected column, or compute running balance
+          let balance: number;
+          if (cols.balance >= 0 && cols.balance < parts.length) {
+            balance = parseDanishNumber(parts[cols.balance] || '0');
+          } else {
+            // No balance column — compute running balance
+            balance = parsed.length > 0
+              ? parsed[parsed.length - 1].balance + amount
+              : amount;
           }
+
+          parsed.push({
+            date: isoDate,
+            description: desc,
+            reference: ref,
+            amount,
+            balance,
+          });
         }
 
         setImportParsedLines(parsed);
