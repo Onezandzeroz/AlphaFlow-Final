@@ -298,7 +298,20 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
         const url = reason
           ? `/api/transactions?id=${id}&reason=${encodeURIComponent(reason)}`
           : `/api/transactions?id=${id}`;
-        await fetch(url, { method: 'DELETE' });
+        const response = await fetch(url, { method: 'DELETE' });
+
+        // Check response.ok — fetch only throws on network errors, not HTTP 4xx/5xx.
+        // Previously the success toast was shown even when the backend returned 500
+        // (e.g. immutability trigger blocking the update), hiding the real failure.
+        if (!response.ok) {
+          const errData = await response.json().catch(() => null);
+          const errorMsg = errData?.error || (language === 'da'
+            ? 'Kunne ikke annullere postering (serverfejl)'
+            : 'Failed to cancel transaction (server error)');
+          toast.error(errorMsg);
+          return;
+        }
+
         toast.success(t('transactionDeleted') || (language === 'da' ? 'Postering annulleret' : 'Transaction cancelled'), {
           description: language === 'da' ? 'Posteringen er blevet annulleret og en modpostering er oprettet' : 'The transaction has been cancelled and a reversal entry has been created',
         });

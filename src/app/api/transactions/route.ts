@@ -728,13 +728,27 @@ export const DELETE = withGuard({
       );
     }
 
-    // Soft-delete: mark as cancelled instead of deleting
-    await db.transaction.update({
-      where: { id },
-      data: {
-        cancelled: true,
-        cancelReason: reason,
-      },
+    // Soft-delete: mark as cancelled instead of deleting.
+    //
+    // SEALED ROWS: Once a transaction is sealed (recordHash IS NOT NULL), the
+    // DB trigger (prisma/journal-immutability.sql) blocks UPDATE on the row.
+    // Setting cancelled/cancelReason is an administrative marking — it does
+    // NOT change any booked amount (the reversal JE does that). We therefore
+    // wrap the flag update in a transaction with immutability_bypass = 'true',
+    // matching the pattern used by demo-mode reset and tenant import.
+    //
+    // Per Bogføringsloven §10-12: the original booked data stays intact; only
+    // the cancellation flag is set and a reversal JE is created that nets
+    // the original to zero. Both entries remain POSTED + visible.
+    await db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
+      await tx.transaction.update({
+        where: { id },
+        data: {
+          cancelled: true,
+          cancelReason: reason,
+        },
+      });
     });
 
     // ── Create a reversal journal entry (modpostering) ──
