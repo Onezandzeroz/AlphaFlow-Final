@@ -54,6 +54,8 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { da } from 'date-fns/locale';
+import { DK_DATETIME_SHORT } from '@/lib/date-utils';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -1028,7 +1030,7 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                           </TableCell>
                           <TableCell className="py-2.5 px-3 text-sm text-gray-500 dark:text-gray-400 hidden sm:table-cell">
                             {sub.submittedDate
-                              ? format(new Date(sub.submittedDate), 'dd/MM/yyyy HH:mm')
+                              ? format(new Date(sub.submittedDate), DK_DATETIME_SHORT, { locale: da })
                               : '—'}
                           </TableCell>
                           <TableCell className="py-2.5 px-3 text-sm text-gray-500 dark:text-gray-400 font-mono hidden md:table-cell">

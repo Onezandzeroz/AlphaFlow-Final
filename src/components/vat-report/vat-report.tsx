@@ -38,6 +38,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { da } from 'date-fns/locale';
+import { DK_DATE_SHORT } from '@/lib/date-utils';
 
 interface Transaction {
   id: string;
@@ -294,7 +296,7 @@ export function VATReport({ user }: VATReportProps) {
       const vatAmount = t.journalVAT?.amount ?? 0;
       return [
         t.type === 'PURCHASE' ? (language === 'da' ? 'Køb' : 'Purchase') : (language === 'da' ? 'Salg' : 'Sale'),
-        format(new Date(t.date), 'dd/MM/yyyy'),
+        format(new Date(t.date), DK_DATE_SHORT, { locale: da }),
         `"${t.description.replace(/"/g, '""')}"`,
         t.amount.toFixed(2),
         vatRate.toFixed(1),

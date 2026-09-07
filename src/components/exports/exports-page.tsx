@@ -53,6 +53,7 @@ import {
 import { PageHeader } from '@/components/shared/page-header';
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { da } from 'date-fns/locale';
+import { DK_DATE_SHORT, DK_MONTH_YEAR_LONG } from '@/lib/date-utils';
 import { Calendar as CalendarUI } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Switch } from '@/components/ui/switch';
@@ -114,15 +115,15 @@ function computePeriodLabel(
   t: (key: string) => string,
   language: string,
 ): string {
-  const fmt = (d: Date) => format(d, 'dd/MM/yyyy');
+  const fmt = (d: Date) => format(d, DK_DATE_SHORT, { locale: da });
   switch (periodType) {
     case 'year':
-      return `${year} (01/01 – 31/12)`;
+      return `${year} (01.01 – 31.12)`;
     case 'quarter':
       return `${year} ${t('saftPeriodQ' + quarter) || `Q${quarter}`}`;
     case 'month': {
       const m = parseInt(month) - 1;
-      return format(new Date(parseInt(year), m, 1), 'MMMM yyyy');
+      return format(new Date(parseInt(year), m, 1), DK_MONTH_YEAR_LONG, { locale: da });
     }
     case 'custom':
       if (customFrom && customTo) {
@@ -500,7 +501,7 @@ export function ExportsPage({ user }: ExportsPageProps) {
         const vatRate = t.journalVAT?.rate ?? 0;
         const vatAmount = t.journalVAT?.amount ?? 0;
         return [
-          format(new Date(t.date), 'dd/MM/yyyy'),
+          format(new Date(t.date), DK_DATE_SHORT, { locale: da }),
           `"${t.description.replace(/"/g, '""')}"`,
           t.amount.toFixed(2),
           vatRate.toFixed(1),
@@ -803,7 +804,7 @@ export function ExportsPage({ user }: ExportsPageProps) {
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-36 justify-start text-left font-normal bg-white dark:bg-[#1a1f1e] border-gray-200 dark:border-gray-700">
                   <Calendar className="mr-2 h-4 w-4 text-[#0d9488]" />
-                  {pCustomFrom ? format(pCustomFrom, 'dd/MM/yyyy') : '...'}
+                  {pCustomFrom ? format(pCustomFrom, DK_DATE_SHORT, { locale: da }) : '...'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 bg-white dark:bg-[#1a1f1e]" align="start">
@@ -822,7 +823,7 @@ export function ExportsPage({ user }: ExportsPageProps) {
               <PopoverTrigger asChild>
                 <Button variant="outline" className="w-36 justify-start text-left font-normal bg-white dark:bg-[#1a1f1e] border-gray-200 dark:border-gray-700">
                   <Calendar className="mr-2 h-4 w-4 text-[#0d9488]" />
-                  {pCustomTo ? format(pCustomTo, 'dd/MM/yyyy') : '...'}
+                  {pCustomTo ? format(pCustomTo, DK_DATE_SHORT, { locale: da }) : '...'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 bg-white dark:bg-[#1a1f1e]" align="start">

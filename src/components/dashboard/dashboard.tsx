@@ -91,6 +91,8 @@ import { useAccessCacheStore } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { hasAccess } from '@/lib/tokenpay';
 import { format, subMonths, startOfYear, startOfMonth, addMonths } from 'date-fns';
+import { da } from 'date-fns/locale';
+import { DK_MONTH_YEAR_SHORT } from '@/lib/date-utils';
 import {
   PieChart,
   Pie,
@@ -950,7 +952,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
       revenue: Math.round(m.revenue * 100) / 100,
       expenses: Math.round(m.expenses * 100) / 100,
       net: Math.round((m.revenue - m.expenses) * 100) / 100,
-      label: format(new Date(m.month + '-01'), 'MMM'),
+      label: format(new Date(m.month + '-01'), 'MMM', { locale: da }),
     }));
   }, [hasDoubleEntryData, allPostedJournalEntries, dateRange]);
 
@@ -966,7 +968,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
     const endMonth = startOfMonth(now);
     while (d <= endMonth) {
       const key = format(d, 'yyyy-MM');
-      dataPoints.push({ month: key, revenue: 0, expenses: 0, net: 0, label: format(d, 'MMM') });
+      dataPoints.push({ month: key, revenue: 0, expenses: 0, net: 0, label: format(d, 'MMM', { locale: da }) });
       d = addMonths(d, 1);
     }
 
@@ -982,7 +984,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
       if (month === currentMonthKey || month === prevMonthKey) {
         // Daily aggregation for recent months
         const dayKey = entry.date; // "2025-04-12T00:00:00.000Z"
-        const dayLabel = format(entryDate, 'MMM d');
+        const dayLabel = format(entryDate, 'd. MMM', { locale: da });
         let dayEntry = dataPoints.find(dp => dp.month === dayKey);
         if (!dayEntry) {
           // Insert after the month summary entry

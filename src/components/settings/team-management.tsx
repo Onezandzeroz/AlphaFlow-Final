@@ -42,6 +42,7 @@ import { toast } from 'sonner';
 import { TenantTwoFactorToggle } from '@/components/settings/tenant-two-factor-toggle';
 import { format, formatDistanceToNow } from 'date-fns';
 import { da } from 'date-fns/locale';
+import { DK_DATE_MEDIUM } from '@/lib/date-utils';
 
 interface Member {
   userId: string;
@@ -524,7 +525,7 @@ export function TeamManagement() {
                           ) : (
                             <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {language === 'da' ? 'Udløber' : 'Expires'} {format(expiresDate, 'MMM d, yyyy')}
+                              {language === 'da' ? 'Udløber' : 'Expires'} {format(expiresDate, DK_DATE_MEDIUM, { locale: da })}
                             </span>
                           )}
                         </div>

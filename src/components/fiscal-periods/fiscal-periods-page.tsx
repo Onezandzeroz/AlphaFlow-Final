@@ -49,6 +49,7 @@ import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { format, formatDistanceToNow } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
+import { DK_DATETIME_SHORT } from '@/lib/date-utils';
 
 // Danish month names (lowercase as specified)
 const DANISH_MONTH_NAMES = [
@@ -78,7 +79,7 @@ function formatLockedDate(dateStr: string, language: 'da' | 'en'): string {
   try {
     const date = new Date(dateStr);
     if (language === 'da') {
-      return format(date, 'dd.MM.yyyy HH:mm', { locale: da });
+      return format(date, DK_DATETIME_SHORT, { locale: da });
     }
     return format(date, 'dd/MM/yyyy HH:mm', { locale: enGB });
   } catch {

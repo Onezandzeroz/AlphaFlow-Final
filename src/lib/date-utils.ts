@@ -233,3 +233,36 @@ export function formatDateLocal(date: Date): string {
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
+
+// ─── Danish date format constants ───────────────────────────────────
+//
+// The Danish standard for date display uses POINTS (.) as separators,
+// NOT slashes (/) — e.g. "25.06.2025" (not "25/06/2025").
+// These constants are the single source of truth for date-fns format()
+// strings across the platform. Always use these instead of hardcoding
+// format strings in components, so the format is consistent everywhere.
+//
+// Reference: Dansk Standard DS/ISO 8601 + Danish locale convention (da-DK).
+// The `da` locale from date-fns is applied at each call site to ensure
+// Danish month/day names (januar, februar, mandag, tirsdag, etc.).
+
+/** Short Danish date: "25.06.2025" — use for tables, lists, compact displays */
+export const DK_DATE_SHORT = 'dd.MM.yyyy';
+
+/** Danish date with short month name: "25. jun 2025" — use for relative-ish displays */
+export const DK_DATE_MEDIUM = 'd. MMM yyyy';
+
+/** Danish date with long month name: "25. juni 2025" — use for formal documents, invoices */
+export const DK_DATE_LONG = 'd. MMMM yyyy';
+
+/** Danish date + time: "25.06.2025 14:30" — use for audit logs, timestamps */
+export const DK_DATETIME_SHORT = 'dd.MM.yyyy HH:mm';
+
+/** Danish date + long time: "25. juni 2025 kl. 14:30" — use for detailed logs */
+export const DK_DATETIME_LONG = 'd. MMMM yyyy HH:mm';
+
+/** Danish month + year: "jun 2025" — use for chart labels, period selectors */
+export const DK_MONTH_YEAR_SHORT = 'MMM yyyy';
+
+/** Danish month + year long: "juni 2025" — use for report headers */
+export const DK_MONTH_YEAR_LONG = 'MMMM yyyy';

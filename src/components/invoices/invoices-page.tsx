@@ -110,6 +110,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
+import { DK_DATE_SHORT } from '@/lib/date-utils';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from "sonner";
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
@@ -941,8 +942,8 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
 
       toast.success(t('invoiceMarkedPaid'), {
         description: language === 'da'
-          ? `Betalt d. ${format(paidDate, 'dd/MM-yyyy', { locale: isDanish ? da : enGB })}`
-          : `Paid on ${format(paidDate, 'dd/MM/yyyy', { locale: isDanish ? da : enGB })}`,
+          ? `Betalt d. ${format(paidDate, DK_DATE_SHORT, { locale: da })}`
+          : `Paid on ${format(paidDate, DK_DATE_SHORT, { locale: enGB })}`,
       });
       fetchInvoices();
       if (previewInvoice?.id === invoice.id) {
@@ -3680,7 +3681,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                       >
                         <CalendarDays className="h-4 w-4 mr-2 text-[#0d9488]" />
                         {markPaidDate
-                          ? format(markPaidDate, 'dd/MM-yyyy', { locale: isDanish ? da : enGB })
+                          ? format(markPaidDate, DK_DATE_SHORT, { locale: isDanish ? da : enGB })
                           : (language === 'da' ? 'Vælg dato' : 'Pick a date')}
                       </Button>
                     </PopoverTrigger>

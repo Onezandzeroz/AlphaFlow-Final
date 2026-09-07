@@ -50,6 +50,8 @@ import JSZip from 'jszip';
 import { PageHeader } from '@/components/shared/page-header';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { format, formatDistanceToNow } from 'date-fns';
+import { da } from 'date-fns/locale';
+import { DK_DATETIME_SHORT } from '@/lib/date-utils';
 
 interface BackupEntry {
   id: string;
@@ -1892,7 +1894,7 @@ export function BackupPage({ user }: BackupPageProps) {
                         {language === 'da' ? 'Dato' : 'Date'}:
                       </span>
                       <span className="font-medium text-gray-900 dark:text-white">
-                        {format(new Date(restoreTarget.createdAt), 'dd/MM/yyyy HH:mm')}
+                        {format(new Date(restoreTarget.createdAt), DK_DATETIME_SHORT, { locale: da })}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
