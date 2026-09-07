@@ -845,6 +845,42 @@ export const DELETE = withGuard({
       logger.info(
         `[TRANSACTION CANCEL] Marked ${originalJournalEntries.length} original journal entry(s) as cancelled for transaction ${id}`
       );
+
+      // ── Unmatch any bank statement lines pointing at the cancelled JEs ──
+      //
+      // Bank statement lines that were matched to the original (now cancelled)
+      // journal entry lines must be released back to UNMATCHED — otherwise the
+      // bank reconciliation UI still shows them as "MATCHED" to a cancelled
+      // entry, which is misleading. The user can then re-match them to a
+      // different (valid) journal entry.
+      //
+      // We collect all JournalEntryLine IDs from the cancelled JEs, then
+      // update all BankStatementLines whose matchedJournalLineId is in that
+      // set: clear the match + reset status to UNMATCHED.
+      const cancelledJournalLineIds = originalJournalEntries.flatMap(
+        (je) => je.lines.map((l) => l.id),
+      );
+
+      if (cancelledJournalLineIds.length > 0) {
+        const unmatchResult = await db.bankStatementLine.updateMany({
+          where: {
+            matchedJournalLineId: { in: cancelledJournalLineIds },
+          },
+          data: {
+            reconciliationStatus: 'UNMATCHED',
+            matchedJournalLineId: null,
+            matchedAt: null,
+            matchConfidence: null,
+            matchMethod: null,
+            aiReasons: null,
+          },
+        });
+        if (unmatchResult.count > 0) {
+          logger.info(
+            `[TRANSACTION CANCEL] Unmatched ${unmatchResult.count} bank statement line(s) that pointed at cancelled journal entries for transaction ${id}`
+          );
+        }
+      }
     }
 
     // Audit log
@@ -863,6 +899,9 @@ export const DELETE = withGuard({
       { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
       { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
       { scope: 'reports', companyId: ctx.activeCompanyId!, action: 'update' },
+      // Bank reconciliation must refresh — matched bank lines may have been
+      // released back to UNMATCHED when the transaction was cancelled.
+      { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
     ]).catch(() => {});
 
     return NextResponse.json({ success: true, message: 'Transaction cancelled (soft-delete)' });
