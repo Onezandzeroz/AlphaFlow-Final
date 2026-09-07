@@ -74,6 +74,9 @@ import { PageHeader } from '@/components/shared/page-header';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { OpenBankingSection } from '@/components/bank-reconciliation/open-banking-section';
 import { toast } from 'sonner';
+import { format as formatDateFns } from 'date-fns';
+import { da } from 'date-fns/locale';
+import { DK_DATE_SHORT } from '@/lib/date-utils';
 import {
   Popover,
   PopoverContent,
@@ -142,6 +145,24 @@ interface BankReconciliationPageProps {
 }
 
 // ──────────────── Component ────────────────
+
+/**
+ * Format an ISO date/datetime string as a compact Danish date (dd.MM.yyyy).
+ *
+ * Backend returns dates as full ISO datetime strings (e.g. "2026-03-26T00:00:00.000Z").
+ * Displaying them raw shows the ugly "T00:00:00.000Z" suffix on every line.
+ * This helper strips the time component and formats as Danish short date.
+ */
+function fmtDate(iso: string): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso; // fallback: show raw if unparseable
+    return formatDateFns(d, DK_DATE_SHORT, { locale: da });
+  } catch {
+    return iso;
+  }
+}
 
 export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
   const [data, setData] = useState<BankReconciliationData | null>(null);
@@ -1286,7 +1307,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                               {statement.lines.map((line) => (
                                 <TableRow key={line.id}>
                                   <TableCell className="font-mono text-xs sm:text-sm text-gray-600 dark:text-gray-400">
-                                    {line.date}
+                                    {fmtDate(line.date)}
                                   </TableCell>
                                   <TableCell>
                                     <div className="text-sm font-medium text-gray-900 dark:text-white">
@@ -1578,7 +1599,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                       {importParsedLines.slice(0, 20).map((line, idx) => (
                         <TableRow key={idx}>
                           <TableCell className="font-mono text-xs text-gray-600 dark:text-gray-400">
-                            {line.date}
+                            {fmtDate(line.date)}
                           </TableCell>
                           <TableCell className="text-xs text-gray-900 dark:text-white truncate max-w-[200px]">
                             {line.description}
@@ -1659,7 +1680,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                       {language === 'da' ? 'Dato' : 'Date'}:{' '}
                     </span>
                     <span className="text-gray-900 dark:text-white font-mono">
-                      {selectedBankLine.date}
+                      {fmtDate(selectedBankLine.date)}
                     </span>
                   </div>
                   <div className="min-w-0">
@@ -1761,7 +1782,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                               </div>
                             </TableCell>
                             <TableCell className="font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
-                              {candidate.date}
+                              {fmtDate(candidate.date)}
                             </TableCell>
                             <TableCell className="text-xs text-gray-900 dark:text-white max-w-[280px] truncate" title={candidate.description}>
                               {candidate.description}
@@ -1832,7 +1853,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                 {bankLineToUnmatch.description}
               </p>
               <p className="text-gray-500 dark:text-gray-400 font-mono">
-                {bankLineToUnmatch.date} · {tc(bankLineToUnmatch.amount)}
+                {fmtDate(bankLineToUnmatch.date)} · {tc(bankLineToUnmatch.amount)}
               </p>
             </div>
           )}
