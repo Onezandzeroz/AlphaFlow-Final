@@ -817,6 +817,36 @@ export const DELETE = withGuard({
       );
     }
 
+    // ── Mark the ORIGINAL journal entries as cancelled ─────────────
+    //
+    // The original JEs (reference `TX-<id8>`) are POSTED + sealed, so the
+    // immutability trigger blocks UPDATE. We set cancelled=true + cancelReason
+    // via immutability_bypass (same as the Transaction flag update above).
+    //
+    // Why: the `cancelled` flag is the PRIMARY signal that bank reconciliation,
+    // VAT reports, and dashboards use to exclude an entry. Without it, the
+    // original JE would still appear as a match candidate in bank
+    // reconciliation (only excluded by the REVERSAL-* pattern on the
+    // counter-entry, not on the original itself). Marking the original
+    // cancelled makes the exclusion robust + consistent across all features.
+    if (originalJournalEntries.length > 0) {
+      await db.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
+        await tx.journalEntry.updateMany({
+          where: {
+            id: { in: originalJournalEntries.map((je) => je.id) },
+          },
+          data: {
+            cancelled: true,
+            cancelReason: `Transaction cancelled: ${reason}`,
+          },
+        });
+      });
+      logger.info(
+        `[TRANSACTION CANCEL] Marked ${originalJournalEntries.length} original journal entry(s) as cancelled for transaction ${id}`
+      );
+    }
+
     // Audit log
     await auditCancel(
       ctx.id,

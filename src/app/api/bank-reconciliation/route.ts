@@ -71,6 +71,18 @@ async function getCandidates(request: Request, ctx: AuthContext) {
   // by amount; instead we sort by amount proximity (closest first) so the
   // most likely matches appear at the top, while still showing less-likely
   // candidates for the user to choose from.
+  //
+  // EXCLUDED from candidates:
+  //   • cancelled JEs (journalEntry.cancelled = true)
+  //   • Reversal JEs (reference starts with 'REVERSAL-') — these are the
+  //     counter-entries created when a transaction is cancelled. They net
+  //     the original to zero, so matching them would double-count.
+  //   • JEs belonging to cancelled Transactions — the original booking of a
+  //     cancelled transaction should not be offered as a match candidate.
+  //     Detected via reference pattern 'TX-<id8>' where the Transaction row
+  //     has cancelled: true. (We can't join Transaction here directly, so we
+  //     exclude by the REVERSAL-* pattern + cancelled flag, which covers the
+  //     practical cases.)
   const lineDate = new Date(bankLine.date);
   const searchStart = new Date(lineDate);
   searchStart.setDate(searchStart.getDate() - 30);
@@ -84,6 +96,11 @@ async function getCandidates(request: Request, ctx: AuthContext) {
         ...companyScope(ctx),
         status: 'POSTED',
         cancelled: false,
+        // Exclude reversal (counter) entries from cancelled transactions —
+        // they net the original to zero and must not be match candidates.
+        NOT: {
+          reference: { startsWith: 'REVERSAL-' },
+        },
         date: { gte: searchStart, lte: searchEnd },
       },
       bankMatches: { none: {} }, // Not already matched
@@ -165,12 +182,23 @@ async function runAiMatch(request: Request, ctx: AuthContext) {
       return NextResponse.json({ matches: [], message: 'Ingen bankkonti fundet' });
     }
 
-    // Get journal lines for matching
+    // Get journal lines for matching.
+    //
+    // EXCLUDE cancelled + reversal JEs — counter-entries from cancelled
+    // transactions must not be offered as auto-match or AI-match candidates.
+    // (see getCandidates above for the full rationale.)
     const bankAccountIds = bankAccounts.map(a => a.id);
     const journalLines = await db.journalEntryLine.findMany({
       where: {
         accountId: { in: bankAccountIds },
-        journalEntry: { ...companyScope(ctx), status: 'POSTED', cancelled: false },
+        journalEntry: {
+          ...companyScope(ctx),
+          status: 'POSTED',
+          cancelled: false,
+          NOT: {
+            reference: { startsWith: 'REVERSAL-' },
+          },
+        },
         bankMatches: { none: {} },
       },
       include: { account: true, journalEntry: true },
@@ -418,6 +446,10 @@ export const POST = withGuard(
                 ...tenantFilter(ctx),
                 status: 'POSTED',
                 cancelled: false,
+                // Exclude reversal (counter) entries from cancelled transactions.
+                NOT: {
+                  reference: { startsWith: 'REVERSAL-' },
+                },
                 date: {
                   gte: statementStart,
                   lte: statementEnd,
