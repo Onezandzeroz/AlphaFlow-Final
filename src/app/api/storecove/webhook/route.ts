@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import {
   storecoveClient,
   StorecoveWebhookEvent,
@@ -32,18 +33,71 @@ import { storeReceivedInvoice } from '@/lib/invoice-receiver';
 
 export async function POST(request: Request) {
   try {
-    // ── 1. Read raw body + verify signature ────────────────────────
+    // ── 1. Read raw body + verify authenticity ─────────────────────
+    // Storecove does NOT send an HMAC signature header. Instead, it
+    // supports static "HTTP Header" authentication: you configure a
+    // header name + secret value in the Storecove webhook dialog, and
+    // Storecove includes that exact header on every webhook POST.
+    //
+    // AlphaFlow supports BOTH auth methods (auto-detected):
+    //
+    //  A) Preferred — static shared-secret HTTP header.
+    //     Configure in the Storecove dashboard webhook dialog:
+    //       Authentication: "HTTP Header"
+    //       Header name:  X-Alphaflow-Webhook-Secret
+    //       Header value: <your secret>
+    //     Set the SAME secret in .env as STORECOVE_WEBHOOK_SECRET.
+    //     AlphaFlow compares the header value to the env secret.
+    //
+    //  B) Legacy/optional — HMAC-SHA256 signature.
+    //     If Storecove ever adds X-Storecove-Signature support, the
+    //     signature path below still works (HMAC of the raw body with
+    //     STORECOVE_WEBHOOK_SECRET as the key).
+    //
+    // Both paths are fail-closed: if STORECOVE_WEBHOOK_SECRET is unset,
+    // ALL webhooks are rejected with HTTP 401.
     const rawBody = await request.text();
 
-    const signature = request.headers.get('X-Storecove-Signature');
-    if (!signature) {
-      logger.warn('[STORECOVE_WEBHOOK] Missing X-Storecove-Signature header');
-      return NextResponse.json({ error: 'Missing signature header' }, { status: 401 });
+    // ── 1a. Check the static shared-secret header first ──
+    const sharedSecretHeader = request.headers.get('X-Alphaflow-Webhook-Secret');
+    const webhookSecret = process.env.STORECOVE_WEBHOOK_SECRET;
+
+    let authenticated = false;
+
+    if (sharedSecretHeader && webhookSecret) {
+      // Path A: static shared-secret header (what Storecove actually supports).
+      // Constant-time comparison to prevent timing attacks.
+      const bufferA = Buffer.from(sharedSecretHeader);
+      const bufferB = Buffer.from(webhookSecret);
+      if (bufferA.length === bufferB.length && bufferA.length > 0) {
+        // timingSafeEqual requires equal-length buffers
+        authenticated = timingSafeEqual(bufferA, bufferB);
+      }
+      if (!authenticated) {
+        logger.warn('[STORECOVE_WEBHOOK] Invalid shared-secret header value');
+      }
+    } else if (webhookSecret) {
+      // ── 1b. Fall back to HMAC signature (legacy / future-proof) ──
+      const signature = request.headers.get('X-Storecove-Signature');
+      if (signature && storecoveClient.verifyWebhookSignature(rawBody, signature)) {
+        authenticated = true;
+      } else {
+        logger.warn('[STORECOVE_WEBHOOK] No valid shared-secret header or HMAC signature', {
+          hasSharedSecretHeader: !!sharedSecretHeader,
+          hasSignatureHeader: !!signature,
+        });
+      }
+    } else {
+      // Fail-closed: no secret configured at all.
+      logger.error(
+        '[STORECOVE_WEBHOOK] REJECTED: STORECOVE_WEBHOOK_SECRET is not configured. ' +
+        'Set it in .env and configure the same value in the Storecove webhook dialog ' +
+        '(Authentication: HTTP Header, Header name: X-Alphaflow-Webhook-Secret, Header value: <secret>).'
+      );
     }
 
-    if (!storecoveClient.verifyWebhookSignature(rawBody, signature)) {
-      logger.warn('[STORECOVE_WEBHOOK] Invalid webhook signature');
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    if (!authenticated) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // ── 2. Parse the webhook event ─────────────────────────────────
