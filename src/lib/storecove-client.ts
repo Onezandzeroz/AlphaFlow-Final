@@ -479,6 +479,12 @@ export class StorecoveClient {
     // Step 2: Add each Peppol identifier via the sub-resource endpoint.
     // POST /legal_entities/{id}/peppol_identifiers
     //   body: { scheme, identifier, superscheme: "iso6523-actorid-upis" }
+    //
+    // CRITICAL: if this fails, the legal entity is useless (cannot send invoices).
+    // We capture the FULL Storecove error body and throw so the caller sees the
+    // precise reason (e.g. "identifier already in use by deleted entity", validation
+    // error, etc.) instead of a silent success with a missing Peppol identifier.
+    const peppolErrors: string[] = [];
     for (const pi of payload.peppolIdentifiers) {
       const piResponse = await this.makeRequestWithRetry(
         'POST',
@@ -486,15 +492,28 @@ export class StorecoveClient {
         { scheme: pi.scheme, identifier: pi.identifier, superscheme: 'iso6523-actorid-upis' },
       );
       if (!piResponse.ok) {
-        const error = await this.parseError(piResponse);
+        const errorBody = await piResponse.text();
         logger.error('[STORECOVE] Failed to add Peppol identifier to legal entity', {
           legalEntityId: legalEntity.id,
           scheme: pi.scheme,
           identifier: pi.identifier,
-          error: error.message,
+          status: piResponse.status,
+          body: errorBody,
         });
-        // Don't fail the whole creation — the legal entity exists.
+        peppolErrors.push(
+          `Peppol identifier ${pi.scheme}:${pi.identifier} kunne ikke tilføjes (HTTP ${piResponse.status}): ${errorBody || piResponse.statusText}`
+        );
       }
+    }
+
+    if (peppolErrors.length > 0) {
+      // Throw so the UI shows the precise Storecove error and the tenant
+      // knows the legal entity exists but is NOT usable for sending yet.
+      throw new Error(
+        `Juridisk enhed ${legalEntity.id} blev oprettet, MEN Peppol identifier blev afvist: ${peppolErrors.join('; ')}. ` +
+        `Mulige årsager: (1) CVR-nummeret er allerede bundet til en anden (måske slettet) legal entity — kontakt Storecove support for at frigive det, ` +
+        `(2) CVR-formatet er ugyldigt, eller (3) midlertidig Storecove-fejl.`
+      );
     }
 
     return legalEntity;

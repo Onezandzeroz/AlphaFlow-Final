@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from '@/lib/use-translation';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -317,13 +317,6 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
       setIsLookingUpParticipant(false);
     }
   }, [participantLookupId, isDa]);
-
-  // ── Derived: auto-computed Peppol AS4 ID ──
-  const computedPeppolId = useMemo(() => {
-    if (peppolAs4Id) return peppolAs4Id;
-    if (companyCvr) return `0188:CVR${companyCvr}`;
-    return '';
-  }, [peppolAs4Id, companyCvr]);
 
   // ── Save settings ──
   const handleSave = useCallback(async () => {
@@ -682,7 +675,9 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
 
             <Separator />
 
-            {/* ── EndpointID (auto-filled from CVR with scheme 0184) ── */}
+            {/* ── EndpointID ── */}
+            {/* When Storecove is connected, this is MANAGED by the legal entity
+                (auto-set to 0184:<CVR>) and must NOT be edited manually. */}
             <div className="space-y-1.5">
               <Label htmlFor="endpointId" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {isDa ? 'EndpointID' : 'EndpointID'}
@@ -695,8 +690,15 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   onChange={(e) => setEndpointId(e.target.value)}
                   placeholder={`0184:${companyCvr || 'CVR-nummer'}`}
                   className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-20"
+                  readOnly={!!storecoveStatus?.connected}
+                  disabled={!!storecoveStatus?.connected}
                 />
-                {companyCvr && !endpointId && (
+                {storecoveStatus?.connected ? (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0d9488] dark:text-[#14b8a6] bg-[#0d9488]/10 dark:bg-[#14b8a6]/10 px-2 py-0.5 rounded">
+                    <ShieldCheck className="h-3 w-3" />
+                    {isDa ? 'Auto fra Storecove' : 'Auto from Storecove'}
+                  </span>
+                ) : companyCvr && !endpointId ? (
                   <Button
                     type="button"
                     variant="ghost"
@@ -706,16 +708,21 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   >
                     {isDa ? 'Auto-udfyld' : 'Auto-fill'}
                   </Button>
-                )}
+                ) : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                {isDa
-                  ? 'Dit unikke EndpointID i NemHandel-netværket. Schema 0184 = DK CVR.'
-                  : 'Your unique EndpointID in the NemHandel network. Scheme 0184 = DK CVR.'}
+                {storecoveStatus?.connected
+                  ? (isDa
+                      ? 'Håndteres automatisk af din Storecove juridiske enhed. Kan ikke ændres manuelt.'
+                      : 'Managed automatically by your Storecove legal entity. Cannot be edited manually.')
+                  : (isDa
+                      ? 'Dit unikke EndpointID i NemHandel-netværket. Schema 0184 = DK CVR.'
+                      : 'Your unique EndpointID in the NemHandel network. Scheme 0184 = DK CVR.')}
               </p>
             </div>
 
             {/* ── GLN/EAN number ── */}
+            {/* Genuinely per-tenant — always editable. */}
             <div className="space-y-1.5">
               <Label htmlFor="gln" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {isDa ? 'GLN/EAN-nummer' : 'GLN/EAN number'}
@@ -736,10 +743,15 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
             </div>
 
             {/* ── Peppol AS4 ID ── */}
+            {/* When Storecove is connected, this is MANAGED by the legal entity
+                (auto-set to 0188:CVR<CVR>) and must NOT be edited manually. */}
             <div className="space-y-1.5">
               <Label htmlFor="peppolAs4Id" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {isDa ? 'Peppol AS4 ID' : 'Peppol AS4 ID'}
-                <span className="text-muted-foreground ml-1 font-normal">({isDa ? 'frivilligt' : 'optional'})</span>
+                {storecoveStatus?.connected
+                  ? <span className="text-red-500 ml-0.5">*</span>
+                  : <span className="text-muted-foreground ml-1 font-normal">({isDa ? 'frivilligt' : 'optional'})</span>
+                }
               </Label>
               <div className="relative">
                 <Input
@@ -748,8 +760,15 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   onChange={(e) => setPeppolAs4Id(e.target.value)}
                   placeholder={`0188:CVR${companyCvr || 'xxxx'}`}
                   className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-20"
+                  readOnly={!!storecoveStatus?.connected}
+                  disabled={!!storecoveStatus?.connected}
                 />
-                {companyCvr && !peppolAs4Id && (
+                {storecoveStatus?.connected ? (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0d9488] dark:text-[#14b8a6] bg-[#0d9488]/10 dark:bg-[#14b8a6]/10 px-2 py-0.5 rounded">
+                    <ShieldCheck className="h-3 w-3" />
+                    {isDa ? 'Auto fra Storecove' : 'Auto from Storecove'}
+                  </span>
+                ) : companyCvr && !peppolAs4Id ? (
                   <Button
                     type="button"
                     variant="ghost"
@@ -759,17 +778,16 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   >
                     {isDa ? 'Auto-udfyld' : 'Auto-fill'}
                   </Button>
-                )}
+                ) : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                {isDa
-                  ? 'Peppol AS4 Participant ID til Peppol-netværket. Format: 0188:CVRnummer.'
-                  : 'Peppol AS4 Participant ID for the Peppol network. Format: 0188:CVRnumber.'}
-                {companyCvr && !peppolAs4Id && (
-                  <span className="text-[#0d9488] dark:text-[#99f6e4] ml-1">
-                    {isDa ? 'Foreslået' : 'Suggested'}: {computedPeppolId}
-                  </span>
-                )}
+                {storecoveStatus?.connected
+                  ? (isDa
+                      ? 'Håndteres automatisk af din Storecove juridiske enhed. Kan ikke ændres manuelt.'
+                      : 'Managed automatically by your Storecove legal entity. Cannot be edited manually.')
+                  : (isDa
+                      ? 'Peppol AS4 Participant ID til Peppol-netværket. Format: 0188:CVRnummer.'
+                      : 'Peppol AS4 Participant ID for the Peppol network. Format: 0188:CVRnumber.')}
               </p>
             </div>
 

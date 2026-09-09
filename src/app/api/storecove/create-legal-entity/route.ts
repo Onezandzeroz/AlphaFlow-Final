@@ -152,7 +152,13 @@ export const POST = withGuard(
         legalEntityName: legalEntity.name,
       });
 
-      // ── Store the legal entity ID on the Company ──
+      // ── Store the legal entity ID + auto-configure e-invoicing ──
+      // Identifiers are now MANAGED by the Storecove legal entity — tenants
+      // never need to manually set EndpointID or Peppol AS4 ID. We auto-set
+      // them here so the settings page can display them as read-only.
+      // Delivery mode is also set to 'automatic' so the tenant immediately
+      // sees the full sending options (channel, GLN, auto-send) instead of
+      // having to manually pick "manual vs automatic" first.
       await db.company.update({
         where: { id: ctx.activeCompanyId! },
         data: {
@@ -160,9 +166,15 @@ export const POST = withGuard(
           storecoveLegalEntityId: legalEntity.id,
           storecoveConnectedAt: new Date(),
           storecoveLastTestedAt: new Date(),
-          // Also auto-enable e-invoicing now that the company can send
+          // Auto-enable e-invoicing now that the company can send
           einvoiceEnabled: true,
+          // Identifiers — auto-managed from the legal entity (read-only in UI)
           einvoiceEndpointId: `0184:${cvr}`,
+          einvoicePeppolAs4Id: `0188:CVR${cvr}`,
+          // Delivery mode — default to 'automatic' so the tenant sees the
+          // full settings section immediately (channel, GLN, auto-send).
+          // They can switch to 'manual' if they prefer manual XML upload.
+          einvoiceDeliveryMode: 'automatic',
         },
       });
 
