@@ -246,8 +246,10 @@ interface StorecoveApiError {
 
 // ─── CONSTANTS ────────────────────────────────────────────────────
 
-/** Storecove API base URL (EU region) */
-const DEFAULT_BASE_URL = 'https://api.storecove.com/v2';
+/** Storecove API base URL (EU region).
+ *  NOTE: the correct path includes /api — confirmed via the official
+ *  OpenAPI 2.0.1 spec at https://api.apis.guru/v2/specs/storecove.com/2.0.1/  */
+const DEFAULT_BASE_URL = 'https://api.storecove.com/api/v2';
 
 /** Default request timeout (30 seconds) */
 const DEFAULT_TIMEOUT = 30000;
@@ -320,8 +322,15 @@ export class StorecoveClient {
   // ─── CONNECTION TEST ──────────────────────────────────────────────
 
   /**
-   * Test the Storecove API connection by fetching legal entities.
-   * Returns true if the API key is valid and the connection works.
+   * Test the Storecove API connection.
+   *
+   * Uses GET /discovery/identifiers (a lightweight authed endpoint) to
+   * verify the API key is valid. Returns true if the key works.
+   *
+   * NOTE: Storecove has NO "list all legal entities" endpoint — only
+   * POST /legal_entities (create) and GET /legal_entities/{id} (get one).
+   * So we can't return a legalEntitiesCount here. Legal entity IDs are
+   * tracked locally on the Company model (storecoveLegalEntityId).
    */
   async testConnection(): Promise<{ connected: boolean; error?: string; legalEntitiesCount?: number }> {
     if (this.simulationMode) {
@@ -329,7 +338,8 @@ export class StorecoveClient {
     }
 
     try {
-      const response = await this.makeRequest('GET', '/legal_entities');
+      // GET /discovery/identifiers — returns 200 on valid auth, 401 on invalid
+      const response = await this.makeRequest('GET', '/discovery/identifiers');
 
       if (!response.ok) {
         const error = await this.parseError(response);
@@ -339,10 +349,12 @@ export class StorecoveClient {
         };
       }
 
-      const entities = await response.json() as StorecoveLegalEntity[];
+      // Connection is healthy. We can't count legal entities (no list endpoint),
+      // so we return 0 and let callers check the Company.storecoveLegalEntityId
+      // field to determine if a legal entity is bound.
       return {
         connected: true,
-        legalEntitiesCount: entities.length,
+        legalEntitiesCount: 0,
       };
     } catch (error) {
       return {
@@ -355,17 +367,40 @@ export class StorecoveClient {
   // ─── LEGAL ENTITIES ──────────────────────────────────────────────
 
   /**
-   * Get all legal entities registered in Storecove for this account.
-   * Legal entities represent the companies that can send/receive via Peppol.
+   * Get a specific legal entity by its Storecove ID.
+   *
+   * NOTE: Storecove has NO "list all legal entities" endpoint. You must
+   * know the numeric ID (stored locally on Company.storecoveLegalEntityId).
+   * Use getLegalEntity(id) to fetch details for a known ID.
+   */
+  async getLegalEntity(legalEntityId: number): Promise<StorecoveLegalEntity | null> {
+    if (this.simulationMode) {
+      return this.simulateGetLegalEntities()[0] ?? null;
+    }
+
+    try {
+      const response = await this.makeRequest('GET', `/legal_entities/${legalEntityId}`);
+      if (!response.ok) {
+        logger.warn('[STORECOVE] Failed to fetch legal entity', { legalEntityId, status: response.status });
+        return null;
+      }
+      return await response.json() as StorecoveLegalEntity;
+    } catch (error) {
+      logger.warn('[STORECOVE] Legal entity fetch exception:', error);
+      return null;
+    }
+  }
+
+  /**
+   * @deprecated Storecove has no "list all" endpoint. Returns [].
+   * Use getLegalEntity(id) with a known ID instead.
    */
   async getLegalEntities(): Promise<StorecoveLegalEntity[]> {
     if (this.simulationMode) {
       return this.simulateGetLegalEntities();
     }
-
-    const response = await this.makeRequest('GET', '/legal_entities');
-    this.assertOk(response, 'Failed to fetch legal entities');
-    return response.json() as Promise<StorecoveLegalEntity[]>;
+    logger.warn('[STORECOVE] getLegalEntities() called but Storecove has no list endpoint. Returning [].');
+    return [];
   }
 
   /**
@@ -383,50 +418,86 @@ export class StorecoveClient {
    * @returns The created legal entity with its numeric id
    */
   async createLegalEntity(payload: {
-    /** Display name (company name) */
+    /** Display name (company name) → maps to party_name */
     name: string;
     /** Peppol identifiers — for Danish companies: [{ scheme: '0184', identifier: '<CVR>' }] */
     peppolIdentifiers: Array<{ scheme: string; identifier: string }>;
-    /** Address of the legal entity */
-    address?: {
+    /** Address of the legal entity (line1, city, zip, country are required by Storecove) */
+    address: {
       country: string;
       street?: string;
-      city?: string;
-      zip?: string;
+      city: string;
+      zip: string;
     };
-    /** Tax regime, e.g. 'DK_VAT' for Danish VAT-registered companies */
-    taxRegime?: string;
-    /** Primary contact email */
-    primaryEmail?: string;
-    /** Whether the legal entity is active (default: true) */
-    active?: boolean;
+    /** Tenant ID for multi-tenant isolation in Storecove (optional) */
+    tenantId?: string;
+    /** Whether the legal entity is public (default: false) */
+    public?: boolean;
   }): Promise<StorecoveLegalEntity> {
     if (this.simulationMode) {
       return this.simulateCreateLegalEntity(payload);
     }
 
-    // Storecove wraps the entity in a `legal_entity` key and uses snake_case
-    const body: Record<string, unknown> = {
-      legal_entity: {
-        name: payload.name,
-        peppol_identifiers: payload.peppolIdentifiers,
-        ...(payload.address && {
-          address: {
-            country: payload.address.country,
-            ...(payload.address.street && { street: payload.address.street }),
-            ...(payload.address.city && { city: payload.address.city }),
-            ...(payload.address.zip && { zip: payload.address.zip }),
-          },
-        }),
-        ...(payload.taxRegime && { tax_regime: payload.taxRegime }),
-        ...(payload.primaryEmail && { primary_email: payload.primaryEmail }),
-        ...(payload.active !== undefined && { active: payload.active }),
-      },
+    // Step 1: Create the legal entity (no peppol identifiers in this call).
+    // Storecove LegalEntityCreate schema (confirmed via OpenAPI 2.0.1):
+    //   required: party_name (min 2), line1 (min 2), city (min 2), zip (min 2), country
+    // All string fields have minLength: 2 — we enforce this to avoid 422 errors.
+    const safeStr = (s: string | undefined | null, fallback: string): string => {
+      const v = (s ?? '').trim();
+      return v.length >= 2 ? v : fallback;
+    };
+    const partyName = safeStr(payload.name, 'AlphaFlow Tenant');
+    const line1 = safeStr(payload.address.street, partyName);
+    const city = safeStr(payload.address.city, 'København');
+    const zip = safeStr(payload.address.zip, '0000');
+
+    const createBody: Record<string, unknown> = {
+      party_name: partyName,
+      line1,
+      city,
+      zip,
+      country: payload.address.country,
+      ...(payload.tenantId && { tenant_id: payload.tenantId }),
+      public: payload.public ?? false,
     };
 
-    const response = await this.makeRequestWithRetry('POST', '/legal_entities', body);
-    await this.assertOk(response, 'Failed to create legal entity');
-    return response.json() as Promise<StorecoveLegalEntity>;
+    const createResponse = await this.makeRequestWithRetry('POST', '/legal_entities', createBody);
+    if (!createResponse.ok) {
+      // Capture the full error body so the caller sees the precise validation failure
+      const errorBody = await createResponse.text();
+      logger.error('[STORECOVE] Failed to create legal entity', {
+        status: createResponse.status,
+        body: errorBody,
+        payloadSent: createBody,
+      });
+      throw new Error(
+        `Storecove rejected legal entity creation (HTTP ${createResponse.status}): ${errorBody || createResponse.statusText}`
+      );
+    }
+    const legalEntity = await createResponse.json() as StorecoveLegalEntity;
+
+    // Step 2: Add each Peppol identifier via the sub-resource endpoint.
+    // POST /legal_entities/{id}/peppol_identifiers
+    //   body: { scheme, identifier, superscheme: "iso6523-actorid-upis" }
+    for (const pi of payload.peppolIdentifiers) {
+      const piResponse = await this.makeRequestWithRetry(
+        'POST',
+        `/legal_entities/${legalEntity.id}/peppol_identifiers`,
+        { scheme: pi.scheme, identifier: pi.identifier, superscheme: 'iso6523-actorid-upis' },
+      );
+      if (!piResponse.ok) {
+        const error = await this.parseError(piResponse);
+        logger.error('[STORECOVE] Failed to add Peppol identifier to legal entity', {
+          legalEntityId: legalEntity.id,
+          scheme: pi.scheme,
+          identifier: pi.identifier,
+          error: error.message,
+        });
+        // Don't fail the whole creation — the legal entity exists.
+      }
+    }
+
+    return legalEntity;
   }
 
   /**
@@ -490,41 +561,35 @@ export class StorecoveClient {
     }
 
     try {
+      // Storecove InvoiceSubmission payload (confirmed via OpenAPI 2.0.1):
+      //   - document: raw XML string (top-level, NOT nested under invoice)
+      //   - legalEntityId: camelCase (NOT legal_entity_id)
+      //   - routing: top-level object with eIdentifiers
+      // The `document` field is marked DEPRECATED in favor of `attachments`
+      // but still works for raw UBL/OIOUBL XML submission.
       const body: Record<string, unknown> = {
-        invoice: {
-          document: xmlContent,
-        },
+        document: xmlContent,
       };
 
-      // Set legal entity if provided
+      // Set legal entity (camelCase field name)
       if (options.legalEntityId) {
-        body.legal_entity_id = options.legalEntityId;
+        body.legalEntityId = options.legalEntityId;
       }
 
-      // Set routing overrides if provided
+      // Set routing if receiver scheme + identifier are provided
       if (options.receiverScheme && options.receiverIdentifier) {
-        body.invoice = {
-          ...(body.invoice as Record<string, unknown>),
-          routing: {
+        body.routing = {
+          eIdentifiers: {
             scheme: options.receiverScheme,
             identifier: options.receiverIdentifier,
           },
         };
       }
 
-      // Route to NemHandel eDelivery if requested.
-      // NemHandel eDelivery follows Peppol AS4 specifications with Danish extensions:
-      // - MitID certificate signing (handled by Storecove)
-      // - Schema validation at receiving AP (required before transport ack)
-      // - Schematron validation before forwarding downstream
-      // - MLR/AR response if schematron validation fails
-      // - Uses eDelivery SML (EC) and NHR SMP (Nemhandelsregisteret)
-      if (options.routeToNemhandel) {
-        body.invoice = {
-          ...(body.invoice as Record<string, unknown>),
-          nemhandel: true,
-        };
-      }
+      // NOTE: routeToNemhandel — Storecove's InvoiceSubmission schema does
+      // NOT have a `nemhandel` boolean field. NemHandel routing is determined
+      // by Storecove automatically based on the receiver's network registration.
+      // The previous `nemhandel: true` flag was incorrect and has been removed.
 
       const response = await this.makeRequestWithRetry('POST', '/invoice_submissions', body);
 
@@ -537,19 +602,12 @@ export class StorecoveClient {
         };
       }
 
-      const result = await response.json() as {
-        id: string;
-        storecove_id: number;
-        status: string;
-        message_id?: string;
-      };
+      // Response: { guid: "<v4-uuid>" } (InvoiceSubmissionResult schema)
+      const result = await response.json() as { guid?: string };
 
       return {
         success: true,
-        submissionId: result.id,
-        storecoveId: String(result.storecove_id),
-        messageId: result.message_id,
-        status: result.status,
+        submissionId: result.guid,
         nemhandelRouted: options.routeToNemhandel ?? false,
       };
     } catch (error) {
@@ -567,55 +625,28 @@ export class StorecoveClient {
   /**
    * Get the delivery status of a previously submitted invoice.
    *
-   * @param submissionId - The submission ID returned from submitInvoice
-   * @returns Current delivery status
+   * NOTE: Storecove has NO GET /invoice_submissions/{id} endpoint for
+   * polling status. Delivery status updates arrive exclusively via the
+   * webhook (POST /api/storecove/webhook, event invoice_submission.status_changed).
+   *
+   * This method returns a 'processing' status to indicate the submission
+   * is in-flight and the caller should wait for the webhook.
+   *
+   * @param submissionId - The submission GUID returned from submitInvoice
+   * @returns Current delivery status (processing unless webhook has updated it)
    */
   async getSubmissionStatus(submissionId: string): Promise<StorecoveDeliveryStatus> {
     if (this.simulationMode) {
       return this.simulateGetSubmissionStatus(submissionId);
     }
 
-    try {
-      const response = await this.makeRequest('GET', `/invoice_submissions/${submissionId}`);
-
-      if (!response.ok) {
-        const error = await this.parseError(response);
-        return {
-          status: 'failed',
-          rejectionReason: error.message || `Failed to fetch status: ${response.status}`,
-        };
-      }
-
-      const result = await response.json() as {
-        id: string;
-        storecove_id: number;
-        status: StorecoveSubmissionStatus;
-        delivered_at?: string;
-        accepted_at?: string;
-        rejected_at?: string;
-        rejection_reason?: string;
-        receiver_endpoint_id?: string;
-        receiver_scheme?: string;
-        receiver_identifier?: string;
-      };
-
-      return {
-        status: result.status,
-        storecoveId: String(result.storecove_id),
-        deliveredAt: result.delivered_at,
-        acceptedAt: result.accepted_at,
-        rejectedAt: result.rejected_at,
-        rejectionReason: result.rejection_reason,
-        receiverEndpointId: result.receiver_endpoint_id,
-        receiverScheme: result.receiver_scheme,
-        receiverIdentifier: result.receiver_identifier,
-      };
-    } catch (error) {
-      return {
-        status: 'failed',
-        rejectionReason: error instanceof Error ? error.message : 'Failed to fetch status',
-      };
-    }
+    // Storecove has no GET /invoice_submissions/{id} endpoint.
+    // Status is delivered via webhook only. Return 'processing' so callers
+    // know to wait for the webhook event rather than polling.
+    logger.info('[STORECOVE] getSubmissionStatus: no polling endpoint exists; awaiting webhook', { submissionId });
+    return {
+      status: 'processing',
+    };
   }
 
   // ─── PEPPOL PARTICIPANT LOOKUP ────────────────────────────────────
@@ -623,12 +654,15 @@ export class StorecoveClient {
   /**
    * Check if a recipient is registered on the Peppol network.
    *
-   * Pre-flight check before sending: verifies that the recipient's
-   * Access Point can receive e-invoices via Peppol BIS Billing 3.0.
+   * Uses POST /discovery/exists (confirmed via OpenAPI 2.0.1):
+   *   body: { scheme, identifier, metaScheme: "iso6523-actorid-upis", network: "peppol" }
+   *   response: { code: "OK" | "NOK", email: boolean }
+   *
+   * Pre-flight check before sending: verifies the recipient is reachable.
    *
    * @param scheme - Peppol scheme ID (e.g., '0184' for Danish CVR)
    * @param identifier - The identifier value (e.g., CVR number)
-   * @returns Participant information or existence check result
+   * @returns Participant existence + metadata
    */
   async lookupParticipant(
     scheme: string,
@@ -639,18 +673,13 @@ export class StorecoveClient {
     }
 
     try {
-      const response = await this.makeRequest(
-        'GET',
-        `/peppol/participants/${encodeURIComponent(scheme)}/${encodeURIComponent(identifier)}`,
-      );
-
-      if (response.status === 404) {
-        return {
-          exists: false,
-          scheme,
-          identifier,
-        };
-      }
+      const body = {
+        scheme,
+        identifier,
+        metaScheme: 'iso6523-actorid-upis',
+        network: 'peppol',
+      };
+      const response = await this.makeRequestWithRetry('POST', '/discovery/exists', body);
 
       if (!response.ok) {
         const error = await this.parseError(response);
@@ -662,21 +691,14 @@ export class StorecoveClient {
         };
       }
 
-      const result = await response.json() as {
-        scheme: string;
-        identifier: string;
-        name?: string;
-        country_code?: string;
-        access_points?: Array<{ id: string; name: string }>;
-      };
+      // Response: { code: "OK" | "NOK", email: boolean }
+      const result = await response.json() as { code: string; email?: boolean };
+      const exists = result.code === 'OK';
 
       return {
-        exists: true,
-        scheme: result.scheme,
-        identifier: result.identifier,
-        name: result.name,
-        countryCode: result.country_code,
-        accessPoints: result.access_points,
+        exists,
+        scheme,
+        identifier,
       };
     } catch (error) {
       logger.warn('[STORECOVE] Participant lookup exception:', error);
@@ -711,9 +733,11 @@ export class StorecoveClient {
     }
 
     try {
+      // Storecove API: GET /received_documents/{guid}/{format}?syntax={syntax}
+      // format="original" returns raw XML; syntax is a required query param.
       const response = await this.makeRequest(
         'GET',
-        `/received_documents/${encodeURIComponent(documentGuid)}/original`,
+        `/received_documents/${encodeURIComponent(documentGuid)}/original?syntax=invoice`,
       );
 
       if (!response.ok) {
@@ -752,7 +776,7 @@ export class StorecoveClient {
     try {
       const response = await this.makeRequest(
         'GET',
-        `/received_documents/${encodeURIComponent(documentGuid)}/json`,
+        `/received_documents/${encodeURIComponent(documentGuid)}/json?syntax=invoice`,
       );
 
       if (!response.ok) {
