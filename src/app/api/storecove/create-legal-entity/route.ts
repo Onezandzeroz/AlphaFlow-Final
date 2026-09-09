@@ -122,17 +122,27 @@ export const POST = withGuard(
       }
 
       // ── Create the legal entity in Storecove ──
-      // Peppol identifier scheme 0184 = Danish CVR register
+      // Peppol identifier scheme 0184 = Danish CVR register.
+      // Storecove requires: party_name, line1, city, zip, country (all required).
+      // The Company model stores address as a single string — we use it as line1
+      // and try to extract a Danish postal code (4 digits) + city from it.
+      const addressStr = company.address || company.name;
+      // Danish postal codes are exactly 4 digits, often followed by the city name
+      const postalMatch = addressStr.match(/(\d{4})\s+([A-Za-zÆØÅæøå\s]+)/);
+      const line1 = addressStr.split(',').map(s => s.trim())[0] || company.name;
+      const city = postalMatch ? postalMatch[2].trim() : (addressStr.split(',').map(s => s.trim())[1] || 'Danmark');
+      const zip = postalMatch ? postalMatch[1] : '0000';
+
       const legalEntity = await storecoveClient.createLegalEntity({
         name: company.name,
         peppolIdentifiers: [{ scheme: '0184', identifier: cvr }],
         address: {
           country: 'DK',
-          ...(company.address && { street: company.address }),
+          street: line1,
+          city,
+          zip,
         },
-        taxRegime: 'DK_VAT',
-        primaryEmail: company.email || undefined,
-        active: true,
+        tenantId: company.id, // multi-tenant isolation in Storecove
       });
 
       logger.info('[STORECOVE_CREATE_LE] Legal entity created', {
