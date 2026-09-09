@@ -23,6 +23,8 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
         bankIban: true, bankStreet: true, bankCity: true, bankCountry: true,
         companyType: true, invoiceTerms: true, invoiceNotesTemplate: true,
         nextInvoiceSequence: true, currentYear: true, isDemo: true, updatedAt: true,
+        // CVR verification timestamp — gates Storecove legal entity creation
+        cvrVerifiedAt: true,
         // Credit note numbering (separate series from invoices)
         creditNotePrefix: true, nextCreditNoteSequence: true,
         // E-invoice / eDelivery fields for onboarding status detection
@@ -74,6 +76,8 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       nextCreditNoteSequence: company.nextCreditNoteSequence,
       isDemo: company.isDemo,
       updatedAt: company.updatedAt,
+      // CVR verification — null means CVR not yet verified against the register
+      cvrVerifiedAt: company.cvrVerifiedAt,
       // E-invoice / eDelivery fields for onboarding status detection
       einvoiceEnabled: company.einvoiceEnabled,
       einvoiceRegistrationNo: company.einvoiceRegistrationNo,

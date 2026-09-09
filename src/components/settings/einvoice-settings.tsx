@@ -33,8 +33,8 @@ import {
   Link2,
   Unlink,
   Search,
-  Key,
   Activity,
+  PlusCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -128,17 +128,17 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     status: null,
   });
 
-  // Company CVR (for auto-filling endpointId)
+  // Company CVR + verification status (gates legal entity creation)
   const [companyCvr, setCompanyCvr] = useState('');
+  const [cvrVerified, setCvrVerified] = useState(false);
 
   // Storecove connection state
-  const [storecoveApiKey, setStorecoveApiKey] = useState('');
-  const [storecoveLegalEntityId, setStorecoveLegalEntityId] = useState('');
+  // NOTE: no API key state — the platform key lives only in .env.
+  // Tenants create their own legal entity via /api/storecove/create-legal-entity.
   const [storecoveStatus, setStorecoveStatus] = useState<StorecoveConnectionStatus | null>(null);
-  const [isConnectingStorecove, setIsConnectingStorecove] = useState(false);
+  const [isCreatingLegalEntity, setIsCreatingLegalEntity] = useState(false);
   const [isDisconnectingStorecove, setIsDisconnectingStorecove] = useState(false);
   const [isTestingStorecove, setIsTestingStorecove] = useState(false);
-  const [showApiKey, setShowApiKey] = useState(false);
 
   // Peppol participant lookup
   const [participantLookupId, setParticipantLookupId] = useState('');
@@ -171,7 +171,8 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     }
   }, []);
 
-  // Fetch company CVR for endpointId auto-fill
+  // Fetch company CVR + verification status for endpointId auto-fill
+  // and for gating the Storecove legal-entity creation button
   const fetchCompanyCvr = useCallback(async () => {
     try {
       const res = await fetch('/api/company');
@@ -181,6 +182,9 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
           setCompanyCvr(data.companyInfo.cvrNumber);
           setEndpointId(prev => prev || `0184:${data.companyInfo.cvrNumber}`);
         }
+        // cvrVerifiedAt != null means the CVR has been verified against
+        // the Erhvervsstyrelsen CVR register (KYC gate for Storecove)
+        setCvrVerified(!!data.companyInfo?.cvrVerifiedAt);
       }
     } catch {
       // Ignore — endpoint ID stays empty
@@ -206,46 +210,46 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     fetchStorecoveStatus();
   }, [fetchSettings, fetchCompanyCvr, fetchStorecoveStatus]);
 
-  // ── Connect Storecove ──
-  const handleConnectStorecove = useCallback(async () => {
-    if (!storecoveApiKey.trim()) {
-      toast.error(isDa ? 'Indtast en API-nøgle' : 'Enter an API key');
+  // ── Create legal entity in Storecove (tenant-initiated) ──
+  // Uses the PLATFORM API key from .env — the tenant never sees it.
+  // Gated on CVR verification (server-side check too, this is just UX).
+  const handleCreateLegalEntity = useCallback(async () => {
+    if (!cvrVerified) {
+      toast.error(isDa
+        ? 'Bekræft dit CVR-nummer i Virksomhedsindstillinger først.'
+        : 'Verify your CVR number in Company settings first.');
       return;
     }
-    setIsConnectingStorecove(true);
+    setIsCreatingLegalEntity(true);
     try {
-      const res = await fetch('/api/storecove/connect', {
+      const res = await fetch('/api/storecove/create-legal-entity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey: storecoveApiKey,
-          legalEntityId: storecoveLegalEntityId ? parseInt(storecoveLegalEntityId) : undefined,
-        }),
       });
 
       if (!res.ok) {
-        const isAccess = await handleMutationError(res, isDa ? 'Forbind Storecove' : 'Connect Storecove');
-        if (isAccess) { setIsConnectingStorecove(false); return; }
-        return; // handleMutationError already showed error toast
+        const isAccess = await handleMutationError(res, isDa ? 'Opret juridisk enhed' : 'Create legal entity');
+        if (isAccess) { setIsCreatingLegalEntity(false); return; }
+        return;
       }
 
       const data = await res.json();
       toast.success(
-        isDa ? 'Storecove forbundet!' : 'Storecove connected!',
+        isDa ? 'Juridisk enhed oprettet i Storecove!' : 'Legal entity created in Storecove!',
         {
           description: isDa
-            ? `${data.legalEntitiesCount || 0} juridiske enheder fundet`
-            : `${data.legalEntitiesCount || 0} legal entities found`,
+            ? `ID: ${data.legalEntityId} · Peppol: ${data.peppolIdentifier}`
+            : `ID: ${data.legalEntityId} · Peppol: ${data.peppolIdentifier}`,
         },
       );
-      setStorecoveApiKey('');
       fetchStorecoveStatus();
+      fetchSettings(); // refresh einvoiceEnabled / endpointId
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : (isDa ? 'Forbindelse fejlede' : 'Connection failed'));
+      toast.error(err instanceof Error ? err.message : (isDa ? 'Oprettelse fejlede' : 'Creation failed'));
     } finally {
-      setIsConnectingStorecove(false);
+      setIsCreatingLegalEntity(false);
     }
-  }, [storecoveApiKey, storecoveLegalEntityId, isDa, handleMutationError, fetchStorecoveStatus]);
+  }, [cvrVerified, isDa, handleMutationError, fetchStorecoveStatus, fetchSettings]);
 
   // ── Disconnect Storecove ──
   const handleDisconnectStorecove = useCallback(async () => {
@@ -472,7 +476,6 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     );
   }
 
-  const isAppOwner = user.hasAppOwner === true;
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -1031,11 +1034,12 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                       </Badge>
                     )}
                   </div>
-                  {storecoveStatus?.apiKeyId && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {isDa ? 'API-nøgle' : 'API Key'}: <span className="font-mono">••••{storecoveStatus.apiKeyId}</span>
-                    </p>
-                  )}
+            {/* ── Connection status — show API key mask only if set (backwards compat) ── */}
+            {storecoveStatus?.apiKeyId && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {isDa ? 'Platform API-nøgle' : 'Platform API Key'}: <span className="font-mono">••••{storecoveStatus.apiKeyId}</span>
+              </p>
+            )}
                   {storecoveStatus?.legalEntityId && (
                     <p className="text-xs text-muted-foreground">
                       {isDa ? 'Juridisk enhed ID' : 'Legal Entity ID'}: <span className="font-mono">{storecoveStatus.legalEntityId}</span>
@@ -1050,69 +1054,35 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
               </div>
             </div>
 
-            {/* ── Connect / Disconnect ── */}
+            {/* ── Create Legal Entity / Disconnect ──
+                The platform Storecove API key lives only in .env.
+                Tenants create their OWN legal entity here (KYC = CVR verified).
+                No API key is ever entered in the UI. */}
             {!storecoveStatus?.connected ? (
               <div className="space-y-3">
-                {isAppOwner ? (
+                {cvrVerified ? (
                   <>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="storecoveApiKey" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        <Key className="h-3.5 w-3.5 inline mr-1" />
-                        {isDa ? 'Storecove API-nøgle' : 'Storecove API Key'}
-                        <span className="text-red-500 ml-0.5">*</span>
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          id="storecoveApiKey"
-                          type={showApiKey ? 'text' : 'password'}
-                          value={storecoveApiKey}
-                          onChange={(e) => setStorecoveApiKey(e.target.value)}
-                          placeholder={isDa ? 'Indsæt din Storecove API-nøgle...' : 'Paste your Storecove API key...'}
-                          className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-20"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 h-8 text-[10px] text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                        >
-                          {showApiKey ? (isDa ? 'Skjul' : 'Hide') : (isDa ? 'Vis' : 'Show')}
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="storecoveLegalEntityId" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {isDa ? 'Juridisk enhed ID' : 'Legal Entity ID'}
-                        <span className="text-muted-foreground ml-1 font-normal">({isDa ? 'frivilligt' : 'optional'})</span>
-                      </Label>
-                      <Input
-                        id="storecoveLegalEntityId"
-                        type="number"
-                        value={storecoveLegalEntityId}
-                        onChange={(e) => setStorecoveLegalEntityId(e.target.value)}
-                        placeholder={isDa ? 'f.eks. 12345' : 'e.g. 12345'}
-                        className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10"
-                      />
-                      <p className="text-xs text-muted-foreground">
+                    <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
+                      <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>
                         {isDa
-                          ? 'Kan findes i dit Storecove-dashboard under Legal Entities.'
-                          : 'Can be found in your Storecove dashboard under Legal Entities.'}
-                      </p>
+                          ? `CVR ${companyCvr} er verificeret. Du kan oprette en juridisk enhed i Storecove — AlphaFlow bruger platformens API-nøgle automatisk.`
+                          : `CVR ${companyCvr} is verified. You can create a legal entity in Storecove — AlphaFlow uses the platform API key automatically.`}
+                      </span>
                     </div>
                     <Button
-                      onClick={handleConnectStorecove}
-                      disabled={isConnectingStorecove || !storecoveApiKey.trim()}
+                      onClick={handleCreateLegalEntity}
+                      disabled={isCreatingLegalEntity}
                       className="w-full bg-violet-600 hover:bg-violet-700 text-white gap-2 font-medium transition-all"
                     >
-                      {isConnectingStorecove ? (
+                      {isCreatingLegalEntity ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <Link2 className="h-4 w-4" />
+                        <PlusCircle className="h-4 w-4" />
                       )}
-                      {isConnectingStorecove
-                        ? (isDa ? 'Forbinder...' : 'Connecting...')
-                        : (isDa ? 'Forbind Storecove' : 'Connect Storecove')
+                      {isCreatingLegalEntity
+                        ? (isDa ? 'Opretter...' : 'Creating...')
+                        : (isDa ? 'Opret juridisk enhed i Storecove' : 'Create legal entity in Storecove')
                       }
                     </Button>
                   </>
@@ -1121,8 +1091,8 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                     <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>
                       {isDa
-                        ? 'Kun app-ejeren kan konfigurere Storecove API-nøglen. Kontakt din administrator for at forbinde.'
-                        : 'Only the app owner can configure the Storecove API key. Contact your administrator to connect.'}
+                        ? 'Du skal verificere dit CVR-nummer i Virksomhedsindstillinger før du kan oprette en juridisk enhed i Storecove. Storecove kræver at KYC håndteres af AlphaFlow som kontrahent.'
+                        : 'You must verify your CVR number in Company settings before creating a legal entity in Storecove. Storecove requires KYC to be handled by AlphaFlow as the contractor.'}
                     </span>
                   </div>
                 )}
@@ -1142,21 +1112,19 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   )}
                   {isDa ? 'Test forbindelse' : 'Test connection'}
                 </Button>
-                {isAppOwner && (
-                  <Button
-                    onClick={handleDisconnectStorecove}
-                    disabled={isDisconnectingStorecove}
-                    variant="outline"
-                    className="gap-2 font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 border-gray-200 dark:border-white/10"
-                  >
-                    {isDisconnectingStorecove ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Unlink className="h-4 w-4" />
-                    )}
-                    {isDa ? 'Afbryd' : 'Disconnect'}
-                  </Button>
-                )}
+                <Button
+                  onClick={handleDisconnectStorecove}
+                  disabled={isDisconnectingStorecove}
+                  variant="outline"
+                  className="gap-2 font-medium text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 border-gray-200 dark:border-white/10"
+                >
+                  {isDisconnectingStorecove ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Unlink className="h-4 w-4" />
+                  )}
+                  {isDa ? 'Afbryd' : 'Disconnect'}
+                </Button>
               </div>
             )}
 

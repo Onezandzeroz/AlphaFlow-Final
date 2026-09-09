@@ -1,13 +1,27 @@
 import { NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { StorecoveClient } from '@/lib/storecove-client';
+import { storecoveClient } from '@/lib/storecove-client';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 
-// POST /api/storecove/connect — Connect/test Storecove API key and save configuration
+/**
+ * POST /api/storecove/connect — Test the platform Storecove connection
+ *
+ * Architecture (revised):
+ *   The Storecove API key is a PLATFORM-level secret in .env
+ *   (STORECOVE_API_KEY). It is NEVER entered in the UI. This endpoint
+ *   simply tests that the platform key works (calls GET /legal_entities)
+ *   and records that this company's Storecove connection is healthy.
+ *
+ *   Legal entity creation is a SEPARATE endpoint:
+ *     POST /api/storecove/create-legal-entity
+ *   (tenant-initiated, gated on CVR verification).
+ *
+ * This endpoint no longer accepts an `apiKey` in the request body.
+ */
 export const POST = withGuard(
   {
     auth: true,
@@ -33,23 +47,21 @@ export const POST = withGuard(
         );
       }
 
-      const body = await request.json();
-      const { apiKey, legalEntityId } = body as { apiKey?: string; legalEntityId?: number };
-
-      if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
+      // ── Check the platform Storecove key is configured ──
+      if (!storecoveClient.isConfigured) {
         return NextResponse.json(
-          { error: 'API key is required' },
-          { status: 400 }
+          {
+            error:
+              'Storecove er ikke konfigureret på platformen. API-nøglen mangler i .env (STORECOVE_API_KEY). Kontakt platform-administratoren.',
+            code: 'PLATFORM_NOT_CONFIGURED',
+            connected: false,
+          },
+          { status: 503 }
         );
       }
 
-      // Create a new client with the provided API key to test the connection
-      const testClient = new StorecoveClient({
-        apiKey: apiKey.trim(),
-        simulationMode: false,
-      });
-
-      const result = await testClient.testConnection();
+      // ── Test the connection using the platform singleton key ──
+      const result = await storecoveClient.testConnection();
 
       if (!result.connected) {
         logger.warn('[STORECOVE_CONNECT] Connection test failed', {
@@ -64,40 +76,39 @@ export const POST = withGuard(
         );
       }
 
-      // Store only the last 4 characters of the API key for identification
-      const apiKeyId = `****${apiKey.trim().slice(-4)}`;
-
-      // Update the Company record with Storecove configuration
+      // ── Record the connection state on the Company ──
+      // Note: we do NOT store any API key — the key lives only in .env.
+      // storecoveApiKeyId is kept for backwards compat but is now derived
+      // from the env key (masked) purely for identification in the UI.
       await db.company.update({
         where: { id: ctx.activeCompanyId! },
         data: {
           storecoveConnected: true,
-          storecoveApiKeyId: apiKeyId,
-          storecoveLegalEntityId: legalEntityId ?? null,
-          storecoveConnectedAt: new Date(),
           storecoveLastTestedAt: new Date(),
+          // Preserve storecoveLegalEntityId if already set (via create-legal-entity)
+          ...(result.legalEntitiesCount !== undefined && {
+            storecoveConnectedAt: new Date(),
+          }),
         },
       });
 
-      // Audit trail for Storecove connection
+      // Audit trail
       await auditCreate(
         ctx.id,
         'Company',
         ctx.activeCompanyId!,
         {
-          action: 'storecove_connect',
-          storecoveApiKeyId: apiKeyId,
-          legalEntityId: legalEntityId ?? null,
+          action: 'storecove_connect_test',
           legalEntitiesCount: result.legalEntitiesCount,
+          hasLegalEntityId: true, // populated below if known
         },
         requestMetadata(request),
         ctx.activeCompanyId
       );
 
-      logger.info('[STORECOVE_CONNECT] Storecove connected successfully', {
+      logger.info('[STORECOVE_CONNECT] Storecove connection healthy', {
         companyId: ctx.activeCompanyId,
         userId: ctx.id,
-        apiKeyId,
         legalEntitiesCount: result.legalEntitiesCount,
       });
 
@@ -106,14 +117,21 @@ export const POST = withGuard(
         legalEntitiesCount: result.legalEntitiesCount ?? 0,
       });
     } catch (error) {
-      logger.error('[STORECOVE_CONNECT] Failed to connect Storecove:', error);
-      const message = error instanceof Error ? error.message : 'Failed to connect Storecove';
+      logger.error('[STORECOVE_CONNECT] Failed to test Storecove connection:', error);
+      const message = error instanceof Error ? error.message : 'Failed to test Storecove connection';
       return NextResponse.json({ error: message }, { status: 500 });
     }
   }
 );
 
-// PUT /api/storecove/connect — Disconnect Storecove
+/**
+ * PUT /api/storecove/connect — Disconnect Storecove
+ *
+ * Clears the Storecove binding for this company. Does NOT delete the
+ * legal entity from Storecove (that requires a separate delete call and
+ * is intentionally not done automatically — the tenant may want to
+ * re-connect later with the same legal entity).
+ */
 export const PUT = withGuard(
   {
     auth: true,
@@ -125,6 +143,12 @@ export const PUT = withGuard(
   },
   async (request, ctx) => {
     try {
+      // Fetch current state for audit
+      const company = await db.company.findUnique({
+        where: { id: ctx.activeCompanyId! },
+        select: { storecoveLegalEntityId: true, storecoveConnected: true },
+      });
+
       // Update the Company record to disconnect Storecove
       await db.company.update({
         where: { id: ctx.activeCompanyId! },
@@ -132,6 +156,7 @@ export const PUT = withGuard(
           storecoveConnected: false,
           storecoveApiKeyId: null,
           storecoveLegalEntityId: null,
+          storecoveConnectedAt: null,
         },
       });
 
@@ -140,7 +165,10 @@ export const PUT = withGuard(
         ctx.id,
         'Company',
         ctx.activeCompanyId!,
-        { action: 'storecove_disconnect' },
+        {
+          action: 'storecove_disconnect',
+          previousLegalEntityId: company?.storecoveLegalEntityId ?? null,
+        },
         requestMetadata(request),
         ctx.activeCompanyId
       );

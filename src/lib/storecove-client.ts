@@ -368,6 +368,87 @@ export class StorecoveClient {
     return response.json() as Promise<StorecoveLegalEntity[]>;
   }
 
+  /**
+   * Create a new legal entity in Storecove.
+   *
+   * Used by tenants to register their own company as a Peppol sender.
+   * The request is authenticated with the platform-level API key
+   * (STORECOVE_API_KEY in .env) — tenants never see or enter an API key.
+   *
+   * KYC responsibility: Storecove shifts KYC to the contractor (AlphaFlow).
+   * AlphaFlow enforces this by requiring a CVR-verified company before
+   * allowing legal entity creation (see /api/storecove/create-legal-entity).
+   *
+   * @param payload - Legal entity details (name, Peppol identifiers, address)
+   * @returns The created legal entity with its numeric id
+   */
+  async createLegalEntity(payload: {
+    /** Display name (company name) */
+    name: string;
+    /** Peppol identifiers — for Danish companies: [{ scheme: '0184', identifier: '<CVR>' }] */
+    peppolIdentifiers: Array<{ scheme: string; identifier: string }>;
+    /** Address of the legal entity */
+    address?: {
+      country: string;
+      street?: string;
+      city?: string;
+      zip?: string;
+    };
+    /** Tax regime, e.g. 'DK_VAT' for Danish VAT-registered companies */
+    taxRegime?: string;
+    /** Primary contact email */
+    primaryEmail?: string;
+    /** Whether the legal entity is active (default: true) */
+    active?: boolean;
+  }): Promise<StorecoveLegalEntity> {
+    if (this.simulationMode) {
+      return this.simulateCreateLegalEntity(payload);
+    }
+
+    // Storecove wraps the entity in a `legal_entity` key and uses snake_case
+    const body: Record<string, unknown> = {
+      legal_entity: {
+        name: payload.name,
+        peppol_identifiers: payload.peppolIdentifiers,
+        ...(payload.address && {
+          address: {
+            country: payload.address.country,
+            ...(payload.address.street && { street: payload.address.street }),
+            ...(payload.address.city && { city: payload.address.city }),
+            ...(payload.address.zip && { zip: payload.address.zip }),
+          },
+        }),
+        ...(payload.taxRegime && { tax_regime: payload.taxRegime }),
+        ...(payload.primaryEmail && { primary_email: payload.primaryEmail }),
+        ...(payload.active !== undefined && { active: payload.active }),
+      },
+    };
+
+    const response = await this.makeRequestWithRetry('POST', '/legal_entities', body);
+    await this.assertOk(response, 'Failed to create legal entity');
+    return response.json() as Promise<StorecoveLegalEntity>;
+  }
+
+  /**
+   * Delete a legal entity in Storecove (used when a tenant disconnects).
+   *
+   * Note: Storecove may soft-delete rather than hard-delete. The legal
+   * entity's Peppol identifiers become unavailable for re-registration
+   * for a grace period.
+   */
+  async deleteLegalEntity(legalEntityId: number): Promise<{ success: boolean }> {
+    if (this.simulationMode) {
+      return this.simulateDeleteLegalEntity(legalEntityId);
+    }
+
+    const response = await this.makeRequestWithRetry(
+      'DELETE',
+      `/legal_entities/${legalEntityId}`,
+    );
+    await this.assertOk(response, 'Failed to delete legal entity');
+    return { success: true };
+  }
+
   // ─── INVOICE SUBMISSION ──────────────────────────────────────────
 
   /**
@@ -911,6 +992,29 @@ export class StorecoveClient {
         updated_at: new Date().toISOString(),
       },
     ];
+  }
+
+  private async simulateCreateLegalEntity(payload: {
+    name: string;
+    peppolIdentifiers: Array<{ scheme: string; identifier: string }>;
+  }): Promise<StorecoveLegalEntity> {
+    await this.simulateLatency(100, 300);
+    const id = Math.floor(Math.random() * 9000) + 1000;
+    return {
+      id,
+      name: payload.name,
+      tax_regime: 'DK_VAT',
+      primary_email: 'demo@alphaflow.dk',
+      peppol_identifiers: payload.peppolIdentifiers,
+      active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  private async simulateDeleteLegalEntity(_legalEntityId: number): Promise<{ success: boolean }> {
+    await this.simulateLatency(50, 150);
+    return { success: true };
   }
 
   private async simulateSubmitInvoice(
