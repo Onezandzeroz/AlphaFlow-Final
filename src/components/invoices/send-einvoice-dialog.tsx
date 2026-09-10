@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/lib/use-translation';
 import {
   Dialog,
@@ -37,6 +37,7 @@ import {
   Settings,
   Link2,
   Zap,
+  Mail,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -121,6 +122,65 @@ export function SendEInvoiceDialog({
   const [showXmlPreview, setShowXmlPreview] = useState(false);
   const [isLoadingXml, setIsLoadingXml] = useState(false);
 
+  // ── Pre-flight participant reachability check ──
+  // Runs when an e-invoice channel (STORECOVE/PEPPOL) is selected and the
+  // customer has a CVR. If the recipient is NOT on the Peppol test/production
+  // network, we show a warning with a one-click switch to PDF email.
+  const [preflightResult, setPreflightResult] = useState<{ exists: boolean; checkedCvr: string } | null>(null);
+  const [preflightLoading, setPreflightLoading] = useState(false);
+  const [preflightDismissed, setPreflightDismissed] = useState(false);
+
+  const isEmailChannel = channel === 'EMAIL';
+  const isEInvoiceChannel = channel === 'STORECOVE' || channel === 'PEPPOL' || channel === 'OIOUBL';
+  const showPreflightWarning =
+    isEInvoiceChannel &&
+    preflightResult?.exists === false &&
+    !preflightDismissed &&
+    !!invoice?.customerCvr &&
+    !!einvoiceConfig?.storecoveConnected;
+
+  // ── Pre-flight: check if the recipient can receive e-invoices ──
+  // Only runs for e-invoice channels (STORECOVE/PEPPOL) when Storecove is
+  // connected and the customer has a CVR. Non-blocking: if it fails or says
+  // "not reachable", the user can still force the send.
+  const runPreflight = useCallback(async (cvr: string) => {
+    if (!cvr || !/^\d{8}$/.test(cvr)) return;
+    setPreflightLoading(true);
+    setPreflightDismissed(false);
+    try {
+      const res = await fetch('/api/storecove/participants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scheme: '0184', identifier: cvr, countryCode: 'DK' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPreflightResult({ exists: !!data.exists, checkedCvr: cvr });
+      } else {
+        // On error, don't block — just don't show the warning
+        setPreflightResult(null);
+      }
+    } catch {
+      setPreflightResult(null);
+    } finally {
+      setPreflightLoading(false);
+    }
+  }, []);
+
+  // Run preflight when channel or invoice changes (only for e-invoice channels)
+  useEffect(() => {
+    if (isEInvoiceChannel && invoice?.customerCvr && einvoiceConfig?.storecoveConnected) {
+      // Re-run only if the CVR changed or we haven't checked yet
+      if (preflightResult?.checkedCvr !== invoice.customerCvr) {
+        runPreflight(invoice.customerCvr);
+      }
+    } else {
+      // Reset when switching to EMAIL channel or no CVR
+      setPreflightResult(null);
+      setPreflightDismissed(false);
+    }
+  }, [channel, invoice?.customerCvr, isEInvoiceChannel, einvoiceConfig?.storecoveConnected, preflightResult?.checkedCvr, runPreflight]);
+
   // ── Fetch XML preview (before early return) ──
   const handlePreviewXml = useCallback(async () => {
     if (!invoice || !companyInfo) return;
@@ -143,46 +203,75 @@ export function SendEInvoiceDialog({
     }
   }, [invoice, companyInfo, channel]);
 
-  // ── Send e-invoice (before early return) ──
+  // ── Send (e-invoice or email, before early return) ──
   const handleSend = useCallback(async () => {
     if (!invoice) return;
     setIsSending(true);
     try {
-      const res = await fetch(`/api/invoices/${invoice.id}/send-einvoice`, {
+      // EMAIL channel: use the legacy PDF email route (POST /api/invoices/{id}/send)
+      // E-invoice channels: use the e-invoice queue route (POST /api/invoices/{id}/send-einvoice)
+      const endpoint = isEmailChannel
+        ? `/api/invoices/${invoice.id}/send`
+        : `/api/invoices/${invoice.id}/send-einvoice`;
+      const payload = isEmailChannel
+        ? { language: isDa ? 'da' : 'en' }  // subject/message optional, defaults are fine
+        : { channel };
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || (isDa ? 'Kunne ikke sende e-faktura' : 'Failed to send e-invoice'));
+        throw new Error(data.error || (isDa ? 'Kunne ikke sende faktura' : 'Failed to send invoice'));
       }
 
       const data = await res.json();
-      setSendResult({
-        messageId: data.messageId || data.id || '',
-        channel,
-        sentAt: new Date().toISOString(),
-      });
-      setIsSent(true);
-      toast.success(
-        isDa ? 'E-faktura sendt!' : 'E-invoice sent!',
-        {
-          description: isDa
-            ? `${invoice.invoiceNumber} er sendt via ${channel === 'OIOUBL' ? 'NemHandel' : 'Peppol BIS'}`
-            : `${invoice.invoiceNumber} has been sent via ${channel === 'OIOUBL' ? 'NemHandel' : 'Peppol BIS'}`,
-        },
-      );
+
+      if (isEmailChannel) {
+        // Email route returns { success, sentTo, invoiceNumber, logId }
+        setSendResult({
+          messageId: data.sentTo || '',  // reuse field for email address
+          channel: 'EMAIL',
+          sentAt: new Date().toISOString(),
+        });
+        setIsSent(true);
+        toast.success(
+          isDa ? 'Faktura sendt via e-mail!' : 'Invoice sent via email!',
+          {
+            description: isDa
+              ? `${invoice.invoiceNumber} er sendt til ${data.sentTo}`
+              : `${invoice.invoiceNumber} has been sent to ${data.sentTo}`,
+          },
+        );
+      } else {
+        // E-invoice route returns { sending: {...} }
+        setSendResult({
+          messageId: data.sending?.messageId || data.messageId || '',
+          channel,
+          sentAt: new Date().toISOString(),
+        });
+        setIsSent(true);
+        toast.success(
+          isDa ? 'E-faktura sat i kø!' : 'E-invoice queued!',
+          {
+            description: isDa
+              ? `${invoice.invoiceNumber} er sat i kø til afsendelse via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? 'Storecove' : 'Peppol BIS'}`
+              : `${invoice.invoiceNumber} queued for sending via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? 'Storecove' : 'Peppol BIS'}`,
+          },
+        );
+      }
       onSuccess();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : (isDa ? 'Kunne ikke sende e-faktura' : 'Failed to send e-invoice'),
+        err instanceof Error ? err.message : (isDa ? 'Kunne ikke sende faktura' : 'Failed to send invoice'),
       );
     } finally {
       setIsSending(false);
     }
-  }, [invoice, channel, isDa, onSuccess]);
+  }, [invoice, channel, isEmailChannel, isDa, onSuccess]);
 
   // ── Close & reset ──
   const handleClose = useCallback(() => {
@@ -190,6 +279,8 @@ export function SendEInvoiceDialog({
     setSendResult(null);
     setShowXmlPreview(false);
     setXmlPreview(null);
+    setPreflightResult(null);
+    setPreflightDismissed(false);
     onClose();
   }, [onClose]);
 
@@ -200,8 +291,11 @@ export function SendEInvoiceDialog({
 
   // ── Warnings ──
   const isNotEnabled = !config?.enabled;
-  const missingCvr = !invoice.customerCvr && !invoice.customerEmail;
-  const canSend = !isNotEnabled && !missingCvr;
+  // For e-invoice channels: require CVR. For EMAIL channel: require email.
+  const missingCvr = isEInvoiceChannel && !invoice.customerCvr;
+  const missingEmail = isEmailChannel && !invoice.customerEmail;
+  // E-invoicing must be enabled only for e-invoice channels (EMAIL doesn't need it)
+  const canSend = (isEmailChannel || !isNotEnabled) && !missingCvr && !missingEmail;
 
   return (
     <Dialog open={!!invoice} onOpenChange={(open) => !open && handleClose()}>
@@ -267,7 +361,7 @@ export function SendEInvoiceDialog({
               </div>
             )}
 
-            {/* Missing CVR warning */}
+            {/* Missing CVR warning (e-invoice channels only) */}
             {missingCvr && !isNotEnabled && (
               <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-4 flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -277,10 +371,65 @@ export function SendEInvoiceDialog({
                   </p>
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
                     {isDa
-                      ? 'E-faktura kræver et CVR-nummer for at identificere modtageren. Tilføj kundens CVR-nummer på fakturaen.'
-                      : 'E-invoicing requires a CVR number to identify the recipient. Add the customer\'s CVR number to the invoice.'
+                      ? 'E-faktura kræver et CVR-nummer for at identificere modtageren på Peppol/NemHandel. Tilføj kundens CVR-nummer, eller vælg \"E-mail (PDF)\" kanalen i stedet.'
+                      : 'E-invoicing requires a CVR number to identify the recipient on Peppol/NemHandel. Add the customer\'s CVR number, or choose the \"Email (PDF)\" channel instead.'
                     }
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* Missing email warning (EMAIL channel only) */}
+            {missingEmail && (
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-4 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                    {isDa ? 'Modtager mangler e-mailadresse' : 'Recipient missing email address'}
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    {isDa
+                      ? 'E-mail-kanalen kræver en e-mailadresse på fakturaen eller kontakten.'
+                      : 'The email channel requires an email address on the invoice or contact.'
+                    }
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Pre-flight: recipient not reachable on Peppol/NemHandel */}
+            {showPreflightWarning && (
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-4 flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                    {isDa ? 'Modtager kan ikke modtage e-fakturaer' : 'Recipient cannot receive e-invoices'}
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    {isDa
+                      ? `CVR ${invoice.customerCvr} er ikke registreret på Peppol/NemHandel-netværket. E-fakturaen vil blive afvist af Storecove.`
+                      : `CVR ${invoice.customerCvr} is not registered on the Peppol/NemHandel network. The e-invoice will be rejected by Storecove.`
+                    }
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-amber-300 text-amber-700 dark:border-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30 gap-2"
+                      onClick={() => setChannel('EMAIL')}
+                    >
+                      <Mail className="h-3.5 w-3.5" />
+                      {isDa ? 'Send som PDF-e-mail i stedet' : 'Send as PDF email instead'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                      onClick={() => setPreflightDismissed(true)}
+                    >
+                      {isDa ? 'Send alligevel' : 'Send anyway'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
@@ -291,19 +440,33 @@ export function SendEInvoiceDialog({
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0 space-y-2">
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                    {isDa ? 'E-faktura sendt succesfuldt' : 'E-invoice sent successfully'}
+                    {sendResult.channel === 'EMAIL'
+                      ? (isDa ? 'Faktura sendt via e-mail' : 'Invoice sent via email')
+                      : (isDa ? 'E-faktura sat i kø' : 'E-invoice queued')
+                    }
                   </p>
                   <div className="space-y-1 text-xs text-emerald-700 dark:text-emerald-400">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{isDa ? 'Kanal' : 'Channel'}</span>
                       <Badge variant="outline" className="text-[10px] px-2 border-emerald-300 dark:border-emerald-700">
-                        {sendResult.channel === 'OIOUBL' ? 'OIOUBL (NemHandel)' : sendResult.channel === 'STORECOVE' ? 'Storecove (Peppol+NemHandel)' : 'Peppol BIS'}
+                        {sendResult.channel === 'EMAIL' ? (isDa ? 'E-mail (PDF)' : 'Email (PDF)') : sendResult.channel === 'OIOUBL' ? 'OIOUBL (NemHandel)' : sendResult.channel === 'STORECOVE' ? 'Storecove (Peppol+NemHandel)' : 'Peppol BIS'}
                       </Badge>
                     </div>
                     {sendResult.messageId && (
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">{isDa ? 'Besked-ID' : 'Message ID'}</span>
-                        <code className="font-mono text-[10px]">{sendResult.messageId}</code>
+                        <span className="text-muted-foreground">
+                          {sendResult.channel === 'EMAIL' ? (isDa ? 'Sendt til' : 'Sent to') : (isDa ? 'Besked-ID' : 'Message ID')}
+                        </span>
+                        {sendResult.channel === 'EMAIL'
+                          ? <span className="truncate ml-2">{sendResult.messageId}</span>
+                          : <code className="font-mono text-[10px]">{sendResult.messageId}</code>
+                        }
+                      </div>
+                    )}
+                    {sendResult.channel !== 'EMAIL' && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">{isDa ? 'Status' : 'Status'}</span>
+                        <span>{isDa ? 'Sat i kø — kør send-worker for at transmittere' : 'Queued — run the send worker to transmit'}</span>
                       </div>
                     )}
                     <div className="flex justify-between">
@@ -355,7 +518,7 @@ export function SendEInvoiceDialog({
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                   {isDa ? 'Afsendelseskanal' : 'Sending channel'}
                 </label>
-                <Select value={channel} onValueChange={setChannel} disabled={isNotEnabled}>
+                <Select value={channel} onValueChange={setChannel} disabled={isNotEnabled && !isEmailChannel}>
                   <SelectTrigger className="bg-white dark:bg-white/5 border-gray-200 dark:border-white/10">
                     <div className="flex items-center gap-2">
                       <Globe className="h-4 w-4 text-muted-foreground" />
@@ -363,12 +526,6 @@ export function SendEInvoiceDialog({
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="OIOUBL">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-3.5 w-3.5 text-[#0d9488]" />
-                        <span>OIOUBL ({isDa ? 'NemHandel' : 'NemHandel'})</span>
-                      </div>
-                    </SelectItem>
                     <SelectItem value="STORECOVE">
                       <div className="flex items-center gap-2">
                         <Link2 className="h-3.5 w-3.5 text-violet-500" />
@@ -387,15 +544,29 @@ export function SendEInvoiceDialog({
                         <span>Peppol BIS</span>
                       </div>
                     </SelectItem>
+                    <SelectItem value="OIOUBL">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-3.5 w-3.5 text-[#0d9488]" />
+                        <span>OIOUBL ({isDa ? 'NemHandel' : 'NemHandel'})</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="EMAIL">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-3.5 w-3.5 text-blue-400" />
+                        <span>{isDa ? 'E-mail (PDF)' : 'Email (PDF)'}</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {channel === 'OIOUBL' && isDa && 'OIOUBL-format via NemHandel-netværket. Standard for offentlige danske institutioner.'}
-                  {channel === 'OIOUBL' && !isDa && 'OIOUBL format via NemHandel network. Standard for Danish public institutions.'}
                   {channel === 'STORECOVE' && isDa && 'Automatisk levering via Storecove Access Point. Sendes til både Peppol og NemHandel.'}
                   {channel === 'STORECOVE' && !isDa && 'Automatic delivery via Storecove Access Point. Routed to both Peppol and NemHandel.'}
-                  {channel !== 'OIOUBL' && channel !== 'STORECOVE' && isDa && 'Peppol BIS Billing 3.0-format. International e-fakturastandard.'}
-                  {channel !== 'OIOUBL' && channel !== 'STORECOVE' && !isDa && 'Peppol BIS Billing 3.0 format. International e-invoicing standard.'}
+                  {channel === 'PEPPOL' && isDa && 'Peppol BIS Billing 3.0-format. International e-fakturastandard.'}
+                  {channel === 'PEPPOL' && !isDa && 'Peppol BIS Billing 3.0 format. International e-invoicing standard.'}
+                  {channel === 'OIOUBL' && isDa && 'OIOUBL-format via NemHandel-netværket. Standard for offentlige danske institutioner.'}
+                  {channel === 'OIOUBL' && !isDa && 'OIOUBL format via NemHandel network. Standard for Danish public institutions.'}
+                  {channel === 'EMAIL' && isDa && 'Sender fakturaen som PDF vedhæftning til kundens e-mailadresse. Kræver ikke Peppol/NemHandel.'}
+                  {channel === 'EMAIL' && !isDa && 'Sends the invoice as a PDF attachment to the customer\'s email address. Does not require Peppol/NemHandel.'}
                 </p>
                 {channel === 'STORECOVE' && !einvoiceConfig?.storecoveConnected && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-2 mt-1.5 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
@@ -405,11 +576,25 @@ export function SendEInvoiceDialog({
                       : 'Storecove is not connected. Sending will use simulation mode. Connect Storecove in settings.'}
                   </div>
                 )}
+                {/* Pre-flight loading indicator */}
+                {preflightLoading && isEInvoiceChannel && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {isDa ? 'Tjekker om modtager kan modtage e-fakturaer...' : 'Checking if recipient can receive e-invoices...'}
+                  </div>
+                )}
+                {/* Pre-flight OK indicator */}
+                {isEInvoiceChannel && preflightResult?.exists === true && !preflightLoading && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {isDa ? 'Modtager er registreret på Peppol/NemHandel-netværket' : 'Recipient is registered on the Peppol/NemHandel network'}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* XML preview (collapsible) */}
-            {!isSent && companyInfo && (
+            {/* XML preview (collapsible) — hidden for EMAIL channel */}
+            {!isSent && companyInfo && !isEmailChannel && (
               <Collapsible open={showXmlPreview} onOpenChange={setShowXmlPreview}>
                 <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-full">
                   <ChevronDown className={`h-3 w-3 transition-transform ${showXmlPreview ? 'rotate-180' : ''}`} />
@@ -487,12 +672,16 @@ export function SendEInvoiceDialog({
               >
                 {isSending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isEmailChannel ? (
+                  <Mail className="h-4 w-4" />
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
                 {isSending
                   ? (isDa ? 'Sender...' : 'Sending...')
-                  : (isDa ? 'Send e-faktura' : 'Send e-invoice')
+                  : isEmailChannel
+                    ? (isDa ? 'Send e-mail' : 'Send email')
+                    : (isDa ? 'Send e-faktura' : 'Send e-invoice')
                 }
               </Button>
             )}
