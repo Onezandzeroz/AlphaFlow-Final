@@ -117,6 +117,7 @@ export function SendEInvoiceDialog({
     messageId: string;
     channel: string;
     sentAt: string;
+    status?: string;
   } | null>(null);
   const [xmlPreview, setXmlPreview] = useState<string | null>(null);
   const [showXmlPreview, setShowXmlPreview] = useState(false);
@@ -247,21 +248,50 @@ export function SendEInvoiceDialog({
           },
         );
       } else {
-        // E-invoice route returns { sending: {...} }
+        // E-invoice route returns { sending: {...}, error?: string }
+        // The API now transmits to Storecove synchronously, so the
+        // status is DELIVERED (success) or FAILED (error) by the time
+        // we get here — not PENDING.
+        const sendStatus = data.sending?.status as string | undefined;
+        const transmissionError = data.error as string | undefined;
+
         setSendResult({
           messageId: data.sending?.messageId || data.messageId || '',
           channel,
           sentAt: new Date().toISOString(),
+          status: data.sending?.status as string | undefined,
         });
         setIsSent(true);
-        toast.success(
-          isDa ? 'E-faktura sat i kø!' : 'E-invoice queued!',
-          {
-            description: isDa
-              ? `${invoice.invoiceNumber} er sat i kø til afsendelse via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? 'Storecove' : 'Peppol BIS'}`
-              : `${invoice.invoiceNumber} queued for sending via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? 'Storecove' : 'Peppol BIS'}`,
-          },
-        );
+
+        if (sendStatus === 'FAILED' || transmissionError) {
+          toast.error(
+            isDa ? 'E-faktura kunne ikke sendes' : 'E-invoice could not be sent',
+            {
+              description: transmissionError || (isDa
+                ? 'Afsendelsen fejlede. Se afsendelseshistorik for detaljer.'
+                : 'Transmission failed. See send history for details.'),
+            },
+          );
+        } else if (sendStatus === 'DELIVERED') {
+          toast.success(
+            isDa ? 'E-faktura sendt!' : 'E-invoice sent!',
+            {
+              description: isDa
+                ? `${invoice.invoiceNumber} er afleveret til Storecove. Klik "Send-historik" for at se status.`
+                : `${invoice.invoiceNumber} delivered to Storecove. Click "Send history" to see status.`,
+            },
+          );
+        } else {
+          // Still PENDING or SENDING — fallback message
+          toast.success(
+            isDa ? 'E-faktura afsendt!' : 'E-invoice sent!',
+            {
+              description: isDa
+                ? `${invoice.invoiceNumber} sendes via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? 'Storecove' : 'Peppol BIS'}. Klik "Send-historik" for at se status.`
+                : `${invoice.invoiceNumber} sending via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? 'Storecove' : 'Peppol BIS'}. Click "Send history" to see status.`,
+            },
+          );
+        }
       }
       onSuccess();
     } catch (err) {
@@ -466,7 +496,13 @@ export function SendEInvoiceDialog({
                     {sendResult.channel !== 'EMAIL' && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">{isDa ? 'Status' : 'Status'}</span>
-                        <span>{isDa ? 'Sat i kø — kør send-worker for at transmittere' : 'Queued — run the send worker to transmit'}</span>
+                        <span className="font-medium">
+                          {sendResult.status === 'FAILED'
+                            ? (isDa ? 'Fejlet — se Send-historik' : 'Failed — see Send history')
+                            : sendResult.status === 'DELIVERED'
+                              ? (isDa ? 'Afleveret til Storecove' : 'Delivered to Storecove')
+                              : (isDa ? 'Sendt — se Send-historik for status' : 'Sent — see Send history for status')}
+                        </span>
                       </div>
                     )}
                     <div className="flex justify-between">

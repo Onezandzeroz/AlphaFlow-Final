@@ -1,50 +1,28 @@
 /**
- * E-Invoice Send Worker — background poller
+ * E-Invoice Send Worker — background poller (OPTIONAL)
  *
- * WHY THIS EXISTS
- * ───────────────
- * `queueEInvoiceSend()` (src/lib/einvoice-sender.ts) only creates a
- * PENDING `EInvoiceSending` row. The function that actually transmits
- * to Storecove — `processEInvoiceSend(sendingId)` — is never auto-
- * invoked by any cron or mini-service in the current codebase.
+ * ──────────────────────────────────────────────────────────────────
+ * STATUS: This worker is NO LONGER REQUIRED for normal operation.
  *
- * This worker closes that gap: it polls for PENDING rows every few
- * seconds and transmits them. Run it as a background process (PM2
- * or `bun --hot`) alongside the Next.js app. Once running, the full
- * send → Storecove → webhook status flow works end-to-end from the
- * UI alone — no manual CLI trigger needed per send.
+ * As of the latest update, the send-einvoice API route
+ * (src/app/api/invoices/[id]/send-einvoice/route.ts) now transmits
+ * to Storecove SYNCHRONOUSLY (inline) when the user clicks Send.
+ * The PENDING row is created AND transmitted in the same request,
+ * so the user sees DELIVERED/FAILED status immediately — no
+ * background worker needed.
  *
- * USAGE
- * ─────
- *   # Foreground (testing / watching logs)
- *   bun scripts/einvoice-send-worker.ts
+ * This worker is kept as a FALLBACK for edge cases:
+ *   - If a send was created but processEInvoiceSend() crashed before
+ *     completing (e.g. server restart mid-request), the row stays
+ *     PENDING. This worker picks it up.
+ *   - If you want belt-and-suspenders reliability for production.
  *
- *   # PM2 (production / persistent)
+ * USAGE (optional, only if you want the fallback):
  *   pm2 start "bun scripts/einvoice-send-worker.ts" --name alphaflow-einvoice-worker
- *   pm2 logs alphaflow-einvoice-worker
  *
- *   # Stop
- *   pm2 stop alphaflow-einvoice-worker
- *
- * PREREQUISITES
- * ─────────────
- *  - .env populated with STORECOVE_API_URL / STORECOVE_API_KEY /
- *    STORECOVE_WEBHOOK_SECRET (sandbox values) + DATABASE_URL
- *  - `bun install` has run (Prisma Client generated via postinstall)
- *
- * BEHAVIOUR
- * ─────────
- *  - Polls every POLL_INTERVAL_MS (default 5s) for PENDING sends.
- *  - Processes each found send sequentially (avoids concurrent
- *    Storecove API rate limits).
- *  - On failure, processEInvoiceSend() marks the row FAILED and
- *    increments retryCount; the row won't be picked up again until
- *    the user clicks "Forsøg igen" in the UI (which resets to PENDING).
- *  - Graceful shutdown on SIGINT/SIGTERM.
- *
- * NOTE: This is both a testing helper AND a production worker. In
- * production, run it under PM2 with restart policy. It replaces the
- * one-shot `scripts/process-einvoice-send.ts` for ongoing operation.
+ * If you DON'T start it, sends still work — they just won't have a
+ * safety net for interrupted transmissions.
+ * ──────────────────────────────────────────────────────────────────
  */
 
 import { db } from '../src/lib/db';
