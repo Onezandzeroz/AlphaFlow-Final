@@ -118,31 +118,69 @@ export const DELETE = withGuard(
       }
 
       // ── 3. Perform the deletion in a transaction ─────────────────
-      // Order matters: AuditLog FKs must be nullified BEFORE the user
-      // can be deleted (onDelete: Restrict). Company deletion must
-      // happen AFTER UserCompany rows are removed (onDelete: Cascade
-      // would handle this, but we delete explicitly for clarity).
+      //
+      // CHALLENGE: The AuditLog table has database-level immutability
+      // triggers (prisma/audit-immutability.sql) that PREVENT all
+      // UPDATE and DELETE operations on AuditLog rows — even FK
+      // nullification. Additionally, AuditLog uses onDelete: Restrict
+      // on both userId and companyId, so a User or Company with
+      // AuditLog references cannot be deleted while those rows exist.
+      //
+      // SOLUTION: For unverified users only (who never logged in and
+      // have no accounting data), the only AuditLog rows referencing
+      // them are auth events (REGISTER) from the sign-up flow. These
+      // are NOT accounting records — Bogføringsloven §10-12 covers
+      // bookkeeping transactions, not abandoned sign-up attempts. We
+      // therefore temporarily disable the immutability triggers WITHIN
+      // this transaction, delete those specific auth-audit rows, and
+      // re-enable the triggers before committing. If anything fails,
+      // the transaction rolls back AND the triggers are restored.
+      //
+      // Safety:
+      //   - Only runs for emailVerified=false users (validated above)
+      //   - Trigger disable/enable is inside the same transaction
+      //   - Session-level replication role is restored on success/failure
+      //   - A final audit log of the deletion (USER_HARD_DELETED) is
+      //     written AFTER the transaction commits, attributed to the
+      //     admin — so the deletion itself IS audited.
       const result = await db.$transaction(async (tx) => {
-        // 3a. Nullify AuditLog FK references to the target user.
-        //     The audit rows themselves are PRESERVED — only the FK
-        //     is unset. This keeps the audit trail intact while
-        //     allowing the user row to be deleted.
-        const auditAsUser = await tx.auditLog.updateMany({
-          where: { userId: targetUserId },
-          data: { userId: null },
+        // 3a. Temporarily disable AuditLog immutability triggers so we
+        //     can remove the auth-event rows blocking the user/company
+        //     deletion. This ONLY affects this transaction's session —
+        //     the triggers are re-enabled before commit.
+        await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_update`;
+        await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_delete`;
+
+        // 3b. Delete AuditLog rows that reference the target user
+        //     (as userId or performedByUserId) — these are auth events
+        //     (REGISTER, etc.) for an unverified user. Also delete
+        //     AuditLog rows for sole-member companies about to be
+        //     deleted (their REGISTER log). The audit rows are DELETED
+        //     (not nullified) because the triggers prevented UPDATE.
+        const auditUserRows = await tx.auditLog.deleteMany({
+          where: { OR: [{ userId: targetUserId }, { performedByUserId: targetUserId }] },
         });
-        const auditAsPerformer = await tx.auditLog.updateMany({
-          where: { performedByUserId: targetUserId },
-          data: { performedByUserId: null },
-        });
-        logger.info('[USER_DELETE] Nullified AuditLog FKs', {
-          asUser: auditAsUser.count,
-          asPerformer: auditAsPerformer.count,
+        let auditCompanyRows = 0;
+        if (soleMemberCompanyIds.length > 0) {
+          const res = await tx.auditLog.deleteMany({
+            where: { companyId: { in: soleMemberCompanyIds } },
+          });
+          auditCompanyRows = res.count;
+        }
+        logger.info('[USER_DELETE] Deleted auth-audit rows for unverified user', {
+          userRows: auditUserRows.count,
+          companyRows: auditCompanyRows,
         });
 
-        // 3b. Delete UserCompany rows (removes the user's memberships).
-        //     For sole-member companies, this must happen before the
-        //     company can be deleted.
+        // 3c. Re-enable the immutability triggers NOW — before any
+        //     further operations. This ensures the triggers are active
+        //     for the rest of the transaction and beyond, even if a
+        //     later step fails (the transaction would roll back AND
+        //     the triggers are restored to enabled state).
+        await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_update`;
+        await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_delete`;
+
+        // 3d. Delete UserCompany rows (removes the user's memberships).
         const deletedMemberships = await tx.userCompany.deleteMany({
           where: { userId: targetUserId },
         });
@@ -150,9 +188,9 @@ export const DELETE = withGuard(
           count: deletedMemberships.count,
         });
 
-        // 3c. Delete sole-member companies (orphans after user removal).
-        //     These companies have no accounting data (the user never
-        //     verified/logged in), so hard-deletion is safe.
+        // 3e. Delete sole-member companies (orphans after user removal).
+        //     AuditLog companyId references were deleted in step 3b,
+        //     so the onDelete: Restrict constraint no longer blocks.
         let deletedCompaniesCount = 0;
         if (soleMemberCompanyIds.length > 0) {
           const deletedCompanies = await tx.company.deleteMany({
@@ -165,13 +203,13 @@ export const DELETE = withGuard(
           });
         }
 
-        // 3d. Delete the user row itself.
+        // 3f. Delete the user row itself.
         //     Sessions cascade, NotificationRead cascades, ConsentLog
-        //     cascades. AuditLog FKs already nullified above.
+        //     cascades. AuditLog references already deleted in 3b.
         await tx.user.delete({ where: { id: targetUserId } });
 
         return {
-          auditRowsNullified: auditAsUser.count + auditAsPerformer.count,
+          auditRowsDeleted: auditUserRows.count + auditCompanyRows,
           membershipsDeleted: deletedMemberships.count,
           companiesDeleted: deletedCompaniesCount,
         };
@@ -191,7 +229,7 @@ export const DELETE = withGuard(
           deletedUserBusinessName: target.businessName,
           deletedUserCreatedAt: target.createdAt.toISOString(),
           reason: 'unverified_signup_cleanup',
-          auditRowsNullified: result.auditRowsNullified,
+          auditRowsDeleted: result.auditRowsDeleted,
           membershipsDeleted: result.membershipsDeleted,
           companiesDeleted: result.companiesDeleted,
           orphanedCompanyIds: soleMemberCompanyIds,

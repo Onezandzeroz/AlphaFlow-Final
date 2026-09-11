@@ -1255,8 +1255,8 @@ export function OversightSettings() {
                 <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-red-700 dark:text-red-400">
                   {isDa
-                    ? 'Auditlog-rækker for denne bruger bevares (med userId nulstillet) så historikken forbliver intakt, men brugeren selv forsvinder permanent.'
-                    : 'Audit log rows for this user are preserved (with userId set to null) so the history remains intact, but the user themselves is permanently removed.'}
+                    ? 'Brugeren slettes permanent. Tilmeldings-auditloggen for denne ubekræftede bruger fjernes også (den indeholder kun auth-events, intet regnskabsdata). Sletningen selv logges med din admin-konto.'
+                    : 'The user is permanently deleted. The sign-up audit log for this unverified user is also removed (it contains only auth events, no accounting data). The deletion itself is logged under your admin account.'}
                 </p>
               </div>
 
