@@ -25,6 +25,7 @@ import {
   Shield, Eye, Search, Building2, Users, AlertTriangle, X, Loader2,
   ChevronRight, Crown, Clock, MoreVertical, Play, Ban, Timer,
   Bot, CheckCircle2, XCircle, CreditCard,
+  UserX, Trash2, Mail, Calendar,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -82,6 +83,28 @@ export function OversightSettings() {
   const [hermesTenants, setHermesTenants] = useState<Map<string, boolean>>(new Map());
   const [hermesDataAccessTenants, setHermesDataAccessTenants] = useState<Map<string, boolean>>(new Map());
 
+  // ── Unverified users (hard-delete abandoned sign-ups) ──
+  interface UnverifiedUser {
+    id: string;
+    email: string;
+    businessName: string | null;
+    createdAt: string;
+    hasVerificationToken: boolean;
+    companies: Array<{
+      id: string;
+      name: string;
+      isDemo: boolean;
+      isSoleMember: boolean;
+      role: string;
+      createdAt: string;
+    }>;
+  }
+  const [unverifiedUsers, setUnverifiedUsers] = useState<UnverifiedUser[]>([]);
+  const [unverifiedLoading, setUnverifiedLoading] = useState(false);
+  const [unverifiedSearch, setUnverifiedSearch] = useState('');
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<UnverifiedUser | null>(null);
+
   const isSuperDev = user?.isSuperDev ?? false;
   const isOversightMode = user?.isOversightMode ?? false;
   const oversightCompanyName = user?.oversightCompanyName;
@@ -128,6 +151,56 @@ export function OversightSettings() {
       }
     } catch { /* ignore */ }
   }, [isSuperDev]);
+
+  // ─── Fetch unverified users ────────────────────────────────────
+  const fetchUnverifiedUsers = useCallback(async () => {
+    setUnverifiedLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (unverifiedSearch) params.set('search', unverifiedSearch);
+      const res = await fetch(`/api/oversight/unverified-users?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUnverifiedUsers(data.users || []);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setUnverifiedLoading(false);
+    }
+  }, [unverifiedSearch]);
+
+  // ─── Delete an unverified user ─────────────────────────────────
+  const handleDeleteUnverified = async (u: UnverifiedUser) => {
+    setDeletingUserId(u.id);
+    try {
+      const res = await fetch(`/api/oversight/users/${u.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.error || 'Sletning mislykkedes');
+      }
+      toast.success(
+        isDa ? 'Bruger slettet' : 'User deleted',
+        {
+          description: isDa
+            ? `${u.email} er permanent slettet${data.deleted?.companiesDeleted > 0 ? ` (${data.deleted.companiesDeleted} virksomhed(er) også fjernet)` : ''}`
+            : `${u.email} has been permanently deleted${data.deleted?.companiesDeleted > 0 ? ` (${data.deleted.companiesDeleted} company/companies also removed)` : ''}`,
+        }
+      );
+      setDeleteConfirmUser(null);
+      // Refresh the list
+      fetchUnverifiedUsers();
+      // Also refresh tenants (in case orphaned companies were deleted)
+      fetchTenants();
+    } catch (err) {
+      toast.error(
+        isDa ? 'Kunne ikke slette bruger' : 'Could not delete user',
+        { description: err instanceof Error ? err.message : undefined }
+      );
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
 
   useEffect(() => {
     if (isSuperDev) {
@@ -940,6 +1013,140 @@ export function OversightSettings() {
         </CardContent>
       </Card>
 
+      {/* ─── Unverified users cleanup ────────────────────────────── */}
+      <Card className="border-0 shadow-lg">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <UserX className="h-4 w-4 text-amber-500" />
+                {isDa ? 'Ubekræftede brugere' : 'Unverified users'}
+                {unverifiedUsers.length > 0 && (
+                  <Badge className="text-[10px] px-1.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                    {unverifiedUsers.length}
+                  </Badge>
+                )}
+              </CardTitle>
+              <CardDescription className="text-sm mt-1">
+                {isDa
+                  ? 'Brugere der har oprettet en konto men aldrig bekræftet deres e-mail. Slet dem for at rydde op (de har intet regnskabsdata).'
+                  : 'Users who registered but never verified their email. Delete them to clean up (they have no accounting data).'}
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 shrink-0"
+              onClick={fetchUnverifiedUsers}
+              disabled={unverifiedLoading}
+            >
+              {unverifiedLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Eye className="h-3.5 w-3.5" />
+              )}
+              {isDa ? 'Hent' : 'Load'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            <Input
+              value={unverifiedSearch}
+              onChange={(e) => setUnverifiedSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchUnverifiedUsers()}
+              placeholder={isDa ? 'Søg på e-mail eller navn...' : 'Search by email or name...'}
+              className="h-9 pl-9 text-sm"
+            />
+          </div>
+
+          {unverifiedLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 text-[#0d9488] animate-spin" />
+            </div>
+          ) : unverifiedUsers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center gap-2">
+              <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              </div>
+              <p className="text-sm font-medium">
+                {isDa ? 'Ingen ubekræftede brugere' : 'No unverified users'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {isDa
+                  ? 'Alle registrerede brugere har bekræftet deres e-mail.'
+                  : 'All registered users have verified their email.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {unverifiedUsers.map((u) => (
+                <div
+                  key={u.id}
+                  className="rounded-lg border border-gray-100 dark:border-white/5 p-3 hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Mail className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <span className="text-sm font-medium truncate">{u.email}</span>
+                      </div>
+                      {u.businessName && (
+                        <p className="text-xs text-muted-foreground truncate pl-5">
+                          {u.businessName}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground pl-5">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {format(new Date(u.createdAt), 'dd.MM.yyyy', { locale: da })}
+                        </span>
+                        {u.companies.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Building2 className="h-3 w-3" />
+                            {u.companies.length} {isDa ? 'virksomhed(er)' : 'company/companies'}
+                          </span>
+                        )}
+                      </div>
+                      {u.companies.length > 0 && (
+                        <div className="pl-5 pt-1 space-y-0.5">
+                          {u.companies.map((c) => (
+                            <div key={c.id} className="text-[11px] text-muted-foreground flex items-center gap-1">
+                              <span className="truncate">{c.name}</span>
+                              {c.isSoleMember && (
+                                <Badge className="text-[9px] px-1 py-0 bg-gray-100 text-gray-500 dark:bg-gray-800/30 dark:text-gray-400">
+                                  {isDa ? 'slettes også' : 'also deleted'}
+                                </Badge>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 gap-1 shrink-0"
+                      disabled={deletingUserId === u.id}
+                      onClick={() => setDeleteConfirmUser(u)}
+                    >
+                      {deletingUserId === u.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                      {isDa ? 'Slet' : 'Delete'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Confirm oversight dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
@@ -991,6 +1198,92 @@ export function OversightSettings() {
               {isDa ? 'Start overvågning' : 'Start Oversight'}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Confirm delete unverified user dialog ───────────────── */}
+      <Dialog open={!!deleteConfirmUser} onOpenChange={(open) => !open && setDeleteConfirmUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+              <Trash2 className="h-5 w-5" />
+              {isDa ? 'Slet ubekræftet bruger?' : 'Delete unverified user?'}
+            </DialogTitle>
+            <DialogDescription>
+              {isDa
+                ? 'Denne handling kan ikke fortrydes. Brugeren slettes permanent fra databasen.'
+                : 'This action cannot be undone. The user will be permanently deleted from the database.'}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteConfirmUser && (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 p-3 space-y-1.5">
+                <div className="flex items-center gap-2 text-sm">
+                  <Mail className="h-3.5 w-3.5 text-gray-400" />
+                  <span className="font-medium">{deleteConfirmUser.email}</span>
+                </div>
+                {deleteConfirmUser.businessName && (
+                  <p className="text-xs text-muted-foreground pl-5">{deleteConfirmUser.businessName}</p>
+                )}
+                <p className="text-xs text-muted-foreground pl-5">
+                  {isDa ? 'Oprettet' : 'Registered'}: {format(new Date(deleteConfirmUser.createdAt), 'dd.MM.yyyy HH:mm', { locale: da })}
+                </p>
+              </div>
+
+              {deleteConfirmUser.companies.length > 0 && (
+                <div className="rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 p-3 flex items-start gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-700 dark:text-amber-400 space-y-1">
+                    <p className="font-medium">
+                      {isDa ? 'Virksomheder der også slettes:' : 'Companies that will also be deleted:'}
+                    </p>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      {deleteConfirmUser.companies.filter(c => c.isSoleMember).map(c => (
+                        <li key={c.id}>{c.name}</li>
+                      ))}
+                    </ul>
+                    <p className="pt-1">
+                      {isDa
+                        ? 'Disse virksomheder har ingen andre medlemmer og vil blive fjernet helt (ingen regnskabsdata findes).'
+                        : 'These companies have no other members and will be fully removed (no accounting data exists).'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 p-3 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-700 dark:text-red-400">
+                  {isDa
+                    ? 'Auditlog-rækker for denne bruger bevares (med userId nulstillet) så historikken forbliver intakt, men brugeren selv forsvinder permanent.'
+                    : 'Audit log rows for this user are preserved (with userId set to null) so the history remains intact, but the user themselves is permanently removed.'}
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteConfirmUser(null)}
+                  className="flex-1"
+                >
+                  {isDa ? 'Annuller' : 'Cancel'}
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => handleDeleteUnverified(deleteConfirmUser)}
+                  disabled={deletingUserId === deleteConfirmUser.id}
+                  className="flex-1 gap-2"
+                >
+                  {deletingUserId === deleteConfirmUser.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  {isDa ? 'Slet permanent' : 'Delete permanently'}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

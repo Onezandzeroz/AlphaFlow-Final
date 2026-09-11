@@ -58,7 +58,8 @@ export type AuditAction =
   | 'TWO_FACTOR_BACKUP_CODES_REGENERATED'
   | 'TWO_FACTOR_TENANT_TOGGLE'
   | 'LOGIN_2FA_VERIFIED'
-  | 'ACCOUNT_DEACTIVATED';
+  | 'ACCOUNT_DEACTIVATED'
+  | 'USER_HARD_DELETED';
 
 export type EntityType =
   | 'User'

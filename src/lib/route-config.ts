@@ -469,6 +469,13 @@ export const routeConfig: RouteConfigMap = {
   '/api/oversight/test-emails': {
     POST: { auth: true, requireSuperDev: true },
   },
+  // ── Unverified-user cleanup (hard-delete abandoned sign-ups) ──
+  '/api/oversight/unverified-users': {
+    GET: { auth: true, requireSuperDev: true },
+  },
+  '/api/oversight/users/[userId]': {
+    DELETE: { auth: true, requireSuperDev: true },
+  },
 
   // ── Subscription payment flow (FASE 5 — Flatpay) ──
   '/api/subscription/create-payment': {
