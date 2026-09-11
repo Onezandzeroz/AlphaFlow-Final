@@ -249,7 +249,7 @@ export const DELETE = withGuard(
           email: target.email,
           companiesDeleted: result.companiesDeleted,
           membershipsDeleted: result.membershipsDeleted,
-          auditRowsNullified: result.auditRowsNullified,
+          auditRowsDeleted: result.auditRowsDeleted,
         },
       });
     } catch (error) {
