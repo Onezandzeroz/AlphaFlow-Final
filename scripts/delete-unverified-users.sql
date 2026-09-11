@@ -57,9 +57,27 @@ SELECT
   (SELECT COUNT(*) FROM "AuditLog" WHERE "performedByUserId" IN (SELECT user_id FROM _unverified_users)) AS performer_ref_rows,
   (SELECT COUNT(*) FROM "AuditLog" WHERE "companyId" IN (SELECT company_id FROM _sole_member_companies)) AS company_ref_rows;
 
--- ─── Step 1: Disable AuditLog immutability triggers ─────────────
-ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_update;
-ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_delete;
+-- ─── Step 1: Conditionally disable AuditLog immutability triggers ─
+-- The triggers are created by prisma/audit-immutability.sql but may
+-- not be installed on all environments. Use DO blocks to check
+-- pg_trigger before ALTERing — ALTER TRIGGER DISABLE errors if the
+-- trigger doesn't exist.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = '"AuditLog"'::regclass AND tgname = 'prevent_audit_update'
+  ) THEN
+    ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_update;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = '"AuditLog"'::regclass AND tgname = 'prevent_audit_delete'
+  ) THEN
+    ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_delete;
+  END IF;
+END
+$$;
 
 -- ─── Step 2: Delete AuditLog rows blocking the deletion ─────────
 -- These are auth events (REGISTER, etc.) for unverified users —
@@ -74,9 +92,23 @@ WHERE "performedByUserId" IN (SELECT user_id FROM _unverified_users);
 DELETE FROM "AuditLog"
 WHERE "companyId" IN (SELECT company_id FROM _sole_member_companies);
 
--- ─── Step 3: Re-enable triggers BEFORE continuing ───────────────
-ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_update;
-ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_delete;
+-- ─── Step 3: Re-enable triggers (only if they were disabled) ────
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = '"AuditLog"'::regclass AND tgname = 'prevent_audit_update'
+  ) THEN
+    ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_update;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = '"AuditLog"'::regclass AND tgname = 'prevent_audit_delete'
+  ) THEN
+    ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_delete;
+  END IF;
+END
+$$;
 
 -- ─── Step 4: Delete UserCompany memberships ─────────────────────
 DELETE FROM "UserCompany"

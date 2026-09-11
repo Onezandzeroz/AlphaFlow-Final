@@ -144,19 +144,35 @@ export const DELETE = withGuard(
       //     written AFTER the transaction commits, attributed to the
       //     admin — so the deletion itself IS audited.
       const result = await db.$transaction(async (tx) => {
-        // 3a. Temporarily disable AuditLog immutability triggers so we
-        //     can remove the auth-event rows blocking the user/company
-        //     deletion. This ONLY affects this transaction's session —
-        //     the triggers are re-enabled before commit.
-        await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_update`;
-        await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_delete`;
+        // 3a. Conditionally disable AuditLog immutability triggers
+        //     IF they exist. The triggers are created by
+        //     prisma/audit-immutability.sql but may not be installed
+        //     on all environments. Check pg_trigger before ALTERing.
+        const triggerExists = async (name: string): Promise<boolean> => {
+          const rows = await tx.$queryRaw<{ exists: boolean }[]>`
+            SELECT EXISTS (
+              SELECT 1 FROM pg_trigger
+              WHERE tgrelid = '"AuditLog"'::regclass
+                AND tgname = ${name}
+            ) AS exists
+          `;
+          return rows[0]?.exists === true;
+        };
+        const hasUpdateTrigger = await triggerExists('prevent_audit_update');
+        const hasDeleteTrigger = await triggerExists('prevent_audit_delete');
+
+        if (hasUpdateTrigger) {
+          await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_update`;
+        }
+        if (hasDeleteTrigger) {
+          await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_delete`;
+        }
 
         // 3b. Delete AuditLog rows that reference the target user
         //     (as userId or performedByUserId) — these are auth events
         //     (REGISTER, etc.) for an unverified user. Also delete
         //     AuditLog rows for sole-member companies about to be
-        //     deleted (their REGISTER log). The audit rows are DELETED
-        //     (not nullified) because the triggers prevented UPDATE.
+        //     deleted (their REGISTER log).
         const auditUserRows = await tx.auditLog.deleteMany({
           where: { OR: [{ userId: targetUserId }, { performedByUserId: targetUserId }] },
         });
@@ -172,13 +188,14 @@ export const DELETE = withGuard(
           companyRows: auditCompanyRows,
         });
 
-        // 3c. Re-enable the immutability triggers NOW — before any
-        //     further operations. This ensures the triggers are active
-        //     for the rest of the transaction and beyond, even if a
-        //     later step fails (the transaction would roll back AND
-        //     the triggers are restored to enabled state).
-        await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_update`;
-        await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_delete`;
+        // 3c. Re-enable the immutability triggers (only if they were
+        //     disabled) — before any further operations.
+        if (hasUpdateTrigger) {
+          await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_update`;
+        }
+        if (hasDeleteTrigger) {
+          await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_delete`;
+        }
 
         // 3d. Delete UserCompany rows (removes the user's memberships).
         const deletedMemberships = await tx.userCompany.deleteMany({

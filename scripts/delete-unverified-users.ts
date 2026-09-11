@@ -92,9 +92,31 @@ async function main() {
   const userIds = users.map(u => u.id);
 
   const result = await db.$transaction(async (tx) => {
-    // 2a. Disable immutability triggers
-    await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_update`;
-    await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_delete`;
+    // 2a. Conditionally disable immutability triggers IF they exist.
+    //     The triggers are created by prisma/audit-immutability.sql,
+    //     but may not be installed on all environments (sandbox, fresh
+    //     dev DB, etc.). Query pg_trigger to check before ALTERing —
+    //     ALTER TRIGGER DISABLE errors if the trigger doesn't exist.
+    const triggerExists = async (name: string): Promise<boolean> => {
+      const rows = await tx.$queryRaw<{ exists: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_trigger
+          WHERE tgrelid = '"AuditLog"'::regclass
+            AND tgname = ${name}
+        ) AS exists
+      `;
+      return rows[0]?.exists === true;
+    };
+
+    const hasUpdateTrigger = await triggerExists('prevent_audit_update');
+    const hasDeleteTrigger = await triggerExists('prevent_audit_delete');
+
+    if (hasUpdateTrigger) {
+      await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_update`;
+    }
+    if (hasDeleteTrigger) {
+      await tx.$executeRaw`ALTER TABLE "AuditLog" DISABLE TRIGGER prevent_audit_delete`;
+    }
 
     // 2b. Delete AuditLog rows (auth events for unverified users)
     const auditUserRows = await tx.auditLog.deleteMany({
@@ -104,9 +126,13 @@ async function main() {
       ? (await tx.auditLog.deleteMany({ where: { companyId: { in: soleMemberCompanyIds } } })).count
       : 0;
 
-    // 2c. Re-enable triggers
-    await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_update`;
-    await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_delete`;
+    // 2c. Re-enable triggers (only if they were disabled)
+    if (hasUpdateTrigger) {
+      await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_update`;
+    }
+    if (hasDeleteTrigger) {
+      await tx.$executeRaw`ALTER TABLE "AuditLog" ENABLE TRIGGER prevent_audit_delete`;
+    }
 
     // 2d. Delete UserCompany memberships
     const memberships = await tx.userCompany.deleteMany({
