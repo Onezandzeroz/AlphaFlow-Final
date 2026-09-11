@@ -239,6 +239,18 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
     // Build old data snapshot for audit
     const oldData: Record<string, unknown> = { companyName: existing.name, cvrNumber: existing.cvrNumber };
 
+    // ─── CVR change → invalidate verification ──────────────────────
+    //
+    // cvrVerifiedAt is tied to a specific CVR number. If the tenant
+    // changes their CVR, the old verification no longer applies to the
+    // new CVR — we must reset cvrVerifiedAt to null so they are forced
+    // to re-verify. Re-verification then hits the cross-tenant uniqueness
+    // gate in /api/cvr/lookup, which blocks the new CVR if another
+    // tenant already verified it.
+    const cvrChanged =
+      cvrNumber &&
+      cvrNumber.trim() !== existing.cvrNumber?.trim();
+
     const company = await db.company.update({
       where: { id: ctx.activeCompanyId! },
       data: {
@@ -249,6 +261,9 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
         ...(phone && { phone }),
         ...(email && { email }),
         ...(cvrNumber && { cvrNumber }),
+        // If the CVR changed, invalidate the old verification. The tenant
+        // must re-verify the new CVR (which enforces cross-tenant uniqueness).
+        ...(cvrChanged && { cvrVerifiedAt: null }),
         ...(invoicePrefix && { invoicePrefix: invoicePrefix.toUpperCase() }),
         ...(bankName && { bankName }),
         ...(bankAccount && { bankAccount }),

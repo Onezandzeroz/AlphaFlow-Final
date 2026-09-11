@@ -213,6 +213,14 @@ export function CvrVerifyButton({
       const data = (await res.json().catch(() => null)) as CvrInfo | { error?: string } | null;
 
       if (!res.ok) {
+        // Handle the cross-tenant CVR-already-claimed conflict with a
+        // dedicated, clear message (rather than a generic "lookup failed").
+        const code = (data && typeof data === 'object' && 'code' in data && (data as { code?: string }).code) || undefined;
+        if (res.status === 409 && code === 'CVR_ALREADY_CLAIMED') {
+          setState('error');
+          setErrorMsg(t('cvrAlreadyClaimed'));
+          return;
+        }
         const message =
           (data && typeof data === 'object' && 'error' in data && data.error) ||
           (language === 'da' ? 'CVR-opslag fejlede' : 'CVR lookup failed');

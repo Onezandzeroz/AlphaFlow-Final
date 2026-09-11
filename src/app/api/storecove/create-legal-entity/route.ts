@@ -109,6 +109,36 @@ export const POST = withGuard(
         );
       }
 
+      // ── Defensive: cross-tenant CVR uniqueness ──────────────────────
+      //
+      // Even though /api/cvr/lookup already blocks two tenants from
+      // verifying the same CVR, add a second line of defense here:
+      // refuse to create a Storecove legal entity if another tenant
+      // has already connected this CVR. This catches any edge case where
+      // the verification gate was bypassed (e.g. legacy data, direct DB
+      // edits) before reaching the Storecove API, which would otherwise
+      // fail with a confusing "Peppol identifier already exists" error.
+      const cvrClaimant = await db.company.findFirst({
+        where: {
+          cvrNumber: company.cvrNumber,
+          cvrVerifiedAt: { not: null },
+          storecoveLegalEntityId: { not: null },
+          id: { not: ctx.activeCompanyId! },
+        },
+        select: { id: true, name: true },
+      });
+      if (cvrClaimant) {
+        return NextResponse.json(
+          {
+            error:
+              'Dette CVR-nummer er allerede forbundet til Storecove af en anden virksomhed. ' +
+              'Hvert CVR-nummer kan kun tilhøre én virksomhed på AlphaFlow.',
+            code: 'CVR_CLAIMED_BY_ANOTHER_TENANT',
+          },
+          { status: 409 }
+        );
+      }
+
       // ── Check the platform Storecove key is configured ──
       if (!storecoveClient.isConfigured) {
         return NextResponse.json(

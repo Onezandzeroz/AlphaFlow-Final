@@ -1658,6 +1658,10 @@ export const translations = {
     da: 'CVR-nummeret findes ikke i CVR-registeret',
     en: 'CVR number not found in the CVR register',
   },
+  cvrAlreadyClaimed: {
+    da: 'Dette CVR-nummer er allerede verificeret af en anden virksomhed på AlphaFlow. Hver virksomhed kan kun have ét CVR-nummer. Kontakt support, hvis du mener dette er en fejl.',
+    en: 'This CVR number is already verified by another company on AlphaFlow. Each company can only have one CVR number. Contact support if you believe this is an error.',
+  },
   cvrLookupError: {
     da: 'CVR-opslag fejlede. Tjek forbindelsen og prøv igen.',
     en: 'CVR lookup failed. Check your connection and try again.',

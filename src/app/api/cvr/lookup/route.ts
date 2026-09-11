@@ -76,10 +76,49 @@ export const GET = withGuard(
       // In simulation mode, surface a clear flag so the UI can show a badge
       // without blocking the flow (useful for demo/dev environments).
 
-      // Persist verification timestamp on the company when the CVR exists
+      // ─── Cross-tenant CVR uniqueness gate ────────────────────────
+      //
+      // A CVR number identifies a single legal entity. Two tenants must
+      // NEVER be able to verify the same CVR — otherwise both could send
+      // e-invoices under the same Peppol identifier (0184:<CVR>), which
+      // is illegal and would cause Storecove "Peppol identifier already
+      // exists" errors at best, and duplicate-delivery confusion at worst.
+      //
+      // Before stamping cvrVerifiedAt, check that no OTHER company has
+      // already verified this CVR. The active company is allowed to
+      // re-verify its own CVR (idempotent).
       if (result.exists && ctx.activeCompanyId) {
+        const claimant = await db.company.findFirst({
+          where: {
+            cvrNumber: cvrDigits,
+            cvrVerifiedAt: { not: null },
+            id: { not: ctx.activeCompanyId },
+          },
+          select: { id: true, name: true },
+        });
+
+        if (claimant) {
+          logger.warn('[CVR_LOOKUP] CVR already verified by another tenant', {
+            cvr: cvrDigits,
+            attemptCompanyId: ctx.activeCompanyId,
+            claimantCompanyId: claimant.id,
+            claimantName: claimant.name,
+            userId: ctx.id,
+          });
+          return NextResponse.json(
+            {
+              exists: false,
+              cvrNumber: cvrDigits,
+              error: 'Dette CVR-nummer er allerede verificeret af en anden virksomhed på AlphaFlow.',
+              code: 'CVR_ALREADY_CLAIMED',
+            },
+            { status: 409 }
+          );
+        }
+
+        // Persist verification timestamp on the company when the CVR exists
         try {
-          await db.$executeRaw`UPDATE "Company" SET "cvrVerifiedAt" = NOW() WHERE id = ${ctx.activeCompanyId}`;
+          await db.$executeRaw`UPDATE "Company" SET "cvrVerifiedAt" = NOW(), "cvrNumber" = ${cvrDigits} WHERE id = ${ctx.activeCompanyId}`;
         } catch (dbErr) {
           logger.warn('[CVR_LOOKUP] Could not persist cvrVerifiedAt', dbErr);
         }
