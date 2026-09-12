@@ -516,6 +516,71 @@ export class StorecoveClient {
       );
     }
 
+    // ── Step 3: Add tax identifier (DK:ERST) for Danish companies ──
+    //
+    // Storecove's UBL generator needs a TAX identifier (separate from
+    // the routing identifier) to fill in PartyTaxScheme/CompanyID (VAT
+    // number) in the generated invoice. Without it, sends fail with:
+    //   "Sending an invoice with VAT, but sender has no VAT number"
+    //
+    // For Denmark, the tax identifier scheme is "DK:ERST" and the
+    // identifier is the VAT number = "DK" + 8-digit CVR (e.g. DK46312058).
+    // See Storecove docs §6.3 "Receiver Identifiers" table:
+    //   EU DK B+G DK:DIGST (Legal) DK:ERST (Tax) DK:DIGST (Routing)
+    //
+    // This is added automatically for Danish companies so the tenant
+    // doesn't have to do it manually.
+    if (payload.address.country === 'DK') {
+      // Find the CVR from the peppol identifiers (scheme 0184 or DK:DIGST)
+      const cvrIdentifier = payload.peppolIdentifiers.find(
+        (pi) => pi.scheme === '0184' || pi.scheme === 'DK:DIGST'
+      );
+      if (cvrIdentifier) {
+        const vatNumber = `DK${cvrIdentifier.identifier}`;
+        logger.info('[STORECOVE] Adding DK:ERST tax identifier for Danish legal entity', {
+          legalEntityId: legalEntity.id,
+          vatNumber,
+        });
+        const taxPiResponse = await this.makeRequestWithRetry(
+          'POST',
+          `/legal_entities/${legalEntity.id}/peppol_identifiers`,
+          { scheme: 'DK:ERST', identifier: vatNumber, superscheme: 'iso6523-actorid-upis' },
+        );
+        if (!taxPiResponse.ok) {
+          const errorBody = await taxPiResponse.text();
+          logger.warn('[STORECOVE] Failed to add DK:ERST tax identifier (non-fatal)', {
+            legalEntityId: legalEntity.id,
+            vatNumber,
+            status: taxPiResponse.status,
+            body: errorBody,
+          });
+          // Non-fatal — the legal entity is still usable for routing,
+          // but VAT invoices will fail until this is added. Log so the
+          // admin can fix it manually if needed.
+        }
+      }
+    }
+
+    // ── Step 4: Patch legal entity with tax_registered = true ──────
+    //
+    // Storecove defaults tax_registered to true, but we set it
+    // explicitly to be safe. This flag tells Storecove's UBL generator
+    // that the sender is VAT-registered, which is required for
+    // invoices with VAT amounts.
+    const patchResponse = await this.makeRequestWithRetry(
+      'PATCH',
+      `/legal_entities/${legalEntity.id}`,
+      { legal_entity: { tax_registered: true } },
+    );
+    if (!patchResponse.ok) {
+      const errorBody = await patchResponse.text();
+      logger.warn('[STORECOVE] Failed to patch tax_registered (non-fatal)', {
+        legalEntityId: legalEntity.id,
+        status: patchResponse.status,
+        body: errorBody,
+      });
+    }
+
     return legalEntity;
   }
 
