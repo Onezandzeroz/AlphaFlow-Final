@@ -548,22 +548,69 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
     // For credit notes (documentType CREDIT_NOTE), resolve the original
     // invoice's number from the originalInvoice relation so it can be
     // surfaced in cac:BillingReference (OIOUBL type 381).
+
+    // ── Sandbox test-receiver override ──────────────────────────
+    //
+    // The Storecove sandbox only has ONE Danish test receiver on the
+    // Peppol test network: scheme=DK:DIGST, identifier=DK10101011.
+    // AlphaFlow normally routes to 0184:<CVR>, but no 0184 test
+    // identifier exists on the test network. When these env vars are
+    // set, BOTH the routing AND the OIOUBL XML's <cbc:EndpointID>
+    // are overridden to the test receiver — they MUST match, or
+    // Storecove's schematron validation rejects the document.
+    //
+    //   STORECOVE_TEST_RECEIVER_SCHEME=DK:DIGST
+    //   STORECOVE_TEST_RECEIVER_IDENTIFIER=DK10101011
+    //
+    // Leave unset in production.
+    const testReceiverScheme = process.env.STORECOVE_TEST_RECEIVER_SCHEME;
+    const testReceiverIdentifier = process.env.STORECOVE_TEST_RECEIVER_IDENTIFIER;
+    const testOverrideActive = !!(testReceiverScheme && testReceiverIdentifier);
+
+    if (testOverrideActive) {
+      logger.info('[EINVOICE_SEND] Sandbox test-receiver override active', {
+        sendingId,
+        originalEndpoint: sending.recipientEndpointId,
+        originalCustomerCvr: sending.invoice.customerCvr,
+        overrideScheme: testReceiverScheme,
+        overrideIdentifier: testReceiverIdentifier,
+      });
+    }
+
+    // Build invoice input, applying test-receiver override to the
+    // customer CVR so the OIOUBL XML's <cbc:EndpointID> matches the
+    // routing endpoint. Without this match, Storecove rejects the
+    // document at schematron validation.
     const invoiceInput = {
       ...sending.invoice,
       originalInvoiceNumber: sending.invoice.originalInvoice?.invoiceNumber ?? null,
+      // Override customer CVR in the invoice data so buildOIOUBLData
+      // generates XML with the test receiver's identifier.
+      ...(testOverrideActive && {
+        customerCvr: testReceiverIdentifier,
+      }),
     };
     const invoiceData = buildOIOUBLData(invoiceInput, sending.company);
+
+    // Also set the endpointScheme on the customer so the OIOUBL
+    // generator uses the test receiver's scheme (e.g. DK:DIGST)
+    // instead of the hardcoded '0184'.
+    if (testOverrideActive) {
+      invoiceData.customer.endpointScheme = testReceiverScheme;
+    }
+
     const xmlContent = generateOIOUBL(invoiceData);
 
     logger.info('[EINVOICE_SEND] Generated OIOUBL XML', {
       sendingId,
       xmlLength: xmlContent.length,
+      testOverride: testOverrideActive,
     });
 
     // 5. Send via appropriate access point
     let result: { success: boolean; messageId?: string; errorCode?: string; errorMessage?: string; responseXml?: string };
 
-    if (sending.channel === EInvoiceSendChannel.STORECOVE || 
+    if (sending.channel === EInvoiceSendChannel.STORECOVE ||
         (sending.channel === EInvoiceSendChannel.PEPPOL_BIS && sending.company.storecoveConnected)) {
       // ── Storecove Access Point (Peppol + NemHandel eDelivery) ──
       // When routeToNemhandel is true, Storecove handles:
@@ -576,36 +623,14 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         ? StorecoveClient.parseEndpointId(sending.recipientEndpointId)
         : null;
 
-      // ── Sandbox test-receiver override ──────────────────────────
-      //
-      // The Storecove sandbox only has ONE Danish test receiver
-      // registered on the Peppol test network:
-      //   scheme: DK:DIGST, identifier: DK10101011
-      //
-      // AlphaFlow normally routes to 0184:<CVR> (Danish CVR register),
-      // but no 0184 test identifier exists on the Peppol test network.
-      // So in sandbox, set these env vars to override the recipient
-      // routing to the DK:DIGST test identifier:
-      //
-      //   STORECOVE_TEST_RECEIVER_SCHEME=DK:DIGST
-      //   STORECOVE_TEST_RECEIVER_IDENTIFIER=DK10101011
-      //
-      // When set, ALL sends are routed to this test receiver (regardless
-      // of the customer CVR on the invoice). Leave unset in production.
-      const testReceiverScheme = process.env.STORECOVE_TEST_RECEIVER_SCHEME;
-      const testReceiverIdentifier = process.env.STORECOVE_TEST_RECEIVER_IDENTIFIER;
-
-      const receiverScheme = testReceiverScheme || parsedEndpoint?.scheme;
-      const receiverIdentifier = testReceiverIdentifier || parsedEndpoint?.identifier;
-
-      if (testReceiverScheme && testReceiverIdentifier) {
-        logger.info('[EINVOICE_SEND] Sandbox test-receiver override active', {
-          sendingId,
-          originalEndpoint: sending.recipientEndpointId,
-          overrideScheme: testReceiverScheme,
-          overrideIdentifier: testReceiverIdentifier,
-        });
-      }
+      // Routing endpoint: use test receiver if override is active,
+      // otherwise use the parsed customer endpoint.
+      const receiverScheme = testOverrideActive
+        ? testReceiverScheme
+        : parsedEndpoint?.scheme;
+      const receiverIdentifier = testOverrideActive
+        ? testReceiverIdentifier
+        : parsedEndpoint?.identifier;
 
       const storecoveResult = await storecoveClient.submitInvoice(xmlContent, {
         legalEntityId: sending.company.storecoveLegalEntityId ?? undefined,

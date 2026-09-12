@@ -31,6 +31,13 @@ export interface OIOUBLInvoiceData {
   // Customer/Buyer information
   customer: {
     id: string;
+    /**
+     * Peppol endpoint scheme for the customer (e.g. '0184' for Danish
+     * CVR, 'DK:DIGST' for Digitalstyrelsen B2G test receiver).
+     * Defaults to '0184' (Danish CVR) if not set. Used in
+     * <cbc:EndpointID schemeID="..."> and <cac:PartyIdentification>.
+     */
+    endpointScheme?: string;
     name: string;
     streetAddress?: string;
     city?: string;
@@ -219,12 +226,12 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       'cac:AccountingCustomerParty': {
         'cac:Party': {
           'cbc:EndpointID': {
-            '@schemeID': '0184',
+            '@schemeID': data.customer.endpointScheme || '0184',
             '#': data.customer.id,
           },
           'cac:PartyIdentification': {
             'cbc:ID': {
-              '@schemeID': '0184',
+              '@schemeID': data.customer.endpointScheme || '0184',
               '#': data.customer.id,
             },
           },
