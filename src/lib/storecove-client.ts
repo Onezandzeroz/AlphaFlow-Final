@@ -580,14 +580,37 @@ export class StorecoveClient {
     }
 
     try {
-      // Storecove InvoiceSubmission payload (confirmed via OpenAPI 2.0.1):
-      //   - document: raw XML string (top-level, NOT nested under invoice)
-      //   - legalEntityId: camelCase (NOT legal_entity_id)
-      //   - routing: top-level object with eIdentifiers
-      // The `document` field is marked DEPRECATED in favor of `attachments`
-      // but still works for raw UBL/OIOUBL XML submission.
+      // Storecove DocumentSubmission payload (confirmed via OpenAPI 2.0.1
+      // and API docs section 5.2.43–5.2.100):
+      //
+      //   POST /document_submissions
+      //   {
+      //     "document": {
+      //       "documentType": "invoice",
+      //       "rawDocumentData": {
+      //         "document": "<base64-encoded UBL/OIOUBL XML>",
+      //         "parseStrategy": "ubl"
+      //       }
+      //     },
+      //     "legalEntityId": <number>,
+      //     "routing": {
+      //       "eIdentifiers": { "scheme": "...", "identifier": "..." }
+      //     }
+      //   }
+      //
+      // The `rawDocumentData` mode (JSON Parsed) lets us send pre-generated
+      // OIOUBL XML. Storecove parses it (parseStrategy: "ubl") and
+      // regenerates a schematron-clean document for the target network.
+      const base64Xml = Buffer.from(xmlContent, 'utf-8').toString('base64');
+
       const body: Record<string, unknown> = {
-        document: xmlContent,
+        document: {
+          documentType: 'invoice',
+          rawDocumentData: {
+            document: base64Xml,
+            parseStrategy: 'ubl',
+          },
+        },
       };
 
       // Set legal entity (camelCase field name)
@@ -605,12 +628,7 @@ export class StorecoveClient {
         };
       }
 
-      // NOTE: routeToNemhandel — Storecove's InvoiceSubmission schema does
-      // NOT have a `nemhandel` boolean field. NemHandel routing is determined
-      // by Storecove automatically based on the receiver's network registration.
-      // The previous `nemhandel: true` flag was incorrect and has been removed.
-
-      const response = await this.makeRequestWithRetry('POST', '/invoice_submissions', body);
+      const response = await this.makeRequestWithRetry('POST', '/document_submissions', body);
 
       if (!response.ok) {
         const error = await this.parseError(response);
@@ -993,7 +1011,27 @@ export class StorecoveClient {
    */
   private async parseError(response: Response): Promise<StorecoveApiError> {
     try {
-      return await response.json() as StorecoveApiError;
+      const body = await response.json();
+      // Storecove returns errors in two formats:
+      //   1. { errors: [{ source: "...", details: "..." }] }
+      //   2. { error: "...", message: "..." }
+      // Surface both, with the full body in `details` for debugging.
+      if (Array.isArray(body.errors) && body.errors.length > 0) {
+        const first = body.errors[0];
+        return {
+          error: `STORECOVE_${response.status}`,
+          message: first.details || first.source || `Storecove validation error`,
+          details: body,
+        };
+      }
+      if (body.error || body.message) {
+        return body as StorecoveApiError;
+      }
+      return {
+        error: `HTTP_${response.status}`,
+        message: JSON.stringify(body),
+        details: body,
+      };
     } catch {
       return {
         error: `HTTP_${response.status}`,

@@ -131,9 +131,18 @@ async function main() {
   </cac:InvoiceLine>
 </Invoice>`;
 
-  // 4. Build request payload
+  // 4. Build request payload — Storecove DocumentSubmission format
+  // The document field is an OBJECT (not a raw string), containing
+  // documentType + rawDocumentData with base64-encoded XML.
+  const base64Xml = Buffer.from(testXml, 'utf-8').toString('base64');
   const payload = {
-    document: testXml,
+    document: {
+      documentType: 'invoice',
+      rawDocumentData: {
+        document: base64Xml,
+        parseStrategy: 'ubl',
+      },
+    },
     legalEntityId: company.storecoveLegalEntityId,
     routing: {
       eIdentifiers: {
@@ -144,7 +153,7 @@ async function main() {
   };
 
   console.log('\n=== Request ===');
-  console.log('URL:', `${apiUrl}/invoice_submissions`);
+  console.log('URL:', `${apiUrl}/document_submissions`);
   console.log('Legal Entity ID:', payload.legalEntityId);
   console.log('Routing scheme:', payload.routing.eIdentifiers.scheme);
   console.log('Routing identifier:', payload.routing.eIdentifiers.identifier);
@@ -153,7 +162,7 @@ async function main() {
   // 5. Send to Storecove
   console.log('\n=== Sending to Storecove... ===');
   try {
-    const response = await fetch(`${apiUrl}/invoice_submissions`, {
+    const response = await fetch(`${apiUrl}/document_submissions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
