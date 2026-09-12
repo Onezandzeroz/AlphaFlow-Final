@@ -618,13 +618,17 @@ export class StorecoveClient {
         body.legalEntityId = options.legalEntityId;
       }
 
-      // Set routing if receiver scheme + identifier are provided
+      // Set routing if receiver scheme + identifier are provided.
+      // eIdentifiers is an ARRAY of RoutingIdentifier objects (each with
+      // `scheme` + `id` fields — NOT `identifier`).
       if (options.receiverScheme && options.receiverIdentifier) {
         body.routing = {
-          eIdentifiers: {
-            scheme: options.receiverScheme,
-            identifier: options.receiverIdentifier,
-          },
+          eIdentifiers: [
+            {
+              scheme: options.receiverScheme,
+              id: options.receiverIdentifier,
+            },
+          ],
         };
       }
 

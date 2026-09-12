@@ -134,6 +134,7 @@ async function main() {
   // 4. Build request payload — Storecove DocumentSubmission format
   // The document field is an OBJECT (not a raw string), containing
   // documentType + rawDocumentData with base64-encoded XML.
+  // eIdentifiers is an ARRAY of { scheme, id } objects.
   const base64Xml = Buffer.from(testXml, 'utf-8').toString('base64');
   const payload = {
     document: {
@@ -145,10 +146,12 @@ async function main() {
     },
     legalEntityId: company.storecoveLegalEntityId,
     routing: {
-      eIdentifiers: {
-        scheme: testScheme || 'DK:DIGST',
-        identifier: testIdentifier || 'DK10101011',
-      },
+      eIdentifiers: [
+        {
+          scheme: testScheme || 'DK:DIGST',
+          id: testIdentifier || 'DK10101011',
+        },
+      ],
     },
   };
 
