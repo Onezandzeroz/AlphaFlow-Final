@@ -36,6 +36,7 @@ import { auditLog } from '@/lib/audit';
 import { generateOIOUBL, type OIOUBLInvoiceData } from '@/lib/oioubl-generator';
 import { NemHandelClient } from '@/lib/nemhandel-client';
 import { storecoveClient, StorecoveClient } from '@/lib/storecove-client';
+import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -476,6 +477,8 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
           // company.bankAccount for paymentAccountId.
           select: {
             invoiceNumber: true,
+            status: true,
+            projectId: true,
             customerName: true,
             customerAddress: true,
             customerEmail: true,
@@ -685,6 +688,7 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
       });
 
       // Also update the Invoice status to SENT if it was DRAFT
+      const wasDraft = sending.invoice.status === 'DRAFT';
       await db.invoice.updateMany({
         where: {
           id: sending.invoiceId,
@@ -692,6 +696,42 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         },
         data: { status: 'SENT' },
       });
+
+      // ── Create accrual journal entry (Tilgodehavende) ──────────
+      //
+      // When an invoice transitions from DRAFT → SENT, an accrual
+      // journal entry MUST be created (debit Tilgodehavende, credit
+      // Omsætning + Udgående moms). The PDF email send route
+      // (/api/invoices/[id]/send) does this, but the e-invoice path
+      // previously did NOT — meaning e-invoiced invoices never
+      // appeared in the journal/transactions. This replicates the
+      // same logic so both send paths are consistent.
+      //
+      // Only runs if the invoice was actually DRAFT (first send).
+      // Re-sends of an already-SENT invoice don't create duplicate JEs.
+      if (wasDraft) {
+        try {
+          await createInvoiceAccrualJournalEntry(
+            sending.invoice,
+            sending.companyId,
+            sending.sentBy,
+          );
+          logger.info('[EINVOICE_SEND] Created accrual journal entry for invoice', {
+            sendingId,
+            invoiceId: sending.invoiceId,
+            invoiceNumber: sending.invoice.invoiceNumber,
+          });
+        } catch (jeError) {
+          // Non-fatal: the invoice was sent successfully, but the JE
+          // creation failed (e.g. missing chart-of-accounts setup).
+          // Log so it can be investigated, but don't fail the send.
+          logger.error('[EINVOICE_SEND] Failed to create accrual journal entry', {
+            sendingId,
+            invoiceId: sending.invoiceId,
+            error: jeError instanceof Error ? jeError.message : String(jeError),
+          });
+        }
+      }
 
       logger.info('[EINVOICE_SEND] E-invoice delivered successfully', {
         sendingId,
@@ -1269,4 +1309,163 @@ export async function registerNemHandel(
     logger.error('[EINVOICE_NEMHANDEL] Failed to register company in NemHandelsregisteret', error);
     throw error;
   }
+}
+
+// ─── INVOICE ACCRUAL JOURNAL ENTRY ─────────────────────────────────
+//
+// When an invoice is sent (DRAFT → SENT), an accrual journal entry
+// must be created to record the receivable (Tilgodehavende), revenue
+// (Omsætning), and output VAT (Udgående moms). This is the same logic
+// as /api/invoices/[id]/send (PDF email) — extracted here so both the
+// PDF and e-invoice send paths use identical accounting.
+//
+// Journal entry structure:
+//   Debit  1200 (Tilgodehavende)     = total gross amount
+//   Credit 4100 (Omsætning)          = net amount per line
+//   Credit 4510 (Udgående moms 25%)  = VAT 25% amount
+//   Credit 4520 (Udgående moms 12%)  = VAT 12% amount
+
+async function createInvoiceAccrualJournalEntry(
+  invoice: {
+    invoiceNumber: string;
+    customerName: string;
+    issueDate: Date;
+    lineItems: unknown;
+    projectId?: string | null;
+  },
+  companyId: string,
+  userId: string,
+): Promise<void> {
+  const lineItems = (Array.isArray(invoice.lineItems) ? invoice.lineItems : []) as Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    vatPercent: number;
+    accountId?: string;
+  }>;
+
+  // Standard Danish chart of accounts
+  const receivablesAccount = await db.account.findFirst({
+    where: { companyId, number: '1200', isActive: true },
+  });
+  const outputVat25Account = await db.account.findFirst({
+    where: { companyId, number: '4510', isActive: true },
+  });
+  const outputVat12Account = await db.account.findFirst({
+    where: { companyId, number: '4520', isActive: true },
+  });
+  const defaultRevenueAccount = await db.account.findFirst({
+    where: { companyId, number: '4100', isActive: true },
+  });
+
+  if (!receivablesAccount) {
+    logger.warn('[JOURNAL_ENTRY] No receivables account (1200) found — skipping accrual JE');
+    return;
+  }
+
+  const jeLines: Array<{
+    accountId: string;
+    debit: number;
+    credit: number;
+    description: string;
+    vatCode?: string | null;
+  }> = [];
+  let totalGross = 0;
+  const vatByRate: Record<number, number> = {};
+
+  for (const item of lineItems) {
+    if (!item.description?.trim() || (item.unitPrice ?? 0) <= 0) continue;
+    const netAmount = Number(item.quantity) * Number(item.unitPrice);
+    const vatAmount = (netAmount * Number(item.vatPercent)) / 100;
+    const grossAmount = netAmount + vatAmount;
+
+    const revenueAccountId = item.accountId || defaultRevenueAccount?.id;
+    if (revenueAccountId) {
+      jeLines.push({
+        accountId: revenueAccountId,
+        debit: 0,
+        credit: netAmount,
+        description: item.description,
+        vatCode: null,
+      });
+    }
+
+    if (vatAmount > 0) {
+      vatByRate[item.vatPercent] = (vatByRate[item.vatPercent] || 0) + vatAmount;
+    }
+
+    totalGross += grossAmount;
+  }
+
+  if (totalGross <= 0) return;
+
+  // Debit Tilgodehavende (receivables)
+  jeLines.unshift({
+    accountId: receivablesAccount.id,
+    debit: totalGross,
+    credit: 0,
+    description: `${invoice.invoiceNumber} – ${invoice.customerName}`,
+  });
+
+  // Credit Udgående moms 25%
+  if (vatByRate[25] && outputVat25Account) {
+    jeLines.push({
+      accountId: outputVat25Account.id,
+      debit: 0,
+      credit: vatByRate[25],
+      description: `${invoice.invoiceNumber} – Udgående moms 25%`,
+      vatCode: 'S25',
+    });
+  }
+
+  // Credit Udgående moms 12%
+  if (vatByRate[12] && outputVat12Account) {
+    jeLines.push({
+      accountId: outputVat12Account.id,
+      debit: 0,
+      credit: vatByRate[12],
+      description: `${invoice.invoiceNumber} – Udgående moms 12%`,
+      vatCode: 'S12',
+    });
+  }
+
+  // Validate balanced (debit = credit)
+  const totalDebit = jeLines.reduce((s, l) => s + l.debit, 0);
+  const totalCredit = jeLines.reduce((s, l) => s + l.credit, 0);
+
+  if (jeLines.length < 2 || Math.abs(totalDebit - totalCredit) >= 0.01) {
+    logger.warn('[JOURNAL_ENTRY] Unbalanced JE — skipping', {
+      invoiceNumber: invoice.invoiceNumber,
+      totalDebit,
+      totalCredit,
+      lineCount: jeLines.length,
+    });
+    return;
+  }
+
+  // Create the journal entry in a transaction + assign voucher number
+  await db.$transaction(async (tx) => {
+    const je = await tx.journalEntry.create({
+      data: {
+        date: invoice.issueDate,
+        description: `Tilgodehavende – Faktura ${invoice.invoiceNumber} – ${invoice.customerName}`,
+        reference: invoice.invoiceNumber,
+        status: 'POSTED',
+        userId,
+        companyId,
+        lines: {
+          create: jeLines.map(l => ({
+            companyId,
+            accountId: l.accountId,
+            debit: l.debit,
+            credit: l.credit,
+            description: l.description,
+            vatCode: (l.vatCode as string | null) ?? null,
+            projectId: invoice.projectId ?? null,
+          })),
+        },
+      },
+    });
+    await assignVoucherNumberIfPosted(tx, je.id, companyId, 'POSTED');
+  });
 }
