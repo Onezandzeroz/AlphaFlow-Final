@@ -1454,7 +1454,7 @@ async function createInvoiceAccrualJournalEntry(
         userId,
         companyId,
         lines: {
-          create: jeLines.map(l => ({
+          create: jeLines.map((l) => ({
             companyId,
             accountId: l.accountId,
             debit: l.debit,
@@ -1462,7 +1462,7 @@ async function createInvoiceAccrualJournalEntry(
             description: l.description,
             vatCode: (l.vatCode as string | null) ?? null,
             projectId: invoice.projectId ?? null,
-          })),
+          })) as any,
         },
       },
     });
