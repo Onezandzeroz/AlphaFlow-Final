@@ -1,10 +1,8 @@
 /**
- * Test Storecove invoice submission — JSON Pure mode (corrected).
+ * Storecove Test — Definitive JSON Pure mode based on OpenAPI spec.
  *
- * Key findings from Storecove docs:
- * 1. Tax category uses full words: "standard" (not "S"), "zero_rated" (not "Z")
- * 2. Tax requires a "country" field (e.g. "DK")
- * 3. Supplier needs publicIdentifiers with scheme "DK:ERST" for VAT number
+ * Field names confirmed from Storecove's OpenAPI 2.0 spec at
+ * https://api.storecove.com/api/v2/openapi.json
  *
  * Usage: bun scripts/test-storecove-send.ts
  */
@@ -13,7 +11,7 @@ import { db } from '../src/lib/db';
 
 async function main() {
   console.log('═'.repeat(60));
-  console.log('  Storecove Test — JSON Pure (corrected)');
+  console.log('  Storecove Test — Definitive (OpenAPI spec)');
   console.log('═'.repeat(60));
 
   const apiUrl = process.env.STORECOVE_API_URL!;
@@ -40,15 +38,15 @@ async function main() {
 
   console.log('Invoice:', invoice.invoiceNumber);
   console.log('Company:', company.name, 'CVR:', company.cvrNumber);
-  console.log('Legal Entity ID:', company.storecoveLegalEntityId);
 
   const lines = (Array.isArray(invoice.lineItems) ? invoice.lineItems : []) as any[];
   const cvr = company.cvrNumber;
   const vatNumber = `DK${cvr}`;
   const subtotal = Number(invoice.subtotal) || 0;
+  const vatTotal = Number(invoice.vatTotal) || 0;
   const total = Number(invoice.total) || 0;
 
-  // Map UBL category codes → Storecove enum values
+  // Map UBL category → Storecove enum (from OpenAPI spec Tax.category)
   const mapCategory = (ubl: string): string => {
     switch (ubl) {
       case 'S': return 'standard';
@@ -70,66 +68,81 @@ async function main() {
     vatGroups.set(percent, grp);
   }
 
+  // Build the InvoiceSubmission payload per OpenAPI spec:
+  // - InvoiceSubmission.invoice = Invoice object
+  // - InvoiceLine uses: description, quantity, amountExcludingTax, tax{country,percentage,category}
+  // - Tax uses "percentage" (NOT "percent"), "country", "category"
+  // - TaxSubtotal uses: taxableAmount, taxAmount, percentage, category, country
+  // - Party uses "companyName" (NOT "partyName")
+  // - Invoice top-level: amountIncludingTax (EXPERIMENTAL but accepted)
   const payload = {
-    document: {
-      documentType: 'invoice',
-      invoice: {
-        invoiceNumber: invoice.invoiceNumber,
-        issueDate: invoice.issueDate.toISOString().slice(0, 10),
-        dueDate: invoice.dueDate.toISOString().slice(0, 10),
-        documentCurrencyCode: invoice.currency || 'DKK',
-        accountingSupplierParty: {
-          publicIdentifiers: [
-            { scheme: '0184', id: cvr },
-            { scheme: 'DK:ERST', id: vatNumber },
-          ],
-        },
-        accountingCustomerParty: {
-          party: {
-            partyName: invoice.customerName,
-            address: { country: 'DK', line1: invoice.customerAddress || 'Test Address', city: 'Test', zip: '0000' },
-            publicIdentifiers: [{ scheme: testScheme || 'DK:DIGST', id: testIdentifier || 'DK10101011' }],
+    legalEntityId: company.storecoveLegalEntityId,
+    routing: {
+      eIdentifiers: [{ scheme: testScheme || 'DK:DIGST', id: testIdentifier || 'DK10101011' }],
+    },
+    invoice: {
+      invoiceNumber: invoice.invoiceNumber,
+      issueDate: invoice.issueDate.toISOString().slice(0, 10),
+      dueDate: invoice.dueDate.toISOString().slice(0, 10),
+      documentCurrencyCode: invoice.currency || 'DKK',
+      amountIncludingTax: Number(total.toFixed(2)),
+
+      // Supplier — tax identifier required for VAT number
+      accountingSupplierParty: {
+        publicIdentifiers: [
+          { scheme: '0184', id: cvr },
+          { scheme: 'DK:ERST', id: vatNumber },
+        ],
+      },
+
+      // Customer (receiver)
+      accountingCustomerParty: {
+        party: {
+          companyName: invoice.customerName,
+          address: {
+            country: 'DK',
+            line1: invoice.customerAddress || 'Test Address',
+            city: 'Test',
+            zip: '0000',
           },
         },
-        invoiceLines: lines.map((line: any) => {
-          const percent = Number(line.vatPercent) || Number(line.vatRate) || 25;
-          return {
-            description: line.description || line.name || 'Linje',
-            quantity: Number(line.quantity) || 1,
-            itemPrice: Number(line.unitPrice) || Number(line.price) || 0,
-            tax: {
-              country: 'DK',
-              percent,
-              category: mapCategory(percent === 0 ? 'Z' : 'S'),
-            },
-          };
-        }),
-        taxSubtotals: Array.from(vatGroups.values()).map(g => ({
-          country: 'DK',
-          taxableAmount: Number(g.taxable.toFixed(2)),
-          taxAmount: Number(g.tax.toFixed(2)),
-          percent: g.percent,
-          category: mapCategory(g.percent === 0 ? 'Z' : 'S'),
-        })),
-        monetaryTotal: {
-          lineExtensionAmount: Number(subtotal.toFixed(2)),
-          taxExclusiveAmount: Number(subtotal.toFixed(2)),
-          taxInclusiveAmount: Number(total.toFixed(2)),
-          payableAmount: Number(total.toFixed(2)),
-        },
-        paymentMeans: {
-          typeCode: '30',
-          payeeAccount: { iban: company.bankIban || undefined, accountNumber: company.bankAccount || undefined },
-        },
+        publicIdentifiers: [{ scheme: testScheme || 'DK:DIGST', id: testIdentifier || 'DK10101011' }],
       },
+
+      // Invoice lines — amountExcludingTax + tax{country,percentage,category}
+      invoiceLines: lines.map((line: any) => {
+        const percent = Number(line.vatPercent) || Number(line.vatRate) || 25;
+        const qty = Number(line.quantity) || 1;
+        const unitPrice = Number(line.unitPrice) || Number(line.price) || 0;
+        const lineNet = qty * unitPrice;
+        return {
+          description: line.description || line.name || 'Linje',
+          quantity: qty,
+          amountExcludingTax: Number(lineNet.toFixed(2)),
+          tax: {
+            country: 'DK',
+            percentage: percent,
+            category: mapCategory(percent === 0 ? 'Z' : 'S'),
+          },
+        };
+      }),
+
+      // Tax subtotals
+      taxSubtotals: Array.from(vatGroups.values()).map(g => ({
+        taxableAmount: Number(g.taxable.toFixed(2)),
+        taxAmount: Number(g.tax.toFixed(2)),
+        percentage: g.percent,
+        category: mapCategory(g.percent === 0 ? 'Z' : 'S'),
+        country: 'DK',
+      })),
     },
-    legalEntityId: company.storecoveLegalEntityId,
-    routing: { eIdentifiers: [{ scheme: testScheme || 'DK:DIGST', id: testIdentifier || 'DK10101011' }] },
   };
 
-  console.log('\n=== Request ===');
-  console.log('Tax category: standard (25% DK VAT)');
-  console.log('Routing:', testScheme + ':' + testIdentifier);
+  console.log('\n=== Payload structure ===');
+  console.log('Top-level keys:', Object.keys(payload));
+  console.log('Invoice keys:', Object.keys(payload.invoice));
+  console.log('First line keys:', Object.keys((payload.invoice as any).invoiceLines[0] || {}));
+  console.log('Tax keys:', Object.keys((payload.invoice as any).invoiceLines[0]?.tax || {}));
 
   console.log('\n=== Sending... ===');
   try {
