@@ -50,6 +50,33 @@ export const POST = withGuard(
       // Derive scheme from country code if not provided
       const resolvedScheme = scheme?.trim() || StorecoveClient.getSchemeForCountry(resolvedCountryCode);
 
+      // ── Sandbox test-receiver override ──────────────────────────
+      // If STORECOVE_TEST_RECEIVER_SCHEME/IDENTIFIER env vars are set
+      // (sandbox mode), the pre-flight check always reports the test
+      // receiver as reachable. This prevents the "recipient cannot
+      // receive e-invoices" warning when the real 0184:<CVR> isn't on
+      // the Peppol test network but the DK:DIGST test identifier is.
+      const testReceiverScheme = process.env.STORECOVE_TEST_RECEIVER_SCHEME;
+      const testReceiverIdentifier = process.env.STORECOVE_TEST_RECEIVER_IDENTIFIER;
+
+      if (testReceiverScheme && testReceiverIdentifier) {
+        logger.info('[STORECOVE_PARTICIPANTS] Sandbox test-receiver override active', {
+          originalScheme: resolvedScheme,
+          originalIdentifier: identifier.trim(),
+          overrideScheme: testReceiverScheme,
+          overrideIdentifier: testReceiverIdentifier,
+        });
+        return NextResponse.json({
+          exists: true,
+          scheme: testReceiverScheme,
+          identifier: testReceiverIdentifier,
+          name: 'Storecove Test Receiver (DK:DIGST)',
+          countryCode: 'DK',
+          accessPoints: [],
+          testOverride: true,
+        });
+      }
+
       const result = await storecoveClient.lookupParticipant(resolvedScheme, identifier.trim());
 
       logger.info('[STORECOVE_PARTICIPANTS] Participant lookup', {

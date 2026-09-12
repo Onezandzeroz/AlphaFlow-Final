@@ -575,11 +575,42 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
       const parsedEndpoint = sending.recipientEndpointId
         ? StorecoveClient.parseEndpointId(sending.recipientEndpointId)
         : null;
-      
+
+      // ── Sandbox test-receiver override ──────────────────────────
+      //
+      // The Storecove sandbox only has ONE Danish test receiver
+      // registered on the Peppol test network:
+      //   scheme: DK:DIGST, identifier: DK10101011
+      //
+      // AlphaFlow normally routes to 0184:<CVR> (Danish CVR register),
+      // but no 0184 test identifier exists on the Peppol test network.
+      // So in sandbox, set these env vars to override the recipient
+      // routing to the DK:DIGST test identifier:
+      //
+      //   STORECOVE_TEST_RECEIVER_SCHEME=DK:DIGST
+      //   STORECOVE_TEST_RECEIVER_IDENTIFIER=DK10101011
+      //
+      // When set, ALL sends are routed to this test receiver (regardless
+      // of the customer CVR on the invoice). Leave unset in production.
+      const testReceiverScheme = process.env.STORECOVE_TEST_RECEIVER_SCHEME;
+      const testReceiverIdentifier = process.env.STORECOVE_TEST_RECEIVER_IDENTIFIER;
+
+      const receiverScheme = testReceiverScheme || parsedEndpoint?.scheme;
+      const receiverIdentifier = testReceiverIdentifier || parsedEndpoint?.identifier;
+
+      if (testReceiverScheme && testReceiverIdentifier) {
+        logger.info('[EINVOICE_SEND] Sandbox test-receiver override active', {
+          sendingId,
+          originalEndpoint: sending.recipientEndpointId,
+          overrideScheme: testReceiverScheme,
+          overrideIdentifier: testReceiverIdentifier,
+        });
+      }
+
       const storecoveResult = await storecoveClient.submitInvoice(xmlContent, {
         legalEntityId: sending.company.storecoveLegalEntityId ?? undefined,
-        receiverScheme: parsedEndpoint?.scheme,
-        receiverIdentifier: parsedEndpoint?.identifier,
+        receiverScheme,
+        receiverIdentifier,
         routeToNemhandel: sending.channel === EInvoiceSendChannel.STORECOVE,
       });
 
