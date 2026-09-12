@@ -1,141 +1,146 @@
 /**
- * Test Storecove invoice submission directly — shows the EXACT error
- * from Storecove's API (422 validation details, etc.)
+ * Test Storecove invoice submission — uses AlphaFlow's REAL OIOUBL
+ * generator output (same as processEInvoiceSend produces) instead of
+ * hand-crafted XML. This tests the actual integration.
  *
  * Usage:
  *   bun scripts/test-storecove-send.ts
  *
- * Bun auto-loads .env, so no need to source it first.
+ * Bun auto-loads .env.
  */
 
 import { db } from '../src/lib/db';
+import { generateOIOUBL } from '../src/lib/oioubl-generator';
 
 async function main() {
   console.log('═'.repeat(60));
-  console.log('  Storecove Test Submission — Diagnostic');
+  console.log('  Storecove Test Submission — Real OIOUBL XML');
   console.log('═'.repeat(60));
 
-  // 1. Check env vars
   const apiUrl = process.env.STORECOVE_API_URL;
   const apiKey = process.env.STORECOVE_API_KEY;
   const testScheme = process.env.STORECOVE_TEST_RECEIVER_SCHEME;
   const testIdentifier = process.env.STORECOVE_TEST_RECEIVER_IDENTIFIER;
 
   console.log('\n=== Environment ===');
-  console.log('STORECOVE_API_URL:', apiUrl || '(missing)');
-  console.log('STORECOVE_API_KEY:', apiKey ? `${apiKey.slice(0, 12)}...` : '(missing)');
-  console.log('TEST_RECEIVER_SCHEME:', testScheme || '(missing)');
-  console.log('TEST_RECEIVER_IDENTIFIER:', testIdentifier || '(missing)');
+  console.log('API_URL:', apiUrl);
+  console.log('API_KEY:', apiKey ? `${apiKey.slice(0, 12)}...` : '(missing)');
+  console.log('TEST_SCHEME:', testScheme || '(missing)');
+  console.log('TEST_IDENTIFIER:', testIdentifier || '(missing)');
 
   if (!apiUrl || !apiKey) {
-    console.error('\n✗ STORECOVE_API_URL or STORECOVE_API_KEY not set in .env');
+    console.error('\n✗ Missing env vars');
     process.exit(1);
   }
 
-  // 2. Get legal entity ID from DB
-  console.log('\n=== Legal Entity from DB ===');
+  // ── 1. Get a DRAFT invoice + company from DB ──────────────────
+  console.log('\n=== Finding a DRAFT invoice ===');
+  const invoice = await db.invoice.findFirst({
+    where: { status: 'DRAFT' },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true, invoiceNumber: true, customerName: true, customerAddress: true,
+      customerEmail: true, customerPhone: true, customerCvr: true,
+      issueDate: true, dueDate: true, lineItems: true,
+      subtotal: true, vatTotal: true, total: true, currency: true,
+      notes: true, documentType: true, originalInvoiceId: true,
+      originalInvoice: { select: { invoiceNumber: true } },
+    },
+  });
+
+  if (!invoice) {
+    console.error('\n✗ No DRAFT invoice found. Create one first.');
+    process.exit(1);
+  }
+
+  console.log('Invoice:', invoice.invoiceNumber, '(', invoice.customerName, ')');
+  console.log('Customer CVR:', invoice.customerCvr || '(none)');
+
   const company = await db.company.findFirst({
     where: { storecoveConnected: true, storecoveLegalEntityId: { not: null } },
     select: {
-      id: true,
-      name: true,
-      cvrNumber: true,
+      id: true, name: true, address: true, email: true, phone: true,
+      cvrNumber: true, bankName: true, bankAccount: true, bankIban: true,
       storecoveLegalEntityId: true,
-      storecoveConnected: true,
     },
   });
 
   if (!company || !company.storecoveLegalEntityId) {
-    console.error('\n✗ No company with a connected Storecove legal entity found.');
-    console.error('  Create one via the UI: Settings → eLevering → Opret juridisk enhed i Storecove');
+    console.error('\n✗ No company with Storecove legal entity connected.');
     process.exit(1);
   }
 
-  console.log('Company:', company.name);
-  console.log('CVR:', company.cvrNumber);
+  console.log('Company:', company.name, '(CVR:', company.cvrNumber + ')');
   console.log('Legal Entity ID:', company.storecoveLegalEntityId);
 
-  // 3. Build minimal test OIOUBL XML
-  const testXml = `<?xml version="1.0" encoding="UTF-8"?>
-<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2">
-  <cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</cbc:CustomizationID>
-  <cbc:ProfileID>urn:fdc:peppol.eu:2017:poacc:billing:01</cbc:ProfileID>
-  <cbc:ID>TEST-001</cbc:ID>
-  <cbc:IssueDate>2026-09-12</cbc:IssueDate>
-  <cbc:DueDate>2026-10-12</cbc:DueDate>
-  <cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>
-  <cbc:DocumentCurrencyCode>DKK</cbc:DocumentCurrencyCode>
-  <cac:AccountingSupplierParty>
-    <cac:Party>
-      <cbc:EndpointID schemeID="0184">${company.cvrNumber}</cbc:EndpointID>
-      <cac:PartyName><cbc:Name>${company.name}</cbc:Name></cac:PartyName>
-      <cac:PostalAddress>
-        <cbc:StreetName>Test Address</cbc:StreetName>
-        <cbc:CityName>Aarhus</cbc:CityName>
-        <cbc:PostalZone>8000</cbc:PostalZone>
-        <cac:Country><cbc:IdentificationCode>DK</cbc:IdentificationCode></cac:Country>
-      </cac:PostalAddress>
-      <cac:PartyTaxScheme>
-        <cbc:CompanyID>DK${company.cvrNumber}</cbc:CompanyID>
-        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
-      </cac:PartyTaxScheme>
-      <cac:PartyLegalEntity><cbc:RegistrationName>${company.name}</cbc:RegistrationName></cac:PartyLegalEntity>
-    </cac:Party>
-  </cac:AccountingSupplierParty>
-  <cac:AccountingCustomerParty>
-    <cac:Party>
-      <cbc:EndpointID schemeID="${testScheme || 'DK:DIGST'}">${testIdentifier || 'DK10101011'}</cbc:EndpointID>
-      <cac:PartyName><cbc:Name>Storecove Test Receiver</cbc:Name></cac:PartyName>
-      <cac:PostalAddress>
-        <cbc:StreetName>Test</cbc:StreetName>
-        <cbc:CityName>Test</cbc:CityName>
-        <cbc:PostalZone>0000</cbc:PostalZone>
-        <cac:Country><cbc:IdentificationCode>DK</cbc:IdentificationCode></cac:Country>
-      </cac:PostalAddress>
-    </cac:Party>
-  </cac:AccountingCustomerParty>
-  <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="DKK">2500.00</cbc:TaxAmount>
-    <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="DKK">10000.00</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="DKK">2500.00</cbc:TaxAmount>
-      <cac:TaxCategory>
-        <cbc:ID>S</cbc:ID>
-        <cbc:Percent>25</cbc:Percent>
-        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
-      </cac:TaxCategory>
-    </cac:TaxSubtotal>
-  </cac:TaxTotal>
-  <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="DKK">10000.00</cbc:LineExtensionAmount>
-    <cbc:TaxExclusiveAmount currencyID="DKK">10000.00</cbc:TaxExclusiveAmount>
-    <cbc:TaxInclusiveAmount currencyID="DKK">12500.00</cbc:TaxInclusiveAmount>
-    <cbc:PayableAmount currencyID="DKK">12500.00</cbc:PayableAmount>
-  </cac:LegalMonetaryTotal>
-  <cac:InvoiceLine>
-    <cbc:ID>1</cbc:ID>
-    <cbc:InvoicedQuantity unitCode="EA">5</cbc:InvoicedQuantity>
-    <cbc:LineExtensionAmount currencyID="DKK">10000.00</cbc:LineExtensionAmount>
-    <cac:Item>
-      <cbc:Description>Test item</cbc:Description>
-      <cbc:Name>Test item</cbc:Name>
-      <cac:ClassifiedTaxCategory>
-        <cbc:ID>S</cbc:ID>
-        <cbc:Percent>25</cbc:Percent>
-        <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
-      </cac:ClassifiedTaxCategory>
-    </cac:Item>
-    <cac:Price>
-      <cbc:PriceAmount currencyID="DKK">2000.00</cbc:PriceAmount>
-    </cac:Price>
-  </cac:InvoiceLine>
-</Invoice>`;
+  // ── 2. Generate REAL OIOUBL XML (same as processEInvoiceSend) ─
+  // Apply test-receiver override to customer CVR + endpointScheme
+  // so the XML's <cbc:EndpointID> matches the routing endpoint.
+  const invoiceInput = {
+    ...invoice,
+    originalInvoiceNumber: invoice.originalInvoice?.invoiceNumber ?? null,
+    // Override customer CVR so XML EndpointID matches routing
+    customerCvr: testIdentifier || invoice.customerCvr,
+  };
 
-  // 4. Build request payload — Storecove DocumentSubmission format
-  // The document field is an OBJECT (not a raw string), containing
-  // documentType + rawDocumentData with base64-encoded XML.
-  // eIdentifiers is an ARRAY of { scheme, id } objects.
-  const base64Xml = Buffer.from(testXml, 'utf-8').toString('base64');
+  // Build OIOUBL data (mirrors buildOIOUBLData in einvoice-sender.ts)
+  const lines = (Array.isArray(invoiceInput.lineItems) ? invoiceInput.lineItems : []) as Array<{
+    description?: string; name?: string; quantity?: number; unitCode?: string;
+    unitPrice?: number; price?: number; vatPercent?: number; vatRate?: number;
+  }>;
+
+  const invoiceData = {
+    invoiceId: invoiceInput.invoiceNumber,
+    issueDate: invoiceInput.issueDate.toISOString().slice(0, 10),
+    dueDate: invoiceInput.dueDate.toISOString().slice(0, 10),
+    invoiceTypeCode: invoiceInput.documentType === 'CREDIT_NOTE' ? '381' : '380',
+    originalInvoiceNumber: invoiceInput.documentType === 'CREDIT_NOTE'
+      ? (invoiceInput.originalInvoiceNumber || undefined) : undefined,
+    supplier: {
+      id: company.cvrNumber || 'DK00000000',
+      name: company.name,
+      streetAddress: company.address || undefined,
+      city: undefined,
+      country: 'DK',
+      vatNumber: company.cvrNumber ? `DK${company.cvrNumber}` : undefined,
+      contactEmail: company.email || undefined,
+      contactPhone: company.phone || undefined,
+    },
+    customer: {
+      id: invoiceInput.customerCvr || `CUST-${invoiceInput.invoiceNumber}`,
+      endpointScheme: testScheme, // e.g. 'DK:DIGST' for test receiver
+      name: invoiceInput.customerName,
+      streetAddress: invoiceInput.customerAddress || undefined,
+      city: undefined,
+      country: 'DK',
+      vatNumber: invoiceInput.customerCvr ? `DK${invoiceInput.customerCvr}` : undefined,
+      contactEmail: invoiceInput.customerEmail || undefined,
+    },
+    lines: lines.map((line, index) => ({
+      id: String(index + 1),
+      description: line.description || line.name || 'Linje',
+      quantity: Number(line.quantity) || 1,
+      unitCode: line.unitCode || 'EA',
+      unitPrice: Number(line.unitPrice) || Number(line.price) || 0,
+      vatPercent: Number(line.vatPercent) || Number(line.vatRate) || 25,
+      vatCategoryCode: (Number(line.vatPercent) || Number(line.vatRate) || 25) === 0 ? 'Z' : 'S',
+    })),
+    taxTotal: Number(invoiceInput.vatTotal) || 0,
+    payableAmount: Number(invoiceInput.total) || 0,
+    taxExclusiveAmount: Number(invoiceInput.subtotal) || 0,
+    taxInclusiveAmount: Number(invoiceInput.total) || 0,
+    paymentMeansCode: '30',
+    paymentAccountId: company.bankIban || company.bankAccount || undefined,
+    currencyCode: invoiceInput.currency || 'DKK',
+  };
+
+  const xmlContent = generateOIOUBL(invoiceData);
+
+  console.log('\n=== Generated OIOUBL XML (first 800 chars) ===');
+  console.log(xmlContent.slice(0, 800) + '\n...');
+
+  // ── 3. Build Storecove DocumentSubmission payload ─────────────
+  const base64Xml = Buffer.from(xmlContent, 'utf-8').toString('base64');
   const payload = {
     document: {
       documentType: 'invoice',
@@ -158,11 +163,10 @@ async function main() {
   console.log('\n=== Request ===');
   console.log('URL:', `${apiUrl}/document_submissions`);
   console.log('Legal Entity ID:', payload.legalEntityId);
-  console.log('Routing scheme:', payload.routing.eIdentifiers.scheme);
-  console.log('Routing identifier:', payload.routing.eIdentifiers.identifier);
-  console.log('XML length:', testXml.length, 'chars');
+  console.log('Routing:', `${testScheme}:${testIdentifier}`);
+  console.log('XML length:', xmlContent.length, 'chars');
 
-  // 5. Send to Storecove
+  // ── 4. Send to Storecove ──────────────────────────────────────
   console.log('\n=== Sending to Storecove... ===');
   try {
     const response = await fetch(`${apiUrl}/document_submissions`, {
@@ -179,22 +183,19 @@ async function main() {
 
     console.log('\n=== Response ===');
     console.log('Status:', response.status, response.statusText);
-    console.log('Raw body:');
+    console.log('Body:');
     console.log(responseText);
 
-    // Try to parse as JSON for pretty-print
     try {
       const parsed = JSON.parse(responseText);
-      console.log('\n=== Parsed JSON ===');
+      console.log('\n=== Parsed ===');
       console.log(JSON.stringify(parsed, null, 2));
-    } catch {
-      // Not JSON — already printed raw
-    }
+    } catch {}
 
     if (response.ok) {
-      console.log('\n✓ SUCCESS — invoice submitted to Storecove');
+      console.log('\n✓ SUCCESS — invoice submitted to Storecove!');
     } else {
-      console.log(`\n✗ FAILED — Storecove returned ${response.status}`);
+      console.log(`\n✗ FAILED — ${response.status}`);
     }
   } catch (err) {
     console.error('\n✗ Network error:', err instanceof Error ? err.message : err);
