@@ -1,8 +1,15 @@
 /**
- * Storecove Test — Definitive JSON Pure mode based on OpenAPI spec.
+ * Storecove Test — Final definitive version based on OpenAPI spec.
  *
- * Field names confirmed from Storecove's OpenAPI 2.0 spec at
- * https://api.storecove.com/api/v2/openapi.json
+ * Key fixes:
+ * 1. address.street1 (NOT line1)
+ * 2. taxSystem: "tax_line_percentages" (NOT default tax_line_amounts)
+ * 3. tax.percentage (NOT tax.percent)
+ * 4. invoiceLine.price: { priceAmount, baseQuantity } (unit price object)
+ * 5. invoiceLine.amountExcludingTax (line total excluding VAT)
+ * 6. party.companyName (NOT partyName)
+ * 7. invoice.amountIncludingTax (top-level, NOT monetaryTotal)
+ * 8. accountingSupplierParty.publicIdentifiers with DK:ERST for VAT number
  *
  * Usage: bun scripts/test-storecove-send.ts
  */
@@ -11,7 +18,7 @@ import { db } from '../src/lib/db';
 
 async function main() {
   console.log('═'.repeat(60));
-  console.log('  Storecove Test — Definitive (OpenAPI spec)');
+  console.log('  Storecove Test — Final (OpenAPI spec)');
   console.log('═'.repeat(60));
 
   const apiUrl = process.env.STORECOVE_API_URL!;
@@ -32,7 +39,7 @@ async function main() {
 
   const company = await db.company.findFirst({
     where: { storecoveConnected: true, storecoveLegalEntityId: { not: null } },
-    select: { name: true, cvrNumber: true, bankIban: true, bankAccount: true, storecoveLegalEntityId: true },
+    select: { name: true, cvrNumber: true, address: true, bankIban: true, bankAccount: true, storecoveLegalEntityId: true },
   });
   if (!company?.storecoveLegalEntityId) { console.error('\n✗ No Storecove legal entity.'); process.exit(1); }
 
@@ -42,11 +49,8 @@ async function main() {
   const lines = (Array.isArray(invoice.lineItems) ? invoice.lineItems : []) as any[];
   const cvr = company.cvrNumber;
   const vatNumber = `DK${cvr}`;
-  const subtotal = Number(invoice.subtotal) || 0;
-  const vatTotal = Number(invoice.vatTotal) || 0;
   const total = Number(invoice.total) || 0;
 
-  // Map UBL category → Storecove enum (from OpenAPI spec Tax.category)
   const mapCategory = (ubl: string): string => {
     switch (ubl) {
       case 'S': return 'standard';
@@ -68,26 +72,18 @@ async function main() {
     vatGroups.set(percent, grp);
   }
 
-  // Build the InvoiceSubmission payload per OpenAPI spec:
-  // - InvoiceSubmission.invoice = Invoice object
-  // - InvoiceLine uses: description, quantity, amountExcludingTax, tax{country,percentage,category}
-  // - Tax uses "percentage" (NOT "percent"), "country", "category"
-  // - TaxSubtotal uses: taxableAmount, taxAmount, percentage, category, country
-  // - Party uses "companyName" (NOT "partyName")
-  // - Invoice top-level: amountIncludingTax (EXPERIMENTAL but accepted)
   const payload = {
     legalEntityId: company.storecoveLegalEntityId,
-    routing: {
-      eIdentifiers: [{ scheme: testScheme || 'DK:DIGST', id: testIdentifier || 'DK10101011' }],
-    },
+    routing: { eIdentifiers: [{ scheme: testScheme || 'DK:DIGST', id: testIdentifier || 'DK10101011' }] },
     invoice: {
       invoiceNumber: invoice.invoiceNumber,
       issueDate: invoice.issueDate.toISOString().slice(0, 10),
       dueDate: invoice.dueDate.toISOString().slice(0, 10),
       documentCurrencyCode: invoice.currency || 'DKK',
+      taxSystem: 'tax_line_percentages',
       amountIncludingTax: Number(total.toFixed(2)),
 
-      // Supplier — tax identifier required for VAT number
+      // Supplier — publicIdentifiers with tax identifier (DK:ERST)
       accountingSupplierParty: {
         publicIdentifiers: [
           { scheme: '0184', id: cvr },
@@ -95,30 +91,33 @@ async function main() {
         ],
       },
 
-      // Customer (receiver)
+      // Customer (receiver) — address uses street1 (NOT line1)
       accountingCustomerParty: {
         party: {
           companyName: invoice.customerName,
           address: {
             country: 'DK',
-            line1: invoice.customerAddress || 'Test Address',
-            city: 'Test',
+            street1: invoice.customerAddress || 'Test Street 1',
+            city: 'Test City',
             zip: '0000',
           },
         },
         publicIdentifiers: [{ scheme: testScheme || 'DK:DIGST', id: testIdentifier || 'DK10101011' }],
       },
 
-      // Invoice lines — amountExcludingTax + tax{country,percentage,category}
+      // Invoice lines — price object + amountExcludingTax + tax{country,percentage,category}
       invoiceLines: lines.map((line: any) => {
         const percent = Number(line.vatPercent) || Number(line.vatRate) || 25;
         const qty = Number(line.quantity) || 1;
         const unitPrice = Number(line.unitPrice) || Number(line.price) || 0;
-        const lineNet = qty * unitPrice;
         return {
           description: line.description || line.name || 'Linje',
           quantity: qty,
-          amountExcludingTax: Number(lineNet.toFixed(2)),
+          amountExcludingTax: Number((qty * unitPrice).toFixed(2)),
+          price: {
+            priceAmount: Number(unitPrice.toFixed(2)),
+            baseQuantity: 1,
+          },
           tax: {
             country: 'DK',
             percentage: percent,
@@ -137,12 +136,6 @@ async function main() {
       })),
     },
   };
-
-  console.log('\n=== Payload structure ===');
-  console.log('Top-level keys:', Object.keys(payload));
-  console.log('Invoice keys:', Object.keys(payload.invoice));
-  console.log('First line keys:', Object.keys((payload.invoice as any).invoiceLines[0] || {}));
-  console.log('Tax keys:', Object.keys((payload.invoice as any).invoiceLines[0]?.tax || {}));
 
   console.log('\n=== Sending... ===');
   try {
