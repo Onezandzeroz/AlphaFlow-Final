@@ -247,7 +247,13 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
       const virtualTransactions: Transaction[] = [];
 
       for (const invoice of invoices) {
+        // Skip CANCELLED invoices (reversed, should not contribute to stats)
         if (invoice.status === 'CANCELLED') continue;
+        // Skip DRAFT invoices — a draft is not yet a committed sale.
+        // It must NOT appear as a transaction or in the stats cards
+        // (Salg / Udgående moms) until it has been sent or marked paid.
+        // Only SENT and PAID invoices represent actual sales.
+        if (invoice.status === 'DRAFT') continue;
         if (invoiceIdsWithTransactions.has(invoice.id)) continue;
 
         const lineItems = (invoice.lineItems as Array<{
