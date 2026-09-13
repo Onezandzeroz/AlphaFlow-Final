@@ -109,7 +109,7 @@ export function SendEInvoiceDialog({
 
   // ── State ──
   const [channel, setChannel] = useState<string>(
-    einvoiceConfig?.defaultChannel || 'OIOUBL'
+    einvoiceConfig?.defaultChannel || 'STORECOVE'
   );
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
@@ -569,7 +569,7 @@ export function SendEInvoiceDialog({
                         {einvoiceConfig?.storecoveConnected && (
                           <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[8px] px-1 py-0">
                             <Zap className="h-2.5 w-2.5" />
-                            {isDa ? 'FORBINDET' : 'LIVE'}
+                            {isDa ? 'FORBUNDET' : 'LIVE'}
                           </Badge>
                         )}
                       </div>
