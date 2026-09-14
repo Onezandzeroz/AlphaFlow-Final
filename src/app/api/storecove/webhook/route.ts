@@ -101,30 +101,46 @@ export async function POST(request: Request) {
     }
 
     // ── 2. Parse the webhook event ─────────────────────────────────
-    let event: StorecoveWebhookEvent;
-    try {
-      event = JSON.parse(rawBody) as StorecoveWebhookEvent;
-    } catch {
-      logger.warn('[STORECOVE_WEBHOOK] Failed to parse webhook payload');
-      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
-    }
+    const rawEvent = JSON.parse(rawBody) as Record<string, unknown>;
 
     logger.info('[STORECOVE_WEBHOOK] Received webhook event', {
-      event: event.event,
-      timestamp: event.timestamp,
+      event_type: rawEvent.event_type,
+      event: rawEvent.event,
+      event_group: rawEvent.event_group,
+      timestamp: rawEvent.timestamp,
+      guid: rawEvent.guid || rawEvent.document_guid,
     });
 
-    // ── 3. Dispatch on event type ──────────────────────────────────
-    if (event.event === 'received_document') {
-      return await handleReceivedDocument(event);
+    // ── 3. Dispatch on event_type (primary discriminator) ─────────
+    //
+    // Storecove's webhook format (confirmed from API docs):
+    //   - event_type: "document_submission" → outbound (sending status)
+    //   - event_type: "received_document"  → inbound (received e-invoice)
+    //
+    // The `event` field is the SUB-event within each type:
+    //   - document_submission: succeeded, failed, cleared, accepted, rejected
+    //   - received_document: received, failed
+    //
+    // For backward compat with the old API format, we also check
+    // `event` directly (old format used event="received_document" etc.)
+    const eventType = rawEvent.event_type as string | undefined;
+    const eventSub = rawEvent.event as string | undefined;
+
+    // Inbound: received_document
+    if (eventType === 'received_document' || eventSub === 'received_document') {
+      return await handleReceivedDocument(rawEvent as unknown as StorecoveReceivedDocumentWebhookEvent);
     }
 
-    if (event.event === 'invoice_submission.status_changed') {
-      return await handleSubmissionStatusChanged(event);
+    // Outbound: document_submission status change
+    if (eventType === 'document_submission' || eventSub === 'invoice_submission.status_changed') {
+      return await handleSubmissionStatusChanged(rawEvent as unknown as StorecoveSubmissionWebhookEvent);
     }
 
-    // invoice_submission.created + legal_entity.updated — acknowledged, not actioned.
-    logger.info('[STORECOVE_WEBHOOK] Ignoring non-actionable event', { event: event.event });
+    // Other events (legal_entity.updated, etc.) — acknowledged, not actioned.
+    logger.info('[STORECOVE_WEBHOOK] Ignoring non-actionable event', {
+      event_type: eventType,
+      event: eventSub,
+    });
     return NextResponse.json({ received: true });
   } catch (error) {
     logger.error('[STORECOVE_WEBHOOK] Failed to process webhook:', error);
@@ -140,7 +156,21 @@ export async function POST(request: Request) {
 // We fetch the XML, resolve the tenant, parse, and store it.
 
 async function handleReceivedDocument(event: StorecoveReceivedDocumentWebhookEvent) {
-  const { document_guid, legal_entity_id, tenant_id, parseable } = event.data;
+  // Storecove's webhook format: document_guid is top-level (NOT under data).
+  // For backward compat, also check event.data.document_guid.
+  const document_guid = event.document_guid || event.data?.document_guid;
+  const legal_entity_id = event.data?.legal_entity_id;
+  const tenant_id = event.tenant_id || event.data?.tenant_id;
+  const parseable = event.parseable ?? event.data?.parseable;
+
+  if (!document_guid) {
+    logger.error('[STORECOVE_WEBHOOK] received_document missing document_guid', {
+      event_type: event.event_type,
+      event: event.event,
+      tenant_id,
+    });
+    return NextResponse.json({ received: true, error: 'missing_document_guid' });
+  }
 
   logger.info('[STORECOVE_WEBHOOK] Processing received_document', {
     document_guid,
@@ -155,7 +185,13 @@ async function handleReceivedDocument(event: StorecoveReceivedDocumentWebhookEve
   //   2. tenant_id (if it's our Company.id cuid) → Company.id
   //   3. Fetch received document JSON → match recipient endpoint
   //      (scheme:identifier) → Company.einvoiceEndpointId / cvrNumber
-  const company = await resolveTenant(event.data);
+  const company = await resolveTenant({
+    legal_entity_id,
+    tenant_id,
+    document_guid,
+    receiver_scheme: event.data?.receiver_scheme,
+    receiver_identifier: event.data?.receiver_identifier,
+  });
 
   if (!company) {
     // No tenant owns this legal entity / endpoint. Return 200 so Storecove
@@ -337,9 +373,133 @@ async function resolveTenant(data: {
 async function handleSubmissionStatusChanged(
   event: StorecoveSubmissionWebhookEvent,
 ) {
-  const submissionId = event.data.id;
-  const status = event.data.status;
+  // Storecove's webhook format: guid is top-level (NOT under data.id).
+  // The sub-event (event.event) is the status: succeeded, failed, etc.
+  // For backward compat, also check event.data.id.
+  const submissionId = event.guid || event.data?.id || '';
+  const status = event.event; // "succeeded", "failed", "cleared", "accepted", etc.
   const now = new Date();
+
+  // Map Storecove sub-events to AlphaFlow EInvoiceSendStatus
+  let newStatus: string;
+  let updateData: Record<string, unknown> = {};
+  let dbStatus: string | null = null;
+
+  switch (status) {
+    case 'succeeded':
+      // "succeeded" = received by corner 3 (receipt acknowledged)
+      newStatus = 'DELIVERED';
+      dbStatus = 'DELIVERED';
+      updateData = { status: 'DELIVERED', deliveredAt: now };
+      break;
+
+    case 'accepted':
+      newStatus = 'ACCEPTED';
+      dbStatus = 'ACCEPTED';
+      updateData = { status: 'ACCEPTED', acceptedAt: now };
+      break;
+
+    case 'rejected':
+      newStatus = 'REJECTED';
+      dbStatus = 'REJECTED';
+      updateData = {
+        status: 'REJECTED',
+        errorMessage: event.details || 'Recipient rejected the invoice',
+      };
+      break;
+
+    case 'failed':
+    case 'undeliverable':
+    case 'expired':
+    case 'no_action_taken':
+      newStatus = 'FAILED';
+      dbStatus = 'FAILED';
+      updateData = {
+        status: 'FAILED',
+        errorMessage: event.details || `Invoice delivery ${status}`,
+      };
+      break;
+
+    case 'cleared':
+      // "cleared" = cleared by the sender's tax authority (QR code obtained)
+      // Not a final delivery status — skip for now
+      logger.info('[STORECOVE_WEBHOOK] Document cleared (intermediate status)', {
+        submissionId,
+        status,
+      });
+      return NextResponse.json({ received: true });
+
+    case 'processing':
+    case 'in_process':
+    case 'started':
+    case 'under_query':
+    case 'conditionally_accepted':
+    case 'partially_paid':
+    case 'paid':
+      // These are corner-4 (receiver-side) statuses that require the
+      // sender to advertise InvoiceResponse. Log but don't update
+      // EInvoiceSending — the initial "succeeded" is the delivery.
+      logger.info('[STORECOVE_WEBHOOK] Intermediate corner-4 status received', {
+        submissionId,
+        status,
+      });
+      return NextResponse.json({ received: true });
+
+    default:
+      // For backward compat with old API format, check event.data.status
+      if (event.data?.status) {
+        const oldStatus = event.data.status;
+        switch (oldStatus) {
+          case 'delivered':
+            newStatus = 'DELIVERED';
+            dbStatus = 'DELIVERED';
+            updateData = { status: 'DELIVERED', deliveredAt: now };
+            break;
+          case 'accepted':
+            newStatus = 'ACCEPTED';
+            dbStatus = 'ACCEPTED';
+            updateData = { status: 'ACCEPTED', acceptedAt: now };
+            break;
+          case 'rejected':
+            newStatus = 'REJECTED';
+            dbStatus = 'REJECTED';
+            updateData = {
+              status: 'REJECTED',
+              errorMessage: event.data.rejection_reason || 'Recipient rejected the invoice',
+            };
+            break;
+          case 'undeliverable':
+          case 'expired':
+          case 'failed':
+            newStatus = 'FAILED';
+            dbStatus = 'FAILED';
+            updateData = {
+              status: 'FAILED',
+              errorMessage: event.data.rejection_reason || `Invoice delivery ${oldStatus}`,
+            };
+            break;
+          case 'processing':
+            newStatus = 'SENDING';
+            dbStatus = 'SENDING';
+            updateData = { status: 'SENDING' };
+            break;
+          default:
+            logger.warn('[STORECOVE_WEBHOOK] Unknown status received', { status, oldStatus });
+            return NextResponse.json({ received: true });
+        }
+      } else {
+        logger.warn('[STORECOVE_WEBHOOK] Unknown status received', { status });
+        return NextResponse.json({ received: true });
+      }
+  }
+
+  if (!submissionId) {
+    logger.warn('[STORECOVE_WEBHOOK] No submission GUID in webhook', {
+      event_type: event.event_type,
+      event: event.event,
+    });
+    return NextResponse.json({ received: true });
+  }
 
   // Look up the EInvoiceSending by storecoveSubmissionId
   const sending = await db.eInvoiceSending.findFirst({
@@ -352,48 +512,6 @@ async function handleSubmissionStatusChanged(
     });
     // Return 200 anyway — Storecove will retry on non-2xx responses
     return NextResponse.json({ received: true });
-  }
-
-  let updateData: Record<string, unknown> = {};
-  let newStatus: string;
-
-  switch (status) {
-    case 'delivered':
-      newStatus = 'DELIVERED';
-      updateData = { status: 'DELIVERED', deliveredAt: now };
-      break;
-
-    case 'accepted':
-      newStatus = 'ACCEPTED';
-      updateData = { status: 'ACCEPTED', acceptedAt: now };
-      break;
-
-    case 'rejected':
-      newStatus = 'REJECTED';
-      updateData = {
-        status: 'REJECTED',
-        errorMessage: event.data.rejection_reason || 'Recipient rejected the invoice',
-      };
-      break;
-
-    case 'undeliverable':
-    case 'expired':
-    case 'failed':
-      newStatus = 'FAILED';
-      updateData = {
-        status: 'FAILED',
-        errorMessage: event.data.rejection_reason || `Invoice delivery ${status}`,
-      };
-      break;
-
-    case 'processing':
-      newStatus = 'SENDING';
-      updateData = { status: 'SENDING' };
-      break;
-
-    default:
-      logger.warn('[STORECOVE_WEBHOOK] Unknown status received', { status });
-      return NextResponse.json({ received: true });
   }
 
   // Update the EInvoiceSending record
@@ -418,9 +536,9 @@ async function handleSubmissionStatusChanged(
     metadata: {
       source: 'storecove_webhook',
       storecoveSubmissionId: submissionId,
-      storecoveStorecoveId: String(event.data.storecove_id),
-      storecoveStatus: status,
-      rejectionReason: event.data.rejection_reason || null,
+      storecoveEvent: status,
+      storecoveDetails: event.details || null,
+      rejectionReason: event.data?.rejection_reason || null,
       timestamp: event.timestamp,
     },
   });

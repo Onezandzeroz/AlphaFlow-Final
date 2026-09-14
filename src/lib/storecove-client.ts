@@ -131,16 +131,42 @@ export interface StorecoveParticipantResult {
 /**
  * Storecove webhook event: outbound submission status change.
  *
- * Sent by Storecove when an invoice_submissions delivery status changes
- * (processing → delivered → accepted / rejected / failed).
+ * Storecove's actual webhook payload format (confirmed from API docs
+ * §3.3.4 Webhooks for Sending):
+ *   {
+ *     "event_type": "document_submission",
+ *     "event_group": "invoice",
+ *     "event": "succeeded",  // or "failed", "cleared", "accepted", etc.
+ *     "guid": "<submission-guid>",
+ *     "idempotencyGuid": "...",
+ *     "tenant_id": "...",
+ *     "v_delivery": true/false,
+ *     "details": "text",
+ *     "response_document": null
+ *   }
+ *
+ * NOTE: The primary discriminator is `event_type` (NOT `event`).
+ * The `event` field is the SUB-event (succeeded/failed/etc.).
+ * The `guid` field is the submission GUID (top-level, NOT nested
+ * under `data.id`).
  */
 export interface StorecoveSubmissionWebhookEvent {
-  event:
-    | 'invoice_submission.status_changed'
-    | 'invoice_submission.created'
-    | 'legal_entity.updated';
-  timestamp: string;
-  data: {
+  /** Primary event type — always "document_submission" for outbound */
+  event_type?: string;
+  /** Sub-event: succeeded, failed, cleared, accepted, rejected, etc. */
+  event: string;
+  /** Event group: "invoice", "invoice_response", etc. */
+  event_group?: string;
+  timestamp?: string;
+  /** Submission GUID (top-level, from POST /document_submissions response) */
+  guid?: string;
+  idempotencyGuid?: string;
+  tenant_id?: string;
+  v_delivery?: boolean;
+  details?: string;
+  response_document?: unknown;
+  // Legacy fields (old API format — kept for backward compat)
+  data?: {
     id: string;
     storecove_id: number;
     status: StorecoveSubmissionStatus;
@@ -158,31 +184,49 @@ export interface StorecoveSubmissionWebhookEvent {
  * Storecove webhook event: an inbound e-invoice was received for one of our
  * legal entities.
  *
- * Storecove delivers received documents via webhook (push) and/or a pull
- * queue. This event signals that a document is available for retrieval via
- * GET /received_documents/{document_guid}/{original|json}.
+ * Storecove's actual webhook payload format (confirmed from API docs
+ * §3.4.2 Received Document Webhook):
+ *   {
+ *     "event_type": "received_document",
+ *     "event_group": "invoice",
+ *     "event": "received",
+ *     "document_guid": "<guid>",
+ *     "tenant_id": "...",
+ *     "parseable": true/false,
+ *     "receive_guid": "..." (optional)
+ *   }
  *
- * The `tenant_id` is the free-form key we set when creating the legal entity;
- * `legal_entity_id` is the numeric Storecove legal entity id (matches
- * Company.storecoveLegalEntityId).
+ * NOTE: The primary discriminator is `event_type` (NOT `event`).
+ * The `event` field is the sub-event (always "received" for inbound).
+ * The `document_guid` is TOP-LEVEL (NOT nested under `data`).
  */
 export interface StorecoveReceivedDocumentWebhookEvent {
-  event: 'received_document';
-  timestamp: string;
-  data: {
-    /** Unique document identifier — used to fetch the document content. */
+  /** Primary event type — always "received_document" for inbound */
+  event_type?: string;
+  /** Sub-event: "received" (or "failed" for processing errors) */
+  event: string;
+  /** Event group: "invoice", "other", "unknown" */
+  event_group?: string;
+  timestamp?: string;
+  /** Unique document identifier — used to fetch document content via GET /received_documents/{guid}/{original|json} */
+  document_guid?: string;
+  /** Free-form tenant key set during legal entity creation (our Company.id) */
+  tenant_id?: string;
+  /** Whether Storecove could parse the document. If false, fetch `original` for raw XML. */
+  parseable?: boolean;
+  /** GUID returned when POSTing a document to ReceivedDocuments endpoint */
+  receive_guid?: string;
+  /** Processing notes (for failed documents) */
+  processing_notes?: unknown[];
+  // Legacy fields (old API format — kept for backward compat)
+  data?: {
     document_guid: string;
-    /** The legal entity the document was addressed to. */
     legal_entity_id?: number;
-    /** Free-form tenant key set during legal entity creation (our Company.id). */
     tenant_id?: string;
-    /** Whether Storecove could parse the document. If false, fetch `original` for raw XML. */
     parseable?: boolean;
-    /** Recipient endpoint (may be present for quick tenant resolution). */
     receiver_endpoint_id?: string;
     receiver_scheme?: string;
     receiver_identifier?: string;
-    /** Sender endpoint, when available. */
     sender_endpoint_id?: string;
     sender_scheme?: string;
     sender_identifier?: string;
@@ -192,8 +236,13 @@ export interface StorecoveReceivedDocumentWebhookEvent {
 /**
  * Discriminated union of all Storecove webhook events AlphaFlow handles.
  *
- * Outbound: invoice_submission.* + legal_entity.updated → update EInvoiceSending status.
- * Inbound:  received_document                       → fetch + parse + store ReceivedInvoice.
+ * Outbound: event_type="document_submission" → update EInvoiceSending status
+ *           (sub-events: succeeded, failed, cleared, accepted, rejected, etc.)
+ * Inbound:  event_type="received_document"  → fetch + parse + store ReceivedInvoice
+ *           (sub-events: received, failed)
+ *
+ * NOTE: The primary discriminator is `event_type`, NOT `event`.
+ * The `event` field is the sub-event within each type.
  */
 export type StorecoveWebhookEvent =
   | StorecoveSubmissionWebhookEvent
