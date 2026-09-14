@@ -109,6 +109,12 @@ interface AuditOptions {
 /**
  * Log an audit event. This is the core function — all API routes
  * should call this for any data mutation.
+ *
+ * CRITICAL events (e.g. DELETE_ATTEMPT on JournalEntry/Transaction)
+ * trigger an IMMEDIATE email to ALERT_EMAIL_RECIPIENT — they do NOT
+ * wait for the daily 06:00 log-monitor scan. This ensures the SuperDev
+ * is notified right away when someone attempts to circumvent
+ * immutability (Bogføringsloven §10-12).
  */
 export async function auditLog(opts: AuditOptions): Promise<void> {
   try {
@@ -124,6 +130,40 @@ export async function auditLog(opts: AuditOptions): Promise<void> {
         metadata: (opts.metadata ?? null) as Prisma.InputJsonValue,
       },
     });
+
+    // ── Immediate critical-incident notification ────────────────
+    //
+    // Check if this event is critical-severity. If so, send an
+    // immediate email to the SuperDev — don't wait for the daily scan.
+    // This is fire-and-forget (non-blocking) so the API response isn't
+    // delayed by the email send. Rate-limited per category (5 min cooldown)
+    // to prevent flooding during an attack.
+    //
+    // Dynamic import avoids a circular dependency: log-monitor.ts
+    // imports from audit.ts indirectly via the scan function, so we
+    // can't statically import it here.
+    try {
+      const { getCriticalEventSeverity, notifyCriticalEventImmediately } = await import('@/lib/log-monitor');
+      const severity = getCriticalEventSeverity(opts.action, opts.entityType);
+      if (severity === 'critical') {
+        // Fire-and-forget — don't block the audit log write
+        notifyCriticalEventImmediately({
+          action: opts.action,
+          entityType: opts.entityType,
+          entityId: opts.entityId,
+          userId: opts.userId,
+          companyId: opts.companyId,
+          metadata: opts.metadata as Record<string, unknown> | undefined,
+        }).catch((err) => {
+          logger.error('[AUDIT] Failed to send immediate critical alert:', err);
+        });
+      }
+    } catch (importErr) {
+      // Non-fatal — if log-monitor can't be imported (e.g. during
+      // build/edge runtime), skip the immediate notification. The
+      // daily scan will still catch it at 06:00.
+      logger.debug('[AUDIT] Could not load log-monitor for immediate notification:', importErr);
+    }
   } catch (error) {
     // Audit logging should never crash the application
     logger.error('[AUDIT] Failed to write audit log:', error);

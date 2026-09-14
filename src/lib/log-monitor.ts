@@ -560,9 +560,17 @@ export async function scanAuditLogForAlerts(
 // ─── Optional e-mail hook (for the daily cron) ────────────────────────────
 
 /**
- * Send an e-mail summary of critical/high alerts to the configured
+ * Send an e-mail summary of alerts to the configured
  * `ALERT_EMAIL_RECIPIENT`. This is OPTIONAL — if the env var is not set,
  * the function is a no-op. Safe to call from the scheduler.
+ *
+ * BEHAVIOUR:
+ *   - If there ARE critical/high alerts → sends a detailed alert table.
+ *   - If there are NO critical/high alerts → sends a "system nominal"
+ *     confirmation email stating no incidents were observed and the
+ *     application is operating normally.
+ *   - Medium/low alerts are included in the nominal email as a count
+ *     summary but do not trigger the detailed alert table.
  *
  * The e-mail is sent via the existing `sendEmail` infrastructure so it is
  * logged in the EmailLog table and respects the SMTP configuration.
@@ -576,13 +584,12 @@ export async function notifyAlertsViaEmail(alerts: LogAlert[]): Promise<void> {
     return;
   }
 
-  // Only e-mail critical + high alerts — medium/low are reviewed weekly.
+  // Separate critical/high (notable) from medium/low
   const notable = alerts.filter(
     (a) => a.severity === 'critical' || a.severity === 'high',
   );
-  if (notable.length === 0) {
-    return;
-  }
+  const mediumCount = alerts.filter((a) => a.severity === 'medium').length;
+  const lowCount = alerts.filter((a) => a.severity === 'low').length;
 
   try {
     // Dynamic import keeps the email-service dependency out of the
@@ -591,9 +598,89 @@ export async function notifyAlertsViaEmail(alerts: LogAlert[]): Promise<void> {
     // import makes the dependency explicit at the call site).
     const { sendEmail } = await import('@/lib/email-service');
 
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    if (notable.length === 0) {
+      // ── "All nominal" daily digest ──────────────────────────────
+      //
+      // No critical/high alerts in the last 24 hours. Send a
+      // confirmation email so the SuperDev knows the monitor is
+      // running and the system is healthy. This is important: if the
+      // SuperDev stops receiving the daily email, they know something
+      // is wrong with the monitor itself.
+      const subject = `[AlphaFlow] Daglig status — ingen hændelser (${dateStr})`;
+
+      const html = `
+        <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;max-width:760px;">
+          <h2 style="margin:0 0 8px 0;">Daglig sikkerhedsstatus — AlphaFlow</h2>
+          <p style="margin:0 0 16px 0;color:#4b5563;">
+            Den automatiske log-scanning har gennemført sit daglige tjek af alle
+            tenants for de seneste 24 timer.
+          </p>
+          <div style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:16px;margin:16px 0;">
+            <p style="margin:0;font-size:15px;color:#065f46;">
+              <strong>✓ Ingen kritiske eller høj-severitets hændelser observeret.</strong><br/>
+              Applikationen opererer nominelt.
+            </p>
+          </div>
+          <table style="border-collapse:collapse;width:100%;font-size:13px;margin:16px 0;">
+            <tr style="background:#f3f4f6;">
+              <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Scanningsperiode</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">Seneste 24 timer (alle tenants)</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Kritiske hændelser</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;color:#059669;font-weight:600;">0</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Høj-severitet hændelser</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;color:#059669;font-weight:600;">0</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Medium-severitet hændelser</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${mediumCount}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Lav-severitet hændelser</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">${lowCount}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Næste scanning</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;">06:00 Europe/Copenhagen (i morgen)</td>
+            </tr>
+          </table>
+          <p style="margin-top:16px;color:#6b7280;font-size:12px;">
+            Denne e-mail sendes automatisk hver dag kl. 06:00 af log-monitor cron.
+            Hvis du ikke længere modtager denne e-mail, kan det indikere at
+            overvågningen er stoppet — undersøg omgående. Svares ikke på denne e-mail.
+          </p>
+        </div>
+      `;
+
+      await sendEmail({
+        to: recipient,
+        subject,
+        html,
+        template: 'owner-notification',
+        metadata: {
+          source: 'log-monitor-cron',
+          alertCount: 0,
+          type: 'daily_nominal',
+          mediumCount,
+          lowCount,
+        },
+      });
+
+      logger.info(
+        `[LOG-MONITOR] Daily nominal e-mail sent to ${recipient} (0 critical/high alerts, ${mediumCount} medium, ${lowCount} low)`,
+      );
+      return;
+    }
+
+    // ── Alert digest (critical/high alerts present) ──────────────
     const subject =
       `[AlphaFlow] ${notable.length} sikkerhedsadvarsel(le) kræver gennemgang — ` +
-      `${new Date().toISOString().slice(0, 10)}`;
+      dateStr;
 
     const rows = notable
       .map((a) => {
@@ -634,6 +721,7 @@ export async function notifyAlertsViaEmail(alerts: LogAlert[]): Promise<void> {
           </thead>
           <tbody>${rows}</tbody>
         </table>
+        ${mediumCount + lowCount > 0 ? `<p style="margin-top:12px;color:#6b7280;font-size:12px;">Derudover blev ${mediumCount} medium- og ${lowCount} lav-severitets hændelser registreret. Disse kræver ikke øjeblikkelig handling men gennemgås ved den ugentlige manuelle review.</p>` : ''}
         <p style="margin-top:16px;color:#6b7280;font-size:12px;">
           E-mail sendt af log-monitor cron (06:00 Europe/Copenhagen). Svares ikke på denne e-mail.
         </p>
@@ -648,7 +736,10 @@ export async function notifyAlertsViaEmail(alerts: LogAlert[]): Promise<void> {
       metadata: {
         source: 'log-monitor-cron',
         alertCount: notable.length,
+        type: 'alert_digest',
         severities: notable.map((a) => a.severity),
+        mediumCount,
+        lowCount,
       },
     });
 
@@ -659,4 +750,179 @@ export async function notifyAlertsViaEmail(alerts: LogAlert[]): Promise<void> {
     // Never let an e-mail failure crash the scheduler.
     logger.error('[LOG-MONITOR] Failed to send alert e-mail:', error);
   }
+}
+
+// ─── Immediate critical-incident notification ─────────────────────────────
+//
+// While the daily scan (06:00) catches everything within 24h, CRITICAL
+// events must trigger an immediate email so the SuperDev can respond
+// right away — not wait up to 24 hours for the next scan.
+//
+// This function is called from auditLog() (see audit.ts) whenever a
+// critical-severity event is written to the AuditLog. It sends an
+// immediate alert email with the event details.
+//
+// CRITICAL events (per scanAuditLogForAlerts):
+//   - DELETE_ATTEMPT on JournalEntry/Transaction (immutability violation)
+//   - Future: any event tagged severity='critical' in the scan logic
+//
+// Rate-limited: max 1 immediate email per 5 minutes per category to
+// avoid email flooding during an attack. The daily digest still runs
+// at 06:00 regardless.
+
+const _lastImmediateEmail: Map<string, number> = new Map();
+const IMMEDIATE_EMAIL_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Send an IMMEDIATE alert email for a critical-severity audit event.
+ * Called from auditLog() when a critical event is detected — does NOT
+ * wait for the daily 06:00 scan.
+ *
+ * Rate-limited per category to prevent email flooding (5 min cooldown).
+ *
+ * @param event - The critical audit event details
+ * @returns true if email was sent, false if suppressed (cooldown or no recipient)
+ */
+export async function notifyCriticalEventImmediately(event: {
+  action: string;
+  entityType: string;
+  entityId: string;
+  userId?: string | null;
+  companyId?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<boolean> {
+  const recipient = process.env.ALERT_EMAIL_RECIPIENT;
+  if (!recipient) {
+    return false; // No recipient configured
+  }
+
+  // Rate-limit: max 1 email per category per 5 minutes
+  const categoryKey = `${event.action}:${event.entityType}`;
+  const now = Date.now();
+  const lastSent = _lastImmediateEmail.get(categoryKey);
+  if (lastSent && now - lastSent < IMMEDIATE_EMAIL_COOLDOWN_MS) {
+    // Within cooldown — suppress to prevent flooding
+    logger.debug('[LOG-MONITOR] Immediate alert suppressed (cooldown)', {
+      categoryKey,
+      cooldownRemaining: Math.ceil((IMMEDIATE_EMAIL_COOLDOWN_MS - (now - lastSent)) / 1000) + 's',
+    });
+    return false;
+  }
+
+  try {
+    const { sendEmail } = await import('@/lib/email-service');
+    const timestamp = new Date().toISOString();
+    const dateStr = timestamp.slice(0, 19).replace('T', ' ');
+
+    const subject = `[AlphaFlow Kritisk] ${event.action} på ${event.entityType} — ØJEBLIKELIGELIG handling påkrævet`;
+
+    const metaRows = event.metadata
+      ? Object.entries(event.metadata)
+          .slice(0, 10)
+          .map(([k, v]) => `<tr><td style="padding:4px 8px;border:1px solid #e5e7eb;font-weight:600;">${k}</td><td style="padding:4px 8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;">${JSON.stringify(v)}</td></tr>`)
+          .join('')
+      : '<tr><td style="padding:4px 8px;border:1px solid #e5e7eb;color:#9ca3af;">(ingen metadata)</td></tr>';
+
+    const html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;color:#111827;max-width:760px;">
+        <div style="background:#fef2f2;border:2px solid #dc2626;border-radius:8px;padding:16px;margin-bottom:16px;">
+          <h2 style="margin:0 0 8px 0;color:#dc2626;">⚠ KRITISK SIKKERHEDSHÆNDELSE</h2>
+          <p style="margin:0;color:#991b1b;font-size:14px;">
+            En kritisk hændelse er registreret og kræver <strong>øjeblikkelig</strong> undersøgelse.
+            Den daglige log-scanning vil også inkludere denne hændelse i digesten kl. 06:00.
+          </p>
+        </div>
+        <table style="border-collapse:collapse;width:100%;font-size:13px;margin:16px 0;">
+          <tr style="background:#f3f4f6;">
+            <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Tidspunkt</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;">${dateStr} UTC</td>
+          </tr>
+          <tr>
+            <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Handling</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;color:#dc2626;">${event.action}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Entitetstype</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;">${event.entityType}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Entitet ID</td>
+            <td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;">${event.entityId}</td>
+          </tr>
+          ${event.userId ? `<tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Bruger ID</td><td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;">${event.userId}</td></tr>` : ''}
+          ${event.companyId ? `<tr><td style="padding:8px;border:1px solid #e5e7eb;font-weight:600;">Tenant ID</td><td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace;font-size:11px;">${event.companyId}</td></tr>` : ''}
+        </table>
+        <h3 style="margin:16px 0 8px 0;">Metadata</h3>
+        <table style="border-collapse:collapse;width:100%;font-size:12px;">
+          ${metaRows}
+        </table>
+        <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin:16px 0;">
+          <p style="margin:0;font-size:13px;color:#92400e;">
+            <strong>Beredskabsplan (Bilag-09):</strong> Start trin 1 (indtekning/isolering) omgående.
+            Identificér den brugerkonto der udførte handlingen, og vurder om kontoen skal suspenderes
+            midlertidigt mens hændelsen undersøges.
+          </p>
+        </div>
+        <p style="margin-top:16px;color:#6b7280;font-size:12px;">
+          Denne e-mail er sendt øjeblikkeligt da hændelsen blev registreret (ikke ventet på daglig scanning).
+          Rate-limiter: maks 1 email pr. 5 minutter pr. hændelsestype. Svares ikke på denne e-mail.
+        </p>
+      </div>
+    `;
+
+    await sendEmail({
+      to: recipient,
+      subject,
+      html,
+      template: 'owner-notification',
+      metadata: {
+        source: 'log-monitor-immediate',
+        type: 'critical_immediate',
+        action: event.action,
+        entityType: event.entityType,
+        entityId: event.entityId,
+        timestamp,
+      },
+    });
+
+    _lastImmediateEmail.set(categoryKey, now);
+    logger.warn(
+      `[LOG-MONITOR] Immediate critical alert sent to ${recipient} — ${event.action} on ${event.entityType}`,
+      { entityId: event.entityId, userId: event.userId, companyId: event.companyId },
+    );
+    return true;
+  } catch (error) {
+    logger.error('[LOG-MONITOR] Failed to send immediate critical alert:', error);
+    return false;
+  }
+}
+
+/**
+ * Check if an audit action/entityType combination is a critical event
+ * that should trigger immediate notification (not wait for daily scan).
+ * Used by auditLog() to decide whether to call notifyCriticalEventImmediately.
+ *
+ * Returns the severity if critical, or null if not critical.
+ */
+export function getCriticalEventSeverity(
+  action: string,
+  entityType: string,
+): 'critical' | null {
+  // DELETE_ATTEMPT on posted JournalEntry/Transaction = immutability
+  // violation attempt — this is the highest-severity event in the system
+  // (someone trying to circumvent Bogføringsloven §10-12).
+  if (
+    action === 'DELETE_ATTEMPT' &&
+    (entityType === 'JournalEntry' || entityType === 'Transaction')
+  ) {
+    return 'critical';
+  }
+
+  // Future critical events can be added here:
+  // - DATA_RESET on a company with posted entries
+  // - Bulk account deactivation by a non-owner
+  // - Encryption key compromise
+  // - etc.
+
+  return null;
 }

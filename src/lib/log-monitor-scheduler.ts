@@ -29,6 +29,17 @@ let _schedulerStarted = false;
  * Run one scan cycle. Wrapped in try/catch so the cron schedule never
  * crashes the process. Returns the alerts found (for testing / manual
  * invocation via instrumentation).
+ *
+ * BEHAVIOUR:
+ *   - Scans AuditLog for the last 24 hours (all tenants, no company filter).
+ *   - ALWAYS sends a daily digest email to ALERT_EMAIL_RECIPIENT:
+ *     • If there are critical/high alerts → full alert table + details.
+ *     • If there are NO critical/high alerts → "all nominal" email
+ *       confirming no incidents were observed and the application is
+ *       operating normally.
+ *   - This ensures the SuperDev receives a daily status email every 24h
+ *     regardless of whether incidents occurred, so they know the monitor
+ *     is running and the system is healthy.
  */
 export async function runLogMonitorCycle(): Promise<
   ReturnType<typeof scanAuditLogForAlerts>
@@ -57,10 +68,11 @@ export async function runLogMonitorCycle(): Promise<
       })),
     );
 
-    // E-mail critical + high alerts (no-op if ALERT_EMAIL_RECIPIENT is unset)
-    if (counts.critical > 0 || counts.high > 0) {
-      await notifyAlertsViaEmail(alerts);
-    }
+    // ALWAYS send the daily digest email — even if there are no alerts.
+    // This ensures the SuperDev gets a "system nominal" confirmation
+    // every 24 hours, so they know the monitor is alive and running.
+    // notifyAlertsViaEmail handles both cases (incidents vs. all clear).
+    await notifyAlertsViaEmail(alerts);
 
     return alerts;
   } catch (error) {
