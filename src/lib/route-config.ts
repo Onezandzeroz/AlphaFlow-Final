@@ -487,6 +487,14 @@ export const routeConfig: RouteConfigMap = {
   '/api/sproom/participants': {
     POST: { auth: true, requireCompany: true },
   },
+  // Webhook receiver — Sproom posts RSA-signed webhook events here.
+  // Auth is verified via the X-Signature header (RSA-SHA256 signature
+  // verified with Sproom's public key fetched from GET /api/webhooks/key).
+  // No session/auth required — fail-closed if the signature is missing
+  // or invalid. Returns 200 even on errors to prevent Sproom retries.
+  '/api/sproom/webhook': {
+    POST: { auth: false },
+  },
 
   // ── Subscription payment flow (FASE 5 — Flatpay) ──
   '/api/subscription/create-payment': {

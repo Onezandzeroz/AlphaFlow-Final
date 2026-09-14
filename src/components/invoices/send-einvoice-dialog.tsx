@@ -81,20 +81,15 @@ interface EInvoiceConfig {
   peppolAs4Id: string | null;
   registrationNo: string | null;
   autoSendOnFinalize: boolean;
-  storecoveConnected?: boolean;
-  storecoveApiKeyId?: string | null;
-  storecoveLegalEntityId?: number | null;
-  storecoveConnectedAt?: string | null;
-  // Sproom (new Access Point — Peppol + NemHandel)
+  // Sproom (Access Point — Peppol + NemHandel)
   sproomChildCompanyId?: string | null;
   sproomConnectedAt?: string | null;
   sproomNemHandelRegistered?: boolean;
   sproomPeppolRegistered?: boolean;
-  // Platform-configured AP ('sproom' | 'storecove' | 'simulation') —
-  // resolved by the server from EINVOICE_ACCESS_POINT. Used to decide
-  // which /api/.../participants endpoint to call for the pre-flight
-  // recipient lookup.
-  activeAccessPoint?: 'sproom' | 'storecove' | 'simulation';
+  // Platform-resolved AP state. Sproom is the only AP, so 'simulation'
+  // indicates Sproom isn't configured (no SPROOM_USERNAME / SPROOM_PASSWORD
+  // in .env) — sends will be simulated locally.
+  activeAccessPoint?: 'sproom' | 'simulation';
 }
 
 interface SendEInvoiceDialogProps {
@@ -135,26 +130,19 @@ export function SendEInvoiceDialog({
 
   // ── Pre-flight participant reachability check ──
   // Runs when an e-invoice channel (STORECOVE/PEPPOL) is selected and the
-  // customer has a CVR. Routes to /api/sproom/participants when Sproom is
-  // the active AP, otherwise falls back to /api/storecove/participants.
-  // If the recipient is NOT on the Peppol/NemHandel network, we show a
-  // warning with a one-click switch to PDF email.
+  // customer has a CVR. Always calls /api/sproom/participants (Sproom is
+  // the only Access Point). If the recipient is NOT on the
+  // Peppol/NemHandel network, we show a warning with a one-click switch
+  // to PDF email.
   const [preflightResult, setPreflightResult] = useState<{ exists: boolean; checkedCvr: string } | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [preflightDismissed, setPreflightDismissed] = useState(false);
 
   // ── Active Access Point detection ──
-  // Sproom takes precedence: if the company has a Sproom child company OR
-  // the platform env var EINVOICE_ACCESS_POINT=sproom, we use Sproom's
-  // /api/sproom/participants endpoint for the pre-flight check.
-  // Otherwise we fall back to Storecove's /api/storecove/participants.
-  const sproomActive =
-    !!einvoiceConfig?.sproomChildCompanyId ||
-    einvoiceConfig?.activeAccessPoint === 'sproom';
-  const apConnected = sproomActive
-    ? !!einvoiceConfig?.sproomChildCompanyId
-    : !!einvoiceConfig?.storecoveConnected;
-  const apName = sproomActive ? 'Sproom' : 'Storecove';
+  // Sproom is the only Access Point. apConnected is true when the
+  // company has a Sproom child company (created via the settings UI).
+  const apName = 'Sproom';
+  const apConnected = !!einvoiceConfig?.sproomChildCompanyId;
 
   const isEmailChannel = channel === 'EMAIL';
   const isEInvoiceChannel = channel === 'STORECOVE' || channel === 'PEPPOL' || channel === 'OIOUBL';
@@ -166,25 +154,21 @@ export function SendEInvoiceDialog({
     apConnected;
 
   // ── Pre-flight: check if the recipient can receive e-invoices ──
-  // Only runs for e-invoice channels (STORECOVE/PEPPOL) when an AP is
-  // connected and the customer has a CVR. Non-blocking: if it fails or says
-  // "not reachable", the user can still force the send.
+  // Only runs for e-invoice channels (STORECOVE/PEPPOL) when Sproom is
+  // connected and the customer has a CVR. Non-blocking: if it fails or
+  // says "not reachable", the user can still force the send.
   const runPreflight = useCallback(async (cvr: string) => {
     if (!cvr || !/^\d{8}$/.test(cvr)) return;
     setPreflightLoading(true);
     setPreflightDismissed(false);
     try {
-      const endpoint = sproomActive
-        ? '/api/sproom/participants'
-        : '/api/storecove/participants';
-      // Both endpoints accept the same { scheme, identifier, countryCode }
-      // payload and return the same { exists, scheme, identifier, ... } shape.
-      // Sproom uses scheme "DK:CVR"; Storecove uses ISO 6523 scheme "0184".
-      const res = await fetch(endpoint, {
+      // Sproom uses scheme "DK:CVR" for Danish CVR lookups. The route
+      // defaults sensibly when the scheme is omitted.
+      const res = await fetch('/api/sproom/participants', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scheme: sproomActive ? 'DK:CVR' : '0184',
+          scheme: 'DK:CVR',
           identifier: cvr,
           countryCode: 'DK',
         }),
@@ -201,7 +185,7 @@ export function SendEInvoiceDialog({
     } finally {
       setPreflightLoading(false);
     }
-  }, [sproomActive]);
+  }, []);
 
   // Run preflight when channel or invoice changes (only for e-invoice channels)
   useEffect(() => {
@@ -284,9 +268,9 @@ export function SendEInvoiceDialog({
         );
       } else {
         // E-invoice route returns { sending: {...}, error?: string }
-        // The API now transmits to the active Access Point (Sproom or
-        // Storecove) synchronously, so the status is DELIVERED (success)
-        // or FAILED (error) by the time we get here — not PENDING.
+        // The API transmits to Sproom synchronously, so the status is
+        // DELIVERED (success) or FAILED (error) by the time we get here —
+        // not PENDING.
         const sendStatus = data.sending?.status as string | undefined;
         const transmissionError = data.error as string | undefined;
 

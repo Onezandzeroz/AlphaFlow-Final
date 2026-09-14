@@ -8,19 +8,24 @@ import { withGuard } from '@/lib/route-guard';
 import { notifyDataChange } from '@/lib/notify-data-change';
 import { db } from '@/lib/db';
 
+// NOTE: The Prisma `EInvoiceSendChannel` enum still includes `STORECOVE`
+// for backward-compat with existing DB rows — renaming it would require
+// a migration. Functionally, the `STORECOVE` channel now maps to Sproom
+// (the only Access Point). Both `STORECOVE` and `PEPPOL_BIS` route
+// through `sproomClient.sendDocument()` in `processEInvoiceSend()`.
 const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoiceSendChannel.PEPPOL_BIS, EInvoiceSendChannel.STORECOVE];
 
-// POST /api/invoices/[id]/send-einvoice — Send an e-invoice via OIOUBL, Peppol, or Storecove
+// POST /api/invoices/[id]/send-einvoice — Send an e-invoice via OIOUBL, Peppol, or Sproom
 //
 // This route does TWO things synchronously:
 //   1. queueEInvoiceSend() — creates a PENDING EInvoiceSending row
 //   2. processEInvoiceSend() — generates the OIOUBL XML and submits it
-//      to Storecove immediately (inline, no background worker needed)
+//      to Sproom immediately (inline, no background worker needed)
 //
 // By the time the response returns, the send has been transmitted to
-// Storecove and the status is either DELIVERED (success) or FAILED
+// Sproom and the status is either DELIVERED (success) or FAILED
 // (error). Further status changes (ACCEPTED/REJECTED) arrive
-// asynchronously via the Storecove webhook.
+// asynchronously via the Sproom webhook at /api/sproom/webhook.
 //
 // If processEInvoiceSend() fails, we still return the sending row
 // (with status FAILED) so the UI can show the error and offer a retry.
@@ -68,14 +73,14 @@ export const POST = withGuard(
         companyId: ctx.activeCompanyId,
       });
 
-      // Step 2: Transmit to Storecove IMMEDIATELY (inline, no worker).
+      // Step 2: Transmit to Sproom IMMEDIATELY (inline, no worker).
       // processEInvoiceSend() generates the OIOUBL XML and submits it
-      // to Storecove. On success → status DELIVERED. On failure →
+      // to Sproom. On success → status DELIVERED. On failure →
       // status FAILED with errorMessage populated.
       let transmissionError: string | undefined;
       try {
         await processEInvoiceSend(sending.id);
-        logger.info(`[EINVOICE_SEND_API] Transmitted to Storecove`, {
+        logger.info(`[EINVOICE_SEND_API] Transmitted to Sproom`, {
           sendingId: sending.id,
           invoiceId: id,
         });

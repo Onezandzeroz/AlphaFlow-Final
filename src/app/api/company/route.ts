@@ -23,13 +23,13 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
         bankIban: true, bankStreet: true, bankCity: true, bankCountry: true,
         companyType: true, invoiceTerms: true, invoiceNotesTemplate: true,
         nextInvoiceSequence: true, currentYear: true, isDemo: true, updatedAt: true,
-        // CVR verification timestamp — gates Storecove legal entity creation
+        // CVR verification timestamp — gates Sproom child company creation
         cvrVerifiedAt: true,
         // Credit note numbering (separate series from invoices)
         creditNotePrefix: true, nextCreditNoteSequence: true,
         // E-invoice / eDelivery fields for onboarding status detection
         einvoiceEnabled: true, einvoiceRegistrationNo: true, einvoiceEndpointId: true,
-        einvoiceDeliveryMode: true, storecoveConnected: true,
+        einvoiceDeliveryMode: true,
         // Sproom Access Point (Peppol + NemHandel)
         sproomChildCompanyId: true, sproomConnectedAt: true,
         sproomNemHandelRegistered: true, sproomPeppolRegistered: true,
@@ -86,7 +86,6 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       einvoiceRegistrationNo: company.einvoiceRegistrationNo,
       einvoiceEndpointId: company.einvoiceEndpointId,
       einvoiceDeliveryMode: company.einvoiceDeliveryMode,
-      storecoveConnected: company.storecoveConnected,
       // Sproom Access Point (Peppol + NemHandel)
       sproomChildCompanyId: company.sproomChildCompanyId,
       sproomConnectedAt: company.sproomConnectedAt?.toISOString() ?? null,

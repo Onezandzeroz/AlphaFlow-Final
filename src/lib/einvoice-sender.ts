@@ -11,11 +11,11 @@
  * - Cancel pending sends
  * - Full send history tracking
  * - Company e-invoice configuration management
- * - NemHandel eDelivery registration (via Storecove Access Point)
+ * - NemHandel eDelivery registration (via Sproom Access Point)
  *
  * NemHandel eDelivery (since 2023 transition):
  * - Follows Peppol AS4 specifications with Danish extensions
- * - MitID Erhverv certificate required (handled by Storecove)
+ * - MitID Erhverv certificate required (handled by Sproom)
  * - Receiving AP performs schema + schematron validation
  * - MLR/AR mandatory if schematron validation fails
  * - Uses eDelivery SML (EC) + NHR SMP (Nemhandelsregisteret)
@@ -24,7 +24,7 @@
  * Dependencies:
  * - Prisma (PostgreSQL via Neon) for persistence
  * - NemHandelClient for NHR/SMP lookup and simulation
- * - StorecoveClient for Peppol + NemHandel eDelivery submission
+ * - SproomClient for Peppol + NemHandel eDelivery submission
  * - generateOIOUBL for XML invoice generation
  * - auditLog for immutable audit trail (Danish Bookkeeping Law §10-12)
  */
@@ -35,31 +35,27 @@ import { logger } from '@/lib/logger';
 import { auditLog } from '@/lib/audit';
 import { generateOIOUBL, type OIOUBLInvoiceData } from '@/lib/oioubl-generator';
 import { NemHandelClient } from '@/lib/nemhandel-client';
-import { storecoveClient, StorecoveClient } from '@/lib/storecove-client';
 import { sproomClient } from '@/lib/sproom-client';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 
-// ─── ACCESS POINT TOGGLE ──────────────────────────────────────────
+// ─── ACCESS POINT SELECTION ────────────────────────────────────────
 //
-// AlphaFlow supports TWO Access Point providers:
-//   - "sproom"    → Sproom (supports Peppol + NemHandel)
-//   - "storecove"  → Storecove (Peppol only — LEGACY)
-//   - (unset)      → simulation mode (no real delivery)
+// AlphaFlow uses Sproom as its sole Access Point. Sproom supports BOTH
+// Peppol and NemHandel, so a single child-company per tenant covers
+// both networks.
 //
-// Switch by setting EINVOICE_ACCESS_POINT in .env.
-// For staging: use Sproom staging URL (SPROOM_API_URL=https://staging.sproom.net)
-// For production: use Sproom production URL (SPROOM_API_URL=https://sproom.net)
+// When Sproom is configured (SPROOM_USERNAME + SPROOM_PASSWORD in .env),
+// sends go through Sproom. Otherwise AlphaFlow falls back to simulation
+// mode (NemHandelClient mock) — no real delivery.
 //
-// The Sproom path is MUCH simpler than Storecove because Sproom accepts
-// raw OIOUBL XML directly — no JSON Pure mode conversion needed.
+// Sproom accepts raw OIOUBL XML directly: no JSON Pure mode conversion,
+// no test-receiver override — the customer's real CVR is used as the
+// routing endpoint.
 
-export type AccessPoint = 'sproom' | 'storecove' | 'simulation';
+export type AccessPoint = 'sproom' | 'simulation';
 
 export function getActiveAccessPoint(): AccessPoint {
-  const ap = process.env.EINVOICE_ACCESS_POINT?.toLowerCase();
-  if (ap === 'sproom' && sproomClient.isConfigured) return 'sproom';
-  if (ap === 'storecove' && storecoveClient.isConfigured) return 'storecove';
-  return 'simulation';
+  return sproomClient.isConfigured ? 'sproom' : 'simulation';
 }
 
 // ─── TYPES ────────────────────────────────────────────────────────
@@ -104,19 +100,21 @@ export interface CompanyEInvoiceConfig {
   registeredAt: string | null;
   autoSendOnFinalize: boolean;
   deliveryMode: 'manual' | 'automatic' | null;
-  // Storecove
+  // Storecove (LEGACY — kept in the DB schema for backward compat, no
+  // longer used by active code). These remain null going forward.
   storecoveConnected: boolean;
   storecoveApiKeyId: string | null;
   storecoveLegalEntityId: number | null;
   storecoveConnectedAt: string | null;
-  // Sproom (new Access Point — Peppol + NemHandel)
+  // Sproom (Access Point — Peppol + NemHandel)
   sproomChildCompanyId: string | null;
   sproomConnectedAt: string | null;
   sproomNemHandelRegistered: boolean;
   sproomPeppolRegistered: boolean;
-  // Platform-configured Access Point ('sproom' | 'storecove' | 'simulation').
-  // Used by the UI to decide which AP card to render and which /api/.../participants
-  // endpoint to call for the pre-flight recipient lookup.
+  // Platform-configured Access Point ('sproom' | 'simulation').
+  // Sproom is the only AP — 'simulation' indicates Sproom isn't configured
+  // (no SPROOM_USERNAME / SPROOM_PASSWORD in .env) and sends will be
+  // simulated locally instead of delivered.
   activeAccessPoint: AccessPoint;
 }
 
@@ -128,10 +126,11 @@ const MAX_RETRIES = 3;
 /** Retry delay in minutes (5 minutes) */
 const RETRY_DELAY_MINUTES = 5;
 
-/** NemHandel client singleton (simulation mode controlled by NEMHANDEL_SIMULATION_MODE env var) */
-const nemHandelClient = new NemHandelClient({
-  simulationMode: process.env.NEMHANDEL_SIMULATION_MODE !== 'false',
-});
+/** NemHandel client singleton — used ONLY for simulation fallback when
+ * Sproom is not configured. In production (Sproom configured), the
+ * Sproom path handles real delivery, so this client runs in simulation
+ * mode regardless. */
+const nemHandelClient = new NemHandelClient({ simulationMode: true });
 
 // ─── HELPERS ──────────────────────────────────────────────────────
 
@@ -365,8 +364,7 @@ export async function queueEInvoiceSend(params: {
         bankName: true,
         bankAccount: true,
         bankIban: true,
-        storecoveConnected: true,
-        storecoveLegalEntityId: true,
+        sproomChildCompanyId: true,
       },
     });
 
@@ -544,8 +542,6 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
             einvoiceEnabled: true,
             einvoiceEndpointId: true,
             einvoiceGLN: true,
-            storecoveConnected: true,
-            storecoveLegalEntityId: true,
             sproomChildCompanyId: true,
             sproomNemHandelRegistered: true,
             sproomPeppolRegistered: true,
@@ -587,66 +583,22 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
     // For credit notes (documentType CREDIT_NOTE), resolve the original
     // invoice's number from the originalInvoice relation so it can be
     // surfaced in cac:BillingReference (OIOUBL type 381).
-
-    // ── Sandbox test-receiver override ──────────────────────────
     //
-    // The Storecove sandbox only has ONE Danish test receiver on the
-    // Peppol test network: scheme=DK:DIGST, identifier=DK10101011.
-    // AlphaFlow normally routes to 0184:<CVR>, but no 0184 test
-    // identifier exists on the test network. When these env vars are
-    // set, BOTH the routing AND the OIOUBL XML's <cbc:EndpointID>
-    // are overridden to the test receiver — they MUST match, or
-    // Storecove's schematron validation rejects the document.
-    //
-    //   STORECOVE_TEST_RECEIVER_SCHEME=DK:DIGST
-    //   STORECOVE_TEST_RECEIVER_IDENTIFIER=DK10101011
-    //
-    // Leave unset in production.
-    const testReceiverScheme = process.env.STORECOVE_TEST_RECEIVER_SCHEME;
-    const testReceiverIdentifier = process.env.STORECOVE_TEST_RECEIVER_IDENTIFIER;
-    const testOverrideActive = !!(testReceiverScheme && testReceiverIdentifier);
-
-    if (testOverrideActive) {
-      logger.info('[EINVOICE_SEND] Sandbox test-receiver override active', {
-        sendingId,
-        originalEndpoint: sending.recipientEndpointId,
-        originalCustomerCvr: sending.invoice.customerCvr,
-        overrideScheme: testReceiverScheme,
-        overrideIdentifier: testReceiverIdentifier,
-      });
-    }
-
-    // Build invoice input, applying test-receiver override to the
-    // customer CVR so the OIOUBL XML's <cbc:EndpointID> matches the
-    // routing endpoint. Without this match, Storecove rejects the
-    // document at schematron validation.
+    // Sproom accepts raw OIOUBL XML with the customer's real CVR as the
+    // routing endpoint — no sandbox test-receiver override needed.
     const invoiceInput = {
       ...sending.invoice,
       originalInvoiceNumber: sending.invoice.originalInvoice?.invoiceNumber ?? null,
-      // Override customer CVR in the invoice data so buildOIOUBLData
-      // generates XML with the test receiver's identifier.
-      ...(testOverrideActive && {
-        customerCvr: testReceiverIdentifier,
-      }),
     };
     const invoiceData = buildOIOUBLData(invoiceInput, sending.company);
-
-    // Also set the endpointScheme on the customer so the OIOUBL
-    // generator uses the test receiver's scheme (e.g. DK:DIGST)
-    // instead of the hardcoded '0184'.
-    if (testOverrideActive) {
-      invoiceData.customer.endpointScheme = testReceiverScheme;
-    }
-
     const xmlContent = generateOIOUBL(invoiceData);
 
     logger.info('[EINVOICE_SEND] Generated OIOUBL XML', {
       sendingId,
       xmlLength: xmlContent.length,
-      testOverride: testOverrideActive,
     });
 
-    // 5. Send via the active Access Point
+    // 5. Send via the active Access Point (Sproom only — simulation fallback)
     let result: { success: boolean; messageId?: string; errorCode?: string; errorMessage?: string; responseXml?: string };
 
     const ap = getActiveAccessPoint();
@@ -679,12 +631,14 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         errorMessage: sproomResult.errorMessage,
       };
 
-      // Store Sproom document ID
+      // Store Sproom document ID in storecoveSubmissionId (legacy
+      // column name — it's the AP tracking ID now, used by the
+      // /api/sproom/webhook handler to match status updates).
       if (sproomResult.success && sproomResult.documentId) {
         await db.eInvoiceSending.update({
           where: { id: sendingId },
           data: {
-            storecoveSubmissionId: sproomResult.documentId, // reuse field for tracking
+            storecoveSubmissionId: sproomResult.documentId,
           },
         });
       }
@@ -695,50 +649,8 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         channel: sending.channel,
       });
 
-    } else if (ap === 'storecove') {
-      // ── STORECOVE Access Point (Peppol only — LEGACY) ───────────
-      const parsedEndpoint = sending.recipientEndpointId
-        ? StorecoveClient.parseEndpointId(sending.recipientEndpointId)
-        : null;
-
-      const testScheme = process.env.STORECOVE_TEST_RECEIVER_SCHEME;
-      const testIdentifier = process.env.STORECOVE_TEST_RECEIVER_IDENTIFIER;
-      const testOverride = !!(testScheme && testIdentifier);
-
-      const receiverScheme = testOverride ? testScheme : parsedEndpoint?.scheme;
-      const receiverIdentifier = testOverride ? testIdentifier : parsedEndpoint?.identifier;
-
-      const storecoveResult = await storecoveClient.submitInvoice(xmlContent, {
-        legalEntityId: sending.company.storecoveLegalEntityId ?? undefined,
-        receiverScheme,
-        receiverIdentifier,
-        routeToNemhandel: false, // Storecove doesn't support NemHandel
-      });
-
-      result = {
-        success: storecoveResult.success,
-        messageId: storecoveResult.messageId,
-        errorCode: storecoveResult.errorCode,
-        errorMessage: storecoveResult.errorMessage,
-      };
-
-      if (storecoveResult.success) {
-        await db.eInvoiceSending.update({
-          where: { id: sendingId },
-          data: {
-            storecoveSubmissionId: storecoveResult.submissionId,
-            storecoveStorecoveId: storecoveResult.storecoveId,
-          },
-        });
-      }
-
-      logger.info('[EINVOICE_SEND] Submitted via Storecove Access Point', {
-        sendingId,
-        storecoveSubmissionId: storecoveResult.submissionId,
-      });
-
     } else {
-      // ── SIMULATION MODE (no Access Point configured) ────────────
+      // ── SIMULATION MODE (Sproom not configured) ────────────────
       const recipientCvr = sending.recipientCvr || sending.company.cvrNumber;
       result = await nemHandelClient.sendInvoice(xmlContent, recipientCvr);
     }
@@ -1311,7 +1223,7 @@ export async function updateCompanyEInvoiceSettings(
  * validation fails.
  *
  * Currently simulated — in production, registration is handled
- * through the NHR portal or via Storecove onboarding.
+ * through the NHR portal or via Sproom onboarding.
  *
  * On success, stores the registration number and timestamp
  * on the Company record.

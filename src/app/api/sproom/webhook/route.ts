@@ -1,0 +1,442 @@
+import { NextResponse } from 'next/server';
+import {
+  sproomClient,
+  type SproomWebhookEvent,
+} from '@/lib/sproom-client';
+import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
+import { auditLog } from '@/lib/audit';
+import { storeReceivedInvoice } from '@/lib/invoice-receiver';
+
+// POST /api/sproom/webhook — Receive Sproom webhook events (NO AUTH)
+//
+// This endpoint is called by Sproom servers, not by authenticated users.
+// Authenticity is verified via the RSA-SHA256 signature in the
+// `X-Signature` header (verified via `sproomClient.verifyWebhookSignature`,
+// which fetches Sproom's RSA public key from GET /api/webhooks/key).
+// Fail-closed: if the signature is missing or invalid, the webhook is
+// rejected with 401. If Sproom is not configured (no platform key), the
+// public key fetch will fail and ALL webhooks are rejected.
+//
+// Two event families are handled:
+//
+//  1. OUTBOUND — DocumentStatusChanged
+//     → update the EInvoiceSending delivery status (delivered / accepted /
+//       rejected / failed). Sproom's webhook payload only tells us the
+//       status CHANGED — we call GET /api/documents/{id}/state to fetch
+//       the actual current status.
+//
+//  2. INBOUND  — DocumentReceived
+//     → fetch the received e-invoice XML from Sproom, resolve the tenant,
+//       parse + store it as a ReceivedInvoice so it appears in the
+//       tenant's e-invoice inbox. This is the receive half required by
+//       Erhvervsstyrelsen.
+//
+// Idempotency: Sproom retries on non-2xx for up to 5 days. We always return
+// 200 after verifying the signature, and the store layer de-duplicates by
+// (companyId, invoiceNumber) so retries are safe.
+
+export async function POST(request: Request) {
+  try {
+    // ── 1. Read raw body + verify Sproom RSA signature ─────────────
+    const rawBody = await request.text();
+
+    const sproomSignature = request.headers.get('X-Signature');
+    if (!sproomSignature || !sproomClient?.isConfigured) {
+      logger.error('[WEBHOOK] REJECTED: Missing X-Signature header or Sproom not configured');
+      // Return 200 even on auth failure to prevent Sproom retries — the
+      // signature is missing/invalid, so a retry won't help.
+      return NextResponse.json({ received: true, error: 'unauthorized' });
+    }
+
+    let authenticated = false;
+    try {
+      authenticated = await sproomClient.verifyWebhookSignature(rawBody, sproomSignature);
+      if (authenticated) {
+        logger.info('[WEBHOOK] Authenticated via Sproom RSA signature');
+      }
+    } catch (err) {
+      logger.warn('[WEBHOOK] Sproom signature verification failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    if (!authenticated) {
+      // Fail-closed: signature missing or invalid. Return 200 to prevent
+      // retries (they will also fail).
+      logger.error('[WEBHOOK] REJECTED: Invalid Sproom RSA signature');
+      return NextResponse.json({ received: true, error: 'invalid_signature' });
+    }
+
+    // ── 2. Parse the webhook event ─────────────────────────────────
+    const event = JSON.parse(rawBody) as SproomWebhookEvent;
+
+    logger.info('[WEBHOOK] Received webhook event', {
+      type: event.type,
+      documentId: event.documentId,
+      status: event.status,
+      timestamp: event.timestamp,
+      companyId: event.companyId,
+      recipientIdentifier: event.recipientIdentifier,
+      senderIdentifier: event.senderIdentifier,
+    });
+
+    // ── 3. Dispatch on event type ──
+    //
+    // SPROOM webhook format:
+    //   { "type": "DocumentReceived",    "documentId": "<guid>", ... }
+    //   { "type": "DocumentStatusChanged","documentId": "<guid>", ... }
+    //
+    if (event.type === 'DocumentReceived') {
+      return await handleReceivedDocument(event);
+    }
+
+    if (event.type === 'DocumentStatusChanged') {
+      return await handleSubmissionStatusChanged(event);
+    }
+
+    // Other events — acknowledged, not actioned.
+    logger.info('[WEBHOOK] Ignoring non-actionable event', { type: event.type });
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    logger.error('[SPROOM_WEBHOOK] Failed to process webhook:', error);
+    // Return 200 to prevent Sproom from retrying on internal errors.
+    // Status catch-up happens via polling (getDocumentState) if needed.
+    return NextResponse.json({ received: true });
+  }
+}
+
+// ─── INBOUND: DocumentReceived ────────────────────────────────────
+//
+// Sproom received an e-invoice addressed to one of our child companies.
+// We fetch the XML, resolve the tenant, parse, and store it.
+
+async function handleReceivedDocument(event: SproomWebhookEvent) {
+  const documentId = event.documentId;
+  const childCompanyId = event.companyId;
+
+  if (!documentId) {
+    logger.error('[WEBHOOK] DocumentReceived missing documentId', {
+      type: event.type,
+      companyId: childCompanyId,
+    });
+    return NextResponse.json({ received: true, error: 'missing_document_id' });
+  }
+
+  logger.info('[WEBHOOK] Processing received document', {
+    documentId,
+    childCompanyId: childCompanyId ?? null,
+    recipientIdentifier: event.recipientIdentifier ?? null,
+  });
+
+  // ── Resolve the tenant (Company) ────────────────────────────────
+  const company = await resolveTenant({
+    childCompanyId,
+    recipientIdentifier: event.recipientIdentifier,
+  });
+
+  if (!company) {
+    logger.error('[WEBHOOK] Could not resolve tenant for received document', {
+      documentId,
+      childCompanyId: childCompanyId ?? null,
+      recipientIdentifier: event.recipientIdentifier ?? null,
+    });
+    return NextResponse.json({ received: true, warning: 'tenant_unresolved' });
+  }
+
+  // ── Fetch the original XML via Sproom ───────────────────────────
+  // GET /api/documents/{documentId}/xml (legacy endpoint, octet-stream)
+  // The childCompanyId is required so Sproom knows which tenant's token
+  // to use — we resolve it from the webhook payload's `companyId` field,
+  // falling back to the company's stored sproomChildCompanyId.
+  const fetchChildId = childCompanyId ?? company.sproomChildCompanyId ?? undefined;
+
+  let xml: string | null = null;
+  try {
+    const raw = await sproomClient.getDocument(documentId, 'xml', {
+      childCompanyId: fetchChildId,
+    });
+    xml = raw ? (typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf-8')) : null;
+  } catch (err) {
+    logger.error('[WEBHOOK] Sproom getDocument failed', {
+      documentId,
+      childCompanyId: fetchChildId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  if (!xml) {
+    logger.error('[WEBHOOK] Could not fetch received document XML', {
+      documentId,
+      companyId: company.id,
+    });
+    return NextResponse.json({ received: true, warning: 'document_fetch_failed' });
+  }
+
+  // ── Parse + store (idempotent) ──────────────────────────────────
+  const result = await storeReceivedInvoice({
+    companyId: company.id,
+    userId: null,
+    xml,
+    source: 'ap_webhook',
+    documentGuid: documentId,
+    auditMeta: {
+      source: 'ap_webhook',
+      document_guid: documentId,
+      child_company_id: childCompanyId ?? null,
+      webhook_timestamp: event.timestamp,
+    },
+  });
+
+  if (result.duplicate) {
+    logger.info('[SPROOM_WEBHOOK] Received document was a duplicate (idempotent skip)', {
+      documentId,
+      companyId: company.id,
+      invoiceId: result.invoice?.id,
+    });
+  } else if (!result.success) {
+    logger.error('[SPROOM_WEBHOOK] Failed to store received document', {
+      documentId,
+      companyId: company.id,
+      error: result.error,
+      validationErrors: result.validationErrors,
+    });
+  } else {
+    logger.info('[SPROOM_WEBHOOK] Received document stored successfully', {
+      documentId,
+      companyId: company.id,
+      invoiceId: result.invoice?.id,
+      invoiceNumber: result.invoice?.invoiceNumber,
+    });
+  }
+
+  // Always 200 — Sproom should not retry. Duplicates + parse failures are
+  // logged and the raw XML is retained in Sproom's dashboard.
+  return NextResponse.json({
+    received: true,
+    stored: result.success,
+    duplicate: result.duplicate ?? false,
+  });
+}
+
+/**
+ * Resolve which Company (tenant) a received document belongs to.
+ *
+ * Tries, in order:
+ *  1. childCompanyId (Sproom webhook `companyId` field) → Company.sproomChildCompanyId
+ *  2. recipientIdentifier (e.g. "DK:CVR:12345678" or "0184:12345678")
+ *     → Company.einvoiceEndpointId or Company.cvrNumber
+ */
+async function resolveTenant(data: {
+  childCompanyId?: string;
+  recipientIdentifier?: string;
+}) {
+  // 1. By Sproom child company ID
+  if (data.childCompanyId) {
+    const company = await db.company.findFirst({
+      where: { sproomChildCompanyId: data.childCompanyId },
+      select: {
+        id: true,
+        cvrNumber: true,
+        einvoiceEndpointId: true,
+        sproomChildCompanyId: true,
+      },
+    });
+    if (company) {
+      logger.info('[SPROOM_WEBHOOK] Tenant resolved by Sproom childCompanyId', {
+        companyId: company.id,
+        childCompanyId: data.childCompanyId,
+      });
+      return company;
+    }
+  }
+
+  // 2. By recipient identifier from the webhook payload
+  // Sproom recipientIdentifier is "scheme:value" (e.g. "DK:CVR:12345678").
+  // Sproom also accepts legacy ISO 6523 form like "0184:12345678".
+  if (data.recipientIdentifier) {
+    // Strip leading "DK:CVR:" or "0184:" prefix to get the raw identifier.
+    const parts = data.recipientIdentifier.split(':');
+    const identifier = parts.length > 1 ? parts[parts.length - 1] : data.recipientIdentifier;
+    const company = await db.company.findFirst({
+      where: {
+        OR: [
+          { einvoiceEndpointId: data.recipientIdentifier },
+          { cvrNumber: identifier },
+        ],
+      },
+      select: {
+        id: true,
+        cvrNumber: true,
+        einvoiceEndpointId: true,
+        sproomChildCompanyId: true,
+      },
+    });
+    if (company) {
+      logger.info('[SPROOM_WEBHOOK] Tenant resolved by recipient identifier', {
+        companyId: company.id,
+        recipientIdentifier: data.recipientIdentifier,
+      });
+      return company;
+    }
+  }
+
+  return null;
+}
+
+// ─── OUTBOUND: DocumentStatusChanged ───────────────────────────────
+
+async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
+  // Sproom: documentId (top-level), type = "DocumentStatusChanged".
+  // Sproom's webhook just tells us the status changed; we need to call
+  // GET /api/documents/{id}/state to get the actual current status.
+  const submissionId = event.documentId ?? '';
+  const now = new Date();
+
+  if (!submissionId) {
+    logger.warn('[SPROOM_WEBHOOK] No documentId in webhook', { type: event.type });
+    return NextResponse.json({ received: true });
+  }
+
+  // ── Fetch the document state to get the actual status ──
+  let status: string | undefined = event.status;
+  let details: string | undefined = event.reason;
+
+  // The EInvoiceSending record stores the Sproom documentId in the
+  // storecoveSubmissionId column (legacy field name, kept for backward
+  // compat — it's just the AP's tracking ID now).
+  const sending = await db.eInvoiceSending.findFirst({
+    where: { storecoveSubmissionId: submissionId },
+  });
+
+  if (!sending) {
+    logger.warn('[SPROOM_WEBHOOK] No EInvoiceSending found for documentId', {
+      submissionId,
+    });
+    // Return 200 anyway — Sproom will retry on non-2xx responses
+    return NextResponse.json({ received: true });
+  }
+
+  // Fetch the latest state via Sproom. The childCompanyId comes from the
+  // webhook payload (event.companyId) or from the company record.
+  const companyForChild = await db.company.findUnique({
+    where: { id: sending.companyId },
+    select: { sproomChildCompanyId: true },
+  });
+  const fetchChildId = event.companyId ?? companyForChild?.sproomChildCompanyId ?? undefined;
+
+  if (sproomClient?.isConfigured && fetchChildId) {
+    try {
+      const states = await sproomClient.getDocumentState(submissionId, {
+        childCompanyId: fetchChildId,
+      });
+      if (states && states.length > 0) {
+        const latest = states[states.length - 1]; // last entry = most recent
+        status = latest.state || status;
+        details = latest.message || details;
+        logger.info('[WEBHOOK] Sproom document state fetched', {
+          submissionId,
+          status,
+          message: details,
+        });
+      }
+    } catch (err) {
+      logger.warn('[WEBHOOK] Sproom getDocumentState failed', {
+        submissionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Continue with the webhook's stated status (event.status) as fallback
+    }
+  }
+
+  // Map Sproom DocumentStatusType → AlphaFlow EInvoiceSendStatus
+  let newStatus: string;
+  let updateData: Record<string, unknown> = {};
+  let dbStatus: string | null = null;
+
+  switch (status) {
+    // ── Delivered to the receiving AP / recipient ──
+    case 'Sent':
+    case 'Received':
+    case 'TransmissionCompleted':
+      newStatus = 'DELIVERED';
+      dbStatus = 'DELIVERED';
+      updateData = { status: 'DELIVERED', deliveredAt: now };
+      break;
+
+    case 'Approved':
+      newStatus = 'ACCEPTED';
+      dbStatus = 'ACCEPTED';
+      updateData = { status: 'ACCEPTED', acceptedAt: now };
+      break;
+
+    case 'Rejected':
+      newStatus = 'REJECTED';
+      dbStatus = 'REJECTED';
+      updateData = { status: 'REJECTED', errorMessage: details || 'Recipient rejected the invoice' };
+      break;
+
+    case 'Error':
+    case 'RuntimeError':
+    case 'SendError':
+    case 'SendNemHandelError':
+    case 'SendSproomError':
+    case 'SchematronValidationError':
+    case 'OIOSchemaValidationError':
+    case 'CustomValidationError':
+      newStatus = 'FAILED';
+      dbStatus = 'FAILED';
+      updateData = { status: 'FAILED', errorMessage: details || `Document error: ${status}` };
+      break;
+
+    case 'Created':
+    case 'EndpointNotFound':
+    case 'Incomplete':
+    case 'TransmissionStarted':
+      // Intermediate statuses — log but don't update
+      logger.info('[WEBHOOK] Intermediate status received', { submissionId, status });
+      return NextResponse.json({ received: true });
+
+    default:
+      logger.warn('[SPROOM_WEBHOOK] Unknown status received', { status });
+      return NextResponse.json({ received: true });
+  }
+
+  // Update the EInvoiceSending record
+  await db.eInvoiceSending.update({
+    where: { id: sending.id },
+    data: updateData,
+  });
+
+  // Audit trail for the status change.
+  // Attribute to the user who initiated the send (sending.sentBy) — this
+  // preserves the original behaviour where the delivery event is tied to the
+  // user who sent the invoice, not an anonymous system actor.
+  await auditLog({
+    action: 'UPDATE',
+    entityType: 'EInvoiceSending',
+    entityId: sending.id,
+    userId: sending.sentBy,
+    companyId: sending.companyId,
+    changes: {
+      status: { old: sending.status, new: newStatus },
+    },
+    metadata: {
+      source: 'sproom_webhook',
+      sproomDocumentId: submissionId,
+      sproomStatus: status,
+      sproomDetails: details || null,
+      timestamp: event.timestamp,
+    },
+  });
+
+  logger.info('[SPROOM_WEBHOOK] Updated EInvoiceSending status', {
+    sendingId: sending.id,
+    previousStatus: sending.status,
+    newStatus,
+    sproomStatus: status,
+    companyId: sending.companyId,
+  });
+
+  return NextResponse.json({ received: true });
+}
