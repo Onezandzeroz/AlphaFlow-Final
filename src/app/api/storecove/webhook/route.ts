@@ -223,7 +223,8 @@ async function handleReceivedDocument(event: StorecoveReceivedDocumentWebhookEve
 
   if (sproomClient?.isConfigured) {
     try {
-      xml = await sproomClient.getDocument(document_guid, 'xml');
+      const raw = await sproomClient.getDocument(document_guid, 'xml');
+      xml = raw ? (typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf-8')) : null;
     } catch (err) {
       logger.error('[WEBHOOK] Sproom getDocument failed', { document_guid, error: err instanceof Error ? err.message : String(err) });
     }
