@@ -9,6 +9,20 @@
  *   bun scripts/clear-storecove-test-data.ts --le 1040564 --confirm   # delete specific LE ID
  *   bun scripts/clear-storecove-test-data.ts --le 1040564,1040565     # multiple LE IDs
  *
+ * What this script deletes via API:
+ *   ✓ Legal entities (+ their peppol identifiers)
+ *   ✓ Webhook instances from the pull-mode queue (GET /webhook_instances/)
+ *   ✓ Storecove connection flags in AlphaFlow's DB
+ *
+ * What CANNOT be deleted via API (Storecove doesn't expose DELETE endpoints):
+ *   ✗ "Invoices Sent" history (document_submissions) — dashboard only
+ *   ✗ "Webhook History" (push-mode delivery log) — dashboard only
+ *   These are read-only audit records in Storecove's system. They don't
+ *   affect re-creating legal entities or sending new test invoices.
+ *   To clear them, log into https://app.storecove.com and delete manually
+ *   if the dashboard provides a delete button (some entries may be
+ *   non-deletable by design).
+ *
  * If --le is not provided, the script looks for connected companies in
  * AlphaFlow's DB. If none are found, it lists all companies for debugging.
  *
@@ -222,10 +236,62 @@ async function main() {
     console.log('');
   }
 
+  // 4. Clear webhook instances from the pull-mode queue
+  console.log('─'.repeat(60));
+  console.log('Clearing webhook instances (pull-mode queue)...\n');
+
+  let webhookCount = 0;
+  // GET /webhook_instances/ returns one instance at a time from the FIFO
+  // queue. Delete each one until we get a 204 (queue empty).
+  // Safety cap at 500 to avoid infinite loop.
+  for (let i = 0; i < 500; i++) {
+    const getResponse = await fetch(`${apiUrl}/webhook_instances/`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (getResponse.status === 204) {
+      console.log('  Queue empty.');
+      break;
+    }
+
+    if (!getResponse.ok) {
+      console.log(`  ✗ Failed to GET webhook instance: ${getResponse.status}`);
+      break;
+    }
+
+    const instance = await getResponse.json() as { guid?: string };
+    if (!instance.guid) {
+      console.log('  ⚠ No guid in response, stopping.');
+      break;
+    }
+
+    console.log(`  Deleting webhook instance ${instance.guid}...`);
+    const delResponse = await fetch(`${apiUrl}/webhook_instances/${instance.guid}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (delResponse.ok) {
+      webhookCount++;
+    } else {
+      console.log(`    ✗ Failed to delete: ${delResponse.status}`);
+    }
+  }
+  console.log(`  ✓ Cleared ${webhookCount} webhook instance(s) from queue`);
+
   console.log('═'.repeat(60));
-  console.log(`  Done. Processed: ${deletedCount}, Errors: ${errorCount}`);
+  console.log(`  Done. Legal entities: ${deletedCount}, Webhook instances: ${webhookCount}`);
   console.log('═'.repeat(60));
-  console.log('\nNext steps:');
+  console.log('\n⚠ Cannot delete via API (Storecove dashboard only):');
+  console.log('   • "Invoices Sent" history (document_submissions)');
+  console.log('   • "Webhook History" (push-mode delivery log)');
+  console.log('   These are read-only audit records. To clear them:');
+  console.log('   1. Log into https://app.storecove.com');
+  console.log('   2. Navigate to the relevant section');
+  console.log('   3. Delete manually if the dashboard provides a button');
+  console.log('   (Some entries may be non-deletable by design)');
+  console.log('');
+  console.log('Next steps:');
   console.log('  1. Verify in Storecove dashboard that legal entities are gone');
   console.log('  2. Re-create from AlphaFlow UI: Settings → eLevering');
   console.log('  3. If "identifier already exists" — wait a few minutes');
