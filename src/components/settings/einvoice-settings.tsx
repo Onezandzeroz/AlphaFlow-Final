@@ -66,6 +66,12 @@ interface EInvoiceSettingsData {
   storecoveApiKeyId: string | null;
   storecoveLegalEntityId: number | null;
   storecoveConnectedAt: string | null;
+  // Sproom (new Access Point — Peppol + NemHandel)
+  sproomChildCompanyId?: string | null;
+  sproomConnectedAt?: string | null;
+  sproomNemHandelRegistered?: boolean;
+  sproomPeppolRegistered?: boolean;
+  activeAccessPoint?: 'sproom' | 'storecove' | 'simulation';
 }
 
 interface NemHandelRegistration {
@@ -86,6 +92,25 @@ interface StorecoveConnectionStatus {
   cvrNumber?: string;
 }
 
+interface SproomConnectionStatus {
+  connected: boolean;
+  childCompanyId?: string | null;
+  connectedAt?: string | null;
+  lastTestedAt?: string | null;
+  healthy?: boolean;
+  nemhandelRegistered?: boolean;
+  peppolRegistered?: boolean;
+  einvoiceEnabled?: boolean;
+  defaultChannel?: string | null;
+  endpointId?: string | null;
+  deliveryMode?: string | null;
+  cvrNumber?: string;
+  cvrVerified?: boolean;
+  // Platform-level config (EINVOICE_ACCESS_POINT env var resolved by the server)
+  activeAccessPoint?: 'sproom' | 'storecove' | 'simulation';
+  sproomConfigured?: boolean;
+}
+
 interface PeppolParticipantResult {
   exists: boolean;
   scheme: string;
@@ -93,6 +118,7 @@ interface PeppolParticipantResult {
   name?: string;
   countryCode?: string;
   accessPoints?: Array<{ id: string; name: string }>;
+  simulated?: boolean;
 }
 
 interface EInvoiceSettingsProps {
@@ -139,6 +165,28 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   const [isCreatingLegalEntity, setIsCreatingLegalEntity] = useState(false);
   const [isDisconnectingStorecove, setIsDisconnectingStorecove] = useState(false);
   const [isTestingStorecove, setIsTestingStorecove] = useState(false);
+
+  // Sproom connection state (new Access Point — Peppol + NemHandel)
+  // Sproom replaces Storecove as AlphaFlow's AP. The Sproom card is shown
+  // INSTEAD of the Storecove card when either:
+  //   - The platform env var EINVOICE_ACCESS_POINT=sproom (read from
+  //     SproomConnectionStatus.activeAccessPoint, populated by the server)
+  //   - OR this company already has a sproomChildCompanyId set
+  const [sproomStatus, setSproomStatus] = useState<SproomConnectionStatus | null>(null);
+  const [isCreatingSproomChild, setIsCreatingSproomChild] = useState(false);
+  const [isTestingSproom, setIsTestingSproom] = useState(false);
+
+  // Derived: which Access Point card should the UI render?
+  // Sproom takes precedence — if a child company exists OR the platform is
+  // configured for Sproom, we hide the Storecove card and show the Sproom card.
+  const sproomActive = !!sproomStatus?.childCompanyId
+    || sproomStatus?.activeAccessPoint === 'sproom';
+  // EndpointID + Peppol AS4 ID are auto-managed by whichever AP is connected
+  // (Sproom's create-child-company route sets them, just like Storecove's
+  // create-legal-entity route). The manual-edit lock should apply to BOTH.
+  const apConnected = sproomActive
+    ? !!sproomStatus?.connected
+    : !!storecoveStatus?.connected;
 
   // Peppol participant lookup
   const [participantLookupId, setParticipantLookupId] = useState('');
@@ -204,11 +252,29 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     }
   }, []);
 
+  // ── Fetch Sproom status (new Access Point) ──
+  // The /api/sproom/status route runs testConnection() with a 10s timeout,
+  // so this can take a moment when the AP is reachable but slow. The card
+  // renders with the cached state on first paint and re-renders when the
+  // fetch resolves.
+  const fetchSproomStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/sproom/status');
+      if (res.ok) {
+        const data = await res.json();
+        setSproomStatus(data as SproomConnectionStatus);
+      }
+    } catch {
+      // Ignore — status stays null, Sproom card won't render
+    }
+  }, []);
+
   useEffect(() => {
     fetchSettings();
     fetchCompanyCvr();
     fetchStorecoveStatus();
-  }, [fetchSettings, fetchCompanyCvr, fetchStorecoveStatus]);
+    fetchSproomStatus();
+  }, [fetchSettings, fetchCompanyCvr, fetchStorecoveStatus, fetchSproomStatus]);
 
   // ── Create legal entity in Storecove (tenant-initiated) ──
   // Uses the PLATFORM API key from .env — the tenant never sees it.
@@ -286,7 +352,75 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     }
   }, [isDa, fetchStorecoveStatus, storecoveStatus]);
 
-  // ── Peppol participant lookup ──
+  // ── Create child company in Sproom (tenant-initiated) ──
+  // Mirrors handleCreateLegalEntity for Storecove — uses the platform
+  // Sproom parent credentials from .env, gated on CVR verification.
+  // The route also registers the child in NemHandel + Peppol and auto-
+  // configures einvoiceEnabled / endpointId / peppolAs4Id.
+  const handleCreateSproomChild = useCallback(async () => {
+    if (!cvrVerified) {
+      toast.error(isDa
+        ? 'Bekræft dit CVR-nummer i Virksomhedsindstillinger først.'
+        : 'Verify your CVR number in Company settings first.');
+      return;
+    }
+    setIsCreatingSproomChild(true);
+    try {
+      const res = await fetch('/api/sproom/create-child-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!res.ok) {
+        const isAccess = await handleMutationError(
+          res,
+          isDa ? 'Opret Sproom child company' : 'Create Sproom child company',
+        );
+        if (isAccess) { setIsCreatingSproomChild(false); return; }
+        return;
+      }
+
+      const data = await res.json();
+      const nemhandel = data.nemhandelRegistered;
+      const peppol = data.peppolRegistered;
+      toast.success(
+        isDa ? 'Child company oprettet i Sproom!' : 'Child company created in Sproom!',
+        {
+          description: isDa
+            ? `ID: ${data.childCompanyId} · NemHandel: ${nemhandel ? 'Tilmeldt' : 'Afventer'} · Peppol: ${peppol ? 'Tilmeldt' : 'Afventer'}`
+            : `ID: ${data.childCompanyId} · NemHandel: ${nemhandel ? 'Registered' : 'Pending'} · Peppol: ${peppol ? 'Registered' : 'Pending'}`,
+        },
+      );
+      fetchSproomStatus();
+      fetchSettings(); // refresh einvoiceEnabled / endpointId / peppolAs4Id
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : (isDa ? 'Oprettelse fejlede' : 'Creation failed'));
+    } finally {
+      setIsCreatingSproomChild(false);
+    }
+  }, [cvrVerified, isDa, handleMutationError, fetchSproomStatus, fetchSettings]);
+
+  // ── Test Sproom connection ──
+  const handleTestSproom = useCallback(async () => {
+    setIsTestingSproom(true);
+    try {
+      await fetchSproomStatus();
+      toast.success(
+        sproomStatus?.healthy
+          ? (isDa ? 'Sproom-forbindelsen er aktiv' : 'Sproom connection is active')
+          : (isDa ? 'Sproom-forbindelsen kunne ikke bekræftes' : 'Sproom connection could not be confirmed'),
+      );
+    } catch {
+      toast.error(isDa ? 'Test fejlede' : 'Test failed');
+    } finally {
+      setIsTestingSproom(false);
+    }
+  }, [isDa, fetchSproomStatus, sproomStatus]);
+
+  // ── Peppol/NemHandel participant lookup ──
+  // Routes to /api/sproom/participants when Sproom is the active AP
+  // (matches the same lookup the send-einvoice dialog uses), otherwise
+  // falls back to /api/storecove/participants.
   const handleLookupParticipant = useCallback(async () => {
     if (!participantLookupId.trim()) {
       toast.error(isDa ? 'Indtast et CVR- eller identifikationsnummer' : 'Enter a CVR or identifier number');
@@ -294,7 +428,13 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     }
     setIsLookingUpParticipant(true);
     try {
-      const res = await fetch('/api/storecove/participants', {
+      const endpoint = sproomActive
+        ? '/api/sproom/participants'
+        : '/api/storecove/participants';
+      // Sproom uses scheme "DK:CVR" for Danish CVR lookups; Storecove uses
+      // the ISO 6523 scheme "0184". The respective routes default sensibly
+      // when the scheme is omitted, so we send the same payload.
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -316,7 +456,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     } finally {
       setIsLookingUpParticipant(false);
     }
-  }, [participantLookupId, isDa]);
+  }, [participantLookupId, isDa, sproomActive]);
 
   // ── Save settings ──
   const handleSave = useCallback(async () => {
@@ -676,8 +816,9 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
             <Separator />
 
             {/* ── EndpointID ── */}
-            {/* When Storecove is connected, this is MANAGED by the legal entity
-                (auto-set to 0184:<CVR>) and must NOT be edited manually. */}
+            {/* When an Access Point (Sproom or Storecove) is connected, this
+                is MANAGED by the AP (auto-set to 0184:<CVR>) and must NOT
+                be edited manually. */}
             <div className="space-y-1.5">
               <Label htmlFor="endpointId" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {isDa ? 'EndpointID' : 'EndpointID'}
@@ -689,14 +830,14 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   value={endpointId}
                   onChange={(e) => setEndpointId(e.target.value)}
                   placeholder={`0184:${companyCvr || 'CVR-nummer'}`}
-                  className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-20"
-                  readOnly={!!storecoveStatus?.connected}
-                  disabled={!!storecoveStatus?.connected}
+                  className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-24"
+                  readOnly={apConnected}
+                  disabled={apConnected}
                 />
-                {storecoveStatus?.connected ? (
+                {apConnected ? (
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0d9488] dark:text-[#14b8a6] bg-[#0d9488]/10 dark:bg-[#14b8a6]/10 px-2 py-0.5 rounded">
                     <ShieldCheck className="h-3 w-3" />
-                    {isDa ? 'Auto fra Storecove' : 'Auto from Storecove'}
+                    {isDa ? `Auto fra ${sproomActive ? 'Sproom' : 'Storecove'}` : `Auto from ${sproomActive ? 'Sproom' : 'Storecove'}`}
                   </span>
                 ) : companyCvr && !endpointId ? (
                   <Button
@@ -711,10 +852,10 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 ) : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                {storecoveStatus?.connected
+                {apConnected
                   ? (isDa
-                      ? 'Håndteres automatisk af din Storecove juridiske enhed. Kan ikke ændres manuelt.'
-                      : 'Managed automatically by your Storecove legal entity. Cannot be edited manually.')
+                      ? `Håndteres automatisk af din ${sproomActive ? 'Sproom child company' : 'Storecove juridiske enhed'}. Kan ikke ændres manuelt.`
+                      : `Managed automatically by your ${sproomActive ? 'Sproom child company' : 'Storecove legal entity'}. Cannot be edited manually.`)
                   : (isDa
                       ? 'Dit unikke EndpointID i NemHandel-netværket. Schema 0184 = DK CVR.'
                       : 'Your unique EndpointID in the NemHandel network. Scheme 0184 = DK CVR.')}
@@ -743,12 +884,13 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
             </div>
 
             {/* ── Peppol AS4 ID ── */}
-            {/* When Storecove is connected, this is MANAGED by the legal entity
-                (auto-set to 0188:CVR<CVR>) and must NOT be edited manually. */}
+            {/* When an Access Point (Sproom or Storecove) is connected, this
+                is MANAGED by the AP (auto-set to 0188:CVR<CVR>) and must NOT
+                be edited manually. */}
             <div className="space-y-1.5">
               <Label htmlFor="peppolAs4Id" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {isDa ? 'Peppol AS4 ID' : 'Peppol AS4 ID'}
-                {storecoveStatus?.connected
+                {apConnected
                   ? <span className="text-red-500 ml-0.5">*</span>
                   : <span className="text-muted-foreground ml-1 font-normal">({isDa ? 'frivilligt' : 'optional'})</span>
                 }
@@ -759,14 +901,14 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   value={peppolAs4Id}
                   onChange={(e) => setPeppolAs4Id(e.target.value)}
                   placeholder={`0188:CVR${companyCvr || 'xxxx'}`}
-                  className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-20"
-                  readOnly={!!storecoveStatus?.connected}
-                  disabled={!!storecoveStatus?.connected}
+                  className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-24"
+                  readOnly={apConnected}
+                  disabled={apConnected}
                 />
-                {storecoveStatus?.connected ? (
+                {apConnected ? (
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0d9488] dark:text-[#14b8a6] bg-[#0d9488]/10 dark:bg-[#14b8a6]/10 px-2 py-0.5 rounded">
                     <ShieldCheck className="h-3 w-3" />
-                    {isDa ? 'Auto fra Storecove' : 'Auto from Storecove'}
+                    {isDa ? `Auto fra ${sproomActive ? 'Sproom' : 'Storecove'}` : `Auto from ${sproomActive ? 'Sproom' : 'Storecove'}`}
                   </span>
                 ) : companyCvr && !peppolAs4Id ? (
                   <Button
@@ -781,10 +923,10 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 ) : null}
               </div>
               <p className="text-xs text-muted-foreground">
-                {storecoveStatus?.connected
+                {apConnected
                   ? (isDa
-                      ? 'Håndteres automatisk af din Storecove juridiske enhed. Kan ikke ændres manuelt.'
-                      : 'Managed automatically by your Storecove legal entity. Cannot be edited manually.')
+                      ? `Håndteres automatisk af din ${sproomActive ? 'Sproom child company' : 'Storecove juridiske enhed'}. Kan ikke ændres manuelt.`
+                      : `Managed automatically by your ${sproomActive ? 'Sproom child company' : 'Storecove legal entity'}. Cannot be edited manually.`)
                   : (isDa
                       ? 'Peppol AS4 Participant ID til Peppol-netværket. Format: 0188:CVRnummer.'
                       : 'Peppol AS4 Participant ID for the Peppol network. Format: 0188:CVRnumber.')}
@@ -990,8 +1132,339 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
         </Card>
       )}
 
-      {/* ═══ AUTOMATIC MODE: STORECOVE ACCESS POINT CARD ═══ */}
-      {deliveryMode === 'automatic' && (
+      {/* ═══ AUTOMATIC MODE: SPROOM ACCESS POINT CARD ═══ */}
+      {/* Sproom replaces Storecove as AlphaFlow's AP — shown when either
+          (a) the platform env var EINVOICE_ACCESS_POINT=sproom, OR
+          (b) this company already has a Sproom child company. When this
+          card renders, the Storecove card below is hidden. */}
+      {deliveryMode === 'automatic' && sproomActive && (
+        <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#0d9488] to-[#14b8a6] flex items-center justify-center shrink-0">
+                <Link2 className="h-4 w-4 text-white" />
+              </div>
+              {isDa ? 'Sproom Access Point' : 'Sproom Access Point'}
+              {sproomStatus?.connected && (
+                <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40 text-xs gap-1 ml-auto">
+                  <CheckCircle2 className="h-3 w-3" />
+                  {isDa ? 'Forbundet' : 'Connected'}
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
+              {isDa
+                ? 'Peppol + NemHandel Access Point udbyder til automatisk e-faktura levering.'
+                : 'Peppol + NemHandel Access Point provider for automatic e-invoice delivery.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* ── Connection status ── */}
+            <div className={`rounded-xl p-4 border ${
+              sproomStatus?.connected && sproomStatus?.healthy
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40'
+                : sproomStatus?.connected
+                  ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800/40'
+                  : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10'
+            }`}>
+              <div className="flex items-center gap-4">
+                <div className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 ${
+                  sproomStatus?.connected && sproomStatus?.healthy
+                    ? 'bg-gradient-to-br from-emerald-500 to-green-500'
+                    : sproomStatus?.connected
+                      ? 'bg-gradient-to-br from-yellow-400 to-amber-500'
+                      : 'bg-gradient-to-br from-gray-400 to-gray-500'
+                }`}>
+                  {sproomStatus?.connected ? (
+                    <Link2 className="h-6 w-6 text-white" />
+                  ) : (
+                    <Unlink className="h-6 w-6 text-white" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {sproomStatus?.connected && sproomStatus?.healthy
+                        ? (isDa ? 'Forbundet med Sproom' : 'Connected to Sproom')
+                        : sproomStatus?.connected
+                          ? (isDa ? 'Forbundet (ingen forbindelse)' : 'Connected (unhealthy)')
+                          : (isDa ? 'Ikke forbundet' : 'Not connected')
+                      }
+                    </span>
+                    {sproomStatus?.connected && sproomStatus?.healthy && (
+                      <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40 text-[10px] gap-1">
+                        <Activity className="h-3 w-3" />
+                        {isDa ? 'Sund' : 'Healthy'}
+                      </Badge>
+                    )}
+                    {/* NemHandel + Peppol registration badges */}
+                    {sproomStatus?.connected && (
+                      <>
+                        {sproomStatus.nemhandelRegistered ? (
+                          <Badge className="bg-[#0d9488]/10 dark:bg-[#0d9488]/20 text-[#0d9488] dark:text-[#14b8a6] border-[#0d9488]/30 dark:border-[#14b8a6]/40 text-[10px] gap-1">
+                            <ShieldCheck className="h-3 w-3" />
+                            {isDa ? 'NemHandel' : 'NemHandel'}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40 text-[10px] gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            {isDa ? 'NemHandel afventer' : 'NemHandel pending'}
+                          </Badge>
+                        )}
+                        {sproomStatus.peppolRegistered ? (
+                          <Badge className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/40 text-[10px] gap-1">
+                            <Globe className="h-3 w-3" />
+                            Peppol
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40 text-[10px] gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            {isDa ? 'Peppol afventer' : 'Peppol pending'}
+                          </Badge>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  {sproomStatus?.childCompanyId && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {isDa ? 'Child company ID' : 'Child company ID'}:{' '}
+                      <span className="font-mono">{sproomStatus.childCompanyId}</span>
+                    </p>
+                  )}
+                  {sproomStatus?.connectedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      {isDa ? 'Forbundet' : 'Connected'}:{' '}
+                      {format(new Date(sproomStatus.connectedAt), 'dd.MM.yyyy HH:mm', { locale })}
+                    </p>
+                  )}
+                  {sproomStatus?.lastTestedAt && (
+                    <p className="text-xs text-muted-foreground">
+                      {isDa ? 'Sidst testet' : 'Last tested'}:{' '}
+                      {format(new Date(sproomStatus.lastTestedAt), 'dd.MM.yyyy HH:mm', { locale })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Create child company / Test connection ──
+                Sproom uses parent-level OAuth2 credentials from .env
+                (SPROOM_USERNAME + SPROOM_PASSWORD). Tenants create their
+                own child company here (KYC = CVR verified). The route
+                also auto-registers in NemHandel + Peppol networks and
+                auto-configures einvoiceEndpointId + peppolAs4Id. */}
+            {!sproomStatus?.connected ? (
+              <div className="space-y-3">
+                {cvrVerified ? (
+                  <>
+                    <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
+                      <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>
+                        {isDa
+                          ? `CVR ${companyCvr} er verificeret. Du kan oprette en child company i Sproom — AlphaFlow bruger platformens Sproom-konto automatisk og tilmelder dig både NemHandel og Peppol.`
+                          : `CVR ${companyCvr} is verified. You can create a child company in Sproom — AlphaFlow uses the platform Sproom account automatically and registers you on both NemHandel and Peppol.`}
+                      </span>
+                    </div>
+                    <Button
+                      onClick={handleCreateSproomChild}
+                      disabled={isCreatingSproomChild}
+                      className="w-full bg-[#0d9488] hover:bg-[#0f766e] text-white gap-2 font-medium transition-all"
+                    >
+                      {isCreatingSproomChild ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <PlusCircle className="h-4 w-4" />
+                      )}
+                      {isCreatingSproomChild
+                        ? (isDa ? 'Opretter...' : 'Creating...')
+                        : (isDa ? 'Opret child company i Sproom' : 'Create child company in Sproom')
+                      }
+                    </Button>
+                  </>
+                ) : (
+                  <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg p-3">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>
+                      {isDa
+                        ? 'Du skal verificere dit CVR-nummer i Virksomhedsindstillinger før du kan oprette en child company i Sproom. Sproom kræver at KYC håndteres af AlphaFlow som kontrahent.'
+                        : 'You must verify your CVR number in Company settings before creating a child company in Sproom. Sproom requires KYC to be handled by AlphaFlow as the contractor.'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleTestSproom}
+                  disabled={isTestingSproom}
+                  variant="outline"
+                  className="flex-1 gap-2 font-medium border-gray-200 dark:border-white/10"
+                >
+                  {isTestingSproom ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Activity className="h-4 w-4" />
+                  )}
+                  {isDa ? 'Test forbindelse' : 'Test connection'}
+                </Button>
+              </div>
+            )}
+
+            {/* ── Peppol/NemHandel Participant Lookup ── */}
+            {sproomStatus?.connected && (
+              <>
+                <Separator />
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
+                    <Search className="h-4 w-4" />
+                    {isDa ? 'Peppol/NemHandel modtager-opslag' : 'Peppol/NemHandel Recipient Lookup'}
+                  </p>
+                  <div className="flex gap-2">
+                    <Input
+                      value={participantLookupId}
+                      onChange={(e) => setParticipantLookupId(e.target.value)}
+                      placeholder={isDa ? 'CVR-nummer (f.eks. 12345678)' : 'CVR number (e.g. 12345678)'}
+                      className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10"
+                      onKeyDown={(e) => e.key === 'Enter' && handleLookupParticipant()}
+                    />
+                    <Button
+                      onClick={handleLookupParticipant}
+                      disabled={isLookingUpParticipant}
+                      variant="outline"
+                      className="gap-2 shrink-0 border-gray-200 dark:border-white/10"
+                    >
+                      {isLookingUpParticipant ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Search className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Lookup result */}
+                  {participantLookupResult && (
+                    <div className={`rounded-lg p-3 border text-xs ${
+                      participantLookupResult.exists
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40'
+                        : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/40'
+                    }`}>
+                      {participantLookupResult.exists ? (
+                        <div className="space-y-1">
+                          <p className="font-medium text-emerald-800 dark:text-emerald-300 flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            {isDa ? 'Modtager fundet på Peppol/NemHandel-netværket' : 'Recipient found on Peppol/NemHandel network'}
+                          </p>
+                          {participantLookupResult.name && (
+                            <p className="text-emerald-700 dark:text-emerald-400">
+                              {participantLookupResult.name}
+                            </p>
+                          )}
+                          <p className="text-muted-foreground">
+                            {isDa ? 'Schema' : 'Scheme'}: {participantLookupResult.scheme} | ID: {participantLookupResult.identifier}
+                          </p>
+                          {participantLookupResult.simulated && (
+                            <p className="text-muted-foreground italic">
+                              {isDa ? '(simuleret — Sproom er ikke konfigureret på platformen)' : '(simulated — Sproom not configured on platform)'}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="font-medium text-red-800 dark:text-red-300 flex items-center gap-1">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          {isDa
+                            ? 'Modtager ikke fundet på Peppol/NemHandel-netværket. Kontroller CVR-nummeret.'
+                            : 'Recipient not found on Peppol/NemHandel network. Check the identifier.'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── Sproom info section ── */}
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 info-box-primary rounded-lg p-3">
+                <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#14b8a6] dark:text-[#99f6e4]" />
+                <div className="space-y-2">
+                  <p className="font-semibold text-gray-700 dark:text-gray-300">
+                    {isDa ? 'Hvad er Sproom?' : 'What is Sproom?'}
+                  </p>
+                  <p className="leading-relaxed">
+                    {isDa
+                      ? 'Sproom er en certificeret Access Point udbyder for både Peppol og NemHandel. AlphaFlow sender raw OIOUBL/PeppolBIS3 XML direkte til Sproom, som leverer den videre til modtageren på det korrekte netværk — uden manuel upload.'
+                      : 'Sproom is a certified Access Point provider for both Peppol and NemHandel. AlphaFlow sends raw OIOUBL/PeppolBIS3 XML directly to Sproom, which delivers it to the recipient on the correct network — without manual upload.'}
+                  </p>
+                  <p className="leading-relaxed">
+                    {isDa
+                      ? 'Workflow: Generer XML → Send til Sproom API → Automatisk leveret via Peppol/NemHandel. Sproom understøtter statuspolling og webhook-signaturer (RSA-SHA256).'
+                      : 'Workflow: Generate XML → Send to Sproom API → Auto-delivered via Peppol/NemHandel. Sproom supports status polling and webhook signatures (RSA-SHA256).'}
+                  </p>
+                  <div className="flex flex-col gap-1 pt-1">
+                    <p className="font-medium text-gray-700 dark:text-gray-300">
+                      {isDa ? 'Fordele' : 'Benefits'}
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li>
+                        {isDa
+                          ? 'Ét barn-virksomhed ID dækker både Peppol og NemHandel'
+                          : 'One child company ID covers both Peppol and NemHandel'}
+                      </li>
+                      <li>
+                        {isDa
+                          ? 'Direkte raw-XML upload (ingen JSON-konvertering)'
+                          : 'Direct raw-XML upload (no JSON conversion)'}
+                      </li>
+                      <li>
+                        {isDa
+                          ? 'Realtids statussporing via /api/documents/{id}/state'
+                          : 'Real-time status tracking via /api/documents/{id}/state'}
+                      </li>
+                      <li>
+                        {isDa
+                          ? 'RSA-signede webhooks (SHA256withRSA)'
+                          : 'RSA-signed webhooks (SHA256withRSA)'}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* External links */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                  <a
+                    href="https://sproom.net/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#0d9488] hover:underline dark:text-[#99f6e4]"
+                  >
+                    sproom.net
+                  </a>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <FileText className="h-3.5 w-3.5 shrink-0" />
+                  <a
+                    href="https://sproom.net/api"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#0d9488] hover:underline dark:text-[#99f6e4]"
+                  >
+                    {isDa ? 'API-dokumentation' : 'API Documentation'}
+                  </a>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ═══ AUTOMATIC MODE: STORECOVE ACCESS POINT CARD (LEGACY FALLBACK) ═══ */}
+      {/* Only shown when Sproom is NOT the active AP AND the company is
+          still using Storecove (either connected, or as the platform-
+          configured AP for tenants that haven't migrated yet). */}
+      {deliveryMode === 'automatic' && !sproomActive && (
         <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
           <CardHeader className="pb-4">
             <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">

@@ -36,7 +36,31 @@ import { auditLog } from '@/lib/audit';
 import { generateOIOUBL, type OIOUBLInvoiceData } from '@/lib/oioubl-generator';
 import { NemHandelClient } from '@/lib/nemhandel-client';
 import { storecoveClient, StorecoveClient } from '@/lib/storecove-client';
+import { sproomClient } from '@/lib/sproom-client';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
+
+// ─── ACCESS POINT TOGGLE ──────────────────────────────────────────
+//
+// AlphaFlow supports TWO Access Point providers:
+//   - "sproom"    → Sproom (supports Peppol + NemHandel)
+//   - "storecove"  → Storecove (Peppol only — LEGACY)
+//   - (unset)      → simulation mode (no real delivery)
+//
+// Switch by setting EINVOICE_ACCESS_POINT in .env.
+// For staging: use Sproom staging URL (SPROOM_API_URL=https://staging.sproom.net)
+// For production: use Sproom production URL (SPROOM_API_URL=https://sproom.net)
+//
+// The Sproom path is MUCH simpler than Storecove because Sproom accepts
+// raw OIOUBL XML directly — no JSON Pure mode conversion needed.
+
+export type AccessPoint = 'sproom' | 'storecove' | 'simulation';
+
+export function getActiveAccessPoint(): AccessPoint {
+  const ap = process.env.EINVOICE_ACCESS_POINT?.toLowerCase();
+  if (ap === 'sproom' && sproomClient.isConfigured) return 'sproom';
+  if (ap === 'storecove' && storecoveClient.isConfigured) return 'storecove';
+  return 'simulation';
+}
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -85,6 +109,15 @@ export interface CompanyEInvoiceConfig {
   storecoveApiKeyId: string | null;
   storecoveLegalEntityId: number | null;
   storecoveConnectedAt: string | null;
+  // Sproom (new Access Point — Peppol + NemHandel)
+  sproomChildCompanyId: string | null;
+  sproomConnectedAt: string | null;
+  sproomNemHandelRegistered: boolean;
+  sproomPeppolRegistered: boolean;
+  // Platform-configured Access Point ('sproom' | 'storecove' | 'simulation').
+  // Used by the UI to decide which AP card to render and which /api/.../participants
+  // endpoint to call for the pre-flight recipient lookup.
+  activeAccessPoint: AccessPoint;
 }
 
 // ─── CONSTANTS ─────────────────────────────────────────────────────
@@ -513,6 +546,9 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
             einvoiceGLN: true,
             storecoveConnected: true,
             storecoveLegalEntityId: true,
+            sproomChildCompanyId: true,
+            sproomNemHandelRegistered: true,
+            sproomPeppolRegistered: true,
           },
         },
       },
@@ -610,36 +646,73 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
       testOverride: testOverrideActive,
     });
 
-    // 5. Send via appropriate access point
+    // 5. Send via the active Access Point
     let result: { success: boolean; messageId?: string; errorCode?: string; errorMessage?: string; responseXml?: string };
 
-    if (sending.channel === EInvoiceSendChannel.STORECOVE ||
-        (sending.channel === EInvoiceSendChannel.PEPPOL_BIS && sending.company.storecoveConnected)) {
-      // ── Storecove Access Point (Peppol + NemHandel eDelivery) ──
-      // When routeToNemhandel is true, Storecove handles:
-      //   - MitID Erhverv certificate signing (required by NemHandel)
-      //   - AS4 transmission to receiving AP
-      //   - Schema validation at receiving AP (required before transport ack)
-      //   - Schematron validation before forwarding downstream
-      //   - MLR/AR response if schematron validation fails
+    const ap = getActiveAccessPoint();
+    logger.info('[EINVOICE_SEND] Active access point', { sendingId, accessPoint: ap });
+
+    if (ap === 'sproom') {
+      // ── SPROOM Access Point (Peppol + NemHandel) ────────────────
+      //
+      // Sproom accepts raw OIOUBL XML directly — no JSON Pure mode,
+      // no base64 encoding, no complex payload structure. Just upload
+      // the XML file and Sproom handles:
+      //   - AS4 transport (Peppol + NemHandel eDelivery)
+      //   - MitID Erhverv certificate signing (for NemHandel)
+      //   - SMP/NHR lookup for recipient routing
+      //   - Schema + schematron validation
+      //   - MLR/AR response on validation failure
+      //
+      // The child company token is fetched automatically by the
+      // sproomClient (cached). We pass the childCompanyId so Sproom
+      // knows which tenant is sending.
+      const sproomResult = await sproomClient.sendDocument(xmlContent, {
+        childCompanyId: sending.company.sproomChildCompanyId ?? undefined,
+        requestId: sending.messageId || undefined, // idempotency
+      });
+
+      result = {
+        success: sproomResult.success,
+        messageId: sproomResult.documentId || sending.messageId,
+        errorCode: sproomResult.errorCode,
+        errorMessage: sproomResult.errorMessage,
+      };
+
+      // Store Sproom document ID
+      if (sproomResult.success && sproomResult.documentId) {
+        await db.eInvoiceSending.update({
+          where: { id: sendingId },
+          data: {
+            storecoveSubmissionId: sproomResult.documentId, // reuse field for tracking
+          },
+        });
+      }
+
+      logger.info('[EINVOICE_SEND] Submitted via Sproom Access Point', {
+        sendingId,
+        sproomDocumentId: sproomResult.documentId,
+        channel: sending.channel,
+      });
+
+    } else if (ap === 'storecove') {
+      // ── STORECOVE Access Point (Peppol only — LEGACY) ───────────
       const parsedEndpoint = sending.recipientEndpointId
         ? StorecoveClient.parseEndpointId(sending.recipientEndpointId)
         : null;
 
-      // Routing endpoint: use test receiver if override is active,
-      // otherwise use the parsed customer endpoint.
-      const receiverScheme = testOverrideActive
-        ? testReceiverScheme
-        : parsedEndpoint?.scheme;
-      const receiverIdentifier = testOverrideActive
-        ? testReceiverIdentifier
-        : parsedEndpoint?.identifier;
+      const testScheme = process.env.STORECOVE_TEST_RECEIVER_SCHEME;
+      const testIdentifier = process.env.STORECOVE_TEST_RECEIVER_IDENTIFIER;
+      const testOverride = !!(testScheme && testIdentifier);
+
+      const receiverScheme = testOverride ? testScheme : parsedEndpoint?.scheme;
+      const receiverIdentifier = testOverride ? testIdentifier : parsedEndpoint?.identifier;
 
       const storecoveResult = await storecoveClient.submitInvoice(xmlContent, {
         legalEntityId: sending.company.storecoveLegalEntityId ?? undefined,
         receiverScheme,
         receiverIdentifier,
-        routeToNemhandel: sending.channel === EInvoiceSendChannel.STORECOVE,
+        routeToNemhandel: false, // Storecove doesn't support NemHandel
       });
 
       result = {
@@ -649,7 +722,6 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         errorMessage: storecoveResult.errorMessage,
       };
 
-      // Store Storecove tracking IDs
       if (storecoveResult.success) {
         await db.eInvoiceSending.update({
           where: { id: sendingId },
@@ -663,13 +735,10 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
       logger.info('[EINVOICE_SEND] Submitted via Storecove Access Point', {
         sendingId,
         storecoveSubmissionId: storecoveResult.submissionId,
-        channel: sending.channel,
       });
+
     } else {
-      // ── NemHandel Client (simulation only — use Storecove for production) ──
-      // The NemHandelClient is used for NHR/SMP participant lookup and
-      // simulation mode only. For production NemHandel eDelivery,
-      // always use the Storecove channel which handles AS4/MitID.
+      // ── SIMULATION MODE (no Access Point configured) ────────────
       const recipientCvr = sending.recipientCvr || sending.company.cvrNumber;
       result = await nemHandelClient.sendInvoice(xmlContent, recipientCvr);
     }
@@ -1091,6 +1160,10 @@ export async function getCompanyEInvoiceSettings(
       storecoveApiKeyId: true,
       storecoveLegalEntityId: true,
       storecoveConnectedAt: true,
+      sproomChildCompanyId: true,
+      sproomConnectedAt: true,
+      sproomNemHandelRegistered: true,
+      sproomPeppolRegistered: true,
     },
   });
 
@@ -1112,6 +1185,11 @@ export async function getCompanyEInvoiceSettings(
     storecoveApiKeyId: company.storecoveApiKeyId,
     storecoveLegalEntityId: company.storecoveLegalEntityId,
     storecoveConnectedAt: company.storecoveConnectedAt?.toISOString() ?? null,
+    sproomChildCompanyId: company.sproomChildCompanyId,
+    sproomConnectedAt: company.sproomConnectedAt?.toISOString() ?? null,
+    sproomNemHandelRegistered: company.sproomNemHandelRegistered,
+    sproomPeppolRegistered: company.sproomPeppolRegistered,
+    activeAccessPoint: getActiveAccessPoint(),
   };
 }
 
@@ -1184,6 +1262,10 @@ export async function updateCompanyEInvoiceSettings(
       storecoveApiKeyId: true,
       storecoveLegalEntityId: true,
       storecoveConnectedAt: true,
+      sproomChildCompanyId: true,
+      sproomConnectedAt: true,
+      sproomNemHandelRegistered: true,
+      sproomPeppolRegistered: true,
     },
   });
 
@@ -1201,6 +1283,11 @@ export async function updateCompanyEInvoiceSettings(
     storecoveApiKeyId: company.storecoveApiKeyId,
     storecoveLegalEntityId: company.storecoveLegalEntityId,
     storecoveConnectedAt: company.storecoveConnectedAt?.toISOString() ?? null,
+    sproomChildCompanyId: company.sproomChildCompanyId,
+    sproomConnectedAt: company.sproomConnectedAt?.toISOString() ?? null,
+    sproomNemHandelRegistered: company.sproomNemHandelRegistered,
+    sproomPeppolRegistered: company.sproomPeppolRegistered,
+    activeAccessPoint: getActiveAccessPoint(),
   };
 
   logger.info('[EINVOICE_SETTINGS] Updated company e-invoice settings', {

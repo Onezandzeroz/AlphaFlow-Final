@@ -30,6 +30,9 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
         // E-invoice / eDelivery fields for onboarding status detection
         einvoiceEnabled: true, einvoiceRegistrationNo: true, einvoiceEndpointId: true,
         einvoiceDeliveryMode: true, storecoveConnected: true,
+        // Sproom Access Point (Peppol + NemHandel)
+        sproomChildCompanyId: true, sproomConnectedAt: true,
+        sproomNemHandelRegistered: true, sproomPeppolRegistered: true,
         // Project Mode gate (FASE 4) — SuperDev per-tenant visibility control
         projectModeEnabled: true,
         // Sidebar logo toggle — show company logo instead of AlphaFlow logo
@@ -84,6 +87,11 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       einvoiceEndpointId: company.einvoiceEndpointId,
       einvoiceDeliveryMode: company.einvoiceDeliveryMode,
       storecoveConnected: company.storecoveConnected,
+      // Sproom Access Point (Peppol + NemHandel)
+      sproomChildCompanyId: company.sproomChildCompanyId,
+      sproomConnectedAt: company.sproomConnectedAt?.toISOString() ?? null,
+      sproomNemHandelRegistered: company.sproomNemHandelRegistered,
+      sproomPeppolRegistered: company.sproomPeppolRegistered,
       projectModeEnabled: company.projectModeEnabled,
       showCompanyLogo: company.showCompanyLogo,
     } : null;

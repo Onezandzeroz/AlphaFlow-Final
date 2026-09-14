@@ -477,6 +477,17 @@ export const routeConfig: RouteConfigMap = {
     DELETE: { auth: true, requireSuperDev: true },
   },
 
+  // ── Sproom Access Point (Peppol + NemHandel) ──
+  '/api/sproom/create-child-company': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
+  },
+  '/api/sproom/status': {
+    GET: { auth: true, requireCompany: true },
+  },
+  '/api/sproom/participants': {
+    POST: { auth: true, requireCompany: true },
+  },
+
   // ── Subscription payment flow (FASE 5 — Flatpay) ──
   '/api/subscription/create-payment': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true },

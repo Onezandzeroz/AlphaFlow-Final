@@ -23,7 +23,7 @@ import { generateApplicationResponse, generateMessageLevelResponse } from '@/lib
 import { logger } from '@/lib/logger';
 import { notifyDataChange } from '@/lib/notify-data-change';
 
-export type ReceiveSource = 'manual_upload' | 'storecove_webhook';
+export type ReceiveSource = 'manual_upload' | 'storecove_webhook' | 'ap_webhook';
 
 export interface StoreReceivedInvoiceParams {
   /** Tenant that owns the received invoice. */

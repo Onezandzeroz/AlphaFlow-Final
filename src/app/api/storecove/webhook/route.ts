@@ -6,6 +6,7 @@ import {
   StorecoveReceivedDocumentWebhookEvent,
   StorecoveSubmissionWebhookEvent,
 } from '@/lib/storecove-client';
+import { sproomClient } from '@/lib/sproom-client';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auditLog } from '@/lib/audit';
@@ -34,112 +35,126 @@ import { storeReceivedInvoice } from '@/lib/invoice-receiver';
 export async function POST(request: Request) {
   try {
     // ── 1. Read raw body + verify authenticity ─────────────────────
-    // Storecove does NOT send an HMAC signature header. Instead, it
-    // supports static "HTTP Header" authentication: you configure a
-    // header name + secret value in the Storecove webhook dialog, and
-    // Storecove includes that exact header on every webhook POST.
     //
-    // AlphaFlow supports BOTH auth methods (auto-detected):
+    // AlphaFlow supports webhooks from BOTH Access Point providers:
     //
-    //  A) Preferred — static shared-secret HTTP header.
-    //     Configure in the Storecove dashboard webhook dialog:
-    //       Authentication: "HTTP Header"
-    //       Header name:  X-Alphaflow-Webhook-Secret
-    //       Header value: <your secret>
-    //     Set the SAME secret in .env as STORECOVE_WEBHOOK_SECRET.
-    //     AlphaFlow compares the header value to the env secret.
+    //  A) Sproom — RSA signature in X-Signature header.
+    //     Sproom signs the webhook body with SHA256withRSA.
+    //     The RSA public key is fetched from GET /api/webhooks/key.
+    //     Verified via sproomClient.verifyWebhookSignature().
     //
-    //  B) Legacy/optional — HMAC-SHA256 signature.
-    //     If Storecove ever adds X-Storecove-Signature support, the
-    //     signature path below still works (HMAC of the raw body with
-    //     STORECOVE_WEBHOOK_SECRET as the key).
+    //  B) Storecove — static shared-secret HTTP header.
+    //     Header: X-Alphaflow-Webhook-Secret = <STORECOVE_WEBHOOK_SECRET>
+    //     Compared with crypto.timingSafeEqual (fail-closed).
     //
-    // Both paths are fail-closed: if STORECOVE_WEBHOOK_SECRET is unset,
-    // ALL webhooks are rejected with HTTP 401.
+    //  C) Simulation — when no AP is configured, accept all (dev only).
+    //
+    // Auth method is auto-detected based on which headers are present.
     const rawBody = await request.text();
 
-    // ── 1a. Check the static shared-secret header first ──
-    const sharedSecretHeader = request.headers.get('X-Alphaflow-Webhook-Secret');
-    const webhookSecret = process.env.STORECOVE_WEBHOOK_SECRET;
-
+    // ── 1a. Try Sproom RSA signature first ──
+    const sproomSignature = request.headers.get('X-Signature');
     let authenticated = false;
 
-    if (sharedSecretHeader && webhookSecret) {
-      // Path A: static shared-secret header (what Storecove actually supports).
-      // Constant-time comparison to prevent timing attacks.
-      const bufferA = Buffer.from(sharedSecretHeader);
-      const bufferB = Buffer.from(webhookSecret);
-      if (bufferA.length === bufferB.length && bufferA.length > 0) {
-        // timingSafeEqual requires equal-length buffers
-        authenticated = timingSafeEqual(bufferA, bufferB);
+    if (sproomSignature && sproomClient?.isConfigured) {
+      try {
+        authenticated = await sproomClient.verifyWebhookSignature(rawBody, sproomSignature);
+        if (authenticated) {
+          logger.info('[WEBHOOK] Authenticated via Sproom RSA signature');
+        }
+      } catch (err) {
+        logger.warn('[WEBHOOK] Sproom signature verification failed', { error: err instanceof Error ? err.message : String(err) });
       }
-      if (!authenticated) {
-        logger.warn('[STORECOVE_WEBHOOK] Invalid shared-secret header value');
-      }
-    } else if (webhookSecret) {
-      // ── 1b. Fall back to HMAC signature (legacy / future-proof) ──
-      const signature = request.headers.get('X-Storecove-Signature');
-      if (signature && storecoveClient.verifyWebhookSignature(rawBody, signature)) {
-        authenticated = true;
-      } else {
-        logger.warn('[STORECOVE_WEBHOOK] No valid shared-secret header or HMAC signature', {
-          hasSharedSecretHeader: !!sharedSecretHeader,
-          hasSignatureHeader: !!signature,
-        });
-      }
-    } else {
-      // Fail-closed: no secret configured at all.
-      logger.error(
-        '[STORECOVE_WEBHOOK] REJECTED: STORECOVE_WEBHOOK_SECRET is not configured. ' +
-        'Set it in .env and configure the same value in the Storecove webhook dialog ' +
-        '(Authentication: HTTP Header, Header name: X-Alphaflow-Webhook-Secret, Header value: <secret>).'
-      );
     }
 
+    // ── 1b. Try Storecove shared-secret header ──
     if (!authenticated) {
+      const sharedSecretHeader = request.headers.get('X-Alphaflow-Webhook-Secret');
+      const webhookSecret = process.env.STORECOVE_WEBHOOK_SECRET;
+
+      if (sharedSecretHeader && webhookSecret) {
+        const bufferA = Buffer.from(sharedSecretHeader);
+        const bufferB = Buffer.from(webhookSecret);
+        if (bufferA.length === bufferB.length && bufferA.length > 0) {
+          authenticated = timingSafeEqual(bufferA, bufferB);
+        }
+        if (!authenticated) {
+          logger.warn('[WEBHOOK] Invalid shared-secret header value');
+        }
+      }
+    }
+
+    // ── 1c. Fail-closed if no auth method succeeded ──
+    if (!authenticated) {
+      logger.error('[WEBHOOK] REJECTED: No valid Sproom signature or Storecove shared-secret');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // ── 2. Parse the webhook event ─────────────────────────────────
     const rawEvent = JSON.parse(rawBody) as Record<string, unknown>;
 
-    logger.info('[STORECOVE_WEBHOOK] Received webhook event', {
+    logger.info('[WEBHOOK] Received webhook event', {
       event_type: rawEvent.event_type,
       event: rawEvent.event,
-      event_group: rawEvent.event_group,
+      type: rawEvent.type,
+      documentId: rawEvent.documentId,
+      eventType: rawEvent.eventType,
       timestamp: rawEvent.timestamp,
-      guid: rawEvent.guid || rawEvent.document_guid,
+      guid: rawEvent.guid || rawEvent.document_guid || rawEvent.documentId,
     });
 
-    // ── 3. Dispatch on event_type (primary discriminator) ─────────
+    // ── 3. Dispatch on event type (supports BOTH Sproom and Storecove) ──
     //
-    // Storecove's webhook format (confirmed from API docs):
-    //   - event_type: "document_submission" → outbound (sending status)
-    //   - event_type: "received_document"  → inbound (received e-invoice)
+    // SPROOM webhook format:
+    //   { "type": "DocumentReceived", "documentId": "<guid>", ... }
+    //   { "type": "DocumentStatusChanged", "documentId": "<guid>", ... }
     //
-    // The `event` field is the SUB-event within each type:
-    //   - document_submission: succeeded, failed, cleared, accepted, rejected
-    //   - received_document: received, failed
+    // STORECOVE webhook format:
+    //   { "event_type": "received_document", "document_guid": "<guid>", ... }
+    //   { "event_type": "document_submission", "event": "succeeded", "guid": "<guid>", ... }
     //
-    // For backward compat with the old API format, we also check
-    // `event` directly (old format used event="received_document" etc.)
     const eventType = rawEvent.event_type as string | undefined;
     const eventSub = rawEvent.event as string | undefined;
+    const sproomType = rawEvent.type as string | undefined;
+    const documentId = (rawEvent.documentId || rawEvent.document_guid || rawEvent.guid) as string | undefined;
 
-    // Inbound: received_document
-    if (eventType === 'received_document' || eventSub === 'received_document') {
-      return await handleReceivedDocument(rawEvent as unknown as StorecoveReceivedDocumentWebhookEvent);
+    // ── Inbound: document received ──
+    // Sproom: type="DocumentReceived"
+    // Storecove: event_type="received_document"
+    if (sproomType === 'DocumentReceived' || eventType === 'received_document' || eventSub === 'received_document') {
+      return await handleReceivedDocument({
+        document_guid: documentId,
+        documentId,
+        event_type: eventType,
+        event: eventSub || sproomType || '',
+        type: sproomType,
+        tenant_id: rawEvent.tenant_id as string | undefined,
+        parseable: rawEvent.parseable as boolean | undefined,
+        data: rawEvent.data as Record<string, unknown> | undefined,
+      } as unknown as StorecoveReceivedDocumentWebhookEvent);
     }
 
-    // Outbound: document_submission status change
-    if (eventType === 'document_submission' || eventSub === 'invoice_submission.status_changed') {
-      return await handleSubmissionStatusChanged(rawEvent as unknown as StorecoveSubmissionWebhookEvent);
+    // ── Outbound: document status changed ──
+    // Sproom: type="DocumentStatusChanged"
+    // Storecove: event_type="document_submission"
+    if (sproomType === 'DocumentStatusChanged' || eventType === 'document_submission' || eventSub === 'invoice_submission.status_changed') {
+      return await handleSubmissionStatusChanged({
+        event_type: eventType,
+        event: eventSub || sproomType || '',
+        type: sproomType,
+        guid: documentId,
+        documentId,
+        details: rawEvent.details as string | undefined,
+        tenant_id: rawEvent.tenant_id as string | undefined,
+        data: rawEvent.data as Record<string, unknown> | undefined,
+      } as unknown as StorecoveSubmissionWebhookEvent);
     }
 
-    // Other events (legal_entity.updated, etc.) — acknowledged, not actioned.
-    logger.info('[STORECOVE_WEBHOOK] Ignoring non-actionable event', {
+    // Other events — acknowledged, not actioned.
+    logger.info('[WEBHOOK] Ignoring non-actionable event', {
       event_type: eventType,
       event: eventSub,
+      sproomType,
     });
     return NextResponse.json({ received: true });
   } catch (error) {
@@ -156,35 +171,33 @@ export async function POST(request: Request) {
 // We fetch the XML, resolve the tenant, parse, and store it.
 
 async function handleReceivedDocument(event: StorecoveReceivedDocumentWebhookEvent) {
-  // Storecove's webhook format: document_guid is top-level (NOT under data).
-  // For backward compat, also check event.data.document_guid.
-  const document_guid = event.document_guid || event.data?.document_guid;
+  // Support both Storecove and Sproom webhook formats:
+  // - Storecove: document_guid (top-level or under data)
+  // - Sproom: documentId (top-level)
+  const document_guid = event.document_guid || event.data?.document_guid || (event as any).documentId;
   const legal_entity_id = event.data?.legal_entity_id;
   const tenant_id = event.tenant_id || event.data?.tenant_id;
   const parseable = event.parseable ?? event.data?.parseable;
 
   if (!document_guid) {
-    logger.error('[STORECOVE_WEBHOOK] received_document missing document_guid', {
+    logger.error('[WEBHOOK] received_document missing document ID', {
       event_type: event.event_type,
       event: event.event,
+      type: (event as any).type,
       tenant_id,
     });
-    return NextResponse.json({ received: true, error: 'missing_document_guid' });
+    return NextResponse.json({ received: true, error: 'missing_document_id' });
   }
 
-  logger.info('[STORECOVE_WEBHOOK] Processing received_document', {
+  logger.info('[WEBHOOK] Processing received document', {
     document_guid,
     legal_entity_id: legal_entity_id ?? null,
     tenant_id: tenant_id ?? null,
     parseable: parseable ?? null,
+    source: (event as any).type ? 'sproom' : 'storecove',
   });
 
   // ── Resolve the tenant (Company) ────────────────────────────────
-  // Resolution order:
-  //   1. legal_entity_id → Company.storecoveLegalEntityId
-  //   2. tenant_id (if it's our Company.id cuid) → Company.id
-  //   3. Fetch received document JSON → match recipient endpoint
-  //      (scheme:identifier) → Company.einvoiceEndpointId / cvrNumber
   const company = await resolveTenant({
     legal_entity_id,
     tenant_id,
@@ -194,10 +207,7 @@ async function handleReceivedDocument(event: StorecoveReceivedDocumentWebhookEve
   });
 
   if (!company) {
-    // No tenant owns this legal entity / endpoint. Return 200 so Storecove
-    // stops retrying — the document remains available in the Storecove
-    // dashboard for manual retrieval. Logged at error for ops visibility.
-    logger.error('[STORECOVE_WEBHOOK] Could not resolve tenant for received document', {
+    logger.error('[WEBHOOK] Could not resolve tenant for received document', {
       document_guid,
       legal_entity_id: legal_entity_id ?? null,
       tenant_id: tenant_id ?? null,
@@ -206,15 +216,32 @@ async function handleReceivedDocument(event: StorecoveReceivedDocumentWebhookEve
   }
 
   // ── Fetch the original XML ──────────────────────────────────────
-  const xml = await storecoveClient.getReceivedDocumentOriginal(document_guid);
+  // Use the active Access Point to fetch the document.
+  // - Sproom: GET /api/documents/{documentId}/xml
+  // - Storecove: GET /received_documents/{guid}/original
+  let xml: string | null = null;
+
+  if (sproomClient?.isConfigured) {
+    try {
+      xml = await sproomClient.getDocument(document_guid, 'xml');
+    } catch (err) {
+      logger.error('[WEBHOOK] Sproom getDocument failed', { document_guid, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  if (!xml && storecoveClient) {
+    try {
+      xml = await storecoveClient.getReceivedDocumentOriginal(document_guid);
+    } catch (err) {
+      logger.error('[WEBHOOK] Storecove getReceivedDocumentOriginal failed', { document_guid, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
 
   if (!xml) {
-    logger.error('[STORECOVE_WEBHOOK] Could not fetch received document XML', {
+    logger.error('[WEBHOOK] Could not fetch received document XML', {
       document_guid,
       companyId: company.id,
     });
-    // Return 200 — Storecove will retry, and the document is also in their
-    // dashboard. Returning non-2xx would cause 5 days of retries.
     return NextResponse.json({ received: true, warning: 'document_fetch_failed' });
   }
 
@@ -223,14 +250,14 @@ async function handleReceivedDocument(event: StorecoveReceivedDocumentWebhookEve
     companyId: company.id,
     userId: null,
     xml,
-    source: 'storecove_webhook',
+    source: 'ap_webhook',
     documentGuid: document_guid,
     auditMeta: {
-      source: 'storecove_webhook',
+      source: 'ap_webhook',
       document_guid,
       legal_entity_id: legal_entity_id ?? null,
       tenant_id: tenant_id ?? null,
-      webhook_timestamp: event.timestamp,
+      webhook_timestamp: (event as any).timestamp,
     },
   });
 
@@ -373,12 +400,42 @@ async function resolveTenant(data: {
 async function handleSubmissionStatusChanged(
   event: StorecoveSubmissionWebhookEvent,
 ) {
-  // Storecove's webhook format: guid is top-level (NOT under data.id).
-  // The sub-event (event.event) is the status: succeeded, failed, etc.
-  // For backward compat, also check event.data.id.
-  const submissionId = event.guid || event.data?.id || '';
-  const status = event.event; // "succeeded", "failed", "cleared", "accepted", etc.
+  // Support both Storecove and Sproom webhook formats:
+  // - Storecove: guid (top-level), event = sub-event (succeeded, failed, etc.)
+  // - Sproom: documentId (top-level), type = "DocumentStatusChanged"
+  //           Need to fetch document state via GET /api/documents/{id}/state
+  const submissionId = event.guid || event.data?.id || (event as any).documentId || '';
+  const sproomType = (event as any).type;
   const now = new Date();
+
+  // ── For Sproom: fetch the document state to get the actual status ──
+  // Sproom's DocumentStatusChanged webhook just tells us the status changed;
+  // we need to call GET /api/documents/{id}/state to get the actual status.
+  let status: string | undefined = event.event;
+  let details: string | undefined = event.details;
+
+  if (sproomType === 'DocumentStatusChanged' && sproomClient?.isConfigured && submissionId) {
+    try {
+      const states = await sproomClient.getDocumentState(submissionId);
+      if (states && states.length > 0) {
+        const latest = states[states.length - 1]; // last entry = most recent
+        status = latest.state || undefined;
+        details = latest.message || undefined;
+        logger.info('[WEBHOOK] Sproom document state fetched', {
+          submissionId,
+          status,
+          message: details,
+        });
+      }
+    } catch (err) {
+      logger.warn('[WEBHOOK] Sproom getDocumentState failed', {
+        submissionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Continue with the event type as fallback
+      status = 'Sent'; // Assume sent if we can't fetch state
+    }
+  }
 
   // Map Storecove sub-events to AlphaFlow EInvoiceSendStatus
   let newStatus: string;
@@ -386,8 +443,8 @@ async function handleSubmissionStatusChanged(
   let dbStatus: string | null = null;
 
   switch (status) {
+    // ── Storecove statuses ──
     case 'succeeded':
-      // "succeeded" = received by corner 3 (receipt acknowledged)
       newStatus = 'DELIVERED';
       dbStatus = 'DELIVERED';
       updateData = { status: 'DELIVERED', deliveredAt: now };
@@ -402,10 +459,7 @@ async function handleSubmissionStatusChanged(
     case 'rejected':
       newStatus = 'REJECTED';
       dbStatus = 'REJECTED';
-      updateData = {
-        status: 'REJECTED',
-        errorMessage: event.details || 'Recipient rejected the invoice',
-      };
+      updateData = { status: 'REJECTED', errorMessage: details || 'Recipient rejected the invoice' };
       break;
 
     case 'failed':
@@ -414,19 +468,11 @@ async function handleSubmissionStatusChanged(
     case 'no_action_taken':
       newStatus = 'FAILED';
       dbStatus = 'FAILED';
-      updateData = {
-        status: 'FAILED',
-        errorMessage: event.details || `Invoice delivery ${status}`,
-      };
+      updateData = { status: 'FAILED', errorMessage: details || `Invoice delivery ${status}` };
       break;
 
     case 'cleared':
-      // "cleared" = cleared by the sender's tax authority (QR code obtained)
-      // Not a final delivery status — skip for now
-      logger.info('[STORECOVE_WEBHOOK] Document cleared (intermediate status)', {
-        submissionId,
-        status,
-      });
+      logger.info('[WEBHOOK] Document cleared (intermediate status)', { submissionId, status });
       return NextResponse.json({ received: true });
 
     case 'processing':
@@ -436,13 +482,64 @@ async function handleSubmissionStatusChanged(
     case 'conditionally_accepted':
     case 'partially_paid':
     case 'paid':
-      // These are corner-4 (receiver-side) statuses that require the
-      // sender to advertise InvoiceResponse. Log but don't update
-      // EInvoiceSending — the initial "succeeded" is the delivery.
-      logger.info('[STORECOVE_WEBHOOK] Intermediate corner-4 status received', {
-        submissionId,
-        status,
-      });
+      logger.info('[WEBHOOK] Intermediate corner-4 status received', { submissionId, status });
+      return NextResponse.json({ received: true });
+
+    // ── Sproom statuses (DocumentStatusType enum) ──
+    case 'Sent':
+      // Document was sent by Sproom to the receiving AP
+      newStatus = 'DELIVERED';
+      dbStatus = 'DELIVERED';
+      updateData = { status: 'DELIVERED', deliveredAt: now };
+      break;
+
+    case 'Received':
+      // Document was received by the receiving AP
+      newStatus = 'DELIVERED';
+      dbStatus = 'DELIVERED';
+      updateData = { status: 'DELIVERED', deliveredAt: now };
+      break;
+
+    case 'TransmissionCompleted':
+      // Transmission completed (final delivery confirmation)
+      newStatus = 'DELIVERED';
+      dbStatus = 'DELIVERED';
+      updateData = { status: 'DELIVERED', deliveredAt: now };
+      break;
+
+    case 'Approved':
+      // Document was approved by the recipient
+      newStatus = 'ACCEPTED';
+      dbStatus = 'ACCEPTED';
+      updateData = { status: 'ACCEPTED', acceptedAt: now };
+      break;
+
+    case 'Rejected':
+      // Document was rejected by the recipient
+      newStatus = 'REJECTED';
+      dbStatus = 'REJECTED';
+      updateData = { status: 'REJECTED', errorMessage: details || 'Recipient rejected the invoice' };
+      break;
+
+    case 'Error':
+    case 'RuntimeError':
+    case 'SendError':
+    case 'SendNemHandelError':
+    case 'SendSproomError':
+    case 'SchematronValidationError':
+    case 'OIOSchemaValidationError':
+    case 'CustomValidationError':
+      newStatus = 'FAILED';
+      dbStatus = 'FAILED';
+      updateData = { status: 'FAILED', errorMessage: details || `Document error: ${status}` };
+      break;
+
+    case 'Created':
+    case 'EndpointNotFound':
+    case 'Incomplete':
+    case 'TransmissionStarted':
+      // Intermediate statuses — log but don't update
+      logger.info('[WEBHOOK] Intermediate status received', { submissionId, status });
       return NextResponse.json({ received: true });
 
     default:

@@ -85,6 +85,16 @@ interface EInvoiceConfig {
   storecoveApiKeyId?: string | null;
   storecoveLegalEntityId?: number | null;
   storecoveConnectedAt?: string | null;
+  // Sproom (new Access Point — Peppol + NemHandel)
+  sproomChildCompanyId?: string | null;
+  sproomConnectedAt?: string | null;
+  sproomNemHandelRegistered?: boolean;
+  sproomPeppolRegistered?: boolean;
+  // Platform-configured AP ('sproom' | 'storecove' | 'simulation') —
+  // resolved by the server from EINVOICE_ACCESS_POINT. Used to decide
+  // which /api/.../participants endpoint to call for the pre-flight
+  // recipient lookup.
+  activeAccessPoint?: 'sproom' | 'storecove' | 'simulation';
 }
 
 interface SendEInvoiceDialogProps {
@@ -125,11 +135,26 @@ export function SendEInvoiceDialog({
 
   // ── Pre-flight participant reachability check ──
   // Runs when an e-invoice channel (STORECOVE/PEPPOL) is selected and the
-  // customer has a CVR. If the recipient is NOT on the Peppol test/production
-  // network, we show a warning with a one-click switch to PDF email.
+  // customer has a CVR. Routes to /api/sproom/participants when Sproom is
+  // the active AP, otherwise falls back to /api/storecove/participants.
+  // If the recipient is NOT on the Peppol/NemHandel network, we show a
+  // warning with a one-click switch to PDF email.
   const [preflightResult, setPreflightResult] = useState<{ exists: boolean; checkedCvr: string } | null>(null);
   const [preflightLoading, setPreflightLoading] = useState(false);
   const [preflightDismissed, setPreflightDismissed] = useState(false);
+
+  // ── Active Access Point detection ──
+  // Sproom takes precedence: if the company has a Sproom child company OR
+  // the platform env var EINVOICE_ACCESS_POINT=sproom, we use Sproom's
+  // /api/sproom/participants endpoint for the pre-flight check.
+  // Otherwise we fall back to Storecove's /api/storecove/participants.
+  const sproomActive =
+    !!einvoiceConfig?.sproomChildCompanyId ||
+    einvoiceConfig?.activeAccessPoint === 'sproom';
+  const apConnected = sproomActive
+    ? !!einvoiceConfig?.sproomChildCompanyId
+    : !!einvoiceConfig?.storecoveConnected;
+  const apName = sproomActive ? 'Sproom' : 'Storecove';
 
   const isEmailChannel = channel === 'EMAIL';
   const isEInvoiceChannel = channel === 'STORECOVE' || channel === 'PEPPOL' || channel === 'OIOUBL';
@@ -138,21 +163,31 @@ export function SendEInvoiceDialog({
     preflightResult?.exists === false &&
     !preflightDismissed &&
     !!invoice?.customerCvr &&
-    !!einvoiceConfig?.storecoveConnected;
+    apConnected;
 
   // ── Pre-flight: check if the recipient can receive e-invoices ──
-  // Only runs for e-invoice channels (STORECOVE/PEPPOL) when Storecove is
+  // Only runs for e-invoice channels (STORECOVE/PEPPOL) when an AP is
   // connected and the customer has a CVR. Non-blocking: if it fails or says
   // "not reachable", the user can still force the send.
   const runPreflight = useCallback(async (cvr: string) => {
-    if (!cvr || !/^\d{8}$/.test(cvr)) return;
+    if (!cvr || !/^\d{8}$/.test(cvr)) return;
     setPreflightLoading(true);
     setPreflightDismissed(false);
     try {
-      const res = await fetch('/api/storecove/participants', {
+      const endpoint = sproomActive
+        ? '/api/sproom/participants'
+        : '/api/storecove/participants';
+      // Both endpoints accept the same { scheme, identifier, countryCode }
+      // payload and return the same { exists, scheme, identifier, ... } shape.
+      // Sproom uses scheme "DK:CVR"; Storecove uses ISO 6523 scheme "0184".
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scheme: '0184', identifier: cvr, countryCode: 'DK' }),
+        body: JSON.stringify({
+          scheme: sproomActive ? 'DK:CVR' : '0184',
+          identifier: cvr,
+          countryCode: 'DK',
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -166,11 +201,11 @@ export function SendEInvoiceDialog({
     } finally {
       setPreflightLoading(false);
     }
-  }, []);
+  }, [sproomActive]);
 
   // Run preflight when channel or invoice changes (only for e-invoice channels)
   useEffect(() => {
-    if (isEInvoiceChannel && invoice?.customerCvr && einvoiceConfig?.storecoveConnected) {
+    if (isEInvoiceChannel && invoice?.customerCvr && apConnected) {
       // Re-run only if the CVR changed or we haven't checked yet
       if (preflightResult?.checkedCvr !== invoice.customerCvr) {
         runPreflight(invoice.customerCvr);
@@ -180,7 +215,7 @@ export function SendEInvoiceDialog({
       setPreflightResult(null);
       setPreflightDismissed(false);
     }
-  }, [channel, invoice?.customerCvr, isEInvoiceChannel, einvoiceConfig?.storecoveConnected, preflightResult?.checkedCvr, runPreflight]);
+  }, [channel, invoice?.customerCvr, isEInvoiceChannel, apConnected, preflightResult?.checkedCvr, runPreflight]);
 
   // ── Fetch XML preview (before early return) ──
   const handlePreviewXml = useCallback(async () => {
@@ -249,9 +284,9 @@ export function SendEInvoiceDialog({
         );
       } else {
         // E-invoice route returns { sending: {...}, error?: string }
-        // The API now transmits to Storecove synchronously, so the
-        // status is DELIVERED (success) or FAILED (error) by the time
-        // we get here — not PENDING.
+        // The API now transmits to the active Access Point (Sproom or
+        // Storecove) synchronously, so the status is DELIVERED (success)
+        // or FAILED (error) by the time we get here — not PENDING.
         const sendStatus = data.sending?.status as string | undefined;
         const transmissionError = data.error as string | undefined;
 
@@ -277,8 +312,8 @@ export function SendEInvoiceDialog({
             isDa ? 'E-faktura sendt!' : 'E-invoice sent!',
             {
               description: isDa
-                ? `${invoice.invoiceNumber} er afleveret til Storecove. Klik "Send-historik" for at se status.`
-                : `${invoice.invoiceNumber} delivered to Storecove. Click "Send history" to see status.`,
+                ? `${invoice.invoiceNumber} er afleveret til ${apName}. Klik "Send-historik" for at se status.`
+                : `${invoice.invoiceNumber} delivered to ${apName}. Click "Send history" to see status.`,
             },
           );
         } else {
@@ -287,8 +322,8 @@ export function SendEInvoiceDialog({
             isDa ? 'E-faktura afsendt!' : 'E-invoice sent!',
             {
               description: isDa
-                ? `${invoice.invoiceNumber} sendes via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? 'Storecove' : 'Peppol BIS'}. Klik "Send-historik" for at se status.`
-                : `${invoice.invoiceNumber} sending via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? 'Storecove' : 'Peppol BIS'}. Click "Send history" to see status.`,
+                ? `${invoice.invoiceNumber} sendes via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? apName : 'Peppol BIS'}. Klik "Send-historik" for at se status.`
+                : `${invoice.invoiceNumber} sending via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? apName : 'Peppol BIS'}. Click "Send history" to see status.`,
             },
           );
         }
@@ -437,8 +472,8 @@ export function SendEInvoiceDialog({
                   </p>
                   <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
                     {isDa
-                      ? `CVR ${invoice.customerCvr} er ikke registreret på Peppol/NemHandel-netværket. E-fakturaen vil blive afvist af Storecove.`
-                      : `CVR ${invoice.customerCvr} is not registered on the Peppol/NemHandel network. The e-invoice will be rejected by Storecove.`
+                      ? `CVR ${invoice.customerCvr} er ikke registreret på Peppol/NemHandel-netværket. E-fakturaen vil blive afvist af ${apName}.`
+                      : `CVR ${invoice.customerCvr} is not registered on the Peppol/NemHandel network. The e-invoice will be rejected by ${apName}.`
                     }
                   </p>
                   <div className="flex gap-2 mt-3">
@@ -479,7 +514,7 @@ export function SendEInvoiceDialog({
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{isDa ? 'Kanal' : 'Channel'}</span>
                       <Badge variant="outline" className="text-[10px] px-2 border-emerald-300 dark:border-emerald-700">
-                        {sendResult.channel === 'EMAIL' ? (isDa ? 'E-mail (PDF)' : 'Email (PDF)') : sendResult.channel === 'OIOUBL' ? 'OIOUBL (NemHandel)' : sendResult.channel === 'STORECOVE' ? 'Storecove (Peppol+NemHandel)' : 'Peppol BIS'}
+                        {sendResult.channel === 'EMAIL' ? (isDa ? 'E-mail (PDF)' : 'Email (PDF)') : sendResult.channel === 'OIOUBL' ? 'OIOUBL (NemHandel)' : sendResult.channel === 'STORECOVE' ? `${apName} (Peppol+NemHandel)` : 'Peppol BIS'}
                       </Badge>
                     </div>
                     {sendResult.messageId && (
@@ -500,7 +535,7 @@ export function SendEInvoiceDialog({
                           {sendResult.status === 'FAILED'
                             ? (isDa ? 'Fejlet — se Send-historik' : 'Failed — see Send history')
                             : sendResult.status === 'DELIVERED'
-                              ? (isDa ? 'Afleveret til Storecove' : 'Delivered to Storecove')
+                              ? (isDa ? `Afleveret til ${apName}` : `Delivered to ${apName}`)
                               : (isDa ? 'Sendt — se Send-historik for status' : 'Sent — see Send history for status')}
                         </span>
                       </div>
@@ -565,8 +600,8 @@ export function SendEInvoiceDialog({
                     <SelectItem value="STORECOVE">
                       <div className="flex items-center gap-2">
                         <Link2 className="h-3.5 w-3.5 text-violet-500" />
-                        <span>Storecove ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
-                        {einvoiceConfig?.storecoveConnected && (
+                        <span>{apName} ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
+                        {apConnected && (
                           <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[8px] px-1 py-0">
                             <Zap className="h-2.5 w-2.5" />
                             {isDa ? 'FORBUNDET' : 'LIVE'}
@@ -595,8 +630,8 @@ export function SendEInvoiceDialog({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {channel === 'STORECOVE' && isDa && 'Automatisk levering via Storecove Access Point. Sendes til både Peppol og NemHandel.'}
-                  {channel === 'STORECOVE' && !isDa && 'Automatic delivery via Storecove Access Point. Routed to both Peppol and NemHandel.'}
+                  {channel === 'STORECOVE' && isDa && `Automatisk levering via ${apName} Access Point. Sendes til både Peppol og NemHandel.`}
+                  {channel === 'STORECOVE' && !isDa && `Automatic delivery via ${apName} Access Point. Routed to both Peppol and NemHandel.`}
                   {channel === 'PEPPOL' && isDa && 'Peppol BIS Billing 3.0-format. International e-fakturastandard.'}
                   {channel === 'PEPPOL' && !isDa && 'Peppol BIS Billing 3.0 format. International e-invoicing standard.'}
                   {channel === 'OIOUBL' && isDa && 'OIOUBL-format via NemHandel-netværket. Standard for offentlige danske institutioner.'}
@@ -604,12 +639,12 @@ export function SendEInvoiceDialog({
                   {channel === 'EMAIL' && isDa && 'Sender fakturaen som PDF vedhæftning til kundens e-mailadresse. Kræver ikke Peppol/NemHandel.'}
                   {channel === 'EMAIL' && !isDa && 'Sends the invoice as a PDF attachment to the customer\'s email address. Does not require Peppol/NemHandel.'}
                 </p>
-                {channel === 'STORECOVE' && !einvoiceConfig?.storecoveConnected && (
+                {channel === 'STORECOVE' && !apConnected && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-2 mt-1.5 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                     {isDa
-                      ? 'Storecove er ikke forbundet. Afsendelse vil bruge simulationstilstand. Forbind Storecove i indstillinger.'
-                      : 'Storecove is not connected. Sending will use simulation mode. Connect Storecove in settings.'}
+                      ? `${apName} er ikke forbundet. Afsendelse vil bruge simulationstilstand. Forbind ${apName} i indstillinger.`
+                      : `${apName} is not connected. Sending will use simulation mode. Connect ${apName} in settings.`}
                   </div>
                 )}
                 {/* Pre-flight loading indicator */}

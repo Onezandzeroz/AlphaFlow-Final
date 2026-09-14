@@ -298,12 +298,19 @@ model Company {
   einvoiceAutoSendOnFinalize Boolean              @default(false) // Auto-send when invoice is finalized
   einvoiceDeliveryMode       String? // 'manual' or 'automatic' — null = not yet chosen
 
-  // Storecove Access Point integration (Peppol delivery)
+  // Storecove Access Point integration (Peppol delivery — LEGACY)
   storecoveConnected     Boolean   @default(false) // Whether Storecove API is configured
   storecoveApiKeyId      String? // Storecove API key ID (last 4 chars stored for identification)
   storecoveLegalEntityId Int? // Storecove legal entity ID for this company
   storecoveConnectedAt   DateTime? // When Storecove was connected
   storecoveLastTestedAt  DateTime? // Last successful connection test
+
+  // Sproom Access Point integration (Peppol + NemHandel delivery)
+  sproomChildCompanyId   String? // Sproom child company ID for this tenant
+  sproomConnectedAt      DateTime? // When Sproom was connected
+  sproomLastTestedAt     DateTime? // Last successful Sproom connection test
+  sproomNemHandelRegistered Boolean @default(false) // Registered in NemHandel network
+  sproomPeppolRegistered Boolean @default(false) // Registered in Peppol network
 
   // ── Project Mode gating (FASE 4 — SuperDev controls per-tenant visibility) ──
   // When false, the Projects section, ProjectSelector dropdowns, project
