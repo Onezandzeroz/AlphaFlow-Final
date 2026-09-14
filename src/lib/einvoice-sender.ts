@@ -626,7 +626,7 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
 
       result = {
         success: sproomResult.success,
-        messageId: sproomResult.documentId || sending.messageId,
+        messageId: sproomResult.documentId ?? sending.messageId ?? undefined,
         errorCode: sproomResult.errorCode,
         errorMessage: sproomResult.errorMessage,
       };
