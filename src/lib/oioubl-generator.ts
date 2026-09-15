@@ -218,12 +218,17 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
           },
           ...(data.supplier.contactEmail || data.supplier.contactPhone
             ? {
+                // UBL 2.1 Contact sequence: ID, Name, Telephone, Telefax,
+                // ElectronicMail, Note, OtherCommunication. Telephone MUST
+                // come before ElectronicMail — emitting ElectronicMail first
+                // caused Sproom's XSD to reject with "invalid child element
+                // 'Telephone' ... expected: Note / OtherCommunication".
                 'cac:Contact': {
-                  ...(data.supplier.contactEmail && {
-                    'cbc:ElectronicMail': data.supplier.contactEmail,
-                  }),
                   ...(data.supplier.contactPhone && {
                     'cbc:Telephone': data.supplier.contactPhone,
+                  }),
+                  ...(data.supplier.contactEmail && {
+                    'cbc:ElectronicMail': data.supplier.contactEmail,
                   }),
                 },
               }
