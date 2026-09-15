@@ -234,7 +234,14 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
           },
           'cac:PartyLegalEntity': {
             'cbc:RegistrationName': data.supplier.name,
-            'cbc:CompanyID': data.supplier.vatNumber || '',
+            // DK-R-014: for Danish suppliers, PartyLegalEntity/CompanyID
+            // MUST specify schemeID="0184" (DK CVR). The value is the
+            // bare 8-digit CVR (data.supplier.id) — NOT the DK-prefixed
+            // vatNumber (which is correct for PartyTaxScheme/CompanyID below).
+            'cbc:CompanyID': {
+              '@schemeID': '0184',
+              '#': data.supplier.id,
+            },
           },
           ...(data.supplier.contactEmail || data.supplier.contactPhone
             ? {
@@ -292,8 +299,15 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
             : {}),
           'cac:PartyLegalEntity': {
             'cbc:RegistrationName': data.customer.name,
+            // DK-R-014 (supplier) / equivalent for customer: CompanyID with
+            // schemeID="0184" + bare CVR (data.customer.id). Conditional on
+            // vatNumber being set (i.e. customerCvr present) so the value is
+            // always a real CVR here, never the 'CUST-...' fallback.
             ...(data.customer.vatNumber && {
-              'cbc:CompanyID': data.customer.vatNumber,
+              'cbc:CompanyID': {
+                '@schemeID': '0184',
+                '#': data.customer.id,
+              },
             }),
           },
           ...(data.customer.contactEmail
