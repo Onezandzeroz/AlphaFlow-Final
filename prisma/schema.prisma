@@ -1400,6 +1400,7 @@ model ReceivedInvoice {
 
   // Workflow
   status          ReceivedInvoiceStatus @default(RECEIVED)
+  readAt          DateTime? // When the user viewed the inbox (null = unread, for the badge counter)
   rejectionReason String? // User-provided reason if rejected
   approvedBy      String? // userId who approved
   approvedAt      DateTime?
@@ -1425,6 +1426,7 @@ model ReceivedInvoice {
 
   @@unique([companyId, invoiceNumber]) // Prevent duplicate invoice numbers within a tenant
   @@index([companyId, status])
+  @@index([companyId, readAt])
   @@index([companyId, issueDate])
   @@index([companyId, supplierCvr])
   @@index([userId])

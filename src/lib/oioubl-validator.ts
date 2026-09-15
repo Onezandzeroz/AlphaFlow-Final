@@ -224,7 +224,7 @@ export function validateOIOUBL(xml: string): ValidationResult {
 
   // ── 6. Currency code validation ─────────────────────────────────────
 
-  const currencyMatches = xml.matchAll(/cbc:DocumentCurrencyCode[^>]*>([^<]+)/g);
+  const currencyMatches = xml.matchAll(/<cbc:DocumentCurrencyCode[^>]*>([^<]+)/g);
   const currencyCodes = new Set<string>();
   for (const match of currencyMatches) {
     const code = match[1].trim();
@@ -261,7 +261,7 @@ export function validateOIOUBL(xml: string): ValidationResult {
 
   // ── 8. Payment means validation ─────────────────────────────────────
 
-  const paymentMeansMatch = xml.match(/cbc:PaymentMeansCode[^>]*>([^<]+)/);
+  const paymentMeansMatch = xml.match(/<cbc:PaymentMeansCode[^>]*>([^<]+)/);
   let meansCode: string | undefined;
   if (paymentMeansMatch) {
     meansCode = paymentMeansMatch[1].trim();
@@ -328,7 +328,7 @@ export function validateOIOUBL(xml: string): ValidationResult {
     }
   }
 
-  const invoiceTypeMatch = xml.match(/cbc:InvoiceTypeCode[^>]*>([^<]+)/);
+  const invoiceTypeMatch = xml.match(/<cbc:InvoiceTypeCode[^>]*>([^<]+)/);
   if (!invoiceTypeMatch) {
     errors.push('Missing InvoiceTypeCode. Value 380 (Commercial invoice) is expected.');
   } else {

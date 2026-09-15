@@ -164,6 +164,13 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
 
   useEffect(() => { fetchInvoices(); }, [fetchInvoices, receivedInvoicesVersion]);
 
+  // Mark all received invoices as read when the inbox is opened (clears the
+  // unread badge). The mark-read route calls notifyDataChange → the
+  // ReceivedInvoiceNotifier's poll sees count → 0.
+  useEffect(() => {
+    fetch('/api/invoices/received/mark-read', { method: 'POST' }).catch(() => {});
+  }, []);
+
   // ── File upload ────────────────────────────────────────────────────
 
   const handleFileUpload = useCallback(async (file: File) => {
