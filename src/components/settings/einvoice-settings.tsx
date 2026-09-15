@@ -22,6 +22,15 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -44,7 +53,6 @@ import {
   Unlink,
   Search,
   Activity,
-  Inbox,
   PlusCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -160,9 +168,9 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     enrollmentLink: string;
     childCompanyId: string | null;
   } | null>(null);
-  const [isRegisteringWebhook, setIsRegisteringWebhook] = useState(false);
   const [isPeppolVerifying, setIsPeppolVerifying] = useState(false);
-  const [peppolPendingMessage, setPeppolPendingMessage] = useState<string | null>(null);
+  const [peppolDialogOpen, setPeppolDialogOpen] = useState(false);
+  const [peppolDialogData, setPeppolDialogData] = useState<{ message?: string; state?: string | null; registered?: boolean } | null>(null);
 
   // Derived: is an Access Point connected? EndpointID + Peppol AS4 ID
   // are auto-managed by Sproom's create-child-company route, so the
@@ -373,58 +381,13 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     }
   }, [isDa, handleMutationError, fetchSproomStatus]);
 
-  // ── Register Sproom webhooks (enable incoming e-invoice receiving) ──
-  // Idempotent: lists existing webhooks + creates the missing types
-  // (DocumentReceived + DocumentStatusChanged). Needed for the e-invoice
-  // inbox to receive invoices delivered to this company's Sproom child.
-  // Auto-registered at child-company creation; call this once for companies
-  // created before that.
-  const handleRegisterWebhook = useCallback(async () => {
-    setIsRegisteringWebhook(true);
-    try {
-      const res = await fetch('/api/sproom/register-webhook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!res.ok) {
-        const isAccess = await handleMutationError(
-          res,
-          isDa ? 'Aktiver e-faktura modtagelse' : 'Enable e-invoice receiving',
-        );
-        if (isAccess) { setIsRegisteringWebhook(false); return; }
-        return; // handleMutationError already showed error toast
-      }
-      const data = await res.json();
-      const newlyRegistered: number = data.registered?.length ?? 0;
-      toast.success(
-        isDa ? 'Modtagelse aktiveret' : 'Receiving enabled',
-        {
-          description: newlyRegistered > 0
-            ? (isDa
-              ? `Registrerede ${newlyRegistered} webhook(s). Sproom leverer nu indkomne e-fakturaer til din indbakke.`
-              : `Registered ${newlyRegistered} webhook(s). Sproom will now deliver incoming e-invoices to your inbox.`)
-            : (isDa
-              ? 'Webhooks var allerede registreret — modtagelse er aktiv.'
-              : 'Webhooks were already registered — receiving is active.'),
-        },
-      );
-    } catch (err) {
-      toast.error(
-        isDa
-          ? 'Kunne ikke aktivere: ' + (err instanceof Error ? err.message : '')
-          : 'Failed: ' + (err instanceof Error ? err.message : ''),
-      );
-    } finally {
-      setIsRegisteringWebhook(false);
-    }
-  }, [isDa, handleMutationError]);
-
   // ── Peppol participant verification (international e-invoicing) ──
-  // Two-step: initiate (Sproom emails a MitID/AcceptButton signing link
-  // to company.email), then complete (after the signer signs, registerPeppol).
-  // The PeppolParticipantVerificationChanged webhook auto-completes too;
-  // handlePeppolComplete is the manual fallback.
-  const handlePeppolInitiate = useCallback(async () => {
+  // Opt-in via the clickable "Peppol afventer" badge → opens a Dialog
+  // showing the current process state + actions. handlePeppolOpen
+  // initiates (returns the current point: existing Pending or new),
+  // handlePeppolComplete registers after the signer signs. The
+  // PeppolParticipantVerificationChanged webhook auto-completes too.
+  const handlePeppolOpen = useCallback(async () => {
     setIsPeppolVerifying(true);
     try {
       const res = await fetch('/api/sproom/peppol', {
@@ -433,23 +396,16 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
         body: JSON.stringify({ action: 'initiate' }),
       });
       if (!res.ok) {
-        const isAccess = await handleMutationError(
-          res,
-          isDa ? 'Tilmeld Peppol' : 'Register Peppol',
-        );
+        const isAccess = await handleMutationError(res, isDa ? 'Peppol' : 'Peppol');
         if (isAccess) { setIsPeppolVerifying(false); return; }
-        return; // handleMutationError already showed error toast
+        return;
       }
       const data = await res.json();
-      setPeppolPendingMessage(data.message || (isDa ? 'Peppol-verifikering påbegyndt. Fuldfør underskriften via linket sendt til din email.' : 'Peppol verification started. Complete the signature via the link sent to your email.'));
-      toast.info(
-        isDa ? 'Peppol-verifikering påbegyndt' : 'Peppol verification started',
-        { description: data.message },
-      );
+      setPeppolDialogData(data);
     } catch (err) {
       toast.error(
         isDa
-          ? 'Kunne ikke påbegynde Peppol: ' + (err instanceof Error ? err.message : '')
+          ? 'Kunne ikke hente Peppol-status: ' + (err instanceof Error ? err.message : '')
           : 'Failed: ' + (err instanceof Error ? err.message : ''),
       );
     } finally {
@@ -461,31 +417,23 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     setIsPeppolVerifying(true);
     try {
       const res = await fetch('/api/sproom/peppol', {
- method: 'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'complete' }),
       });
       if (!res.ok) {
-        const isAccess = await handleMutationError(
-          res,
-          isDa ? 'Gennemfør Peppol' : 'Complete Peppol',
-        );
+        const isAccess = await handleMutationError(res, isDa ? 'Gennemfør Peppol' : 'Complete Peppol');
         if (isAccess) { setIsPeppolVerifying(false); return; }
         return;
       }
       const data = await res.json();
+      setPeppolDialogData(data);
       if (data.registered) {
-        setPeppolPendingMessage(null);
-        toast.success(
-          isDa ? 'Peppol registreret' : 'Peppol registered',
-          { description: data.message },
-        );
+        toast.success(isDa ? 'Peppol registreret' : 'Peppol registered', { description: data.message });
+        setPeppolDialogOpen(false);
         fetchSproomStatus();
       } else {
-        toast.info(
-          isDa ? 'Peppol ikke fuldført' : 'Peppol not complete',
-          { description: data.message },
-        );
+        toast.info(isDa ? 'Peppol ikke fuldført' : 'Peppol not complete', { description: data.message });
       }
     } catch (err) {
       toast.error(
@@ -1265,7 +1213,11 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                             Peppol
                           </Badge>
                         ) : (
-                          <Badge className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40 text-[10px] gap-1">
+                          <Badge
+                            onClick={() => { setPeppolDialogOpen(true); handlePeppolOpen(); }}
+                            className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40 text-[10px] gap-1 cursor-pointer hover:bg-yellow-200 dark:hover:bg-yellow-900/50 transition-colors"
+                            title={isDa ? 'Klik for at starte/genoptage Peppol-verifikering' : 'Click to start/resume Peppol verification'}
+                          >
                             <AlertTriangle className="h-3 w-3" />
                             {isDa ? 'Peppol afventer' : 'Peppol pending'}
                           </Badge>
@@ -1362,101 +1314,67 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 )}
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleTestSproom}
-                    disabled={isTestingSproom}
-                    variant="outline"
-                    className="flex-1 gap-2 font-medium border-gray-200 dark:border-white/10"
-                  >
-                    {isTestingSproom ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Activity className="h-4 w-4" />
-                    )}
-                    {isDa ? 'Test forbindelse' : 'Test connection'}
-                  </Button>
-                  <Button
-                    onClick={() => setShowDisconnectConfirm(true)}
-                    disabled={isDisconnectingSproom}
-                    variant="outline"
-                    className="gap-2 font-medium border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    {isDisconnectingSproom ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Unlink className="h-4 w-4" />
-                    )}
-                    {isDa ? 'Afbryd' : 'Disconnect'}
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  <Button
-                    onClick={handleRegisterWebhook}
-                    disabled={isRegisteringWebhook}
-                    variant="outline"
-                    className="w-full gap-2 font-medium border-emerald-300 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
-                  >
-                    {isRegisteringWebhook ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Inbox className="h-4 w-4" />
-                    )}
-                    {isDa ? 'Aktiver e-faktura modtagelse' : 'Enable e-invoice receiving'}
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    {isDa
-                      ? 'Registrerer Sproom-webhooken så indkomne e-fakturaer leveres til din indbakke. Gøres én gang per virksomhed (sker automatisk ved ny child company-oprettelse).'
-                      : 'Registers the Sproom webhook so incoming e-invoices are delivered to your inbox. Do this once per company (auto on new child-company creation).'}
-                  </p>
-                </div>
-                {!sproomStatus?.peppolRegistered && (
-                  <div className="space-y-2">
-                    {peppolPendingMessage ? (
-                      <>
-                        <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 p-3 text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
-                          <Info className="h-4 w-4 shrink-0 mt-0.5" />
-                          <span>{peppolPendingMessage}</span>
-                        </div>
-                        <Button
-                          onClick={handlePeppolComplete}
-                          disabled={isPeppolVerifying}
-                          variant="outline"
-                          className="w-full gap-2 font-medium border-blue-300 dark:border-blue-900/40 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                        >
-                          {isPeppolVerifying ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4" />
-                          )}
-                          {isDa ? 'Gennemfør Peppol' : 'Complete Peppol'}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        onClick={handlePeppolInitiate}
-                        disabled={isPeppolVerifying}
-                        variant="outline"
-                        className="w-full gap-2 font-medium border-blue-300 dark:border-blue-900/40 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                      >
-                        {isPeppolVerifying ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Globe className="h-4 w-4" />
-                        )}
-                        {isDa ? 'Tilmeld Peppol' : 'Register Peppol'}
-                      </Button>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {isDa
-                        ? 'Peppol er til international e-fakturering. Kræver en underskrift (MitID i produktion, AcceptButton i staging — ingen MitID).'
-                        : 'Peppol is for international e-invoicing. Requires a signature (MitID in production, AcceptButton in staging — no MitID).'}
-                    </p>
-                  </div>
-                )}
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleTestSproom}
+                  disabled={isTestingSproom}
+                  variant="outline"
+                  className="flex-1 gap-2 font-medium border-gray-200 dark:border-white/10"
+                >
+                  {isTestingSproom ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Activity className="h-4 w-4" />
+                  )}
+                  {isDa ? 'Test forbindelse' : 'Test connection'}
+                </Button>
+                <Button
+                  onClick={() => setShowDisconnectConfirm(true)}
+                  disabled={isDisconnectingSproom}
+                  variant="outline"
+                  className="gap-2 font-medium border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  {isDisconnectingSproom ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Unlink className="h-4 w-4" />
+                  )}
+                  {isDa ? 'Afbryd' : 'Disconnect'}
+                </Button>
               </div>
             )}
+
+            {/* ── Peppol verification dialog (opened by the clickable badge) ── */}
+            <Dialog open={peppolDialogOpen} onOpenChange={setPeppolDialogOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    {isDa ? 'Peppol-verifikering' : 'Peppol verification'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {isDa
+                      ? 'Peppol er til international e-fakturering. Registrering kræver en underskrift (MitID i produktion, AcceptButton i staging — ingen MitID). Klik “Gennemfør Peppol” efter underskriften er fuldført.'
+                      : 'Peppol is for international e-invoicing. Registration requires a signature (MitID in production, AcceptButton in staging — no MitID). Click “Complete Peppol” after the signature is completed.'}
+                  </DialogDescription>
+                </DialogHeader>
+                {peppolDialogData?.message && (
+                  <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 p-3 text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
+                    <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>{peppolDialogData.message}</span>
+                  </div>
+                )}
+                <DialogFooter className="gap-2">
+                  <DialogClose asChild>
+                    <Button variant="outline">{isDa ? 'Luk' : 'Close'}</Button>
+                  </DialogClose>
+                  <Button onClick={handlePeppolComplete} disabled={isPeppolVerifying} className="gap-2">
+                    {isPeppolVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                    {isDa ? 'Gennemfør Peppol' : 'Complete Peppol'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {/* ── Disconnect confirmation ── */}
             <AlertDialog open={showDisconnectConfirm} onOpenChange={setShowDisconnectConfirm}>

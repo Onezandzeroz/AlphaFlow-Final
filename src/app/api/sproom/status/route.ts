@@ -147,6 +147,42 @@ export const GET = withGuard(
             data: { sproomLastTestedAt: new Date() },
           });
         }
+
+        // 5. Auto-register Sproom webhooks (DocumentReceived + DocumentStatusChanged)
+        // if missing — so inbound e-invoices + outbound status updates work
+        // seamlessly from connection (no manual "Aktiver" button). Idempotent
+        // (listWebhooks first). Backfills existing child companies created
+        // before the create-child-company auto-registration (Task 16).
+        if (childExists !== false) {
+          const appUrl = (process.env.APP_URL || 'https://alphaflow.dk').replace(/\/$/, '');
+          const webhookUrl = `${appUrl}/api/sproom/webhook`;
+          try {
+            const existing = await sproomClient.listWebhooks({ childCompanyId: company.sproomChildCompanyId! });
+            const existingTypes = new Set(existing.map((w) => w.type).filter(Boolean) as string[]);
+            for (const whType of ['DocumentReceived', 'DocumentStatusChanged'] as const) {
+              if (existingTypes.has(whType)) continue;
+              try {
+                await sproomClient.createWebhook(whType, webhookUrl, { childCompanyId: company.sproomChildCompanyId! });
+                logger.info('[SPROOM_STATUS] Auto-registered missing webhook', {
+                  companyId: ctx.activeCompanyId,
+                  childCompanyId: company.sproomChildCompanyId,
+                  type: whType,
+                });
+              } catch (err) {
+                logger.warn('[SPROOM_STATUS] Failed to auto-register webhook (non-fatal)', {
+                  childCompanyId: company.sproomChildCompanyId,
+                  type: whType,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+              }
+            }
+          } catch (err) {
+            logger.warn('[SPROOM_STATUS] listWebhooks failed (non-fatal — skipping webhook auto-registration)', {
+              childCompanyId: company.sproomChildCompanyId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
       }
 
       return NextResponse.json({
