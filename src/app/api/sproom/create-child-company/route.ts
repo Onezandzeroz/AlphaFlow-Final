@@ -22,7 +22,7 @@ import { withGuard } from '@/lib/route-guard';
  *
  * Preconditions:
  *   - Company.cvrNumber must be set and verified (CVR gate)
- *   - Sproom must be configured (SPROOM_USERNAME + SPROOM_PASSWORD in .env)
+ *   - Sproom must be configured (SPROOM_API_TOKEN in .env)
  *   - EINVOICE_ACCESS_POINT=sproom in .env
  */
 export const POST = withGuard(
@@ -107,7 +107,7 @@ export const POST = withGuard(
       if (!sproomClient.isConfigured) {
         return NextResponse.json(
           {
-            error: 'Sproom er ikke konfigureret på platformen. Sæt SPROOM_USERNAME og SPROOM_PASSWORD i .env.',
+            error: 'Sproom er ikke konfigureret på platformen. Sæt SPROOM_API_TOKEN i .env.',
             code: 'PLATFORM_NOT_CONFIGURED',
           },
           { status: 503 }

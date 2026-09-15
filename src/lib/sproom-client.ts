@@ -72,10 +72,10 @@
  *
  * ─── Simulation mode ─────────────────────────────────────────────────
  *
- * When SPROOM_USERNAME / SPROOM_PASSWORD are not set, the client runs
+ * When SPROOM_API_TOKEN is not set, the client runs
  * in simulation mode and returns realistic synthetic responses so the
  * AlphaFlow UI / API routes can be exercised end-to-end without a real
- * Sproom account. This mirrors the StorecoveClient simulation pattern.
+ * Sproom account.
  */
 
 import { logger } from '@/lib/logger';
@@ -92,13 +92,9 @@ import {
 export interface SproomClientConfig {
   /** Sproom API base URL (default: https://staging.sproom.net) */
   baseUrl?: string;
-  /** Parent-company username for OAuth2 password grant */
-  username?: string;
-  /** Parent-company password for OAuth2 password grant */
-  password?: string;
-  /** OAuth2 token endpoint path (default: /token) */
-  tokenPath?: string;
-  /** Whether to use simulation mode (default: true if username/password missing) */
+  /** Parent-company API token — obtained from the Sproom dashboard (Profile → API) */
+  apiToken?: string;
+  /** Whether to use simulation mode (default: true if apiToken missing) */
   simulationMode?: boolean;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
@@ -405,14 +401,9 @@ export const SPROOM_DK_SCHEMES = {
  */
 export class SproomClient {
   private baseUrl: string;
-  private username: string;
-  private password: string;
-  private tokenPath: string;
+  private apiToken: string;
   private simulationMode: boolean;
   private timeout: number;
-
-  /** Cached parent-company bearer token (for child-company management). */
-  private parentToken: { token: string; expiresAt: number } | null = null;
 
   /** Cached per-child-company bearer tokens (for documents/registrations/etc.). */
   private childTokenCache: Map<string, { token: string; expiresAt: number }> = new Map();
@@ -422,10 +413,8 @@ export class SproomClient {
 
   constructor(config: SproomClientConfig = {}) {
     this.baseUrl = (config.baseUrl || process.env.SPROOM_API_URL || DEFAULT_BASE_URL).replace(/\/$/, '');
-    this.username = config.username || process.env.SPROOM_USERNAME || '';
-    this.password = config.password || process.env.SPROOM_PASSWORD || '';
-    this.tokenPath = config.tokenPath || process.env.SPROOM_TOKEN_PATH || DEFAULT_TOKEN_PATH;
-    this.simulationMode = config.simulationMode ?? (!this.username || !this.password);
+    this.apiToken = config.apiToken || process.env.SPROOM_API_TOKEN || '';
+    this.simulationMode = config.simulationMode ?? (!this.apiToken);
     this.timeout = config.timeout || DEFAULT_TIMEOUT;
   }
 
@@ -457,27 +446,16 @@ export class SproomClient {
         };
       }
 
-      // Step 2: obtain a parent token to validate credentials.
+      // Step 2: verify the API token works by listing child companies.
       try {
-        await this.getAccessToken();
+        const children = await this.listChildCompanies();
+        return { connected: true, childCompaniesCount: children.length };
       } catch (error) {
         return {
           connected: false,
-          error: `Parent authentication failed: ${error instanceof Error ? error.message : 'unknown'}`,
+          error: `API token validation failed: ${error instanceof Error ? error.message : 'unknown'}`,
         };
       }
-
-      // Step 3: count existing child companies.
-      let childCompaniesCount = 0;
-      try {
-        const children = await this.listChildCompanies();
-        childCompaniesCount = children.length;
-      } catch (error) {
-        // Non-fatal — connection is still considered healthy if auth works.
-        logger.warn('[SPROOM] Could not list child companies during test connection', error);
-      }
-
-      return { connected: true, childCompaniesCount };
     } catch (error) {
       return {
         connected: false,
@@ -489,78 +467,21 @@ export class SproomClient {
   // ─── AUTHENTICATION ──────────────────────────────────────────────
 
   /**
-   * Get (or refresh) the parent-company OAuth2 access token.
+   * Get the parent-company API token.
    *
-   * Uses OAuth2 password grant: POST {tokenPath} with form-encoded body
-   *   grant_type=password&username=…&password=…
-   * Response shape (ASP.NET Katana):
-   *   { access_token, token_type, expires_in, .issued, .expires, userName }
+   * Sproom uses a STATIC bearer token obtained from the dashboard
+   * (Profile → API settings). There is NO OAuth2 password grant flow.
+   * The token is set via SPROOM_API_TOKEN env var and used directly
+   * as the Authorization: Bearer header.
    *
-   * The token is cached and re-used until close to expiry.
+   * This method returns the static token for backward compat with
+   * code that calls getAccessToken().
    */
   async getAccessToken(): Promise<string> {
     if (this.simulationMode) {
-      return this.simulateAccessToken();
+      return 'simulated-token';
     }
-
-    const now = Date.now();
-    if (this.parentToken && this.parentToken.expiresAt > now) {
-      return this.parentToken.token;
-    }
-
-    const url = `${this.baseUrl}${this.tokenPath}`;
-    const body = new URLSearchParams({
-      grant_type: 'password',
-      username: this.username,
-      password: this.password,
-    });
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Accept': 'application/json',
-        },
-        body: body.toString(),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        logger.error('[SPROOM] Parent token request failed', {
-          status: response.status,
-          body: errorBody,
-        });
-        throw new Error(
-          `Sproom parent authentication failed (HTTP ${response.status}): ${errorBody || response.statusText}`,
-        );
-      }
-
-      const token = await response.json() as {
-        access_token: string;
-        token_type?: string;
-        expires_in?: number;
-      };
-
-      if (!token.access_token) {
-        throw new Error('Sproom token response missing access_token');
-      }
-
-      const expiresInSec = token.expires_in ?? 1800;
-      this.parentToken = {
-        token: token.access_token,
-        expiresAt: now + expiresInSec * 1000 - TOKEN_REFRESH_MARGIN_S * 1000,
-      };
-
-      logger.info('[SPROOM] Parent token acquired', { expiresInSec });
-      return this.parentToken.token;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+    return this.apiToken;
   }
 
   /**
@@ -1771,7 +1692,7 @@ export class SproomClient {
    * Check if the client is configured for production use.
    */
   get isConfigured(): boolean {
-    return !this.simulationMode && !!this.username && !!this.password;
+    return !this.simulationMode && !!this.apiToken;
   }
 
   // ─── PRIVATE: HTTP REQUESTS ───────────────────────────────────────
@@ -2234,19 +2155,15 @@ QAB
 /**
  * Shared Sproom client instance.
  *
- * Simulation mode is auto-detected: if BOTH SPROOM_USERNAME and
- * SPROOM_PASSWORD are set, production mode is used; otherwise simulation.
+ * Simulation mode is auto-detected: if SPROOM_API_TOKEN is set,
+ * production mode is used; otherwise simulation.
  *
  * Required env vars (production):
  *   SPROOM_API_URL    — e.g. https://sproom.net (default: staging)
- *   SPROOM_USERNAME   — parent-company Sproom username
- *   SPROOM_PASSWORD   — parent-company Sproom password
- *
- * Optional env vars:
- *   SPROOM_TOKEN_PATH — OAuth2 token endpoint (default: /token)
+ *   SPROOM_API_TOKEN  — parent-company API token from Sproom dashboard
  */
 export const sproomClient = new SproomClient({
-  simulationMode: !process.env.SPROOM_USERNAME || !process.env.SPROOM_PASSWORD,
+  simulationMode: !process.env.SPROOM_API_TOKEN,
 });
 
 // Silence unused-import warnings for crypto helpers used internally.

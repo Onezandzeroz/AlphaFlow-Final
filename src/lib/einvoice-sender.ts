@@ -44,7 +44,7 @@ import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 // Peppol and NemHandel, so a single child-company per tenant covers
 // both networks.
 //
-// When Sproom is configured (SPROOM_USERNAME + SPROOM_PASSWORD in .env),
+// When Sproom is configured (SPROOM_API_TOKEN in .env),
 // sends go through Sproom. Otherwise AlphaFlow falls back to simulation
 // mode (NemHandelClient mock) — no real delivery.
 //
@@ -113,7 +113,7 @@ export interface CompanyEInvoiceConfig {
   sproomPeppolRegistered: boolean;
   // Platform-configured Access Point ('sproom' | 'simulation').
   // Sproom is the only AP — 'simulation' indicates Sproom isn't configured
-  // (no SPROOM_USERNAME / SPROOM_PASSWORD in .env) and sends will be
+  // (no SPROOM_API_TOKEN in .env) and sends will be
   // simulated locally instead of delivered.
   activeAccessPoint: AccessPoint;
 }

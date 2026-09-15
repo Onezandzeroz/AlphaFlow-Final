@@ -92,7 +92,7 @@ interface SproomConnectionStatus {
   cvrVerified?: boolean;
   // Platform-level config (server-resolved). Sproom is the only AP, so
   // 'simulation' indicates Sproom isn't configured (no
-  // SPROOM_USERNAME / SPROOM_PASSWORD in .env).
+  // SPROOM_API_TOKEN in .env).
   activeAccessPoint?: 'sproom' | 'simulation';
   sproomConfigured?: boolean;
 }
@@ -1116,7 +1116,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
 
             {/* ── Create child company / Test connection ──
                 Sproom uses parent-level OAuth2 credentials from .env
-                (SPROOM_USERNAME + SPROOM_PASSWORD). Tenants create their
+                (SPROOM_API_TOKEN). Tenants create their
                 own child company here (KYC = CVR verified). The route
                 also auto-registers in NemHandel + Peppol networks and
                 auto-configures einvoiceEndpointId + peppolAs4Id. */}

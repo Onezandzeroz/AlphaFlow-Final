@@ -87,7 +87,7 @@ interface EInvoiceConfig {
   sproomNemHandelRegistered?: boolean;
   sproomPeppolRegistered?: boolean;
   // Platform-resolved AP state. Sproom is the only AP, so 'simulation'
-  // indicates Sproom isn't configured (no SPROOM_USERNAME / SPROOM_PASSWORD
+  // indicates Sproom isn't configured (no SPROOM_API_TOKEN
   // in .env) — sends will be simulated locally.
   activeAccessPoint?: 'sproom' | 'simulation';
 }
