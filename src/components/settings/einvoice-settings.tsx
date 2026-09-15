@@ -122,7 +122,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   // ── State ──
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [nemhandelLoading, setNemhandelLoading] = useState(false);
 
   // Settings form
   const [enabled, setEnabled] = useState(false);
@@ -385,17 +385,23 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     }
   }, [deliveryMode, defaultChannel, endpointId, companyCvr, gln, peppolAs4Id, autoSendOnFinalize, isDa, handleMutationError, fetchSettings]);
 
-  // ── Register with NemHandelsregisteret ──
-  const handleRegister = useCallback(async () => {
-    setIsRegistering(true);
+  // ── Register child company in NemHandel network (via Sproom) ──
+  // Registers the tenant's Sproom child company endpoint in the Danish
+  // NemHandel network (OIOUBL profiles) so it can RECEIVE e-invoices.
+  // The server route persists Company.sproomNemHandelRegistered = true.
+  // After success we reload Sproom status so the NemHandel badge updates.
+  const handleNemHandelRegister = useCallback(async () => {
+    if (!sproomStatus?.connected) {
+      toast.error(isDa
+        ? 'Opret en Sproom child company først.'
+        : 'Create a Sproom child company first.');
+      return;
+    }
+    setNemhandelLoading(true);
     try {
-      const res = await fetch('/api/company/einvoice-register', {
+      const res = await fetch('/api/sproom/register-nemhandel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          endpointId: endpointId || `0184:${companyCvr}`,
-          gln: gln || null,
-        }),
       });
 
       if (!res.ok) {
@@ -403,28 +409,24 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
           res,
           isDa ? 'Tilmeld NemHandelsregisteret' : 'Register with NemHandelsregisteret',
         );
-        if (isAccess) { setIsRegistering(false); return; }
+        if (isAccess) { setNemhandelLoading(false); return; }
         return; // handleMutationError already showed error toast
       }
 
-      const data = await res.json();
-      toast.success(
-        isDa ? 'Tilmeldt NemHandelsregisteret!' : 'Registered with NemHandelsregisteret!',
-        {
-          description: isDa
-            ? `Registreringsnummer: ${data.registrationNo || '—'}`
-            : `Registration number: ${data.registrationNo || '—'}`,
-        },
-      );
-      fetchSettings();
+      await res.json();
+      toast.success(isDa ? 'Tilmeldt NemHandelsregisteret' : 'Registered with NemHandelsregisteret');
+      // Reload Sproom status so the NemHandel badge reflects the new state
+      fetchSproomStatus();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : (isDa ? 'Tilmelding fejlede' : 'Registration failed'),
+        isDa
+          ? 'Kunne ikke tilmelde: ' + (err instanceof Error ? err.message : '')
+          : 'Failed to register: ' + (err instanceof Error ? err.message : ''),
       );
     } finally {
-      setIsRegistering(false);
+      setNemhandelLoading(false);
     }
-  }, [endpointId, companyCvr, gln, isDa, handleMutationError, fetchSettings]);
+  }, [sproomStatus, isDa, handleMutationError, fetchSproomStatus]);
 
   // ── Registration status badge ──
   const getRegistrationStatusBadge = () => {
@@ -921,16 +923,16 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
             {/* ── Register button ── */}
             {registration.status !== 'registered' && (
               <Button
-                onClick={handleRegister}
-                disabled={isRegistering || !companyCvr}
+                onClick={handleNemHandelRegister}
+                disabled={nemhandelLoading || !companyCvr || !sproomStatus?.connected}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2 font-medium transition-all"
               >
-                {isRegistering ? (
+                {nemhandelLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <ExternalLink className="h-4 w-4" />
                 )}
-                {isRegistering
+                {nemhandelLoading
                   ? (isDa ? 'Tilmelder...' : 'Registering...')
                   : (isDa ? 'Tilmeld NemHandelsregisteret' : 'Register with NemHandelsregisteret')
                 }

@@ -487,6 +487,13 @@ export const routeConfig: RouteConfigMap = {
   '/api/sproom/participants': {
     POST: { auth: true, requireCompany: true },
   },
+  // Register the tenant's Sproom child company in the NemHandel network
+  // and persist Company.sproomNemHandelRegistered = true. Standalone
+  // retry path for the (non-fatal) NemHandel registration that
+  // create-child-company also attempts.
+  '/api/sproom/register-nemhandel': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
+  },
   // Webhook receiver — Sproom posts RSA-signed webhook events here.
   // Auth is verified via the X-Signature header (RSA-SHA256 signature
   // verified with Sproom's public key fetched from GET /api/webhooks/key).
