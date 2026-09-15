@@ -14,6 +14,15 @@ export interface OIOUBLInvoiceData {
   // For credit notes (381): the original invoice number being credited.
   // Surfaced in cac:BillingReference. Falls back to the credit note's own ID.
   originalInvoiceNumber?: string;
+
+  /**
+   * Buyer reference (cbc:BuyerReference). Peppol BIS 3 / EN 16931 rule
+   * R003 requires a buyer reference OR a purchase order reference
+   * (cac:OrderReference). If unset, the generator falls back to the
+   * customer's identifier (CVR) so the document is always R003-compliant.
+   * Wire a real value here once the Invoice model has a PO/buyer-reference field.
+   */
+  buyerReference?: string;
   
   // Supplier/Seller information
   supplier: {
@@ -170,6 +179,17 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       // so its position relative to DueDate is not sequence-critical).
       'cbc:InvoiceTypeCode': data.invoiceTypeCode || '380', // 380=Commercial invoice, 381=Credit note
       'cbc:DocumentCurrencyCode': data.currencyCode,
+
+      // PEPPOL-EN16931-R003 requires a buyer reference (cbc:BuyerReference)
+      // OR a purchase order reference (cac:OrderReference). The Invoice
+      // model has no explicit PO/buyer-reference field, so we emit a
+      // BuyerReference using the customer's identifier (CVR) — the buyer's
+      // identifier serves as a routing reference and satisfies R003. Wire
+      // data.buyerReference to a real field once the Invoice model has one.
+      // UBL 2.1 position: BuyerReference (cbc, ~pos 18) comes after
+      // DocumentCurrencyCode and before the cac elements (InvoicePeriod /
+      // OrderReference / BillingReference / AccountingSupplierParty).
+      'cbc:BuyerReference': data.buyerReference || data.customer.id,
 
       // Credit note: include original invoice reference (BillingReference).
       // Uses the credited invoice's number when known; falls back to the
