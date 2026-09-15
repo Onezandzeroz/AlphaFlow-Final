@@ -22,7 +22,8 @@ import { useTranslation } from '@/lib/use-translation';
 import { useDataVersion } from '@/hooks/use-data-version';
 
 export function ReceivedInvoiceNotifier() {
-  const { isDa } = useTranslation();
+  const { language } = useTranslation();
+  const isDa = language === 'da';
   const receivedVersion = useDataVersion('received-invoices');
   const prevCount = useRef<number | null>(null);
   const lastVersion = useRef(0);
