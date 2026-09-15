@@ -156,11 +156,20 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       'cbc:ProfileID': 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0',
       'cbc:ID': data.invoiceId,
       'cbc:IssueDate': data.issueDate,
+
+      // DueDate MUST come right after IssueDate per the UBL 2.1 schema
+      // sequence (position 8, before DocumentCurrencyCode at position 10).
+      // Emitting it AFTER DocumentCurrencyCode causes Sproom's XSD validation
+      // to reject the document: "invalid child element 'DueDate' ... expected:
+      // TaxCurrencyCode, PricingCurrencyCode, ...". Not emitted for credit
+      // notes (381) — they have no due date.
+      ...(data.dueDate && data.invoiceTypeCode !== '381' && { 'cbc:DueDate': data.dueDate }),
+
+      // InvoiceTypeCode is an OIOUBL extension (the UBL 2.1 / Peppol BIS 3
+      // XSD lax-allows it — sequence-validated known elements skip past it,
+      // so its position relative to DueDate is not sequence-critical).
       'cbc:InvoiceTypeCode': data.invoiceTypeCode || '380', // 380=Commercial invoice, 381=Credit note
       'cbc:DocumentCurrencyCode': data.currencyCode,
-      
-      // Optional due date (not applicable for credit notes)
-      ...(data.dueDate && data.invoiceTypeCode !== '381' && { 'cbc:DueDate': data.dueDate }),
 
       // Credit note: include original invoice reference (BillingReference).
       // Uses the credited invoice's number when known; falls back to the
