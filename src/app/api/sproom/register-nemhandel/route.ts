@@ -99,9 +99,10 @@ export const POST = withGuard(
         cvr: company.cvrNumber,
       });
 
-      await sproomClient.registerNemHandel(
+      const nemhandelResult = await sproomClient.registerNemHandel(
         { schemeId: 'DK:CVR', value: company.cvrNumber },
-        ['Nes5Customer'] // Standard invoice + credit note profile
+        ['Nes5Customer'], // Standard invoice + credit note profile
+        { childCompanyId: company.sproomChildCompanyId } // impersonate the child company
       );
 
       // ── 4. Persist NHR flag in DB ────────────────────────────────
@@ -116,6 +117,7 @@ export const POST = withGuard(
       logger.info('[SPROOM_NEMHANDEL] Registered in NemHandel', {
         companyId: ctx.activeCompanyId,
         childCompanyId: company.sproomChildCompanyId,
+        networkId: nemhandelResult.networkId,
       });
 
       // ── 5. Audit trail ───────────────────────────────────────────

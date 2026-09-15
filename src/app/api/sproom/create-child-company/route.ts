@@ -144,7 +144,8 @@ export const POST = withGuard(
       try {
         await sproomClient.registerNemHandel(
           { schemeId: 'DK:CVR', value: cvr },
-          ['Nes5Customer'] // Standard invoice + credit note profile
+          ['Nes5Customer'], // Standard invoice + credit note profile
+          { childCompanyId: childCompany.id } // impersonate the child company
         );
         nemhandelRegistered = true;
         logger.info('[SPROOM_CREATE_CHILD] Registered in NemHandel', { childCompanyId: childCompany.id });
@@ -160,7 +161,8 @@ export const POST = withGuard(
       try {
         await sproomClient.registerPeppol(
           { schemeId: 'DK:CVR', value: cvr },
-          ['PeppolBis3Billing'] // Peppol BIS Billing 3.0
+          ['PeppolBis3Billing'], // Peppol BIS Billing 3.0
+          { childCompanyId: childCompany.id } // impersonate the child company
         );
         peppolRegistered = true;
         logger.info('[SPROOM_CREATE_CHILD] Registered in Peppol', { childCompanyId: childCompany.id });
