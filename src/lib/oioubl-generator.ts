@@ -74,8 +74,12 @@ export interface OIOUBLInvoiceData {
   taxInclusiveAmount: number; // Total including VAT
   
   // Payment information
-  paymentMeansCode?: string; // e.g., '30' = Credit transfer
+  paymentMeansCode?: string; // e.g., '42' = Payment to bank account (DK-R-005)
   paymentAccountId?: string; // Bank account number (IBAN or local)
+  // Danish bank registration number (registreringsnummer, 4-digit bank code).
+  // DK-R-006: mandatory for Danish suppliers when PaymentMeansCode is 31 or 42.
+  // Emitted in cac:PayeeFinancialAccount/cac:FinancialInstitutionBranch/cbc:ID.
+  bankRegistration?: string;
   paymentReference?: string; // Payment reference/KID
   
   // Currency
@@ -336,6 +340,16 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
                 'cbc:ID': data.paymentAccountId,
                 ...(data.paymentReference && {
                   'cbc:PaymentNote': data.paymentReference,
+                }),
+                // DK-R-006: for Danish suppliers with PaymentMeansCode 31/42,
+                // the registration account (registreringsnummer, 4-digit bank
+                // code) is mandatory. Emitted in FinancialInstitutionBranch/cbc:ID.
+                // UBL 2.1 FinancialAccount sequence: ID, ..., PaymentNote,
+                // FinancialInstitutionBranch, Country — so it comes AFTER PaymentNote.
+                ...(data.bankRegistration && {
+                  'cac:FinancialInstitutionBranch': {
+                    'cbc:ID': data.bankRegistration,
+                  },
                 }),
               },
             },

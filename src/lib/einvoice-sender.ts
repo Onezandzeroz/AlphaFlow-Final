@@ -259,6 +259,7 @@ function buildOIOUBLData(
     cvrNumber: string;
     bankName?: string;
     bankAccount?: string;
+    bankRegistration?: string;
     bankIban?: string | null;
   },
 ): OIOUBLInvoiceData {
@@ -321,6 +322,7 @@ function buildOIOUBLData(
     taxInclusiveAmount: total,
     paymentMeansCode: '42',
     paymentAccountId: invoice.bankIban || company.bankIban || company.bankAccount || undefined,
+    bankRegistration: company.bankRegistration || undefined,
     currencyCode,
   };
 }
@@ -539,6 +541,7 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
             phone: true,
             bankName: true,
             bankAccount: true,
+            bankRegistration: true,
             bankIban: true,
             einvoiceEnabled: true,
             einvoiceEndpointId: true,
