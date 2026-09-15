@@ -70,12 +70,6 @@ interface EInvoiceSettingsData {
   activeAccessPoint?: 'sproom' | 'simulation';
 }
 
-interface NemHandelRegistration {
-  registrationNo: string | null;
-  registeredAt: string | null;
-  status: 'registered' | 'not_registered' | 'pending' | null;
-}
-
 interface SproomConnectionStatus {
   connected: boolean;
   childCompanyId?: string | null;
@@ -133,13 +127,6 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   const [autoSendOnFinalize, setAutoSendOnFinalize] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<'manual' | 'automatic' | null>(null);
 
-  // Registration data (read-only from server)
-  const [registration, setRegistration] = useState<NemHandelRegistration>({
-    registrationNo: null,
-    registeredAt: null,
-    status: null,
-  });
-
   // Company CVR + verification status (gates Sproom child company creation)
   const [companyCvr, setCompanyCvr] = useState('');
   const [cvrVerified, setCvrVerified] = useState(false);
@@ -155,6 +142,12 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   // are auto-managed by Sproom's create-child-company route, so the
   // manual-edit lock applies when Sproom is connected.
   const apConnected = !!sproomStatus?.connected;
+  // NemHandel network registration status for the Sproom child company.
+  // The NemHandelsregisteret card reflects THIS (not the legacy Digst
+  // registration fields), because the "Tilmeld NemHandelsregisteret" button
+  // performs the Sproom NemHandel registration and persists
+  // Company.sproomNemHandelRegistered = true.
+  const nemhandelRegistered = !!sproomStatus?.nemhandelRegistered;
 
   // Peppol participant lookup
   const [participantLookupId, setParticipantLookupId] = useState('');
@@ -174,11 +167,6 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
         setPeppolAs4Id(data.peppolAs4Id || '');
         setAutoSendOnFinalize(data.autoSendOnFinalize);
         setDeliveryMode(data.deliveryMode);
-        setRegistration({
-          registrationNo: data.registrationNo,
-          registeredAt: data.registeredAt,
-          status: data.registrationStatus,
-        });
       }
     } catch (err) {
       console.error('Failed to fetch e-invoice settings:', err);
@@ -427,33 +415,6 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
       setNemhandelLoading(false);
     }
   }, [sproomStatus, isDa, handleMutationError, fetchSproomStatus]);
-
-  // ── Registration status badge ──
-  const getRegistrationStatusBadge = () => {
-    switch (registration.status) {
-      case 'registered':
-        return (
-          <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40 text-xs gap-1">
-            <CheckCircle2 className="h-3 w-3" />
-            {isDa ? 'Tilmeldt' : 'Registered'}
-          </Badge>
-        );
-      case 'pending':
-        return (
-          <Badge className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40 text-xs gap-1">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            {isDa ? 'Afventer' : 'Pending'}
-          </Badge>
-        );
-      default:
-        return (
-          <Badge className="bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700/40 text-xs gap-1">
-            <Building2 className="h-3 w-3" />
-            {isDa ? 'Ikke tilmeldt' : 'Not registered'}
-          </Badge>
-        );
-    }
-  };
 
   // ── Loading skeleton ──
   if (isLoading) {
@@ -870,24 +831,18 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
           <CardContent className="space-y-4">
             {/* ── Registration status ── */}
             <div className={`rounded-xl p-4 border ${
-              registration.status === 'registered'
+              nemhandelRegistered
                 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40'
-                : registration.status === 'pending'
-                  ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800/40'
-                  : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10'
+                : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10'
             }`}>
               <div className="flex items-center gap-4">
                 <div className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 ${
-                  registration.status === 'registered'
+                  nemhandelRegistered
                     ? 'bg-gradient-to-br from-emerald-500 to-green-500'
-                    : registration.status === 'pending'
-                      ? 'bg-gradient-to-br from-yellow-400 to-amber-500'
-                      : 'bg-gradient-to-br from-gray-400 to-gray-500'
+                    : 'bg-gradient-to-br from-gray-400 to-gray-500'
                 }`}>
-                  {registration.status === 'registered' ? (
+                  {nemhandelRegistered ? (
                     <CheckCircle2 className="h-6 w-6 text-white" />
-                  ) : registration.status === 'pending' ? (
-                    <Loader2 className="h-6 w-6 text-white animate-spin" />
                   ) : (
                     <Building2 className="h-6 w-6 text-white" />
                   )}
@@ -895,25 +850,33 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {registration.status === 'registered'
+                      {nemhandelRegistered
                         ? (isDa ? 'Registreret i NemHandelsregisteret' : 'Registered in NemHandelsregisteret')
-                        : registration.status === 'pending'
-                          ? (isDa ? 'Registrering afventer' : 'Registration pending')
-                          : (isDa ? 'Ikke registreret' : 'Not registered')
+                        : (isDa ? 'Ikke registreret' : 'Not registered')
                       }
                     </span>
-                    {getRegistrationStatusBadge()}
+                    {nemhandelRegistered ? (
+                      <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40 text-xs gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        {isDa ? 'Tilmeldt' : 'Registered'}
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700/40 text-xs gap-1">
+                        <Building2 className="h-3 w-3" />
+                        {isDa ? 'Ikke tilmeldt' : 'Not registered'}
+                      </Badge>
+                    )}
                   </div>
-                  {registration.registrationNo && (
+                  {nemhandelRegistered && sproomStatus?.lastTestedAt && (
                     <p className="text-xs text-muted-foreground mt-1">
-                      {isDa ? 'Registreringsnummer' : 'Registration number'}:{' '}
-                      <span className="font-mono font-medium">{registration.registrationNo}</span>
+                      {isDa ? 'Senest bekræftet' : 'Last confirmed'}:{' '}
+                      {format(new Date(sproomStatus.lastTestedAt), 'dd.MM.yyyy', { locale })}
                     </p>
                   )}
-                  {registration.registeredAt && (
+                  {nemhandelRegistered && sproomStatus?.childCompanyId && (
                     <p className="text-xs text-muted-foreground">
-                      {isDa ? 'Registreringsdato' : 'Registration date'}:{' '}
-                      {format(new Date(registration.registeredAt), 'dd.MM.yyyy', { locale })}
+                      {isDa ? 'Sproom child' : 'Sproom child'}:{' '}
+                      <span className="font-mono font-medium">{sproomStatus.childCompanyId}</span>
                     </p>
                   )}
                 </div>
@@ -921,7 +884,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
             </div>
 
             {/* ── Register button ── */}
-            {registration.status !== 'registered' && (
+            {!nemhandelRegistered && (
               <Button
                 onClick={handleNemHandelRegister}
                 disabled={nemhandelLoading || !companyCvr || !sproomStatus?.connected}
