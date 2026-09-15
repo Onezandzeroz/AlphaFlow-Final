@@ -153,7 +153,7 @@ export const GET = withGuard(
         // seamlessly from connection (no manual "Aktiver" button). Idempotent
         // (listWebhooks first). Backfills existing child companies created
         // before the create-child-company auto-registration (Task 16).
-        if (childExists !== false) {
+        if (childExists === true || childExists === null) {
           const appUrl = (process.env.APP_URL || 'https://alphaflow.dk').replace(/\/$/, '');
           const webhookUrl = `${appUrl}/api/sproom/webhook`;
           try {
