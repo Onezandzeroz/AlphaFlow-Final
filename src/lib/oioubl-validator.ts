@@ -136,7 +136,7 @@ export function validateOIOUBL(xml: string): ValidationResult {
 
   // ── 4. Invoice line items ───────────────────────────────────────────
 
-  const invoiceLineCount = countOccurrences(xml, '<cac:InvoiceLine>');
+  const invoiceLineCount = countOccurrences(xml, 'cac:InvoiceLine');
   if (invoiceLineCount === 0) {
     errors.push('Invoice must contain at least one line item.');
   }
@@ -161,7 +161,13 @@ export function validateOIOUBL(xml: string): ValidationResult {
 
   // ── 5. Totals validation ────────────────────────────────────────────
 
-  const lineExtensionAmounts = extractAllValues(xml, 'cbc:LineExtensionAmount');
+  // Sum only the per-line LineExtensionAmounts (inside InvoiceLine), NOT
+  // the LegalMonetaryTotal/LineExtensionAmount (which is the total of all
+  // lines — including it would double-count: total + sum(lines) = 2×total,
+  // producing a false "TaxExclusiveAmount mismatch" error).
+  const invoiceLineBlocks = xml.match(/<cac:InvoiceLine[\s\S]*?<\/cac:InvoiceLine>/g) || [];
+  const perLineXml = invoiceLineBlocks.join('');
+  const lineExtensionAmounts = extractAllValues(perLineXml, 'cbc:LineExtensionAmount');
   const calculatedLineTotal = lineExtensionAmounts.reduce((sum, val) => sum + parseFloat(val || '0'), 0);
 
   const taxExclusiveAmount = extractFirstValue(xml, 'cbc:TaxExclusiveAmount');

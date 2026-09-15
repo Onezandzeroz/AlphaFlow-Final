@@ -600,32 +600,20 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
     });
 
     // 4b. Pre-validate the OIOUBL XML against Peppol BIS 3 / EN 16931 +
-    // Danish DK-R rules BEFORE sending to Sproom. Fails fast with ALL
-    // validation errors at once (no Sproom round-trip per error). On
-    // failure, mark the row FAILED + return — the send-einvoice route
-    // surfaces the errorMessage in the toast (so the user sees every
-    // issue at once, not one Sproom rejection per send).
+    // Danish DK-R rules. NON-BLOCKING: log issues for diagnostics, but
+    // always proceed to Sproom (the authoritative validator). The
+    // pre-check is regex-based and produces false positives on some XML
+    // formats (e.g. double-counts LineExtensionAmount across
+    // LegalMonetaryTotal + InvoiceLine, mis-matches the InvoiceLine tag,
+    // mis-captures currency). Blocking on those would prevent valid
+    // sends. Sproom's full schematron catches real issues (surfaced via
+    // the toast by the Task 8 fix). To re-enable blocking, the validator's
+    // regexes need to be fixed against the actual generated XML format.
     const validation = validateOIOUBL(xmlContent);
-    if (!validation.isValid) {
-      const errorMsg = `OIOUBL validering fejlede: ${validation.errors.join(' | ')}`;
-      logger.error('[EINVOICE_SEND] OIOUBL pre-validation failed', {
+    if (validation.errors.length > 0 || validation.warnings.length > 0) {
+      logger.warn('[EINVOICE_SEND] OIOUBL pre-validation issues (non-blocking — Sproom is authoritative)', {
         sendingId,
         errors: validation.errors,
-        warnings: validation.warnings,
-      });
-      await db.eInvoiceSending.update({
-        where: { id: sendingId },
-        data: {
-          status: EInvoiceSendStatus.FAILED,
-          errorCode: 'OIOUBL_VALIDATION_FAILED',
-          errorMessage: errorMsg,
-        },
-      });
-      return; // don't send invalid XML to Sproom
-    }
-    if (validation.warnings.length > 0) {
-      logger.warn('[EINVOICE_SEND] OIOUBL validation warnings', {
-        sendingId,
         warnings: validation.warnings,
       });
     }
