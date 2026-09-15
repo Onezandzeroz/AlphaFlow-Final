@@ -118,6 +118,18 @@ export const POST = withGuard(
         },
       });
 
+      // If processEInvoiceSend() did NOT throw (Sproom returned
+      // { success: false } internally → Path A), the row is FAILED with
+      // an errorMessage but transmissionError is still undefined. Surface
+      // the row's errorMessage so the UI toast shows the ACTUAL failure
+      // reason (e.g. "childCompanyId is required", "Sproom API error: 422",
+      // recipient endpoint not found, OIOUBL validation error, etc.)
+      // instead of the unhelpful generic "Se afsendelseshistorik for
+      // detaljer." fallback.
+      if (!transmissionError && updatedSending?.status === 'FAILED' && updatedSending.errorMessage) {
+        transmissionError = updatedSending.errorMessage;
+      }
+
       notifyDataChange({ scope: 'invoices', companyId: ctx.activeCompanyId!, action: 'update' }).catch(() => {});
 
       // Return the updated sending row. If transmission failed, include
