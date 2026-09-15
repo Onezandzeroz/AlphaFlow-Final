@@ -505,6 +505,12 @@ export const routeConfig: RouteConfigMap = {
   '/api/sproom/register-webhook': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
   },
+  // Peppol participant verification (initiate the MitID signing flow) +
+  // completion (check verification state + registerPeppol when Signed).
+  // Auto-initiated at child-company creation when registerPeppol returns 403.
+  '/api/sproom/peppol': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
+  },
   // Webhook receiver — Sproom posts RSA-signed webhook events here.
   // Auth is verified via the X-Signature header (RSA-SHA256 signature
   // verified with Sproom's public key fetched from GET /api/webhooks/key).

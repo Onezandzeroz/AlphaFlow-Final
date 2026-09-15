@@ -161,6 +161,8 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     childCompanyId: string | null;
   } | null>(null);
   const [isRegisteringWebhook, setIsRegisteringWebhook] = useState(false);
+  const [isPeppolVerifying, setIsPeppolVerifying] = useState(false);
+  const [peppolPendingMessage, setPeppolPendingMessage] = useState<string | null>(null);
 
   // Derived: is an Access Point connected? EndpointID + Peppol AS4 ID
   // are auto-managed by Sproom's create-child-company route, so the
@@ -416,6 +418,85 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
       setIsRegisteringWebhook(false);
     }
   }, [isDa, handleMutationError]);
+
+  // ── Peppol participant verification (international e-invoicing) ──
+  // Two-step: initiate (Sproom emails a MitID/AcceptButton signing link
+  // to company.email), then complete (after the signer signs, registerPeppol).
+  // The PeppolParticipantVerificationChanged webhook auto-completes too;
+  // handlePeppolComplete is the manual fallback.
+  const handlePeppolInitiate = useCallback(async () => {
+    setIsPeppolVerifying(true);
+    try {
+      const res = await fetch('/api/sproom/peppol', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'initiate' }),
+      });
+      if (!res.ok) {
+        const isAccess = await handleMutationError(
+          res,
+          isDa ? 'Tilmeld Peppol' : 'Register Peppol',
+        );
+        if (isAccess) { setIsPeppolVerifying(false); return; }
+        return; // handleMutationError already showed error toast
+      }
+      const data = await res.json();
+      setPeppolPendingMessage(data.message || (isDa ? 'Peppol-verifikering påbegyndt. Fuldfør underskriften via linket sendt til din email.' : 'Peppol verification started. Complete the signature via the link sent to your email.'));
+      toast.info(
+        isDa ? 'Peppol-verifikering påbegyndt' : 'Peppol verification started',
+        { description: data.message },
+      );
+    } catch (err) {
+      toast.error(
+        isDa
+          ? 'Kunne ikke påbegynde Peppol: ' + (err instanceof Error ? err.message : '')
+          : 'Failed: ' + (err instanceof Error ? err.message : ''),
+      );
+    } finally {
+      setIsPeppolVerifying(false);
+    }
+  }, [isDa, handleMutationError]);
+
+  const handlePeppolComplete = useCallback(async () => {
+    setIsPeppolVerifying(true);
+    try {
+      const res = await fetch('/api/sproom/peppol', {
+ method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' }),
+      });
+      if (!res.ok) {
+        const isAccess = await handleMutationError(
+          res,
+          isDa ? 'Gennemfør Peppol' : 'Complete Peppol',
+        );
+        if (isAccess) { setIsPeppolVerifying(false); return; }
+        return;
+      }
+      const data = await res.json();
+      if (data.registered) {
+        setPeppolPendingMessage(null);
+        toast.success(
+          isDa ? 'Peppol registreret' : 'Peppol registered',
+          { description: data.message },
+        );
+        fetchSproomStatus();
+      } else {
+        toast.info(
+          isDa ? 'Peppol ikke fuldført' : 'Peppol not complete',
+          { description: data.message },
+        );
+      }
+    } catch (err) {
+      toast.error(
+        isDa
+          ? 'Kunne ikke gennemføre Peppol: ' + (err instanceof Error ? err.message : '')
+          : 'Failed: ' + (err instanceof Error ? err.message : ''),
+      );
+    } finally {
+      setIsPeppolVerifying(false);
+    }
+  }, [isDa, handleMutationError, fetchSproomStatus]);
 
   // ── Peppol/NemHandel participant lookup ──
   // Always uses Sproom's /api/sproom/participants endpoint (Sproom is
@@ -1330,6 +1411,50 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                       : 'Registers the Sproom webhook so incoming e-invoices are delivered to your inbox. Do this once per company (auto on new child-company creation).'}
                   </p>
                 </div>
+                {!sproomStatus?.peppolRegistered && (
+                  <div className="space-y-2">
+                    {peppolPendingMessage ? (
+                      <>
+                        <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 p-3 text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
+                          <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>{peppolPendingMessage}</span>
+                        </div>
+                        <Button
+                          onClick={handlePeppolComplete}
+                          disabled={isPeppolVerifying}
+                          variant="outline"
+                          className="w-full gap-2 font-medium border-blue-300 dark:border-blue-900/40 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                        >
+                          {isPeppolVerifying ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4" />
+                          )}
+                          {isDa ? 'Gennemfør Peppol' : 'Complete Peppol'}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        onClick={handlePeppolInitiate}
+                        disabled={isPeppolVerifying}
+                        variant="outline"
+                        className="w-full gap-2 font-medium border-blue-300 dark:border-blue-900/40 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        {isPeppolVerifying ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Globe className="h-4 w-4" />
+                        )}
+                        {isDa ? 'Tilmeld Peppol' : 'Register Peppol'}
+                      </Button>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {isDa
+                        ? 'Peppol er til international e-fakturering. Kræver en underskrift (MitID i produktion, AcceptButton i staging — ingen MitID).'
+                        : 'Peppol is for international e-invoicing. Requires a signature (MitID in production, AcceptButton in staging — no MitID).'}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

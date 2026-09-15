@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   sproomClient,
   type SproomWebhookEvent,
+  type SproomPeppolVerification,
 } from '@/lib/sproom-client';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
@@ -93,6 +94,10 @@ export async function POST(request: Request) {
 
     if (event.type === 'DocumentStatusChanged') {
       return await handleSubmissionStatusChanged(event);
+    }
+
+    if (event.type === 'PeppolParticipantVerificationChanged') {
+      return await handlePeppolParticipantVerificationChanged(event);
     }
 
     // Other events — acknowledged, not actioned.
@@ -439,4 +444,92 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
   });
 
   return NextResponse.json({ received: true });
+}
+
+// ─── Peppol participant verification changed ──────────────────────
+//
+// Sproom fires PeppolParticipantVerificationChanged when a Peppol
+// participant verification's state changes (Pending → Signed/Expired/
+// Rejected/Revoked). When it becomes 'Signed', the child company is now
+// eligible for Peppol registration — auto-complete it here (registerPeppol
+// + set Company.sproomPeppolRegistered = true).
+//
+// The exact webhook payload for this event isn't documented in Sproom's
+// swagger, so we use event.companyId (the child company ID) to resolve
+// the tenant + list the verifications to find a Signed one (defensive).
+async function handlePeppolParticipantVerificationChanged(event: SproomWebhookEvent) {
+  const childCompanyId = event.companyId;
+  if (!childCompanyId) {
+    logger.warn('[SPROOM_WEBHOOK] PeppolParticipantVerificationChanged missing companyId', {
+      type: event.type,
+    });
+    return NextResponse.json({ received: true, warning: 'missing_company_id' });
+  }
+
+  // Resolve the tenant by Sproom childCompanyId.
+  const company = await db.company.findFirst({
+    where: { sproomChildCompanyId: childCompanyId },
+    select: { id: true, cvrNumber: true, sproomPeppolRegistered: true },
+  });
+  if (!company) {
+    logger.warn('[SPROOM_WEBHOOK] No company found for Peppol verification childCompanyId', {
+      childCompanyId,
+    });
+    return NextResponse.json({ received: true, warning: 'tenant_unresolved' });
+  }
+
+  // Already registered — nothing to do.
+  if (company.sproomPeppolRegistered) {
+    return NextResponse.json({ received: true, alreadyRegistered: true });
+  }
+
+  // List verifications → find a Signed one.
+  let verifications: SproomPeppolVerification[] = [];
+  try {
+    verifications = await sproomClient.listPeppolParticipantVerifications({ childCompanyId });
+  } catch (err) {
+    logger.error('[SPROOM_WEBHOOK] listPeppolParticipantVerifications failed', {
+      childCompanyId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return NextResponse.json({ received: true, warning: 'list_failed' });
+  }
+
+  const signed = verifications.find((v) => v.stateType === 'Signed');
+  if (!signed) {
+    logger.info('[SPROOM_WEBHOOK] Peppol verification not yet Signed', {
+      childCompanyId,
+      states: verifications.map((v) => v.stateType),
+    });
+    return NextResponse.json({ received: true, notSigned: true });
+  }
+
+  // Signed → registerPeppol.
+  try {
+    await sproomClient.registerPeppol(
+      { schemeId: 'DK:CVR', value: company.cvrNumber || '' },
+      ['PeppolBis3Billing'],
+      { childCompanyId }
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Already-registered is fine; other errors log + return 200 (no Sproom retry).
+    if (!/already|409|exist/i.test(msg)) {
+      logger.error('[SPROOM_WEBHOOK] registerPeppol failed after Signed verification', {
+        childCompanyId,
+        error: msg,
+      });
+      return NextResponse.json({ received: true, warning: 'register_failed', error: msg });
+    }
+  }
+
+  await db.company.update({
+    where: { id: company.id },
+    data: { sproomPeppolRegistered: true },
+  });
+  logger.info('[SPROOM_WEBHOOK] Peppol registered (verification Signed)', {
+    companyId: company.id,
+    childCompanyId,
+  });
+  return NextResponse.json({ received: true, peppolRegistered: true });
 }

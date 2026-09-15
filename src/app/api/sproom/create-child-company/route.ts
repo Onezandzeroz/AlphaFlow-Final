@@ -292,6 +292,13 @@ export const POST = withGuard(
       }
 
       // ── 4. Register in Peppol network ────────────────────────────
+      // Peppol registration requires a PRIOR participant verification
+      // (MitID signing flow). If registerPeppol returns 403
+      // PeppolParticipantIsNotVerified, initiate the verification — the
+      // signer completes it (MitID prod / AcceptButton staging), then the
+      // PeppolParticipantVerificationChanged webhook auto-completes the
+      // registration. signingMethod: 'AcceptButton' for staging (no MitID
+      // — testable), 'NemId' for production.
       let peppolRegistered = false;
       try {
         await sproomClient.registerPeppol(
@@ -302,10 +309,33 @@ export const POST = withGuard(
         peppolRegistered = true;
         logger.info('[SPROOM_CREATE_CHILD] Registered in Peppol', { childCompanyId: childCompany.id });
       } catch (err) {
-        logger.warn('[SPROOM_CREATE_CHILD] Peppol registration failed (non-fatal)', {
-          childCompanyId: childCompany.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
+        const peppolErr = err instanceof Error ? err.message : String(err);
+        if (/PeppolParticipantIsNotVerified|403/i.test(peppolErr) && company.email) {
+          // Not verified yet — initiate the Peppol participant verification.
+          const sproomApiUrl = process.env.SPROOM_API_URL || '';
+          const signingMethod = sproomApiUrl.includes('staging') ? 'AcceptButton' : 'NemId';
+          try {
+            await sproomClient.initiatePeppolParticipantVerification(
+              { signerEmail: company.email, signerName: company.name, signingMethod, cvr },
+              { childCompanyId: childCompany.id },
+            );
+            logger.info('[SPROOM_CREATE_CHILD] Initiated Peppol participant verification', {
+              childCompanyId: childCompany.id,
+              signerEmail: company.email,
+              signingMethod,
+            });
+          } catch (initErr) {
+            logger.warn('[SPROOM_CREATE_CHILD] Peppol verification initiation failed (non-fatal)', {
+              childCompanyId: childCompany.id,
+              error: initErr instanceof Error ? initErr.message : String(initErr),
+            });
+          }
+        } else {
+          logger.warn('[SPROOM_CREATE_CHILD] Peppol registration failed (non-fatal)', {
+            childCompanyId: childCompany.id,
+            error: peppolErr,
+          });
+        }
       }
 
       // ── 4b. Register webhooks (DocumentReceived + DocumentStatusChanged)

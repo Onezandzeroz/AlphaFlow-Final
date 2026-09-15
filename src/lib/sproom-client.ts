@@ -304,6 +304,42 @@ export class SproomChildCompanyConflictError extends Error {
   }
 }
 
+// ─── PEPPOL PARTICIPANT VERIFICATION ──────────────────────────────
+// Peppol network registration requires the child company to complete a
+// participant verification (a signed declaration). Two-party signing flow:
+//   1. initiatePeppolParticipantVerification() → POST /api/peppol-participant-verifications
+//      with { signerEmail, signerName, signingMethod, cvr? } → { id }.
+//      Sproom emails the signer a signing link (or, with signingMethod
+//      'AcceptButton' — staging/test only — the signer signs via a button
+//      click, no MitID needed).
+//   2. The signer completes the signing (MitID in prod, AcceptButton in staging).
+//   3. PeppolParticipantVerificationChanged webhook fires when stateType='Signed'.
+//   4. registerPeppol() then succeeds (POST /api/registrations/peppol).
+
+/** Sproom signing methods for Peppol participant verification. */
+export type SproomSigningMethod =
+  | 'NemId'           // Personal NemID (Danish)
+  | 'NemIdMoces'      // Employee NemID (company certificate)
+  | 'NorwegianBankId'
+  | 'SwedishBankId'
+  | 'AcceptButton';   // TEST ONLY — sign via button click (no MitID)
+
+/** Participant verification state. */
+export type SproomVerificationState =
+  | 'Pending' | 'Signed' | 'Expired' | 'Rejected' | 'Revoked';
+
+/** A Peppol participant verification record (VerificationDto). */
+export interface SproomPeppolVerification {
+  id: string;
+  signerEmail?: string | null;
+  signerName?: string | null;
+  cvr?: string | null;
+  signingMethod?: SproomSigningMethod;
+  initiatedAt?: string | null;
+  signedAt?: string | null;
+  stateType?: SproomVerificationState;
+}
+
 /** A document listed by GET /api/documents. */
 export interface SproomDocument {
   documentId: string;
@@ -1347,6 +1383,114 @@ export class SproomClient {
       throw new Error('Sproom Peppol registration returned no networkId');
     }
     return { networkId: result.networkId };
+  }
+
+  /**
+   * Initiate a Peppol participant verification for the child company.
+   *
+   * POST /api/peppol-participant-verifications
+   *   body: { signerEmail, signerName, signingMethod, cvr? }
+   *   200 → { id }  (verification ID; Sproom emails the signer a signing link)
+   *
+   * Use signingMethod 'AcceptButton' for staging/test (no MitID — the signer
+   * signs via a button click). Use 'NemId' / 'NemIdMoces' for production.
+   *
+   * After the signer completes the signing, Sproom fires the
+   * PeppolParticipantVerificationChanged webhook (stateType='Signed'), after
+   * which registerPeppol() succeeds.
+   */
+  async initiatePeppolParticipantVerification(
+    payload: {
+      signerEmail: string;
+      signerName: string;
+      signingMethod: SproomSigningMethod;
+      cvr?: string;
+    },
+    options: { childCompanyId?: string } = {},
+  ): Promise<{ id: string }> {
+    if (this.simulationMode) {
+      return { id: `sim-peppol-verification-${Date.now()}` };
+    }
+    if (!options.childCompanyId) {
+      throw new Error('childCompanyId is required to initiate Peppol participant verification');
+    }
+    const childToken = await this.getChildCompanyToken(options.childCompanyId);
+    const response = await this.makeRequestWithRetry(
+      'POST',
+      '/api/peppol-participant-verifications',
+      payload,
+      { accessToken: childToken },
+    );
+    if (!response.ok) {
+      const error = await this.parseError(response);
+      throw new Error(
+        `Failed to initiate Peppol participant verification (HTTP ${response.status}): ${error.message || response.statusText}`,
+      );
+    }
+    const result = (await response.json().catch(() => ({}))) as { id?: string };
+    if (!result.id) {
+      throw new Error('Sproom returned no verification ID for the Peppol participant verification');
+    }
+    return { id: result.id };
+  }
+
+  /**
+   * List all Peppol participant verifications for the child company.
+   *
+   * GET /api/peppol-participant-verifications → VerificationDto[]
+   * Used to check the verification state (e.g. stateType='Signed' → registerPeppol).
+   */
+  async listPeppolParticipantVerifications(
+    options: { childCompanyId?: string } = {},
+  ): Promise<SproomPeppolVerification[]> {
+    if (this.simulationMode) {
+      return [];
+    }
+    if (!options.childCompanyId) {
+      throw new Error('childCompanyId is required to list Peppol participant verifications');
+    }
+    const childToken = await this.getChildCompanyToken(options.childCompanyId);
+    const response = await this.makeRequestWithRetry(
+      'GET',
+      '/api/peppol-participant-verifications',
+      undefined,
+      { accessToken: childToken },
+    );
+    if (!response.ok) {
+      const error = await this.parseError(response);
+      throw new Error(`Failed to list Peppol participant verifications: ${error.message || response.statusText}`);
+    }
+    const data = (await response.json().catch(() => [])) as SproomPeppolVerification[];
+    return Array.isArray(data) ? data : [];
+  }
+
+  /**
+   * Get a single Peppol participant verification by ID (to check its state).
+   *
+   * GET /api/peppol-participant-verifications/{id} → VerificationDto
+   */
+  async getPeppolParticipantVerification(
+    id: string,
+    options: { childCompanyId?: string } = {},
+  ): Promise<SproomPeppolVerification> {
+    if (this.simulationMode) {
+      return { id, stateType: 'Signed' };
+    }
+    if (!options.childCompanyId) {
+      throw new Error('childCompanyId is required to get a Peppol participant verification');
+    }
+    const childToken = await this.getChildCompanyToken(options.childCompanyId);
+    const response = await this.makeRequestWithRetry(
+      'GET',
+      `/api/peppol-participant-verifications/${encodeURIComponent(id)}`,
+      undefined,
+      { accessToken: childToken },
+    );
+    if (!response.ok) {
+      const error = await this.parseError(response);
+      throw new Error(`Failed to get Peppol participant verification ${id}: ${error.message || response.statusText}`);
+    }
+    return (await response.json()) as SproomPeppolVerification;
   }
 
   /**
