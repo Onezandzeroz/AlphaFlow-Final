@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { sproomClient } from '@/lib/sproom-client';
+import { sproomClient, SproomChildCompanyConflictError, type SproomChildCompany } from '@/lib/sproom-client';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auditCreate, requestMetadata } from '@/lib/audit';
@@ -17,6 +17,12 @@ import { withGuard } from '@/lib/route-guard';
  * After creating the child company, this route also:
  *   1. Registers the child in the NemHandel network (OIOUBL profiles)
  *   2. Registers the child in the Peppol network (BIS Billing 3.0 profile)
+ *
+ * If createChildCompany returns 409 (the CVR already has a Sproom profile),
+ * this route auto-starts the enrollment flow (POST
+ * /api/child-companies/enrollments) and returns the enrollmentLink so the
+ * tenant can complete acceptance. A subsequent call re-discovers the
+ * accepted child via listChildCompanies and finalizes the connection.
  *
  * The child company ID is stored on Company.sproomChildCompanyId.
  *
@@ -114,18 +120,151 @@ export const POST = withGuard(
         );
       }
 
-      // ── 2. Create child company in Sproom ────────────────────────
-      logger.info('[SPROOM_CREATE_CHILD] Creating child company', {
+      // ── 2. Resolve a child company for this CVR ───────────────
+      // Three paths:
+      //   (a) createChildCompany succeeds → new child → store + register.
+      //   (b) 409 conflict (CVR already has a Sproom profile) + the company
+      //       is already AlphaFlow's child (e.g. a previous enrollment was
+      //       accepted) → re-discover via listChildCompanies → store + register.
+      //   (c) 409 conflict + not yet a child → auto-start the enrollment flow
+      //       (POST /api/child-companies/enrollments) and return the
+      //       enrollmentLink so the user can complete acceptance. After
+      //       accepting, the user clicks "Opret child company i Sproom" again
+      //       and path (b) completes the connection.
+      logger.info('[SPROOM_CREATE_CHILD] Resolving child company', {
         companyId: ctx.activeCompanyId,
         companyName: company.name,
         cvr,
       });
 
-      const childCompany = await sproomClient.createChildCompany({
-        name: company.name,
-        cvr,
-        schemeId: 'DK:CVR',
-      });
+      // Find a child company of THIS parent matching the CVR (for re-discovery).
+      const findOwnedChild = async (): Promise<SproomChildCompany | null> => {
+        const children = await sproomClient.listChildCompanies();
+        return children.find((c) => c.organizationIdentifier?.value === cvr) ?? null;
+      };
+
+      let childCompany: SproomChildCompany | null = null;
+      let resolveSource: 'created' | 'rediscovered' = 'created';
+
+      try {
+        childCompany = await sproomClient.createChildCompany({
+          name: company.name,
+          cvr,
+          schemeId: 'DK:CVR',
+        });
+        logger.info('[SPROOM_CREATE_CHILD] Child company created', {
+          companyId: ctx.activeCompanyId,
+          childCompanyId: childCompany.id,
+        });
+      } catch (err) {
+        // Only the typed conflict error is recoverable; re-throw others
+        // (network, auth, 5xx) so the outer catch returns 500.
+        if (!(err instanceof SproomChildCompanyConflictError)) throw err;
+
+        const conflict = err;
+        logger.info('[SPROOM_CREATE_CHILD] CVR already has a Sproom profile — checking ownership', {
+          companyId: ctx.activeCompanyId,
+          cvr,
+          existingChildCompanyId: conflict.childCompanyId,
+        });
+
+        // (b) Already a child? (covers the case where a previous enrollment
+        // was accepted — re-discover it instead of re-enrolling.)
+        const owned = await findOwnedChild();
+        if (owned) {
+          childCompany = owned;
+          resolveSource = 'rediscovered';
+          logger.info('[SPROOM_CREATE_CHILD] Re-discovered existing child company (already a child)', {
+            companyId: ctx.activeCompanyId,
+            childCompanyId: owned.id,
+          });
+        } else {
+          // (c) Not a child yet → auto-start the enrollment flow.
+          if (!company.email) {
+            return NextResponse.json(
+              {
+                error:
+                  'Virksomheden har allerede en Sproom-profil, men er ikke din child company. Enrollment kræver en email på virksomheden — sæt den i Virksomhedsindstillinger og prøv igen.',
+                code: 'ENROLLMENT_NO_EMAIL',
+              },
+              { status: 400 }
+            );
+          }
+
+          logger.info('[SPROOM_CREATE_CHILD] Starting enrollment flow', {
+            companyId: ctx.activeCompanyId,
+            cvr,
+            existingChildCompanyId: conflict.childCompanyId,
+          });
+
+          let enrollmentLink: string | null = null;
+          let alreadyChild = false;
+          try {
+            const enr = await sproomClient.enrollChildCompany({
+              childCompanyName: company.name,
+              organizationIdentifier: { schemeId: 'DK:CVR', value: cvr },
+              userEmail: company.email,
+              parentCompanyName: 'AlphaFlow',
+              shouldSendEmail: false,
+            });
+            enrollmentLink = enr.enrollmentLink;
+            alreadyChild = enr.alreadyChild === true;
+          } catch (enrollErr) {
+            const msg = enrollErr instanceof Error ? enrollErr.message : String(enrollErr);
+            logger.error('[SPROOM_CREATE_CHILD] Enrollment failed', { cvr, error: msg });
+            return NextResponse.json(
+              { error: `Kunne ikke påbegynde Sproom enrollment: ${msg}`, code: 'ENROLLMENT_FAILED' },
+              { status: 502 }
+            );
+          }
+
+          // Race: enroll said "already a child" between our list and enroll.
+          if (alreadyChild) {
+            const owned2 = await findOwnedChild();
+            if (owned2) {
+              childCompany = owned2;
+              resolveSource = 'rediscovered';
+              logger.info('[SPROOM_CREATE_CHILD] Enrollment "already a child" — re-discovered', {
+                companyId: ctx.activeCompanyId,
+                childCompanyId: owned2.id,
+              });
+            } else {
+              return NextResponse.json(
+                {
+                  error:
+                    'Sproom rapporterer virksomheden som allerede child, men den blev ikke fundet. Prøv igen.',
+                  code: 'ENROLLMENT_STATE_INCONSISTENT',
+                },
+                { status: 409 }
+              );
+            }
+          } else {
+            // Enrollment started → return the link (no store yet; the user
+            // completes acceptance via the link, then clicks "Opret" again
+            // and path (b) re-discovers + completes).
+            await auditCreate(
+              ctx.id,
+              'Company',
+              ctx.activeCompanyId!,
+              {
+                action: 'sproom_enrollment_started',
+                cvr,
+                existingChildCompanyId: conflict.childCompanyId,
+                enrollmentLink,
+              },
+              requestMetadata(request),
+              ctx.activeCompanyId
+            );
+            return NextResponse.json({
+              enrolled: true,
+              enrollmentLink,
+              childCompanyId: conflict.childCompanyId,
+              message:
+                'Virksomheden har allerede en Sproom-profil. Fuldfør enrollment via linket, og klik derefter "Opret child company i Sproom" igen for at gennemføre forbindelsen.',
+            });
+          }
+        }
+      }
 
       if (!childCompany?.id) {
         return NextResponse.json(
@@ -134,12 +273,8 @@ export const POST = withGuard(
         );
       }
 
-      logger.info('[SPROOM_CREATE_CHILD] Child company created', {
-        companyId: ctx.activeCompanyId,
-        childCompanyId: childCompany.id,
-      });
-
       // ── 3. Register in NemHandel network ─────────────────────────
+      // (re-run on the rediscovery path too — non-fatal if already registered)
       let nemhandelRegistered = false;
       try {
         await sproomClient.registerNemHandel(
@@ -196,7 +331,10 @@ export const POST = withGuard(
         'Company',
         ctx.activeCompanyId!,
         {
-          action: 'sproom_child_company_created',
+          action:
+            resolveSource === 'rediscovered'
+              ? 'sproom_child_company_rediscovered'
+              : 'sproom_child_company_created',
           childCompanyId: childCompany.id,
           nemhandelRegistered,
           peppolRegistered,
@@ -209,6 +347,7 @@ export const POST = withGuard(
       logger.info('[SPROOM_CREATE_CHILD] Complete', {
         companyId: ctx.activeCompanyId,
         childCompanyId: childCompany.id,
+        resolveSource,
         nemhandelRegistered,
         peppolRegistered,
       });

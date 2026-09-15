@@ -152,6 +152,13 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   const [isTestingSproom, setIsTestingSproom] = useState(false);
   const [isDisconnectingSproom, setIsDisconnectingSproom] = useState(false);
   const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
+  // When the CVR already has a Sproom profile, the create route auto-starts
+  // the enrollment flow and returns an enrollmentLink. This holds the link
+  // so the Sproom card can show it until the user completes + reconnects.
+  const [sproomEnrollmentPending, setSproomEnrollmentPending] = useState<{
+    enrollmentLink: string;
+    childCompanyId: string | null;
+  } | null>(null);
 
   // Derived: is an Access Point connected? EndpointID + Peppol AS4 ID
   // are auto-managed by Sproom's create-child-company route, so the
@@ -261,6 +268,31 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
       }
 
       const data = await res.json();
+
+      // Conflict path: the CVR already has a Sproom profile, so the route
+      // auto-started the enrollment flow and returned an enrollmentLink.
+      // Surface it prominently (not just a toast) — the user must complete
+      // acceptance via the link, then click "Opret child company i Sproom"
+      // again to finalize (the route then re-discovers the accepted child).
+      if (data.enrolled && data.enrollmentLink) {
+        setSproomEnrollmentPending({
+          enrollmentLink: data.enrollmentLink as string,
+          childCompanyId: data.childCompanyId ?? null,
+        });
+        toast.info(
+          isDa ? 'Enrollment påbegyndt' : 'Enrollment started',
+          {
+            description: isDa
+              ? 'Virksomheden har allerede en Sproom-profil. Fuldfør via linket i kortet, og klik derefter "Opret child company i Sproom" igen.'
+              : 'The company already has a Sproom profile. Complete via the link in the card, then click "Create child company in Sproom" again.',
+          },
+        );
+        return;
+      }
+
+      // Connected (newly created or re-discovered after enrollment) — clear
+      // any pending enrollment state and show the success toast.
+      setSproomEnrollmentPending(null);
       const nemhandel = data.nemhandelRegistered;
       const peppol = data.peppolRegistered;
       toast.success(
@@ -1142,6 +1174,27 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 auto-configures einvoiceEndpointId + peppolAs4Id. */}
             {!sproomStatus?.connected ? (
               <div className="space-y-3">
+                {sproomEnrollmentPending && (
+                  <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/40 p-3 text-xs text-blue-700 dark:text-blue-400 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Link2 className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>
+                        {isDa
+                          ? 'Virksomheden har allerede en Sproom-profil. Fuldfør enrollment via linket nedenfor, og klik derefter "Opret child company i Sproom" igen for at gennemføre forbindelsen.'
+                          : 'The company already has a Sproom profile. Complete enrollment via the link below, then click "Create child company in Sproom" again to finalize the connection.'}
+                      </span>
+                    </div>
+                    <a
+                      href={sproomEnrollmentPending.enrollmentLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 font-medium underline break-all"
+                    >
+                      {isDa ? 'Åbn enrollment-link' : 'Open enrollment link'}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
                 {cvrVerified ? (
                   <>
                     <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">

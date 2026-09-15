@@ -287,6 +287,23 @@ export interface SproomChildCompany {
   glnNumber?: string | null;
 }
 
+/**
+ * Thrown by createChildCompany when Sproom returns 409 — a child company
+ * already exists for the CVR (the company has a Sproom profile but is not
+ * necessarily a child of THIS parent). The caller should fall back to the
+ * enrollment flow (POST /api/child-companies/enrollments) to take ownership.
+ */
+export class SproomChildCompanyConflictError extends Error {
+  /** The existing child company ID (if Sproom returned one in the 409 body). */
+  readonly childCompanyId: string | null;
+
+  constructor(childCompanyId: string | null, message: string) {
+    super(message);
+    this.name = 'SproomChildCompanyConflictError';
+    this.childCompanyId = childCompanyId;
+  }
+}
+
 /** A document listed by GET /api/documents. */
 export interface SproomDocument {
   documentId: string;
@@ -603,11 +620,12 @@ export class SproomClient {
 
     if (response.status === 409) {
       const conflict = await response.json().catch(() => ({})) as { childCompanyId?: string; message?: string };
-      throw new Error(
-        `Sproom child company already exists for ${schemeId}:${payload.cvr}. ` +
-        (conflict.childCompanyId
-          ? `Existing childCompanyId=${conflict.childCompanyId}. Use the enrollment flow to take ownership.`
-          : (conflict.message || 'Use POST /api/child-companies/enrollments to take ownership.')),
+      throw new SproomChildCompanyConflictError(
+        conflict.childCompanyId ?? null,
+        `Sproom child company already exists for ${schemeId}:${payload.cvr}.` +
+          (conflict.childCompanyId
+            ? ` Existing childCompanyId=${conflict.childCompanyId}.`
+            : ` ${conflict.message || ''}`).trim(),
       );
     }
 
@@ -755,6 +773,62 @@ export class SproomClient {
     }
     this.invalidateChildCompanyToken(childCompanyId);
     return { success: true };
+  }
+
+  /**
+   * Enroll an existing Sproom-profiled company as a child of this parent.
+   *
+   * POST /api/child-companies/enrollments
+   *   body: { childCompanyName, organizationIdentifier, userEmail,
+   *           parentCompanyName, shouldSendEmail }
+   *   200 → { enrollmentLink }  (auth link the enrolled company completes via)
+   *   409 → "Company is already a child" (no enrollment needed)
+   *   400 → InvalidParameters / IdentificationSchemeNotSupported / CompanyNotFound
+   *
+   * Used when createChildCompany returns 409 (the CVR already has a Sproom
+   * profile). The caller surfaces the enrollmentLink so the tenant can
+   * complete acceptance; once accepted, Sproom fires the
+   * ChildCompanyEnrollmentAccepted webhook and the company becomes a child
+   * (re-discoverable via listChildCompanies).
+   */
+  async enrollChildCompany(payload: {
+    childCompanyName: string;
+    organizationIdentifier: SproomOrganizationIdentifier;
+    userEmail: string;
+    parentCompanyName: string;
+    shouldSendEmail: boolean;
+  }): Promise<{ enrollmentLink: string | null; alreadyChild?: boolean }> {
+    if (this.simulationMode) {
+      // Simulation: return a fake link so the UI flow can be exercised.
+      return { enrollmentLink: `${this.baseUrl}/enroll/simulated` };
+    }
+
+    const parentToken = await this.getAccessToken();
+    const body = {
+      childCompanyName: payload.childCompanyName,
+      organizationIdentifier: payload.organizationIdentifier,
+      userEmail: payload.userEmail,
+      parentCompanyName: payload.parentCompanyName,
+      shouldSendEmail: payload.shouldSendEmail,
+    };
+    const response = await this.makeRequestWithRetry(
+      'POST',
+      '/api/child-companies/enrollments',
+      body,
+      { accessToken: parentToken },
+    );
+    // 409 = "Company is already a child" — no enrollment needed.
+    if (response.status === 409) {
+      return { enrollmentLink: null, alreadyChild: true };
+    }
+    if (!response.ok) {
+      const error = await this.parseError(response);
+      throw new Error(
+        `Failed to enroll Sproom child company (HTTP ${response.status}): ${error.message || response.statusText}`,
+      );
+    }
+    const result = (await response.json().catch(() => ({}))) as { enrollmentLink?: string | null };
+    return { enrollmentLink: result.enrollmentLink ?? null };
   }
 
   // ─── DOCUMENT SENDING ────────────────────────────────────────────
