@@ -324,7 +324,14 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       ...(data.paymentAccountId
         ? {
             'cac:PaymentMeans': {
-              'cbc:PaymentMeansCode': data.paymentMeansCode || '30',
+              // DK-R-005: Danish-allowed PaymentMeansCode set is
+              // 1, 10, 31, 42, 48, 49, 50, 58, 59, 93, 97. '30' (Credit
+              // transfer, the UN/ECE default) is NOT allowed for Danish
+              // suppliers. '42' = "Payment to bank account" (buyer pays
+              // into the supplier's bank account) — semantically correct
+              // for a standard invoice + DK-R-005 compliant.
+              // ('31' = debit transfer / direct debit — wrong for credit transfer.)
+              'cbc:PaymentMeansCode': data.paymentMeansCode || '42',
               'cac:PayeeFinancialAccount': {
                 'cbc:ID': data.paymentAccountId,
                 ...(data.paymentReference && {

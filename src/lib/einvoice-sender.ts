@@ -34,6 +34,7 @@ import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auditLog } from '@/lib/audit';
 import { generateOIOUBL, type OIOUBLInvoiceData } from '@/lib/oioubl-generator';
+import { validateOIOUBL } from '@/lib/oioubl-validator';
 import { NemHandelClient } from '@/lib/nemhandel-client';
 import { sproomClient } from '@/lib/sproom-client';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
@@ -318,7 +319,7 @@ function buildOIOUBLData(
     payableAmount: total,
     taxExclusiveAmount: subtotal,
     taxInclusiveAmount: total,
-    paymentMeansCode: '30',
+    paymentMeansCode: '42',
     paymentAccountId: invoice.bankIban || company.bankIban || company.bankAccount || undefined,
     currencyCode,
   };
@@ -597,6 +598,37 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
       sendingId,
       xmlLength: xmlContent.length,
     });
+
+    // 4b. Pre-validate the OIOUBL XML against Peppol BIS 3 / EN 16931 +
+    // Danish DK-R rules BEFORE sending to Sproom. Fails fast with ALL
+    // validation errors at once (no Sproom round-trip per error). On
+    // failure, mark the row FAILED + return — the send-einvoice route
+    // surfaces the errorMessage in the toast (so the user sees every
+    // issue at once, not one Sproom rejection per send).
+    const validation = validateOIOUBL(xmlContent);
+    if (!validation.isValid) {
+      const errorMsg = `OIOUBL validering fejlede: ${validation.errors.join(' | ')}`;
+      logger.error('[EINVOICE_SEND] OIOUBL pre-validation failed', {
+        sendingId,
+        errors: validation.errors,
+        warnings: validation.warnings,
+      });
+      await db.eInvoiceSending.update({
+        where: { id: sendingId },
+        data: {
+          status: EInvoiceSendStatus.FAILED,
+          errorCode: 'OIOUBL_VALIDATION_FAILED',
+          errorMessage: errorMsg,
+        },
+      });
+      return; // don't send invalid XML to Sproom
+    }
+    if (validation.warnings.length > 0) {
+      logger.warn('[EINVOICE_SEND] OIOUBL validation warnings', {
+        sendingId,
+        warnings: validation.warnings,
+      });
+    }
 
     // 5. Send via the active Access Point (Sproom only — simulation fallback)
     let result: { success: boolean; messageId?: string; errorCode?: string; errorMessage?: string; responseXml?: string };

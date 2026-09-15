@@ -346,10 +346,10 @@ export function validateOIOUBL(xml: string): ValidationResult {
   if (typeof meansCode !== 'undefined') {
     const ALLOWED_DK_PAYMENT_MEANS = ['1', '10', '31', '42', '48', '49', '50', '58', '59', '93', '97'];
     if (!ALLOWED_DK_PAYMENT_MEANS.includes(meansCode)) {
-      warnings.push(
+      errors.push(
         `DK-R-005: PaymentMeansCode "${meansCode}" is not in the Danish allowed set ` +
         `(${ALLOWED_DK_PAYMENT_MEANS.join(', ')}). ` +
-        `The Danish CIUS may reject this invoice.`
+        `The Danish CIUS rejects this code (e.g. '30' is not allowed for Danish suppliers — use '42' for payment to bank account).`
       );
     }
   }
@@ -366,6 +366,28 @@ export function validateOIOUBL(xml: string): ValidationResult {
           'Danish CIUS requires CreditNote totals to be non-negative.'
         );
       }
+    }
+  }
+
+  // PEPPOL-EN16931-R003: a buyer reference (cbc:BuyerReference) OR a
+  // purchase order reference (cac:OrderReference) MUST be provided.
+  if (!xml.includes('cbc:BuyerReference') && !xml.includes('cac:OrderReference')) {
+    errors.push(
+      'PEPPOL-EN16931-R003: A buyer reference (cbc:BuyerReference) or purchase order reference (cac:OrderReference) MUST be provided.'
+    );
+  }
+
+  // DK-R-014: for Danish suppliers, PartyLegalEntity/CompanyID in
+  // AccountingSupplierParty MUST specify schemeID="0184" (DK CVR).
+  // Scope the regex to the supplier's PartyLegalEntity (which comes after
+  // PartyTaxScheme, so the non-greedy match lands on the right CompanyID).
+  const supplierLegalEntityCompanyID = xml.match(/cac:AccountingSupplierParty[\s\S]*?<cac:PartyLegalEntity[\s\S]*?<cbc:CompanyID([^>]*)>/);
+  if (supplierLegalEntityCompanyID) {
+    const companyIDAttrs = supplierLegalEntityCompanyID[1];
+    if (!/\bschemeID="0184"/.test(companyIDAttrs)) {
+      errors.push(
+        'DK-R-014: Supplier PartyLegalEntity/CompanyID must specify schemeID="0184" (DK CVR-number) for Danish suppliers.'
+      );
     }
   }
 
