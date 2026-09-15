@@ -308,6 +308,35 @@ export const POST = withGuard(
         });
       }
 
+      // ── 4b. Register webhooks (DocumentReceived + DocumentStatusChanged)
+      // so Sproom notifies AlphaFlow when the child company RECEIVES an
+      // e-invoice (DocumentReceived → e-invoice inbox) or a sent document's
+      // delivery status changes (DocumentStatusChanged → EInvoiceSending
+      // status update). Without these, received e-invoices never reach
+      // AlphaFlow's inbox even though Sproom's dashboard shows them.
+      // Non-fatal: registration failure doesn't block child-company creation
+      // (backfill via POST /api/sproom/register-webhook).
+      {
+        const appUrl = (process.env.APP_URL || 'https://alphaflow.dk').replace(/\/$/, '');
+        const webhookUrl = `${appUrl}/api/sproom/webhook`;
+        for (const whType of ['DocumentReceived', 'DocumentStatusChanged'] as const) {
+          try {
+            await sproomClient.createWebhook(whType, webhookUrl, { childCompanyId: childCompany.id });
+            logger.info('[SPROOM_CREATE_CHILD] Registered webhook', {
+              childCompanyId: childCompany.id,
+              type: whType,
+              webhookUrl,
+            });
+          } catch (err) {
+            logger.warn('[SPROOM_CREATE_CHILD] Webhook registration failed (non-fatal)', {
+              childCompanyId: childCompany.id,
+              type: whType,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      }
+
       // ── 5. Store child company ID + auto-configure e-invoicing ──
       await db.company.update({
         where: { id: ctx.activeCompanyId! },

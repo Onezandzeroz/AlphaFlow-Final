@@ -499,6 +499,12 @@ export const routeConfig: RouteConfigMap = {
   '/api/sproom/disconnect': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
   },
+  // Register Sproom webhooks (DocumentReceived + DocumentStatusChanged)
+  // for the active company's child company. Idempotent backfill — also
+  // auto-registered at child-company creation.
+  '/api/sproom/register-webhook': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
+  },
   // Webhook receiver — Sproom posts RSA-signed webhook events here.
   // Auth is verified via the X-Signature header (RSA-SHA256 signature
   // verified with Sproom's public key fetched from GET /api/webhooks/key).

@@ -44,6 +44,7 @@ import {
   Unlink,
   Search,
   Activity,
+  Inbox,
   PlusCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -159,6 +160,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     enrollmentLink: string;
     childCompanyId: string | null;
   } | null>(null);
+  const [isRegisteringWebhook, setIsRegisteringWebhook] = useState(false);
 
   // Derived: is an Access Point connected? EndpointID + Peppol AS4 ID
   // are auto-managed by Sproom's create-child-company route, so the
@@ -368,6 +370,52 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
       setShowDisconnectConfirm(false);
     }
   }, [isDa, handleMutationError, fetchSproomStatus]);
+
+  // ── Register Sproom webhooks (enable incoming e-invoice receiving) ──
+  // Idempotent: lists existing webhooks + creates the missing types
+  // (DocumentReceived + DocumentStatusChanged). Needed for the e-invoice
+  // inbox to receive invoices delivered to this company's Sproom child.
+  // Auto-registered at child-company creation; call this once for companies
+  // created before that.
+  const handleRegisterWebhook = useCallback(async () => {
+    setIsRegisteringWebhook(true);
+    try {
+      const res = await fetch('/api/sproom/register-webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const isAccess = await handleMutationError(
+          res,
+          isDa ? 'Aktiver e-faktura modtagelse' : 'Enable e-invoice receiving',
+        );
+        if (isAccess) { setIsRegisteringWebhook(false); return; }
+        return; // handleMutationError already showed error toast
+      }
+      const data = await res.json();
+      const newlyRegistered: number = data.registered?.length ?? 0;
+      toast.success(
+        isDa ? 'Modtagelse aktiveret' : 'Receiving enabled',
+        {
+          description: newlyRegistered > 0
+            ? (isDa
+              ? `Registrerede ${newlyRegistered} webhook(s). Sproom leverer nu indkomne e-fakturaer til din indbakke.`
+              : `Registered ${newlyRegistered} webhook(s). Sproom will now deliver incoming e-invoices to your inbox.`)
+            : (isDa
+              ? 'Webhooks var allerede registreret — modtagelse er aktiv.'
+              : 'Webhooks were already registered — receiving is active.'),
+        },
+      );
+    } catch (err) {
+      toast.error(
+        isDa
+          ? 'Kunne ikke aktivere: ' + (err instanceof Error ? err.message : '')
+          : 'Failed: ' + (err instanceof Error ? err.message : ''),
+      );
+    } finally {
+      setIsRegisteringWebhook(false);
+    }
+  }, [isDa, handleMutationError]);
 
   // ── Peppol/NemHandel participant lookup ──
   // Always uses Sproom's /api/sproom/participants endpoint (Sproom is
@@ -1233,33 +1281,55 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 )}
               </div>
             ) : (
-              <div className="flex gap-2">
-                <Button
-                  onClick={handleTestSproom}
-                  disabled={isTestingSproom}
-                  variant="outline"
-                  className="flex-1 gap-2 font-medium border-gray-200 dark:border-white/10"
-                >
-                  {isTestingSproom ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Activity className="h-4 w-4" />
-                  )}
-                  {isDa ? 'Test forbindelse' : 'Test connection'}
-                </Button>
-                <Button
-                  onClick={() => setShowDisconnectConfirm(true)}
-                  disabled={isDisconnectingSproom}
-                  variant="outline"
-                  className="gap-2 font-medium border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-                >
-                  {isDisconnectingSproom ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Unlink className="h-4 w-4" />
-                  )}
-                  {isDa ? 'Afbryd' : 'Disconnect'}
-                </Button>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleTestSproom}
+                    disabled={isTestingSproom}
+                    variant="outline"
+                    className="flex-1 gap-2 font-medium border-gray-200 dark:border-white/10"
+                  >
+                    {isTestingSproom ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Activity className="h-4 w-4" />
+                    )}
+                    {isDa ? 'Test forbindelse' : 'Test connection'}
+                  </Button>
+                  <Button
+                    onClick={() => setShowDisconnectConfirm(true)}
+                    disabled={isDisconnectingSproom}
+                    variant="outline"
+                    className="gap-2 font-medium border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                  >
+                    {isDisconnectingSproom ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Unlink className="h-4 w-4" />
+                    )}
+                    {isDa ? 'Afbryd' : 'Disconnect'}
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  <Button
+                    onClick={handleRegisterWebhook}
+                    disabled={isRegisteringWebhook}
+                    variant="outline"
+                    className="w-full gap-2 font-medium border-emerald-300 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                  >
+                    {isRegisteringWebhook ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Inbox className="h-4 w-4" />
+                    )}
+                    {isDa ? 'Aktiver e-faktura modtagelse' : 'Enable e-invoice receiving'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {isDa
+                      ? 'Registrerer Sproom-webhooken så indkomne e-fakturaer leveres til din indbakke. Gøres én gang per virksomhed (sker automatisk ved ny child company-oprettelse).'
+                      : 'Registers the Sproom webhook so incoming e-invoices are delivered to your inbox. Do this once per company (auto on new child-company creation).'}
+                  </p>
+                </div>
               </div>
             )}
 
