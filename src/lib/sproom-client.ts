@@ -742,6 +742,13 @@ export class SproomClient {
       undefined,
       { accessToken: parentToken },
     );
+    // DELETE is idempotent: a 404 means the child company is already gone
+    // (e.g. deleted directly on the Sproom dashboard). Treat as success —
+    // the caller's desired end state (child gone) is achieved.
+    if (response.status === 404) {
+      this.invalidateChildCompanyToken(childCompanyId);
+      return { success: true };
+    }
     if (!response.ok) {
       const error = await this.parseError(response);
       throw new Error(`Failed to delete Sproom child company ${childCompanyId}: ${error.message || response.statusText}`);

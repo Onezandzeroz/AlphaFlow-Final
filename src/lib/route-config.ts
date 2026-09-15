@@ -494,6 +494,11 @@ export const routeConfig: RouteConfigMap = {
   '/api/sproom/register-nemhandel': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
   },
+  // Disconnect (delete) the tenant's Sproom child company + clear the local
+  // Sproom connection fields. Idempotent on Sproom's side (404 = already gone).
+  '/api/sproom/disconnect': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
+  },
   // Webhook receiver — Sproom posts RSA-signed webhook events here.
   // Auth is verified via the X-Signature header (RSA-SHA256 signature
   // verified with Sproom's public key fetched from GET /api/webhooks/key).

@@ -12,6 +12,16 @@ import { Separator } from '@/components/ui/separator';
 import { ResponsiveSwitch } from '@/components/ui/responsive-switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -89,6 +99,9 @@ interface SproomConnectionStatus {
   // SPROOM_API_TOKEN in .env).
   activeAccessPoint?: 'sproom' | 'simulation';
   sproomConfigured?: boolean;
+  // True when the status route detected the Sproom child company was
+  // deleted externally and auto-cleared the connection fields.
+  reconciled?: boolean;
 }
 
 interface PeppolParticipantResult {
@@ -137,6 +150,8 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   const [sproomStatus, setSproomStatus] = useState<SproomConnectionStatus | null>(null);
   const [isCreatingSproomChild, setIsCreatingSproomChild] = useState(false);
   const [isTestingSproom, setIsTestingSproom] = useState(false);
+  const [isDisconnectingSproom, setIsDisconnectingSproom] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
   // Derived: is an Access Point connected? EndpointID + Peppol AS4 ID
   // are auto-managed by Sproom's create-child-company route, so the
@@ -281,6 +296,46 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
       setIsTestingSproom(false);
     }
   }, [isDa, fetchSproomStatus, sproomStatus]);
+
+  // ── Disconnect (delete) the Sproom child company ──
+  // Calls Sproom's DELETE /api/child-companies/{id} via the
+  // /api/sproom/disconnect route and clears the local Sproom connection
+  // fields. Idempotent on Sproom's side (404 = already gone). After
+  // success we reload Sproom status so the card flips to disconnected and
+  // the create-child-company button reappears.
+  const handleDisconnectSproom = useCallback(async () => {
+    setIsDisconnectingSproom(true);
+    try {
+      const res = await fetch('/api/sproom/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!res.ok) {
+        const isAccess = await handleMutationError(
+          res,
+          isDa ? 'Afbryd Sproom-forbindelse' : 'Disconnect Sproom',
+        );
+        if (isAccess) { return; }
+        return; // handleMutationError already showed error toast
+      }
+
+      await res.json();
+      toast.success(isDa ? 'Sproom-forbindelsen er afbrudt' : 'Sproom connection disconnected');
+      // Reload Sproom status so the card flips to disconnected + the
+      // create-child-company button reappears.
+      fetchSproomStatus();
+    } catch (err) {
+      toast.error(
+        isDa
+          ? 'Kunne ikke afbryde: ' + (err instanceof Error ? err.message : '')
+          : 'Failed to disconnect: ' + (err instanceof Error ? err.message : ''),
+      );
+    } finally {
+      setIsDisconnectingSproom(false);
+      setShowDisconnectConfirm(false);
+    }
+  }, [isDa, handleMutationError, fetchSproomStatus]);
 
   // ── Peppol/NemHandel participant lookup ──
   // Always uses Sproom's /api/sproom/participants endpoint (Sproom is
@@ -1139,8 +1194,59 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   )}
                   {isDa ? 'Test forbindelse' : 'Test connection'}
                 </Button>
+                <Button
+                  onClick={() => setShowDisconnectConfirm(true)}
+                  disabled={isDisconnectingSproom}
+                  variant="outline"
+                  className="gap-2 font-medium border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  {isDisconnectingSproom ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Unlink className="h-4 w-4" />
+                  )}
+                  {isDa ? 'Afbryd' : 'Disconnect'}
+                </Button>
               </div>
             )}
+
+            {/* ── Disconnect confirmation ── */}
+            <AlertDialog open={showDisconnectConfirm} onOpenChange={setShowDisconnectConfirm}>
+              <AlertDialogContent className="max-w-sm">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-base">
+                    {isDa ? 'Afbryd Sproom-forbindelsen?' : 'Disconnect from Sproom?'}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="text-sm">
+                    {isDa
+                      ? 'Dette sletter din child company i Sproom (DELETE /api/child-companies/{id}) og nulstiller forbindelsen i AlphaFlow. NemHandel- og Peppol-registreringer fjernes. Du kan oprette en ny child company bagefter. Handlingen kan ikke fortrydes.'
+                      : 'This deletes your child company in Sproom (DELETE /api/child-companies/{id}) and resets the connection in AlphaFlow. NemHandel and Peppol registrations are removed. You can create a new child company afterwards. This cannot be undone.'}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDisconnectingSproom}>
+                    {isDa ? 'Annullér' : 'Cancel'}
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void handleDisconnectSproom();
+                    }}
+                    disabled={isDisconnectingSproom}
+                    className="bg-red-600 hover:bg-red-700 text-white"
+                  >
+                    {isDisconnectingSproom ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        {isDa ? 'Afbryder…' : 'Disconnecting…'}
+                      </>
+                    ) : (
+                      isDa ? 'Afbryd forbindelse' : 'Disconnect'
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {/* ── Peppol/NemHandel Participant Lookup ── */}
             {sproomStatus?.connected && (
