@@ -181,10 +181,43 @@ export const PUT = withGuard(
         const totalAmount = Number(existing.payableAmount) || 0;
         const issueDate = existing.issueDate;
 
-        // Build journal entry description
-        const description = `E-faktura: ${existing.invoiceNumber} fra ${existing.supplierName}`;
+        // ── Document-type-aware posting ────────────────────────
+        //
+        // INVOICE (documentType = 'INVOICE' or 'CORRECTED'):
+        //   Debit  expense account   (increase expense)
+        //   Credit payables account   (increase supplier liability)
+        //
+        // CREDIT_NOTE (documentType = 'CREDIT_NOTE' or 'SELF_BILLED'):
+        //   Credit expense account   (DECREASE expense — reversal)
+        //   Debit  payables account   (DECREASE supplier liability — reversal)
+        //
+        // A credit note from a supplier REDUCES what you owe them and
+        // REDUCES the expense you originally booked. Without this swap,
+        // posting a credit note would INCORRECTLY increase both the
+        // expense and the payable — treating the credit note as if it
+        // were another invoice.
+        const isCreditNote =
+          existing.documentType === 'CREDIT_NOTE' ||
+          existing.documentType === 'SELF_BILLED';
 
-        // Create JournalEntry with two lines
+        // For invoices: debit expense, credit payables.
+        // For credit notes: credit expense, debit payables (reversed).
+        const expenseDebit = isCreditNote ? 0 : totalAmount;
+        const expenseCredit = isCreditNote ? totalAmount : 0;
+        const payablesDebit = isCreditNote ? totalAmount : 0;
+        const payablesCredit = isCreditNote ? 0 : totalAmount;
+
+        // Build journal entry description — use the correct document noun
+        // so the journal entry reads "E-kreditnota: ..." for credit notes
+        // and "E-faktura: ..." for invoices.
+        const docNounDa = isCreditNote ? 'E-kreditnota' : 'E-faktura';
+        const description = `${docNounDa}: ${existing.invoiceNumber} fra ${existing.supplierName}`;
+        const expenseLineDesc = `${docNounDa} ${existing.invoiceNumber} — ${existing.supplierName}`;
+        const payablesLineDesc = isCreditNote
+          ? `Leverandørgæld (kreditnota): ${existing.supplierName} — ${existing.invoiceNumber}`
+          : `Leverandørgæld: ${existing.supplierName} — ${existing.invoiceNumber}`;
+
+        // Create JournalEntry with two lines (debits/credits swapped for credit notes)
         const journalEntry = await db.$transaction(async (tx) => {
           const je = await tx.journalEntry.create({
             data: {
@@ -196,21 +229,21 @@ export const PUT = withGuard(
               companyId,
               lines: {
                 create: [
-                  // Debit: expense account
+                  // Expense line — Debit for invoices, Credit for credit notes
                   {
                     companyId,
                     accountId: expenseAccount.id,
-                    debit: totalAmount,
-                    credit: 0,
-                    description: `E-faktura ${existing.invoiceNumber} — ${existing.supplierName}`,
+                    debit: expenseDebit,
+                    credit: expenseCredit,
+                    description: expenseLineDesc,
                   },
-                  // Credit: payables account
+                  // Payables line — Credit for invoices, Debit for credit notes
                   {
                     companyId,
                     accountId: payablesAccount.id,
-                    debit: 0,
-                    credit: totalAmount,
-                    description: `Leverandørgæld: ${existing.supplierName} — ${existing.invoiceNumber}`,
+                    debit: payablesDebit,
+                    credit: payablesCredit,
+                    description: payablesLineDesc,
                   },
                 ],
               },
