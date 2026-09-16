@@ -505,6 +505,10 @@ export const routeConfig: RouteConfigMap = {
   '/api/sproom/register-webhook': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true },
   },
+  // Diagnostic: checks webhook registration + public key fetchability.
+  '/api/sproom/webhook-status': {
+    GET: { auth: true, requireCompany: true },
+  },
   // Peppol participant verification (initiate the MitID signing flow) +
   // completion (check verification state + registerPeppol when Signed).
   // Auto-initiated at child-company creation when registerPeppol returns 403.
