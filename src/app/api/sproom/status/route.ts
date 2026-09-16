@@ -167,6 +167,7 @@ export const GET = withGuard(
             for (const wh of existing) {
               const whTypeLower = (wh.type || '').toLowerCase();
               if (seenTypes.has(whTypeLower)) {
+                if (!wh.id) continue;
                 try {
                   await sproomClient.deleteWebhook(wh.id, { childCompanyId: company.sproomChildCompanyId! });
                   logger.info('[SPROOM_STATUS] Deleted duplicate webhook', {
