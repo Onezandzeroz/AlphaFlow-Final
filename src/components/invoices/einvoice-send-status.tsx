@@ -619,7 +619,11 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
               </p>
             </div>
           ) : (
-            <div className="max-h-96 overflow-y-auto">
+            <div>
+              {/* No max-h-96 here — the dialog's own max-h-[85vh]
+                  overflow-y-auto handles the scroll for the entire
+                  content. A nested max-h-96 here would clip the table
+                  at 384px regardless of viewport size. */}
               <Table>
                 <TableHeader>
                   <TableRow>
