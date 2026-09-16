@@ -235,20 +235,69 @@ export type SproomWebhookType =
   | 'ReportProcessingCompleted';
 
 /**
+ * Status details block embedded inside a DocumentStatusChanged webhook.
+ *
+ * Sproom sends this as a nested object carrying the actual state, status
+ * code, delivery type, and a high-resolution ISO-8601 timestamp.
+ */
+export interface SproomWebhookStatusDetails {
+  /** ISO-8601 timestamp for the status transition. */
+  dateTime?: string;
+  /** Machine-readable state name, e.g. `created`, `transmissionStarted`, `sent`. */
+  state?: string;
+  /** Numeric Sproom status code, e.g. 101 (created), 301 (transmissionStarted), 302 (sent). */
+  statusCode?: number;
+  /** Delivery channel, e.g. `sproom` (NemHandel) or `peppol`. */
+  deliveryType?: string;
+}
+
+/**
  * Sproom webhook event payload.
  *
  * Sproom posts JSON to the configured webhook URL. The exact shape
- * depends on `type`; the fields below cover the two event types
- * AlphaFlow consumes (DocumentStatusChanged for outbound, DocumentReceived
- * for inbound). Unknown/extra fields are preserved via `[k: string]: unknown`.
+ * depends on the event family; the fields below cover the two event
+ * types AlphaFlow consumes (DocumentStatusChanged for outbound,
+ * DocumentReceived for inbound) plus PeppolParticipantVerificationChanged.
+ *
+ * IMPORTANT — observed payload shape from Sproom staging (Sep 2026):
+ *
+ *   Sproom uses the lowercase camelCase field name `webhookType` (NOT
+ *   `type`) as the discriminator. The values themselves are also
+ *   lowercase camelCase: `documentStatusChanged`, `documentReceived`,
+ *   `peppolParticipantVerificationChanged`. We accept both `webhookType`
+ *   and the legacy `type` field for forward/backward compatibility, and
+ *   match case-insensitively.
+ *
+ *   For DocumentStatusChanged, Sproom also includes a top-level
+ *   `documentStatus` field (e.g. "created", "transmissionStarted",
+ *   "sent", "delivered", "approved", "rejected") and a nested
+ *   `statusDetails` block with the precise `state` + `statusCode` +
+ *   `deliveryType` + ISO `dateTime`.
+ *
+ * Unknown/extra fields are preserved via `[k: string]: unknown`.
  */
 export interface SproomWebhookEvent {
-  /** Webhook type discriminator (always present). */
-  type: SproomWebhookType;
+  /**
+   * Webhook type discriminator. Sproom actually posts this under the
+   * camelCase key `webhookType` (e.g. "documentReceived"). The legacy
+   * PascalCase `type` field is supported as a fallback for forward
+   * compatibility with the swagger documentation.
+   */
+  type?: SproomWebhookType;
+  /** Real Sproom field name — camelCase webhookType. */
+  webhookType?: string;
   /** Sproom document ID (GUID) the event refers to. */
   documentId?: string;
   /** New document status (for DocumentStatusChanged events). */
   status?: SproomDocumentStatus;
+  /**
+   * Top-level document status string for DocumentStatusChanged events.
+   * Sproom sends this as `documentStatus` (e.g. "created",
+   * "transmissionStarted", "sent", "approved", "rejected").
+   */
+  documentStatus?: string;
+  /** Nested status details block (state, statusCode, deliveryType, dateTime). */
+  statusDetails?: SproomWebhookStatusDetails;
   /** Previous document status (optional, for status transitions). */
   previousStatus?: SproomDocumentStatus;
   /** ISO-8601 timestamp of the event. */
@@ -265,6 +314,8 @@ export interface SproomWebhookEvent {
   documentType?: SproomDocumentRole;
   /** Document format (OioUbl2 or PeppolBis3). */
   documentFormat?: SproomDocumentFormat;
+  /** Whether related documents exist (DocumentReceived only). */
+  hasRelatedDocuments?: boolean;
   /** Preserve any extra fields Sproom adds. */
   [key: string]: unknown;
 }

@@ -81,24 +81,46 @@ export async function POST(request: Request) {
     // ── 2. Parse the webhook event ─────────────────────────────────
     const event = JSON.parse(rawBody) as SproomWebhookEvent;
 
+    // Sproom posts the discriminator under the camelCase key `webhookType`
+    // (e.g. "documentReceived"), NOT the PascalCase `type` field from the
+    // swagger docs. Accept either for forward/backward compat.
+    const rawType = (event.webhookType || event.type || '').toString();
+    const eventType = rawType.toLowerCase();
+
     // WARN-level logging (INFO is suppressed in production) so we can see
     // the actual event payload + type from Sproom.
-    const eventType = (event.type || '').toLowerCase();
     logger.warn('[WEBHOOK] Event received', {
+      webhookType: event.webhookType,
       type: event.type,
       eventTypeLower: eventType,
       documentId: event.documentId,
       companyId: event.companyId,
+      documentStatus: event.documentStatus,
+      state: event.statusDetails?.state,
+      statusCode: event.statusDetails?.statusCode,
       rawBodyPreview: rawBody.substring(0, 500),
     });
 
     // ── 3. Dispatch on event type ──
     //
-    // SPROOM webhook format (NOTE: Sproom returns type in LOWERCASE
-    // "documentReceived" — NOT the capitalized "DocumentReceived" from the
-    // swagger enum. Match case-insensitively to handle both forms).
-    //   { "type": "documentReceived",    "documentId": "<guid>", ... }
-    //   { "type": "documentStatusChanged","documentId": "<guid>", ... }
+    // SPROOM webhook format (observed from staging Sep 2026):
+    //
+    //   DocumentReceived:
+    //     { "documentType":"invoice", "hasRelatedDocuments":false,
+    //       "webhookType":"documentReceived",
+    //       "companyId":"<guid>", "documentId":"<guid>" }
+    //
+    //   DocumentStatusChanged:
+    //     { "documentStatus":"sent",
+    //       "statusDetails":{ "dateTime":"...", "state":"sent",
+    //         "statusCode":302, "deliveryType":"sproom" },
+    //       "webhookType":"documentStatusChanged",
+    //       "companyId":"<guid>", "documentId":"<guid>" }
+    //
+    //   PeppolParticipantVerificationChanged: { "webhookType":"...", ... }
+    //
+    // Match case-insensitively — both `webhookType` and `type` (swagger
+    // docs) are accepted as the discriminator.
     //
     // (eventType was already computed above for logging — reuse it here.)
     if (eventType === 'documentreceived') {
@@ -305,19 +327,28 @@ async function resolveTenant(data: {
 // ─── OUTBOUND: DocumentStatusChanged ───────────────────────────────
 
 async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
-  // Sproom: documentId (top-level), type = "DocumentStatusChanged".
-  // Sproom's webhook just tells us the status changed; we need to call
-  // GET /api/documents/{id}/state to get the actual current status.
+  // Sproom: documentId (top-level), webhookType = "documentStatusChanged".
+  // The webhook payload includes BOTH a top-level `documentStatus`
+  // (e.g. "sent", "approved", "rejected") and a nested `statusDetails`
+  // block with `state`, `statusCode`, `deliveryType`, and a high-precision
+  // ISO-8601 `dateTime`. We use `documentStatus` first, then fall back
+  // to `statusDetails.state`, then `event.status`, then the GET state API.
   const submissionId = event.documentId ?? '';
   const now = new Date();
 
   if (!submissionId) {
-    logger.warn('[SPROOM_WEBHOOK] No documentId in webhook', { type: event.type });
+    logger.warn('[SPROOM_WEBHOOK] No documentId in webhook', {
+      webhookType: event.webhookType,
+      type: event.type,
+    });
     return NextResponse.json({ received: true });
   }
 
-  // ── Fetch the document state to get the actual status ──
-  let status: string | undefined = event.status;
+  // ── Resolve the status from the webhook payload ──
+  // Sproom's webhook payload is authoritative for the new state — we
+  // prefer it over the GET /state API to avoid an extra round-trip.
+  let status: string | undefined =
+    event.documentStatus || event.statusDetails?.state || event.status;
   let details: string | undefined = event.reason;
 
   // The EInvoiceSending record stores the Sproom documentId in the
@@ -367,50 +398,56 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
     }
   }
 
-  // Map Sproom DocumentStatusType → AlphaFlow EInvoiceSendStatus
+  // Map Sproom DocumentStatusType → AlphaFlow EInvoiceSendStatus.
+  //
+  // Sproom posts status values as lowercase camelCase strings
+  // (e.g. "created", "transmissionStarted", "sent", "approved",
+  // "rejected", "delivered"). The switch below matches case-insensitively
+  // by normalising the status string to lowercase before comparison.
   let newStatus: string;
   let updateData: Record<string, unknown> = {};
   let dbStatus: string | null = null;
 
-  switch (status) {
+  switch (status?.toLowerCase()) {
     // ── Delivered to the receiving AP / recipient ──
-    case 'Sent':
-    case 'Received':
-    case 'TransmissionCompleted':
+    case 'sent':
+    case 'received':
+    case 'transmissioncompleted':
+    case 'delivered':
       newStatus = 'DELIVERED';
       dbStatus = 'DELIVERED';
       updateData = { status: 'DELIVERED', deliveredAt: now };
       break;
 
-    case 'Approved':
+    case 'approved':
       newStatus = 'ACCEPTED';
       dbStatus = 'ACCEPTED';
       updateData = { status: 'ACCEPTED', acceptedAt: now };
       break;
 
-    case 'Rejected':
+    case 'rejected':
       newStatus = 'REJECTED';
       dbStatus = 'REJECTED';
       updateData = { status: 'REJECTED', errorMessage: details || 'Recipient rejected the invoice' };
       break;
 
-    case 'Error':
-    case 'RuntimeError':
-    case 'SendError':
-    case 'SendNemHandelError':
-    case 'SendSproomError':
-    case 'SchematronValidationError':
-    case 'OIOSchemaValidationError':
-    case 'CustomValidationError':
+    case 'error':
+    case 'runtimeerror':
+    case 'senderror':
+    case 'sendnemhandelerror':
+    case 'sendsproomerror':
+    case 'schematronvalidationerror':
+    case 'oioschemavalidationerror':
+    case 'customvalidationerror':
       newStatus = 'FAILED';
       dbStatus = 'FAILED';
       updateData = { status: 'FAILED', errorMessage: details || `Document error: ${status}` };
       break;
 
-    case 'Created':
-    case 'EndpointNotFound':
-    case 'Incomplete':
-    case 'TransmissionStarted':
+    case 'created':
+    case 'endpointnotfound':
+    case 'incomplete':
+    case 'transmissionstarted':
       // Intermediate statuses — log but don't update
       logger.info('[WEBHOOK] Intermediate status received', { submissionId, status });
       return NextResponse.json({ received: true });
