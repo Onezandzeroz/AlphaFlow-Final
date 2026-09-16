@@ -310,9 +310,76 @@ function buildOioiublSellersItemId(gtin: string) {
 // ─── POSTAL ADDRESS (OIOUBL vs Peppol BIS 3) ──────────────────────
 
 /**
+ * Parse a Danish street address string into street name + building number.
+ *
+ * AlphaFlow stores addresses as a single string (e.g., "Vildvej 234, st."
+ * or "Leverandørvej 11"). OIOUBL's StructuredDK format requires separate
+ * `cbc:StreetName` and `cbc:BuildingNumber` elements. Sproom's F-LIB035
+ * schematron rule rejects StructuredDK addresses that have neither.
+ *
+ * Danish address formats handled:
+ *   "Street 123"             → street="Street", number="123"
+ *   "Street 123, 3."         → street="Street", number="123" (floor dropped)
+ *   "Street 123A"            → street="Street", number="123A"
+ *   "Street 12 A"            → street="Street", number="12 A"
+ *   "Street-name 123, st."   → street="Street-name", number="123"
+ *
+ * If no building number can be parsed, returns the full address as the
+ * street name and `buildingNumber: undefined`. The caller should then
+ * OMIT the AddressFormatCode element (so the F-LIB035 rule doesn't fire)
+ * OR switch to "UnstructuredDK" format.
+ */
+function parseDanishStreetAddress(address: string | undefined): {
+  streetName: string;
+  buildingNumber?: string;
+} {
+  if (!address || !address.trim()) {
+    return { streetName: 'Unknown' };
+  }
+  // Strip floor/apartment info — everything after the first comma.
+  // "Vildvej 234, st." → "Vildvej 234"
+  const mainAddress = address.split(',')[0].trim();
+
+  // Match pattern: "Street Name 123" or "Street Name 123A" — the
+  // building number is the LAST whitespace-separated token that
+  // starts with a digit (followed by an optional letter).
+  const trailingMatch = mainAddress.match(/^(.+?)\s+(\d+[A-Za-z]?)\s*$/);
+  if (trailingMatch) {
+    return {
+      streetName: trailingMatch[1].trim(),
+      buildingNumber: trailingMatch[2],
+    };
+  }
+
+  // Fallback: try to find a building number anywhere in the address.
+  // Useful for formats like "123 Street Name" (rare in DK but defensive).
+  const anywhereMatch = mainAddress.match(/\b(\d+[A-Za-z]?)\b/);
+  if (anywhereMatch) {
+    const num = anywhereMatch[0];
+    const idx = mainAddress.indexOf(num);
+    const street = mainAddress.substring(0, idx).trim();
+    return {
+      streetName: street || 'Unknown',
+      buildingNumber: num,
+    };
+  }
+
+  // No building number found — return the full address as street name.
+  return { streetName: mainAddress };
+}
+
+/**
  * Build the cac:PostalAddress block. For OIOUBL, includes the
  * AddressFormatCode element (StructuredDK) and emits it FIRST per the
  * UBL 2.1 schema sequence. For Peppol BIS 3, omits AddressFormatCode.
+ *
+ * F-LIB035 schematron rule (Sproom): if AddressFormatCode = StructuredDK,
+ * the address MUST have either a BuildingNumber or a Postbox element.
+ * To comply:
+ *   - Parse the building number from the street address.
+ *   - If parsing succeeds → emit StructuredDK + StreetName + BuildingNumber.
+ *   - If parsing fails → OMIT AddressFormatCode entirely (so the rule
+ *     doesn't fire). The address is still valid OIOUBL, just unstructured.
  */
 function buildPostalAddress(
   data: { streetAddress?: string; city?: string; postalCode?: string; country?: string },
@@ -320,9 +387,21 @@ function buildPostalAddress(
   isPeppolBis: boolean,
 ): Record<string, unknown> {
   void currencyCode; // reserved for future use (no currency in PostalAddress)
+  const parsed = parseDanishStreetAddress(data.streetAddress);
+  const hasBuildingNumber = !!parsed.buildingNumber;
+
   return {
-    ...(isPeppolBis ? {} : { 'cbc:AddressFormatCode': OIOUBL_ADDRESS_FORMAT_CODE }),
-    'cbc:StreetName': data.streetAddress || 'Unknown',
+    // Only emit AddressFormatCode=StructuredDK when we have a BuildingNumber
+    // to satisfy F-LIB035. If parsing failed, OMIT AddressFormatCode so
+    // the rule doesn't fire (the address is still valid OIOUBL).
+    ...(!isPeppolBis && hasBuildingNumber
+      ? { 'cbc:AddressFormatCode': OIOUBL_ADDRESS_FORMAT_CODE }
+      : {}),
+    'cbc:StreetName': parsed.streetName,
+    // Emit BuildingNumber only when we successfully parsed one.
+    ...(!isPeppolBis && parsed.buildingNumber
+      ? { 'cbc:BuildingNumber': parsed.buildingNumber }
+      : {}),
     'cbc:CityName': data.city || 'Unknown',
     'cbc:PostalZone': data.postalCode || '0000',
     'cac:Country': {
