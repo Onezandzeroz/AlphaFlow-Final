@@ -33,7 +33,6 @@ import {
   FileText,
   ChevronDown,
   Globe,
-  ShieldCheck,
   Settings,
   Link2,
   Zap,
@@ -145,7 +144,11 @@ export function SendEInvoiceDialog({
   const apConnected = !!einvoiceConfig?.sproomChildCompanyId;
 
   const isEmailChannel = channel === 'EMAIL';
-  const isEInvoiceChannel = channel === 'STORECOVE' || channel === 'PEPPOL' || channel === 'OIOUBL';
+  // Sproom is the only Access Point. Two e-invoice channels:
+  //   - 'STORECOVE' = Sproom Auto (default — OIOUBL for DK, Peppol BIS for cross-border)
+  //   - 'PEPPOL'    = Sproom Peppol (force Peppol BIS 3)
+  // Both route through sproomClient.sendDocument() in processEInvoiceSend().
+  const isEInvoiceChannel = channel === 'STORECOVE' || channel === 'PEPPOL';
   const showPreflightWarning =
     isEInvoiceChannel &&
     preflightResult?.exists === false &&
@@ -306,8 +309,8 @@ export function SendEInvoiceDialog({
             isDa ? 'E-faktura afsendt!' : 'E-invoice sent!',
             {
               description: isDa
-                ? `${invoice.invoiceNumber} sendes via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? apName : 'Peppol BIS'}. Klik "Send-historik" for at se status.`
-                : `${invoice.invoiceNumber} sending via ${channel === 'OIOUBL' ? 'NemHandel' : channel === 'STORECOVE' ? apName : 'Peppol BIS'}. Click "Send history" to see status.`,
+                ? `${invoice.invoiceNumber} sendes via ${channel === 'STORECOVE' ? `${apName} (Auto)` : `${apName} (Peppol)`}. Klik "Send-historik" for at se status.`
+                : `${invoice.invoiceNumber} sending via ${channel === 'STORECOVE' ? `${apName} (Auto)` : `${apName} (Peppol)`}. Click "Send history" to see status.`,
             },
           );
         }
@@ -498,7 +501,7 @@ export function SendEInvoiceDialog({
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{isDa ? 'Kanal' : 'Channel'}</span>
                       <Badge variant="outline" className="text-[10px] px-2 border-emerald-300 dark:border-emerald-700">
-                        {sendResult.channel === 'EMAIL' ? (isDa ? 'E-mail (PDF)' : 'Email (PDF)') : sendResult.channel === 'OIOUBL' ? 'OIOUBL (NemHandel)' : sendResult.channel === 'STORECOVE' ? `${apName} (Peppol+NemHandel)` : 'Peppol BIS'}
+                        {sendResult.channel === 'EMAIL' ? (isDa ? 'E-mail (PDF)' : 'Email (PDF)') : sendResult.channel === 'STORECOVE' ? `${apName} (Auto)` : `${apName} (Peppol)`}
                       </Badge>
                     </div>
                     {sendResult.messageId && (
@@ -584,7 +587,7 @@ export function SendEInvoiceDialog({
                     <SelectItem value="STORECOVE">
                       <div className="flex items-center gap-2">
                         <Link2 className="h-3.5 w-3.5 text-violet-500" />
-                        <span>{apName} ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
+                        <span>Sproom ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
                         {apConnected && (
                           <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[8px] px-1 py-0">
                             <Zap className="h-2.5 w-2.5" />
@@ -596,13 +599,7 @@ export function SendEInvoiceDialog({
                     <SelectItem value="PEPPOL">
                       <div className="flex items-center gap-2">
                         <Globe className="h-3.5 w-3.5 text-blue-500" />
-                        <span>Peppol BIS</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="OIOUBL">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-3.5 w-3.5 text-[#0d9488]" />
-                        <span>OIOUBL ({isDa ? 'NemHandel' : 'NemHandel'})</span>
+                        <span>Sproom ({isDa ? 'Peppol' : 'Peppol'})</span>
                       </div>
                     </SelectItem>
                     <SelectItem value="EMAIL">
@@ -614,14 +611,12 @@ export function SendEInvoiceDialog({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {channel === 'STORECOVE' && isDa && `Automatisk levering via ${apName} Access Point. Sendes til både Peppol og NemHandel.`}
-                  {channel === 'STORECOVE' && !isDa && `Automatic delivery via ${apName} Access Point. Routed to both Peppol and NemHandel.`}
-                  {channel === 'PEPPOL' && isDa && 'Peppol BIS Billing 3.0-format. International e-fakturastandard.'}
-                  {channel === 'PEPPOL' && !isDa && 'Peppol BIS Billing 3.0 format. International e-invoicing standard.'}
-                  {channel === 'OIOUBL' && isDa && 'OIOUBL-format via NemHandel-netværket. Standard for offentlige danske institutioner.'}
-                  {channel === 'OIOUBL' && !isDa && 'OIOUBL format via NemHandel network. Standard for Danish public institutions.'}
-                  {channel === 'EMAIL' && isDa && 'Sender fakturaen som PDF vedhæftning til kundens e-mailadresse. Kræver ikke Peppol/NemHandel.'}
-                  {channel === 'EMAIL' && !isDa && 'Sends the invoice as a PDF attachment to the customer\'s email address. Does not require Peppol/NemHandel.'}
+                  {channel === 'STORECOVE' && isDa && 'Standard. Sproom vælger automatisk OIOUBL for danske modtagere (NemHandel) og Peppol BIS 3 for internationale modtagere.'}
+                  {channel === 'STORECOVE' && !isDa && 'Default. Sproom auto-selects OIOUBL for Danish recipients (NemHandel) and Peppol BIS 3 for international recipients.'}
+                  {channel === 'PEPPOL' && isDa && 'Tving Peppol BIS 3-format. Brug kun til internationale sends hvor modtageren eksplicit kræver Peppol.'}
+                  {channel === 'PEPPOL' && !isDa && 'Force Peppol BIS 3 format. Only use for international sends where the recipient explicitly requires Peppol.'}
+                  {channel === 'EMAIL' && isDa && 'Sender fakturaen som PDF vedhæftning til kundens e-mailadresse. Kræver ikke Sproom/NemHandel.'}
+                  {channel === 'EMAIL' && !isDa && 'Sends the invoice as a PDF attachment to the customer\'s email address. Does not require Sproom/NemHandel.'}
                 </p>
                 {channel === 'STORECOVE' && !apConnected && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-2 mt-1.5 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">

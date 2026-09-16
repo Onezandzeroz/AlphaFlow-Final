@@ -22,7 +22,6 @@ import {
   RefreshCw,
   Loader2,
   Globe,
-  ShieldCheck,
   ChevronDown,
   ChevronUp,
   Send,
@@ -105,18 +104,25 @@ function getStatusConfig(status: string, isDa: boolean) {
 }
 
 function getChannelIcon(channel: string) {
-  if (channel === 'OIOUBL' || channel === 'NEMHANDEL') {
-    return <ShieldCheck className="h-3.5 w-3.5 text-[#0d9488]" />;
-  }
+  // Sproom is the only Access Point now — both channels (Auto / Peppol)
+  // route through sproomClient. Use the same icon; the label differentiates.
   return <Globe className="h-3.5 w-3.5 text-blue-500" />;
 }
 
 function getChannelLabel(channel: string, isDa: boolean) {
-  if (channel === 'OIOUBL' || channel === 'NEMHANDEL') {
-    return isDa ? 'OIOUBL' : 'OIOUBL';
+  // Sproom Auto (alias 'STORECOVE' / 'OIOUBL' / 'NEMHANDEL') — auto-selects
+  // OIOUBL for Danish recipients, Peppol BIS 3 for international.
+  // Sproom Peppol (alias 'PEPPOL' / 'PEPPOL_BIS') — forces Peppol BIS 3.
+  if (
+    channel === 'OIOUBL' ||
+    channel === 'NEMHANDEL' ||
+    channel === 'NEMHANDEL_OIOUBL' ||
+    channel === 'STORECOVE'
+  ) {
+    return isDa ? 'Sproom (Auto)' : 'Sproom (Auto)';
   }
-  if (channel === 'PEPPOL') {
-    return 'Peppol BIS';
+  if (channel === 'PEPPOL' || channel === 'PEPPOL_BIS') {
+    return isDa ? 'Sproom (Peppol)' : 'Sproom (Peppol)';
   }
   return channel;
 }

@@ -37,17 +37,17 @@
  * 7. OIOUBL Choreographies: Access Points must support OIOUBL document
  *    formats and choreographies, including OIOUBL schematrons.
  *
- * IMPORTANT: When using Storecove as the Access Point provider, all of
- * the above requirements are handled by Storecove on AlphaFlow's behalf.
+ * IMPORTANT: When using Sproom as the Access Point provider, all of
+ * the above requirements are handled by Sproom on AlphaFlow's behalf.
  * AlphaFlow only needs to generate valid OIOUBL XML and submit it to
- * the Storecove API. Storecove handles MitID signing, AS4 transmission,
+ * the Sproom API. Sproom handles MitID signing, AS4 transmission,
  * schema/schematron validation at the receiving AP, and MLR/AR responses.
  *
  * This client provides:
  * - Simulation mode for development/testing
  * - NemHandel eDelivery specification constants
  * - SMP/NHR participant lookup helpers
- * - MitID certificate status checking (via Storecove)
+ * - MitID certificate status checking (via Sproom)
  *
  * References:
  * - NemHandel eDelivery specification (Erhvervsstyrelsen)
@@ -124,7 +124,7 @@ export interface NemHandelClientConfig {
   apiKey?: string;
   /** Whether to use simulation mode (default: true) */
   simulationMode?: boolean;
-  /** Whether Storecove is being used as the Access Point (default: true) */
+  /** Whether Sproom is being used as the Access Point (default: true) */
   useStorecove?: boolean;
 }
 
@@ -186,12 +186,12 @@ export const NEMHANDEL_AS4_REQUIREMENTS = {
  * NemHandel eDelivery client.
  *
  * In production, this client is NOT used directly for invoice submission —
- * Storecove handles all AS4 transmission on AlphaFlow's behalf. This client
+ * Sproom handles all AS4 transmission on AlphaFlow's behalf. This client
  * provides simulation capabilities and NemHandel eDelivery specification
  * helpers for pre-flight checks and documentation.
  *
- * For direct invoice submission, use StorecoveClient.submitInvoice()
- * with routeToNemhandel: true.
+ * For direct invoice submission, use the Sproom client
+ * (`sproomClient.sendDocument()`) with routeToNemhandel: true.
  */
 export class NemHandelClient {
   private baseUrl: string;
@@ -214,7 +214,7 @@ export class NemHandelClient {
    * Checks whether a recipient is registered in the NemHandel eDelivery
    * network and can receive e-invoices via Peppol BIS Billing 3.0 / OIOUBL.
    *
-   * In production, this is handled by Storecove's participant lookup API.
+   * In production, this is handled by Sproom's participant lookup API.
    * This method provides simulation for development.
    *
    * @param cvr - Danish CVR number (8 digits)
@@ -225,9 +225,9 @@ export class NemHandelClient {
       return this.simulateLookupParticipant(cvr);
     }
 
-    // In production, use Storecove's participant lookup
-    // (see /api/storecove/participants)
-    logger.warn('[NEMHANDEL] Direct NHR lookup not implemented — use Storecove participant lookup API instead');
+    // In production, use Sproom's participant lookup
+    // (see /api/sproom/participants or the Sproom REST client)
+    logger.warn('[NEMHANDEL] Direct NHR lookup not implemented — use Sproom participant lookup API instead');
     return {
       exists: false,
       scheme: DK_CVR_SCHEME,
@@ -241,8 +241,8 @@ export class NemHandelClient {
    * Send an OIOUBL invoice XML via NemHandel eDelivery.
    *
    * IMPORTANT: In production, this should NOT be called directly.
-   * Use StorecoveClient.submitInvoice() with routeToNemhandel: true
-   * instead. Storecove handles:
+   * Use sproomClient.sendDocument() with routeToNemhandel: true
+   * instead. Sproom handles:
    *   - MitID certificate signing
    *   - AS4 transmission to the receiving AP
    *   - Schema validation at the receiving AP
@@ -263,15 +263,15 @@ export class NemHandelClient {
       return this.simulateSendInvoice(xmlContent, recipientCvr);
     }
 
-    // In production, this is handled by Storecove
-    // See: storecoveClient.submitInvoice(xml, { routeToNemhandel: true })
+    // In production, this is handled by Sproom
+    // See: sproomClient.sendDocument(xml, { routeToNemhandel: true })
     return {
       success: false,
-      errorCode: 'NEMHANDEL_USE_STORECOVE',
+      errorCode: 'NEMHANDEL_USE_SPROOM',
       errorMessage:
         'Direct NemHandel eDelivery submission is not supported. ' +
-        'Use StorecoveClient.submitInvoice() with routeToNemhandel: true instead. ' +
-        'Storecove handles MitID signing, AS4 transmission, and validation on your behalf.',
+        'Use sproomClient.sendDocument() with routeToNemhandel: true instead. ' +
+        'Sproom handles MitID signing, AS4 transmission, and validation on your behalf.',
     };
   }
 
@@ -284,7 +284,7 @@ export class NemHandelClient {
    * 1. Schema validation at receiving AP → transport acknowledgment
    * 2. Schematron validation → forwarding or MLR/AR rejection
    *
-   * In production, status updates come via Storecove webhooks.
+   * In production, status updates come via Sproom webhooks.
    *
    * @param messageId - The AS4 message ID returned from sendInvoice
    * @returns Current delivery status
@@ -294,11 +294,11 @@ export class NemHandelClient {
       return this.simulateDeliveryStatus(messageId);
     }
 
-    // In production, use Storecove's submission status API
-    // See: storecoveClient.getSubmissionStatus(submissionId)
+    // In production, use Sproom's document state API
+    // See: sproomClient.getDocumentState(documentId)
     return {
       status: 'PENDING',
-      rejectionReason: 'Direct NemHandel status check not supported — use Storecove webhook or polling API',
+      rejectionReason: 'Direct NemHandel status check not supported — use Sproom webhook or polling API',
     };
   }
 
@@ -310,8 +310,8 @@ export class NemHandelClient {
    * This registers the company's endpoint ID in the centralized NHR SMP,
    * making it discoverable on the NemHandel eDelivery network.
    *
-   * In production with Storecove, registration is typically handled via
-   * Storecove's legal entity onboarding. This method provides simulation
+   * In production with Sproom, registration is typically handled via
+   * Sproom's child company onboarding. This method provides simulation
    * for development/testing.
    *
    * The registration also registers the company as a receiver of
@@ -339,14 +339,14 @@ export class NemHandelClient {
     }
 
     // In production, NHR registration is handled via:
-    // 1. Storecove legal entity onboarding (recommended), OR
+    // 1. Sproom child company onboarding (recommended), OR
     // 2. Direct registration through Nemhandelsregisteret portal
     //    at https://nemhandel.dk/
     //
     // Direct API-based NHR registration is not publicly available.
-    // For production, ensure the company's legal entity is registered
-    // in Storecove with the correct CVR and endpoint ID.
-    logger.warn('[NEMHANDEL] Direct NHR registration not available via API — use Storecove onboarding or NHR portal');
+    // For production, ensure the company's child company is registered
+    // in Sproom with the correct CVR and endpoint ID.
+    logger.warn('[NEMHANDEL] Direct NHR registration not available via API — use Sproom onboarding or NHR portal');
 
     // Return a simulated registration number as fallback
     const registrationNo = `NHR-${cvr}-${Date.now().toString(36).toUpperCase()}`;
@@ -354,7 +354,7 @@ export class NemHandelClient {
       cvr,
       endpointId,
       registrationNo,
-      note: 'For production, complete registration via Storecove or NHR portal',
+      note: 'For production, complete registration via Sproom or NHR portal',
     });
 
     return registrationNo;
@@ -394,7 +394,7 @@ export class NemHandelClient {
   }
 
   /**
-   * Check if the client is configured to use Storecove as the AP.
+   * Check if the client is configured to use Sproom as the AP.
    */
   get isUsingStorecove(): boolean {
     return this.useStorecove;
@@ -440,7 +440,7 @@ export class NemHandelClient {
       messageId,
       as4MessageId,
       recipientCvr,
-      note: 'In production, Storecove handles MitID signing and AS4 transmission',
+      note: 'In production, Sproom handles MitID signing and AS4 transmission',
     });
 
     return {
@@ -506,7 +506,7 @@ export class NemHandelClient {
       cvr,
       endpointId,
       registrationNo,
-      note: 'In production, use Storecove legal entity onboarding or NHR portal',
+      note: 'In production, use Sproom child company onboarding or NHR portal',
     });
 
     return registrationNo;
@@ -525,12 +525,12 @@ export class NemHandelClient {
  *
  * Simulation mode is the default (safe — no real API calls).
  * In production, all NemHandel eDelivery operations are handled
- * by the Storecove Access Point client.
+ * by the Sproom Access Point client.
  *
  * Set NEMHANDEL_SIMULATION_MODE=false in production if you need
- * direct NHR SMP access (not typically required when using Storecove).
+ * direct NHR SMP access (not typically required when using Sproom).
  */
 export const nemHandelClient = new NemHandelClient({
   simulationMode: process.env.NEMHANDEL_SIMULATION_MODE !== 'false',
-  useStorecove: true, // Always use Storecove for production eDelivery
+  useStorecove: true, // Always use Sproom for production eDelivery
 });

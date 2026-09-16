@@ -795,8 +795,8 @@ export function nemhandelRegistrationNoticeHtml(
     : 'How to enroll';
 
   const consentBody = language === 'da'
-    ? `Tilmelding er frivillig og kræver dit samtykke. Gå til <strong>Indstillinger → eLevering / eFaktura</strong> i AlphaFlow, aktivér e-fakturering, og marker at du ønsker tilmelding til NemHandelsregisteret. Når du har givet samtykke, håndterer AlphaFlow automatisk tilmeldingen via vores integrerede Storecove Access Point.`
-    : `Enrollment is voluntary and requires your consent. Go to <strong>Settings → e-Delivery / e-Invoice</strong> in AlphaFlow, enable e-invoicing, and mark that you wish to enroll in the NemHandel Register. Once you have given consent, AlphaFlow automatically handles the enrollment via our integrated Storecove Access Point.`;
+    ? `Tilmelding er frivillig og kræver dit samtykke. Gå til <strong>Indstillinger → eLevering / eFaktura</strong> i AlphaFlow, aktivér e-fakturering, og marker at du ønsker tilmelding til NemHandelsregisteret. Når du har givet samtykke, håndterer AlphaFlow automatisk tilmeldingen via vores integrerede Sproom Access Point.`
+    : `Enrollment is voluntary and requires your consent. Go to <strong>Settings → e-Delivery / e-Invoice</strong> in AlphaFlow, enable e-invoicing, and mark that you wish to enroll in the NemHandel Register. Once you have given consent, AlphaFlow automatically handles the enrollment via our integrated Sproom Access Point.`;
 
   const ctaText = language === 'da'
     ? 'Gå til e-faktura-indstillinger'

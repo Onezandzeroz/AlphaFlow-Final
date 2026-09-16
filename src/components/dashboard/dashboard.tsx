@@ -732,8 +732,8 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
         title: language === 'da' ? 'eLevering / eFaktura' : 'eDelivery / e-Invoice',
         description: language === 'da' ? 'Aktiver e-faktura og registrer i NemHandel' : 'Enable e-invoicing and register with NemHandel',
         detail: language === 'da'
-          ? 'NemHandel eDelivery g\u00f8r det muligt at sende og modtage e-fakturaer direkte fra AlphaFlow \u2014 uden manuel upload. Registrer din virksomhed i NemHandelsregisteret og forbind en Access Point udbyder (f.eks. Storecove) for automatisk levering via Peppol-netv\u00e6rket.'
-          : 'NemHandel eDelivery enables sending and receiving e-invoices directly from AlphaFlow \u2014 no manual upload needed. Register your company in NemHandelsregisteret and connect an Access Point provider (e.g. Storecove) for automatic delivery via the Peppol network.',
+          ? 'NemHandel eDelivery g\u00f8r det muligt at sende og modtage e-fakturaer direkte fra AlphaFlow \u2014 uden manuel upload. Registrer din virksomhed i NemHandelsregisteret og forbind Sproom Access Point for automatisk levering via Peppol- og NemHandel-netv\u00e6rkene.'
+          : 'NemHandel eDelivery enables sending and receiving e-invoices directly from AlphaFlow \u2014 no manual upload needed. Register your company in NemHandelsregisteret and connect the Sproom Access Point for automatic delivery via the Peppol and NemHandel networks.',
         bgImage: '/VidClips/Onboarding/NemHandel-OIOUBL.jpg',
         icon: Zap,
         done: hasEInvoiceSetup,

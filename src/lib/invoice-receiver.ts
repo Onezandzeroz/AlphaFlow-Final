@@ -3,7 +3,8 @@
  *
  * Used by BOTH:
  *  - Manual XML upload  → POST /api/invoices/receive  (authenticated user)
- *  - Storecove webhook  → POST /api/storecove/webhook  (no user, system event)
+ *  - AP webhook → POST /api/sproom/webhook  (new Sproom, no user, system event)
+ *    or the legacy POST /api/storecove/webhook (kept for backward compat).
  *
  * Erhvervsstyrelsen requires a platform to both SEND and RECEIVE e-invoices.
  * This module is the single source of truth for the receive-and-store path:
@@ -11,9 +12,9 @@
  * MLR / ApplicationResponse → audit log → notify frontend.
  *
  * Idempotency: ReceivedInvoice has @@unique([companyId, invoiceNumber]).
- * If Storecove retries a webhook (up to 5 days), the duplicate is detected and
- * returned as `{ duplicate: true }` without error, so the webhook returns 200
- * and Storecove stops retrying.
+ * If the Access Point retries a webhook (Sproom retries for up to 5 days),
+ * the duplicate is detected and returned as `{ duplicate: true }` without
+ * error, so the webhook returns 200 and the AP stops retrying.
  */
 
 import { db } from '@/lib/db';
@@ -32,9 +33,13 @@ export interface StoreReceivedInvoiceParams {
   userId: string | null;
   /** Raw UBL 2.1 / OIOUBL XML string. */
   xml: string;
-  /** Where this invoice came from. */
+  /**
+   * Where this invoice came from. The `'storecove_webhook'` value is a
+   * legacy string kept for backward compat with existing DB rows; the
+   * active Sproom webhook uses `'ap_webhook'`.
+   */
   source: ReceiveSource;
-  /** Storecove document GUID (when source = storecove_webhook). */
+  /** Access Point document GUID (when source is a webhook delivery). */
   documentGuid?: string;
   /** Audit metadata (IP, user-agent, webhook event id, etc.). */
   auditMeta?: Record<string, unknown>;
@@ -138,11 +143,16 @@ export async function storeReceivedInvoice(
     return { success: false, error: 'Invalid issue date in XML' };
   }
 
-  // Traceability note for webhook-delivered invoices.
+  // Traceability note for webhook-delivered invoices. The string in the
+  // note is what the inbox UI matches on (see einvoice-inbox.tsx). For
+  // legacy DB rows we still emit "Storecove webhook" so the inbox badge
+  // continues to render for invoices received before the Sproom migration.
   const notes =
-    source === 'storecove_webhook' && documentGuid
-      ? `Automatisk modtaget via Storecove webhook · document_guid: ${documentGuid}`
-      : undefined;
+    source === 'ap_webhook' && documentGuid
+      ? `Automatisk modtaget via Sproom webhook · document_guid: ${documentGuid}`
+      : source === 'storecove_webhook' && documentGuid
+        ? `Automatisk modtaget via Storecove webhook · document_guid: ${documentGuid}`
+        : undefined;
 
   // ── 5. Persist ───────────────────────────────────────────────────
   const invoice = await db.receivedInvoice.create({

@@ -7,8 +7,8 @@ import { withGuard } from '@/lib/route-guard';
 
 // POST /api/invoices/receive — Receive and store an e-invoice (manual upload)
 //
-// This is the manual-upload path. The automatic path is the Storecove webhook
-// at /api/storecove/webhook (event: received_document). Both use the same
+// This is the manual-upload path. The automatic path is the Sproom webhook
+// at /api/sproom/webhook (event: DocumentReceived). Both use the same
 // shared storeReceivedInvoice() logic so parsing, validation, response-XML
 // generation, audit logging and frontend notification are identical.
 export const POST = withGuard(

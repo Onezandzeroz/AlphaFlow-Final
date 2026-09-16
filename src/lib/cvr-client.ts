@@ -150,8 +150,9 @@ interface EsSearchResponse {
 /**
  * CVR Register client. Singleton via the `cvrClient` export.
  *
- * Follows the same architecture as StorecoveClient: class with
- * simulation mode, AbortController timeout, and a singleton instance.
+ * Follows the same architecture as the Sproom and legacy AP clients:
+ * a class with simulation mode, AbortController timeout, and a
+ * singleton instance.
  */
 export class CvrClient {
   private baseUrl: string;

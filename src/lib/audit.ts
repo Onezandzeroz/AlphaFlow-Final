@@ -94,7 +94,7 @@ interface AuditOptions {
   entityId: string;
   /**
    * The user who triggered the action. Pass `null` for system-initiated
-   * events (e.g. Storecove inbound webhook delivering an e-invoice with no
+   * events (e.g. Sproom inbound webhook delivering an e-invoice with no
    * authenticated user in context). The AuditLog.userId column is nullable.
    */
   userId: string | null;

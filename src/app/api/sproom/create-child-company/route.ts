@@ -11,8 +11,8 @@ import { withGuard } from '@/lib/route-guard';
  * POST /api/sproom/create-child-company
  *
  * Creates a Sproom "child company" for the active tenant. This is Sproom's
- * equivalent of Storecove's "legal entity" — the tenant's identity in the
- * Sproom platform that can send and receive e-invoices.
+ * equivalent of the previous AP's "legal entity" — the tenant's identity in
+ * the Sproom platform that can send and receive e-invoices.
  *
  * After creating the child company, this route also:
  *   1. Registers the child in the NemHandel network (OIOUBL profiles)

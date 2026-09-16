@@ -789,13 +789,13 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                   <SelectItem value="OIOUBL">
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="h-3.5 w-3.5 text-[#0d9488]" />
-                      <span>OIOUBL ({isDa ? 'NemHandel' : 'NemHandel'})</span>
+                      <span>Sproom ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="PEPPOL">
                     <div className="flex items-center gap-2">
                       <Globe className="h-3.5 w-3.5 text-blue-500" />
-                      <span>Peppol BIS</span>
+                      <span>Sproom ({isDa ? 'Peppol' : 'Peppol'})</span>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -803,11 +803,11 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
               <p className="text-xs text-muted-foreground">
                 {defaultChannel === 'OIOUBL'
                   ? (isDa
-                    ? 'OIOUBL er standardformatet for danske offentlige institutioner.'
-                    : 'OIOUBL is the standard format for Danish public institutions.')
+                    ? 'Standard. Sproom vælger automatisk OIOUBL for danske modtagere (NemHandel) og Peppol BIS 3 for internationale modtagere.'
+                    : 'Default. Sproom auto-selects OIOUBL for Danish recipients (NemHandel) and Peppol BIS 3 for international recipients.')
                   : (isDa
-                    ? 'Peppol BIS er en international e-fakturastandard.'
-                    : 'Peppol BIS is an international e-invoicing standard.')}
+                    ? 'Tving Peppol BIS 3-format. Brug kun til internationale sends hvor modtageren eksplicit kræver Peppol.'
+                    : 'Force Peppol BIS 3 format. Only use for international sends where the recipient explicitly requires Peppol.')}
               </p>
             </div>
 

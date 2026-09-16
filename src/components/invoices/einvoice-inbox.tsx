@@ -103,7 +103,7 @@ interface ReceivedInvoice {
   validationWarnings?: string | null;
   createdAt: string;
   journalEntryId?: string | null;
-  /** When present and containing "Storecove webhook", the invoice was auto-received. */
+  /** When present and containing "Sproom webhook" / "ap_webhook" (or legacy "Storecove webhook"), the invoice was auto-received. */
   notes?: string | null;
 }
 
@@ -505,7 +505,7 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
                               <span className="font-medium text-sm truncate max-w-[200px]">
                                 {inv.supplierName}
                               </span>
-                              {inv.notes && inv.notes.includes('Storecove webhook') && (
+                              {inv.notes && (inv.notes.includes('Storecove webhook') || inv.notes.includes('Sproom webhook') || inv.notes.includes('ap_webhook')) && (
                                 <Badge variant="outline" className="shrink-0 text-[10px] py-0 px-1.5 font-normal text-emerald-700 border-emerald-300 bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:bg-emerald-950/40" title={inv.notes}>
                                   Auto
                                 </Badge>

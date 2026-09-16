@@ -5,7 +5,7 @@
  * (Erhvervsstyrelsen / VIRK) and returns company metadata for auto-fill.
  *
  * Requires authentication + an active company (follows the same guard
- * pattern as /api/storecove/participants). Rate-limited to 20 lookups
+ * pattern as /api/sproom/participants). Rate-limited to 20 lookups
  * per minute per IP to protect the CVR API quota.
  *
  * Response (200):
@@ -36,7 +36,7 @@ export const GET = withGuard(
   },
   async (request, ctx) => {
     try {
-      // Rate limit: 20 lookups per minute per IP (matches storecove participants)
+      // Rate limit: 20 lookups per minute per IP (matches Sproom participants route)
       const clientIp = getClientIp(request);
       const rl = rateLimit(`cvr-lookup:${clientIp}`, {
         maxRequests: 20,
@@ -81,7 +81,7 @@ export const GET = withGuard(
       // A CVR number identifies a single legal entity. Two tenants must
       // NEVER be able to verify the same CVR — otherwise both could send
       // e-invoices under the same Peppol identifier (0184:<CVR>), which
-      // is illegal and would cause Storecove "Peppol identifier already
+      // is illegal and would cause Sproom "Peppol identifier already
       // exists" errors at best, and duplicate-delivery confusion at worst.
       //
       // Before stamping cvrVerifiedAt, check that no OTHER company has

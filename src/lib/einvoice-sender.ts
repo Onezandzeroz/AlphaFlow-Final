@@ -146,7 +146,24 @@ function generateMessageId(): string {
 }
 
 /**
- * Map send channel to OIOUBL format
+ * Map send channel to OIOUBL format.
+ *
+ * The UI exposes three e-invoice channels to the user:
+ *   - 'OIOUBL'    (alias for NEMHANDEL_OIOUBL) — Danish NemHandel format
+ *   - 'PEPPOL'    (alias for PEPPOL_BIS)       — International Peppol BIS 3
+ *   - 'STORECOVE' (legacy alias for Sproom)    — "Auto" — let Sproom pick
+ *
+ * The STORECOVE channel is the default in the send dialog when the
+ * tenant hasn't set a default. It's described to the user as
+ * "Auto Peppol+NemHandel" — but a single document can only be sent on
+ * ONE network, so we have to pick. For Danish-to-Danish sends (the
+ * overwhelmingly common case), OIOUBL is the right default: the
+ * recipient is registered in NemHandel and expects OIOUBL. For
+ * cross-border sends, the user should explicitly select PEPPOL.
+ *
+ * Mapping STORECOVE → OIOUBL also makes the format label in the inbox
+ * show "OIOUBL" (not "Peppol BIS") for default-channel sends, which
+ * matches user expectations for Danish NemHandel e-invoicing.
  */
 function channelToFormat(channel: EInvoiceSendChannel): EInvoiceFormat {
   switch (channel) {
@@ -155,7 +172,10 @@ function channelToFormat(channel: EInvoiceSendChannel): EInvoiceFormat {
     case EInvoiceSendChannel.PEPPOL_BIS:
       return EInvoiceFormat.PEPPOL_BIS;
     case EInvoiceSendChannel.STORECOVE:
-      return EInvoiceFormat.PEPPOL_BIS;
+      // "Auto" channel — default to OIOUBL for Danish NemHandel sends.
+      // Cross-border users must explicitly select the PEPPOL channel
+      // to opt into Peppol BIS 3 format.
+      return EInvoiceFormat.OIOUBL;
     default:
       return EInvoiceFormat.OIOUBL;
   }
@@ -1026,17 +1046,31 @@ export async function getInvoiceSendHistory(
 /**
  * ── Channel alias <-> Prisma enum normalisation ──
  *
- * The settings UI (and several invoice dialogs) use short aliases for the
- * default sending channel — 'OIOUBL' and 'PEPPOL' — because those match the
- * document-format vocabulary users already know. The database column
- * `einvoiceDefaultChannel`, however, is typed as the Prisma enum
- * `EInvoiceSendChannel` whose members are NEMHANDEL_OIOUBL | PEPPOL_BIS |
- * STORECOVE.
+ * Sproom is the ONLY Access Point. The UI exposes two e-invoice channels:
  *
- * Sending the alias directly to Prisma raises a validation error (the root
- * cause of the "Der opstod en fejl. Prøv igen." toast on the e-delivery
- * onboarding step). These helpers translate at the lib boundary so callers
- * may freely use either the alias or the canonical enum name.
+ *   - 'STORECOVE' (alias, default) → "Sproom (Auto Peppol+NemHandel)"
+ *       - Auto-selects OIOUBL for Danish recipients (NemHandel network)
+ *       - Auto-selects Peppol BIS 3 for international recipients
+ *       - DB enum: EInvoiceSendChannel.STORECOVE (legacy name kept for
+ *         backward compat with existing rows — renaming would require a
+ *         Prisma migration)
+ *
+ *   - 'PEPPOL' (alias) → "Sproom (Peppol)"
+ *       - Forces Peppol BIS 3 format (cross-border sends)
+ *       - DB enum: EInvoiceSendChannel.PEPPOL_BIS
+ *
+ *   - 'OIOUBL' (alias, settings-only) → "Sproom (Auto Peppol+NemHandel)"
+ *       - Same as STORECOVE but goes through the NEMHANDEL_OIOUBL enum
+ *       - DB enum: EInvoiceSendChannel.NEMHANDEL_OIOUBL
+ *       - Kept as a settings-page option for legacy tenants that
+ *         selected it before the channel dropdown was simplified.
+ *
+ * The settings UI uses short aliases ('OIOUBL' / 'PEPPOL' / 'STORECOVE')
+ * because they match the document-format vocabulary users know. The
+ * database column `einvoiceDefaultChannel` is typed as the Prisma enum
+ * `EInvoiceSendChannel` whose members are NEMHANDEL_OIOUBL | PEPPOL_BIS |
+ * STORECOVE. These helpers translate at the lib boundary so callers may
+ * freely use either the alias or the canonical enum name.
  */
 const CHANNEL_ALIAS_TO_ENUM: Record<string, EInvoiceSendChannel> = {
   OIOUBL: 'NEMHANDEL_OIOUBL',

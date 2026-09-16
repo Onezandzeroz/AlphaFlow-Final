@@ -76,7 +76,7 @@ export enum Feature {
   DataExport = 'DATA_EXPORT',
   /** Hermes AI advisory. Pro+. */
   Hermes = 'HERMES',
-  /** Auto e-invoice via Peppol/NemHandel (Storecove). Business+. */
+  /** Auto e-invoice via Peppol/NemHandel (Sproom). Business+. */
   AutoEinvoice = 'AUTO_EINVOICE',
   /** Annual report iXBRL for Erhvervsstyrelsen. Månedlig+. */
   AnnualReportIxbnl = 'ANNUAL_REPORT_IXBRL',
@@ -286,8 +286,10 @@ export function isProjectsAvailable(ctx: AuthContext | null): boolean {
 
 /**
  * Auto e-invoice availability: plan tier >= Business (twoyear) AND
- * Storecove is connected. The storecoveConnected flag is a technical
- * config flag, not a tier gate — but auto-send requires both.
+ * Sproom is connected. The storecoveConnected flag is a legacy technical
+ * config flag kept for backward compat (Sproom connection is now tracked
+ * via sproomChildCompanyId), but auto-send still requires the company to
+ * be connected to Sproom.
  */
 export function isAutoEinvoiceAvailable(ctx: AuthContext | null): boolean {
   if (!ctx) return false;

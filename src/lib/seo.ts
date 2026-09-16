@@ -147,7 +147,7 @@ export const FAQ_DA: readonly {
   {
     question: "Kan jeg sende e-fakturaer med AlphaFlow?",
     answer:
-      "Ja, AlphaFlow understøtter Peppol-netværket via OIOUBL BIS Billing 3.0-standarden. Du kan registrere dit virksomhedsnummer, sende og modtage e-fakturaer direkte i systemet, og spore afsendelsesstatus. Integration med Storecove for nem tilmelding.",
+      "Ja, AlphaFlow understøtter Peppol-netværket via OIOUBL BIS Billing 3.0-standarden. Du kan registrere dit virksomhedsnummer, sende og modtage e-fakturaer direkte i systemet, og spore afsendelsesstatus. Integration med Sproom for nem tilmelding.",
   },
   {
     question: "Er AlphaFlow compliant med dansk bogføringslov?",
@@ -217,7 +217,7 @@ export const FEATURES_DA: readonly string[] = [
   "Valutahåndtering med automatisk kursopdatering",
   "Multi-sprog (dansk/engelsk)",
   "Hermes AI-assistent til regnskabsspørgsmål",
-  "Storecove Peppol-adgangspunkt integration",
+  "Sproom Peppol-adgangspunkt integration",
   "Kreditnota-håndtering",
 ] as const;
 

@@ -17,9 +17,9 @@
  *     → receives inbound docs via DocumentReceived webhook
  *     → verifies webhook signature with RSA public key
  *
- * ─── Key differences from Storecove (the AP this replaces) ──────────
+ * ─── Key differences from the previous Access Point (now superseded by Sproom) ─
  *
- * 1. RAW XML UPLOAD (simpler than Storecove!)
+ * 1. RAW XML UPLOAD (simpler than the previous AP!)
  *    Sproom accepts raw XML bytes via `POST /api/documents` with
  *    Content-Type: application/octet-stream. No base64 wrapping, no
  *    JSON Pure mode, no "parseStrategy". Sproom auto-detects the format
@@ -55,9 +55,10 @@
  *    No `documentType` or `format` field needed on upload — Sproom
  *    inspects the XML and routes through the correct network.
  *
- * 7. SPROOM HAS A REAL POLLING ENDPOINT (unlike Storecove)
+ * 7. SPROOM HAS A REAL POLLING ENDPOINT (unlike the previous AP)
  *    GET /api/documents/{id}/state returns the full state history of
- *    a document, so callers CAN poll (Storecove could only webhook).
+ *    a document, so callers CAN poll (the previous AP could only
+ *    deliver via webhook).
  *
  * ─── Authentication flow ─────────────────────────────────────────────
  *
@@ -2438,7 +2439,7 @@ export class SproomClient {
     if (format === 'html') {
       return `<!DOCTYPE html><html><body><h1>Simulated invoice ${documentId}</h1></body></html>`;
     }
-    // Return a minimal Peppol BIS 3 invoice XML for simulation parity with StorecoveClient.
+    // Return a minimal Peppol BIS 3 invoice XML for simulation parity with the legacy StorecoveClient.
     const now = new Date();
     const issueDate = now.toISOString().slice(0, 10);
     const dueDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);

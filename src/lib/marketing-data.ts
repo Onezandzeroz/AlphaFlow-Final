@@ -142,7 +142,7 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Auto e-faktura (Peppol / NemHandel)",
         description:
-          "Business-plan og opefter sender e-fakturaer automatisk via Storecove adgangspunkt — ingen manuelt upload af XML-filer.",
+          "Business-plan og opefter sender e-fakturaer automatisk via Sproom adgangspunkt — ingen manuelt upload af XML-filer.",
       },
       {
         title: "Kreditnota-håndtering",
@@ -399,7 +399,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     features: [
       "Alt fra Pro",
       "Auto e-faktura (Peppol / NemHandel)",
-      "Storecove Peppol-adgangspunkt inkluderet",
+      "Sproom Peppol-adgangspunkt inkluderet",
       "Ubegrænsede teammedlemmer",
     ],
   },
@@ -464,7 +464,7 @@ export const TRUST_BADGES: readonly TrustBadge[] = [
   {
     icon: Globe,
     title: "Peppol / OIOUBL",
-    description: "EU-standard e-fakturering via Storecove adgangspunkt",
+    description: "EU-standard e-fakturering via Sproom adgangspunkt",
   },
 ] as const;
 
