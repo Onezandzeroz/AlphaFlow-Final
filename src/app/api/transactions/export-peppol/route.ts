@@ -45,9 +45,9 @@ export const GET = withGuard({
 
     // Calculate amounts
     const vatPercent = Number(transaction.vatPercent);
-    const taxExclusiveAmount = Number(transaction.amount);
-    const taxTotal = (taxExclusiveAmount * vatPercent) / 100;
-    const taxInclusiveAmount = taxExclusiveAmount + taxTotal;
+    const lineExtensionAmount = Number(transaction.amount); // pre-tax amount (= sum of line amounts)
+    const taxTotal = (lineExtensionAmount * vatPercent) / 100; // VAT total
+    const taxInclusiveAmount = lineExtensionAmount + taxTotal; // total incl. tax
     const payableAmount = taxInclusiveAmount;
 
     // Generate invoice ID
@@ -74,6 +74,21 @@ export const GET = withGuard({
     };
 
     // Build invoice data
+    //
+    // OIOUBL 2.1 semantic (Task 41 root-cause fix for F-INV127):
+    //   taxExclusiveAmount = TOTAL TAX (NOT the pre-tax amount).
+    //   buildOIOUBLData in einvoice-sender.ts sets this format-aware, but
+    //   this standalone export route builds OIOUBLInvoiceData directly —
+    //   so we must populate the field correctly here:
+    //     lineExtensionAmount = pre-tax sum of line amounts
+    //     taxExclusiveAmount  = taxTotal (the VAT total)
+    //     taxInclusiveAmount  = total incl. tax
+    //     payableAmount       = total incl. tax
+    // The generator's OIOUBL branch then emits:
+    //   <cbc:LineExtensionAmount> = lineExtensionAmount
+    //   <cbc:TaxExclusiveAmount>  = taxExclusiveAmount = taxTotal ✓ F-INV127
+    //   <cbc:TaxInclusiveAmount>  = taxInclusiveAmount
+    //   <cbc:PayableAmount>       = payableAmount
     const invoiceData: OIOUBLInvoiceData = {
       invoiceId,
       issueDate,
@@ -95,14 +110,15 @@ export const GET = withGuard({
           description: transaction.description,
           quantity: 1,
           unitCode: 'EA', // Each
-          unitPrice: taxExclusiveAmount,
+          unitPrice: lineExtensionAmount,
           vatPercent,
           vatCategoryCode: getVATCategoryCode(vatPercent),
         },
       ],
       taxTotal,
       payableAmount,
-      taxExclusiveAmount,
+      lineExtensionAmount,
+      taxExclusiveAmount: taxTotal, // OIOUBL semantic: TaxExclusiveAmount = TOTAL TAX (F-INV127)
       taxInclusiveAmount,
       paymentMeansCode: '30',
       paymentAccountId: 'DK5000400440116243', // Sample IBAN-like account

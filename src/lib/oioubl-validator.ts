@@ -160,6 +160,33 @@ export function validateOIOUBL(xml: string): ValidationResult {
   }
 
   // ── 5. Totals validation ────────────────────────────────────────────
+  //
+  // CRITICAL: OIOUBL 2.1 vs Peppol BIS 3 / EN 16931 have DIFFERENT
+  // semantics for TaxExclusiveAmount (Task 41 root-cause fix for F-INV127):
+  //
+  //   OIOUBL 2.1:
+  //     LineExtensionAmount = sum of line net amounts (pre-tax subtotal)
+  //     TaxExclusiveAmount  = TOTAL TAX (= sum of TaxSubtotal/TaxAmount = vatTotal)
+  //     TaxInclusiveAmount  = LineExtensionAmount + TaxExclusiveAmount (= total)
+  //     PayableAmount       = TaxInclusiveAmount
+  //     F-INV127 schematron: Sum(TaxSubtotal/TaxAmount) MUST equal TaxExclusiveAmount.
+  //
+  //   Peppol BIS 3 / EN 16931:
+  //     LineExtensionAmount = sum of line net amounts (pre-tax subtotal)
+  //     TaxExclusiveAmount  = pre-tax subtotal (= LineExtensionAmount)
+  //     TaxInclusiveAmount  = TaxExclusiveAmount + TaxAmount (= subtotal + vatTotal)
+  //     PayableAmount       = TaxInclusiveAmount
+  //
+  // The validator MUST be format-aware — checking TaxExclusiveAmount ==
+  // sum-of-line-amounts is only valid for Peppol BIS 3, NOT for OIOUBL.
+  //
+  // Format detection: inspect the CustomizationID. The OIOUBL literal
+  // string ('OIOUBL-2.1' or legacy 'OIOUBL-2.02') selects OIOUBL
+  // semantics; anything else (incl. Peppol BIS 3 URN) selects Peppol
+  // BIS 3 semantics.
+  const customizationIdForTotals = xml.match(/<cbc:CustomizationID[^>]*>([^<]+)<\/cbc:CustomizationID>/);
+  const customizationIdValue = customizationIdForTotals ? customizationIdForTotals[1].trim() : '';
+  const isOIOUBLFormat = customizationIdValue === 'OIOUBL-2.1' || customizationIdValue === 'OIOUBL-2.02';
 
   // Sum only the per-line LineExtensionAmounts (inside InvoiceLine), NOT
   // the LegalMonetaryTotal/LineExtensionAmount (which is the total of all
@@ -170,19 +197,91 @@ export function validateOIOUBL(xml: string): ValidationResult {
   const lineExtensionAmounts = extractAllValues(perLineXml, 'cbc:LineExtensionAmount');
   const calculatedLineTotal = lineExtensionAmounts.reduce((sum, val) => sum + parseFloat(val || '0'), 0);
 
-  const taxExclusiveAmount = extractFirstValue(xml, 'cbc:TaxExclusiveAmount');
-  const taxInclusiveAmount = extractFirstValue(xml, 'cbc:TaxInclusiveAmount');
-  const payableAmount = extractFirstValue(xml, 'cbc:PayableAmount');
+  // Extract the LegalMonetaryTotal block — needed for OIOUBL where
+  // cbc:LineExtensionAmount appears both in InvoiceLine AND in
+  // LegalMonetaryTotal. Without scoping, extractFirstValue would return
+  // the line-level value, not the LegalMonetaryTotal value.
+  const legalMonetaryTotalBlock = xml.match(/<cac:LegalMonetaryTotal[\s\S]*?<\/cac:LegalMonetaryTotal>/);
+  const lmtXml = legalMonetaryTotalBlock ? legalMonetaryTotalBlock[0] : '';
+  const lmtLineExtensionAmount = extractFirstValue(lmtXml, 'cbc:LineExtensionAmount');
+  const taxExclusiveAmount = extractFirstValue(lmtXml, 'cbc:TaxExclusiveAmount');
+  const taxInclusiveAmount = extractFirstValue(lmtXml, 'cbc:TaxInclusiveAmount');
+  const payableAmount = extractFirstValue(lmtXml, 'cbc:PayableAmount');
   const taxAmount = extractFirstValue(xml, 'cbc:TaxAmount');
+
+  // Sum of all TaxSubtotal/TaxAmount (used by F-INV127 for OIOUBL).
+  // The top-level cac:TaxTotal has one or more cac:TaxSubtotal/cbc:TaxAmount
+  // children. We extract them from the first cac:TaxTotal block (skip
+  // line-level TaxTotals, which also have TaxSubtotal/TaxAmount).
+  const topLevelTaxTotalMatch = xml.match(/<cac:TaxTotal>([\s\S]*?)<\/cac:TaxTotal>/);
+  const topLevelTaxTotalXml = topLevelTaxTotalMatch ? topLevelTaxTotalMatch[1] : '';
+  const subtotalTaxAmounts = extractAllValues(topLevelTaxTotalXml, 'cbc:TaxAmount');
+  // The first cbc:TaxAmount in the TaxTotal block is the top-level TaxAmount;
+  // the rest are TaxSubtotal/TaxAmount values. For F-INV127 we want the SUM
+  // of the TaxSubtotal/TaxAmount values (which should equal the top-level
+  // TaxAmount, AND equal TaxExclusiveAmount in OIOUBL).
+  const sumOfSubtotalTaxAmounts = subtotalTaxAmounts.slice(1).reduce(
+    (sum, val) => sum + parseFloat(val || '0'),
+    0,
+  );
 
   if (taxExclusiveAmount === null) {
     errors.push('Missing TaxExclusiveAmount.');
+  } else if (isOIOUBLFormat) {
+    // OIOUBL 2.1 semantics (Task 41):
+    //   TaxExclusiveAmount = TOTAL TAX (= sum of TaxSubtotal/TaxAmount = vatTotal)
+    //   F-INV127: Sum(TaxSubtotal/TaxAmount) MUST equal TaxExclusiveAmount.
+    const taxExcl = parseFloat(taxExclusiveAmount);
+    if (Math.abs(taxExcl - sumOfSubtotalTaxAmounts) > 0.02) {
+      errors.push(
+        `[F-INV127] TaxExclusiveAmount (${taxExcl.toFixed(2)}) does not equal ` +
+        `sum of TaxTotal/TaxSubtotal/TaxAmount (${sumOfSubtotalTaxAmounts.toFixed(2)}). ` +
+        `In OIOUBL 2.1, TaxExclusiveAmount = TOTAL TAX (= vatTotal), NOT the pre-tax subtotal. ` +
+        `Official example: LineExtensionAmount=5050.00, TaxExclusiveAmount=1262.50 (= vatTotal).`
+      );
+    }
+    // Also: TaxExclusiveAmount should equal the top-level TaxAmount.
+    if (taxAmount !== null) {
+      const topTax = parseFloat(taxAmount);
+      if (Math.abs(taxExcl - topTax) > 0.02) {
+        errors.push(
+          `OIOUBL: TaxExclusiveAmount (${taxExcl.toFixed(2)}) does not equal TaxTotal/TaxAmount ` +
+          `(${topTax.toFixed(2)}). In OIOUBL 2.1, TaxExclusiveAmount = TOTAL TAX.`
+        );
+      }
+    }
+    // TaxInclusiveAmount = LineExtensionAmount + TaxExclusiveAmount
+    // (= sum of line amounts + total tax = total).
+    if (lmtLineExtensionAmount !== null && taxInclusiveAmount !== null) {
+      const lmtLine = parseFloat(lmtLineExtensionAmount);
+      const taxIncl = parseFloat(taxInclusiveAmount);
+      const expectedIncl = lmtLine + taxExcl;
+      if (Math.abs(expectedIncl - taxIncl) > 0.02) {
+        errors.push(
+          `OIOUBL: TaxInclusiveAmount (${taxIncl.toFixed(2)}) does not equal LineExtensionAmount + ` +
+          `TaxExclusiveAmount (${expectedIncl.toFixed(2)} = ${lmtLine.toFixed(2)} + ${taxExcl.toFixed(2)}).`
+        );
+      }
+    }
   } else {
+    // Peppol BIS 3 / EN 16931 semantics:
+    //   TaxExclusiveAmount = pre-tax subtotal (= sum of line amounts).
     const taxExcl = parseFloat(taxExclusiveAmount);
     if (Math.abs(taxExcl - calculatedLineTotal) > 0.02) {
       errors.push(
-        `TaxExclusiveAmount (${taxExcl.toFixed(2)}) does not match sum of line extension amounts (${calculatedLineTotal.toFixed(2)}). Difference: ${(taxExcl - calculatedLineTotal).toFixed(2)}.`
+        `TaxExclusiveAmount (${taxExcl.toFixed(2)}) does not match sum of line extension amounts ` +
+        `(${calculatedLineTotal.toFixed(2)}). Difference: ${(taxExcl - calculatedLineTotal).toFixed(2)}.`
       );
+    }
+    if (taxAmount !== null && taxInclusiveAmount !== null) {
+      const tax = parseFloat(taxAmount);
+      const expectedInclusive = taxExcl + tax;
+      if (Math.abs(expectedInclusive - parseFloat(taxInclusiveAmount)) > 0.02) {
+        errors.push(
+          `TaxInclusiveAmount (${parseFloat(taxInclusiveAmount).toFixed(2)}) does not equal ` +
+          `TaxExclusiveAmount + TaxAmount (${expectedInclusive.toFixed(2)}).`
+        );
+      }
     }
   }
 
@@ -196,15 +295,6 @@ export function validateOIOUBL(xml: string): ValidationResult {
     const tax = parseFloat(taxAmount);
     if (tax < 0) {
       errors.push('TaxAmount must not be negative.');
-    }
-
-    if (taxExclusiveAmount !== null && taxInclusiveAmount !== null) {
-      const expectedInclusive = parseFloat(taxExclusiveAmount) + tax;
-      if (Math.abs(expectedInclusive - parseFloat(taxInclusiveAmount)) > 0.02) {
-        errors.push(
-          `TaxInclusiveAmount (${parseFloat(taxInclusiveAmount).toFixed(2)}) does not equal TaxExclusiveAmount + TaxAmount (${expectedInclusive.toFixed(2)}).`
-        );
-      }
     }
   }
 
@@ -241,22 +331,49 @@ export function validateOIOUBL(xml: string): ValidationResult {
   }
 
   // ── 7. VAT category code validation ─────────────────────────────────
-
-  const vatCategoryMatches = xml.matchAll(/cbc:ID>([^<]*)<\/cbc:ID/g);
+  //
+  // Peppol BIS 3 / EN 16931 uses single-letter codes (S, Z, AE, E, K, G, O).
+  // OIOUBL 2.1 uses full words (StandardRated, ZeroRated, ExemptFromTax,
+  // ReverseCharge, ConditionalExemptFromTax, FreeExportItemTax,
+  // OutsideScopeTax) — see urn:oioubl:codelist:taxcategoryid-1.1.
+  //
+  // Format-aware: scan for the appropriate codelist form, and only warn
+  // when the format-appropriate codes are absent.
+  const OIOUBL_TAX_CATEGORY_IDS = new Set([
+    'StandardRated', 'ZeroRated', 'ExemptFromTax', 'ReverseCharge',
+    'ConditionalExemptFromTax', 'FreeExportItemTax', 'OutsideScopeTax',
+  ]);
+  const vatCategoryMatches = xml.matchAll(/cbc:ID[^>]*>([^<]*)<\/cbc:ID/g);
   const vatCategories: string[] = [];
+  const oioublTaxCategories: string[] = [];
   for (const match of vatCategoryMatches) {
     const code = match[1].trim();
-    // Only validate if it looks like a VAT category code (1-2 chars, letters)
+    // Peppol BIS 3 single/double-letter codes.
     if (/^[A-Z]{1,2}$/.test(code) && !['VAT'].includes(code)) {
       vatCategories.push(code);
       if (!VALID_VAT_CATEGORY_CODES.has(code)) {
-        errors.push(`Invalid VAT category code "${code}". Valid codes: S, Z, AE, K, G, O, E.`);
+        errors.push(`Invalid Peppol BIS 3 VAT category code "${code}". Valid codes: S, Z, AE, K, G, O, E.`);
       }
+    }
+    // OIOUBL full-word codes.
+    if (OIOUBL_TAX_CATEGORY_IDS.has(code)) {
+      oioublTaxCategories.push(code);
     }
   }
 
-  if (vatCategories.length === 0 && invoiceLineCount > 0) {
-    warnings.push('No VAT category codes found in invoice lines.');
+  if (isOIOUBLFormat) {
+    // For OIOUBL: warn if NO OIOUBL full-word tax category codes are found.
+    if (oioublTaxCategories.length === 0 && invoiceLineCount > 0) {
+      warnings.push(
+        'No OIOUBL tax category codes (StandardRated/ZeroRated/etc.) found. ' +
+        'OIOUBL 2.1 requires TaxCategory/ID values from urn:oioubl:codelist:taxcategoryid-1.1.'
+      );
+    }
+  } else {
+    // For Peppol BIS 3: warn if NO single-letter codes are found.
+    if (vatCategories.length === 0 && invoiceLineCount > 0) {
+      warnings.push('No VAT category codes found in invoice lines.');
+    }
   }
 
   // ── 8. Payment means validation ─────────────────────────────────────
@@ -481,12 +598,17 @@ export function validateOIOUBL(xml: string): ValidationResult {
     );
   }
 
-  // DK-R-014: for Danish suppliers, PartyLegalEntity/CompanyID in
-  // AccountingSupplierParty MUST specify schemeID="0184" (DK CVR).
+  // DK-R-014 (Peppol BIS 3 only): for Danish suppliers using the Peppol
+  // BIS 3 format, PartyLegalEntity/CompanyID in AccountingSupplierParty
+  // MUST specify schemeID="0184" (DK CVR ISO 6523 ICD).
+  //
+  // For OIOUBL 2.1, the equivalent uses schemeID="DK:CVR" (the OIOUBL
+  // scheme ID — see docs/SBD-OIOUBL-Invoice-valid.xml line 78). The DK-R
+  // rules don't apply to OIOUBL; this check is therefore format-aware.
   // Scope the regex to the supplier's PartyLegalEntity (which comes after
   // PartyTaxScheme, so the non-greedy match lands on the right CompanyID).
   const supplierLegalEntityCompanyID = xml.match(/cac:AccountingSupplierParty[\s\S]*?<cac:PartyLegalEntity[\s\S]*?<cbc:CompanyID([^>]*)>/);
-  if (supplierLegalEntityCompanyID) {
+  if (supplierLegalEntityCompanyID && !isOIOUBLFormat) {
     const companyIDAttrs = supplierLegalEntityCompanyID[1];
     if (!/\bschemeID="0184"/.test(companyIDAttrs)) {
       errors.push(
@@ -501,20 +623,37 @@ export function validateOIOUBL(xml: string): ValidationResult {
   // validation as part of AS4 transmission. Pre-check common issues
   // that would cause the receiving AP to reject the invoice.
 
-  // Check that supplier endpoint ID uses the correct scheme
+  // Check that supplier endpoint ID uses the correct scheme.
+  // Peppol BIS 3: scheme="0184" (ISO 6523 ICD for Danish CVR).
+  // OIOUBL 2.1:   scheme="DK:CVR" (OIOUBL scheme ID, per the official
+  //               Erhvervsstyrelsen example).
+  // The check is format-aware so we don't issue a false warning for valid
+  // OIOUBL documents that use "DK:CVR".
   const supplierEndpointScheme = xml.match(/cac:AccountingSupplierParty[\s\S]*?cbc:EndpointID[^>]*@schemeID="([^"]+)"/);
-  if (supplierEndpointScheme && supplierEndpointScheme[1] !== '0184') {
-    warnings.push(
-      `Supplier EndpointID scheme is "${supplierEndpointScheme[1]}" — NemHandel eDelivery typically requires scheme "0184" (Danish CVR).`
-    );
+  if (supplierEndpointScheme) {
+    const expected = isOIOUBLFormat ? 'DK:CVR' : '0184';
+    if (supplierEndpointScheme[1] !== expected) {
+      warnings.push(
+        `Supplier EndpointID scheme is "${supplierEndpointScheme[1]}" — ` +
+        (isOIOUBLFormat
+          ? 'OIOUBL 2.1 typically uses scheme "DK:CVR" (Danish CVR).'
+          : 'Peppol BIS 3 typically uses scheme "0184" (Danish CVR).')
+      );
+    }
   }
 
-  // Check that customer endpoint ID uses the correct scheme
+  // Check that customer endpoint ID uses the correct scheme (format-aware).
   const customerEndpointScheme = xml.match(/cac:AccountingCustomerParty[\s\S]*?cbc:EndpointID[^>]*@schemeID="([^"]+)"/);
-  if (customerEndpointScheme && customerEndpointScheme[1] !== '0184') {
-    warnings.push(
-      `Customer EndpointID scheme is "${customerEndpointScheme[1]}" — NemHandel eDelivery typically requires scheme "0184" (Danish CVR).`
-    );
+  if (customerEndpointScheme) {
+    const expected = isOIOUBLFormat ? 'DK:CVR' : '0184';
+    if (customerEndpointScheme[1] !== expected) {
+      warnings.push(
+        `Customer EndpointID scheme is "${customerEndpointScheme[1]}" — ` +
+        (isOIOUBLFormat
+          ? 'OIOUBL 2.1 typically uses scheme "DK:CVR" (Danish CVR).'
+          : 'Peppol BIS 3 typically uses scheme "0184" (Danish CVR).')
+      );
+    }
   }
 
   // Warn about OIOUBL 3.0 forthcoming changes

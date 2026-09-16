@@ -369,9 +369,36 @@ function buildOIOUBLData(
       vatPercent: Number(line.vatPercent) || Number(line.vatRate) || 25,
       vatCategoryCode: (Number(line.vatPercent) || Number(line.vatRate) || 25) === 0 ? 'Z' : 'S',
     })),
+    // ── CRITICAL OIOUBL vs Peppol BIS 3 SEMANTIC (Task 41 root-cause fix) ──
+    //
+    // In OIOUBL 2.1:
+    //   TaxExclusiveAmount = TOTAL TAX (= sum of TaxSubtotal/TaxAmount)
+    //   F-INV127 schematron: Sum(TaxSubtotal/TaxAmount) MUST equal TaxExclusiveAmount.
+    //   Official example: LineExtensionAmount=5050.00, TaxExclusiveAmount=1262.50,
+    //                     TaxInclusiveAmount=6312.50 (= 5050 + 1262.5), PayableAmount=6312.50.
+    //
+    // In Peppol BIS 3 / EN 16931:
+    //   TaxExclusiveAmount = pre-tax subtotal (= LineExtensionAmount)
+    //   Conventional European semantics — "amount exclusive of tax".
+    //
+    // buildOIOUBLData populates:
+    //   lineExtensionAmount = subtotal (= sum of line amounts) — BOTH formats
+    //   taxExclusiveAmount  = vatTotal (OIOUBL) | subtotal (Peppol BIS 3)
+    //   taxInclusiveAmount  = total (incl. tax) — BOTH formats
+    //   payableAmount       = total (incl. tax) — BOTH formats
+    //
+    // The generator then emits:
+    //   cbc:LineExtensionAmount = lineExtensionAmount  (subtotal — both formats)
+    //   cbc:TaxExclusiveAmount  = taxExclusiveAmount  (vatTotal for OIOUBL → F-INV127 ✓)
+    //   cbc:TaxInclusiveAmount  = taxInclusiveAmount   (total — both formats)
+    //   cbc:PayableAmount       = payableAmount        (total — both formats)
     taxTotal: vatTotal,
     payableAmount: total,
-    taxExclusiveAmount: subtotal,
+    lineExtensionAmount: subtotal,
+    taxExclusiveAmount:
+      format === 'OIOUBL'
+        ? vatTotal    // OIOUBL: TaxExclusiveAmount = TOTAL TAX (F-INV127)
+        : subtotal,  // Peppol BIS 3: TaxExclusiveAmount = pre-tax subtotal
     taxInclusiveAmount: total,
     paymentMeansCode: '42',
     // OIOUBL F-LIB131: PayeeFinancialAccount/ID must be ≤10 chars.
@@ -388,6 +415,11 @@ function buildOIOUBLData(
     // from the IBAN (positions 4-7 of a Danish IBAN).
     bankRegistration:
       company.bankRegistration || extractRegFromIban(company.bankIban) || undefined,
+    // OIOUBL PaymentNote defaults to the invoice ID (matching the official
+    // example: <cbc:PaymentNote>A00095678</cbc:PaymentNote> = invoice ID).
+    // The generator emits PaymentNote = paymentReference || invoiceId, so
+    // we just pass the invoice number through here (callers can override).
+    paymentReference: invoice.invoiceNumber,
     currencyCode,
   };
 }

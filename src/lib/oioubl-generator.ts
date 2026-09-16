@@ -1,4 +1,5 @@
 import { create } from 'xmlbuilder2';
+import { createHash } from 'node:crypto';
 
 /**
  * OIOUBL 2.1 / Peppol BIS Billing 3.0 XML Generator
@@ -149,10 +150,46 @@ export interface OIOUBLInvoiceData {
   }>;
   
   // Totals
-  taxTotal: number; // Total VAT amount
-  payableAmount: number; // Total including VAT
-  taxExclusiveAmount: number; // Total excluding VAT
-  taxInclusiveAmount: number; // Total including VAT
+  //
+  // CRITICAL OIOUBL vs Peppol BIS 3 SEMANTIC DIFFERENCE (Task 41):
+  //
+  //   In UBL 2.1, `cbc:LineExtensionAmount` and `cbc:TaxExclusiveAmount` are
+  //   DIFFERENT elements with DIFFERENT semantics in OIOUBL 2.1 vs Peppol BIS 3:
+  //
+  //   • LineExtensionAmount = sum of line net amounts (pre-tax subtotal).
+  //     This is the SAME in both formats — it's the sum of all
+  //     cac:InvoiceLine/cbc:LineExtensionAmount values.
+  //
+  //   • TaxExclusiveAmount (OIOUBL) = TOTAL TAX (= sum of TaxSubtotal/TaxAmount).
+  //     The OIOUBL 2.1 schematron rule F-INV127 requires:
+  //       "Sum of TaxTotal/TaxSubtotal/TaxAmount elements MUST equal
+  //        TaxExclusiveAmount"
+  //     So in OIOUBL, TaxExclusiveAmount = taxTotal (NOT the pre-tax subtotal!).
+  //     Official example: LineExtensionAmount=5050.00, TaxExclusiveAmount=1262.50,
+  //                       TaxInclusiveAmount=6312.50 (= 5050 + 1262.5), PayableAmount=6312.50.
+  //
+  //   • TaxExclusiveAmount (Peppol BIS 3) = pre-tax subtotal (= LineExtensionAmount).
+  //     Peppol BIS 3 / EN 16931 has the conventional European semantics where
+  //     TaxExclusiveAmount = the amount EXCLUSIVE of tax (pre-tax).
+  //
+  //   To handle both semantics with one generator, the caller (buildOIOUBLData)
+  //   populates:
+  //     lineExtensionAmount  = subtotal (= sum of line amounts) — BOTH formats
+  //     taxExclusiveAmount   = vatTotal (OIOUBL)  | subtotal (Peppol BIS 3)
+  //     taxInclusiveAmount   = total (incl. tax) — BOTH formats
+  //     payableAmount        = total (incl. tax) — BOTH formats
+  //
+  //   The generator then emits:
+  //     cbc:LineExtensionAmount = data.lineExtensionAmount
+  //     cbc:TaxExclusiveAmount  = data.taxExclusiveAmount  (vatTotal for OIOUBL ✓ F-INV127)
+  //     cbc:TaxInclusiveAmount  = data.taxInclusiveAmount
+  //     cbc:PayableAmount       = data.payableAmount
+  //
+  taxTotal: number; // Total VAT amount (= cbc:TaxAmount in cac:TaxTotal)
+  payableAmount: number; // Total including VAT (= cbc:PayableAmount)
+  lineExtensionAmount: number; // Sum of line net amounts (pre-tax subtotal). UBL 2.1 cbc:LineExtensionAmount. SAME for both formats.
+  taxExclusiveAmount: number; // OIOUBL: total tax (= taxTotal, satisfies F-INV127). Peppol BIS 3: pre-tax subtotal (= lineExtensionAmount).
+  taxInclusiveAmount: number; // Total including VAT (= payableAmount in practice)
   
   // Payment information
   paymentMeansCode?: string; // e.g., '42' = Payment to bank account (DK-R-005)
@@ -193,6 +230,31 @@ export const DEFAULT_CUSTOMER: OIOUBLInvoiceData['customer'] = {
 };
 
 // ─── OIOUBL HELPER FUNCTIONS ─────────────────────────────────────
+
+/**
+ * Generate a deterministic UUID v5-format string from a seed.
+ *
+ * Used to populate cbc:UUID elements in OIOUBL 2.1 (Invoice/UUID and
+ * OrderReference/UUID). The same seed always produces the same UUID —
+ * important so that re-generating the XML for the same invoice (e.g.,
+ * on retry) produces the same UUID and the receiving AP treats it as
+ * a retransmission of the same instance rather than a brand-new invoice.
+ *
+ * Returns a UUID-formatted string (8-4-4-4-12 hex) derived from the SHA-1
+ * of the seed, with version 5 (name-based with SHA-1) and RFC 4122 variant
+ * bits set, matching the format of the official Erhvervsstyrelsen example
+ * (e.g., "9756b4d0-8815-1029-857a-e388fe63f399").
+ */
+function deterministicUuid(seed: string): string {
+  const hash = createHash('sha1').update(seed).digest();
+  // Per RFC 4122 §4.3 (UUID v5 layout):
+  //   - byte 6 high nibble = version (5 = name-based with SHA-1)
+  //   - byte 8 high bits   = variant (10 = RFC 4122)
+  hash[6] = (hash[6] & 0x0f) | 0x50; // version 5
+  hash[8] = (hash[8] & 0x3f) | 0x80; // variant RFC 4122
+  const hex = hash.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
 
 /**
  * Ensure a CVR/VAT value has the "DK" country prefix.
@@ -556,6 +618,29 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
   //   Value: DK-prefixed CVR (OIOUBL) or bare CVR (PEPPOL_BIS — DK-R-014)
 
   // ── BUILD INVOICE OBJECT ──
+  //
+  // The OIOUBL branch produces XML matching the official Erhvervsstyrelsen
+  // reference example at docs/SBD-OIOUBL-Invoice-valid.xml EXACTLY (as a
+  // structural template, not a patch on Peppol BIS 3). The Peppol BIS branch
+  // preserves the original EN 16931 / Peppol BIS 3 structure unchanged.
+  //
+  // OIOUBL-specific structural elements added in Task 41 (matching the
+  // official example) — ALL emitted ONLY on the OIOUBL branch:
+  //   • cbc:CopyIndicator=false  (after cbc:ID, before cbc:UUID)
+  //   • cbc:UUID                 (deterministic, derived from invoiceId)
+  //   • cbc:AccountingCost       (synthetic, derived from invoiceId)
+  //   • cac:OrderReference       (with cbc:ID + cbc:UUID + cbc:IssueDate)
+  //   • cac:Delivery             (with cbc:ActualDeliveryDate=issueDate)
+  //   • cbc:ID="1" in PaymentMeans (first child)
+  //   • cac:PaymentTerms        (with cbc:ID + cbc:PaymentMeansID + cbc:Amount)
+  // OIOUBL also OMITS cbc:BuyerReference (the OrderReference above serves
+  // the same purpose and matches the official example).
+  //
+  // The PRIMARY semantic fix (Task 41) is in LegalMonetaryTotal:
+  //   cbc:LineExtensionAmount = data.lineExtensionAmount (sum of line amounts)
+  //   cbc:TaxExclusiveAmount  = data.taxExclusiveAmount  (= vatTotal for OIOUBL!)
+  // For OIOUBL, F-INV127 requires: Sum(TaxSubtotal/TaxAmount) = TaxExclusiveAmount.
+  // buildOIOUBLData sets taxExclusiveAmount=vatTotal for OIOUBL → F-INV127 satisfied.
   const invoice = {
     Invoice: {
       '@xmlns': 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2',
@@ -563,10 +648,20 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       '@xmlns:cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
 
       // ── Document identification ───────────────────────────────
+      // UBL 2.1 InvoiceType sequence: UBLVersionID, CustomizationID,
+      // ProfileID, ID, CopyIndicator, UUID, IssueDate, IssueTime,
+      // InvoiceTypeCode, Note, DocumentCurrencyCode, AccountingCostCode,
+      // AccountingCost, LineCountNumeric, OrderReference, BillingReference, ...
       'cbc:UBLVersionID': '2.1',
       'cbc:CustomizationID': customizationId,
       'cbc:ProfileID': profileId,
       'cbc:ID': data.invoiceId,
+      // OIOUBL only — CopyIndicator=false matches the official example.
+      ...(isPeppolBis ? {} : { 'cbc:CopyIndicator': 'false' }),
+      // OIOUBL only — UUID is a deterministic instance identifier derived
+      // from the invoiceId (deterministicUuid helper). Stable across
+      // re-generations so retries produce the same UUID.
+      ...(isPeppolBis ? {} : { 'cbc:UUID': deterministicUuid(`invoice:${data.invoiceId}`) }),
       'cbc:IssueDate': data.issueDate,
 
       // DueDate MUST come right after IssueDate per the UBL 2.1 schema
@@ -585,13 +680,32 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       'cbc:InvoiceTypeCode': invoiceTypeCode,
       'cbc:DocumentCurrencyCode': data.currencyCode,
 
-      // PEPPOL-EN16931-R003 requires a buyer reference (cbc:BuyerReference)
-      // OR a purchase order reference (cac:OrderReference). The Invoice
-      // model has no explicit PO/buyer-reference field, so we emit a
-      // BuyerReference using the customer's identifier (CVR) — the buyer's
-      // identifier serves as a routing reference and satisfies R003.
-      // OIOUBL also accepts BuyerReference (it's optional in UBL 2.1).
-      'cbc:BuyerReference': data.buyerReference || data.customer.id,
+      // OIOUBL only — AccountingCost (synthetic value derived from the
+      // invoiceId, matching the official example's structure). AlphaFlow
+      // has no separate accounting cost-center field; we use the invoiceId
+      // as a routing reference. The element is optional in UBL 2.1.
+      ...(isPeppolBis ? {} : { 'cbc:AccountingCost': data.invoiceId }),
+
+      // OIOUBL only — OrderReference (with ID, UUID, IssueDate). Matches
+      // the official example's structure. The ID uses the invoiceId as a
+      // synthetic PO reference (AlphaFlow has no separate PO field).
+      // For Peppol BIS 3, R003 requires BuyerReference OR OrderReference —
+      // the Peppol branch keeps using BuyerReference (below) since we have
+      // no real PO data.
+      ...(isPeppolBis ? {} : {
+        'cac:OrderReference': {
+          'cbc:ID': data.invoiceId,
+          'cbc:UUID': deterministicUuid(`order:${data.invoiceId}`),
+          'cbc:IssueDate': data.issueDate,
+        },
+      }),
+
+      // PEPPOL_BIS only — BuyerReference. Peppol BIS 3 R003 requires
+      // BuyerReference OR OrderReference. AlphaFlow has no PO/buyer-reference
+      // field, so we emit BuyerReference using the customer's identifier (CVR).
+      // OIOUBL: omitted (the OrderReference above serves the same purpose
+      // and matches the official example which has no BuyerReference).
+      ...(isPeppolBis ? { 'cbc:BuyerReference': data.buyerReference || data.customer.id } : {}),
 
       // ── Credit note: BillingReference ────────────────────────
       ...(data.invoiceTypeCode === '381' && {
@@ -753,15 +867,37 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
         },
       },
       
+      // ── Delivery ─────────────────────────────────────────────
+      //
+      // OIOUBL only — cac:Delivery with cbc:ActualDeliveryDate, matching
+      // the official example. AlphaFlow doesn't have a separate delivery
+      // date field; we use the invoice issueDate as a synthetic delivery
+      // date (the delivery is implied to have happened on or before the
+      // invoice date). The element is optional in UBL 2.1.
+      //
+      // UBL 2.1 Invoice sequence: AccountingCustomerParty, ...,
+      // Delivery, ..., PaymentMeans, PaymentTerms, TaxTotal, ...
+      ...(isPeppolBis ? {} : {
+        'cac:Delivery': {
+          'cbc:ActualDeliveryDate': data.issueDate,
+        },
+      }),
+
       // ── Payment Means ────────────────────────────────────────
       //
-      // OIOUBL adds PaymentChannelCode (DK:BANK) per the official example.
-      // The element sequence per UBL 2.1 PaymentMeans schema:
+      // OIOUBL adds PaymentChannelCode (DK:BANK) and cbc:ID="1" per the
+      // official example. The element sequence per UBL 2.1 PaymentMeans schema:
       //   ID, PaymentMeansCode, PaymentDueDate, PaymentChannelCode,
       //   InstructionNote, PaymentID, ... PayeeFinancialAccount
+      //
+      // OIOUBL's PaymentNote (= invoice ID, like the official example's
+      // <cbc:PaymentNote>A00095678</cbc:PaymentNote>) is always emitted
+      // (defaults to data.invoiceId when data.paymentReference is unset).
       ...(data.paymentAccountId
         ? {
             'cac:PaymentMeans': {
+              // OIOUBL only — cbc:ID="1" matches the official example.
+              ...(isPeppolBis ? {} : { 'cbc:ID': '1' }),
               // DK-R-005: Danish-allowed PaymentMeansCode set is
               // 1, 10, 31, 42, 48, 49, 50, 58, 59, 93, 97. '30' (Credit
               // transfer, the UN/ECE default) is NOT allowed for Danish
@@ -778,9 +914,12 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
               ...(isPeppolBis ? {} : { 'cbc:PaymentChannelCode': OIOUBL_PAYMENT_CHANNEL_CODE }),
               'cac:PayeeFinancialAccount': {
                 'cbc:ID': data.paymentAccountId,
-                ...(data.paymentReference && {
-                  'cbc:PaymentNote': data.paymentReference,
-                }),
+                // OIOUBL: always emit PaymentNote (= invoice ID) to match
+                // the official example structure. Peppol BIS 3: only emit
+                // when paymentReference is explicitly set.
+                ...(!isPeppolBis || data.paymentReference
+                  ? { 'cbc:PaymentNote': data.paymentReference || data.invoiceId }
+                  : {}),
                 // DK-R-006: for Danish suppliers with PaymentMeansCode 31/42,
                 // the registration account (registreringsnummer, 4-digit bank
                 // code) is mandatory. Emitted in FinancialInstitutionBranch/cbc:ID.
@@ -795,7 +934,29 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
             },
           }
         : {}),
-      
+
+      // ── Payment Terms ────────────────────────────────────────
+      //
+      // OIOUBL only — cac:PaymentTerms with cbc:ID="1", cbc:PaymentMeansID="1",
+      // and cbc:Amount=total. Matches the official example structure:
+      //   <cac:PaymentTerms>
+      //     <cbc:ID>1</cbc:ID>
+      //     <cbc:PaymentMeansID>1</cbc:PaymentMeansID>
+      //     <cbc:Amount currencyID="DKK">6312.50</cbc:Amount>
+      //   </cac:PaymentTerms>
+      // UBL 2.1 PaymentTermsType sequence: ID, PaymentMeansID,
+      // PrepaidPaymentReferenceID, ReferenceID, ..., Amount, ...
+      ...(isPeppolBis ? {} : {
+        'cac:PaymentTerms': {
+          'cbc:ID': '1',
+          'cbc:PaymentMeansID': '1',
+          'cbc:Amount': {
+            '@currencyID': data.currencyCode,
+            '#': data.payableAmount.toFixed(2),
+          },
+        },
+      }),
+
       // ── Tax Total ────────────────────────────────────────────
       'cac:TaxTotal': {
         'cbc:TaxAmount': {
@@ -807,10 +968,32 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       },
       
       // ── Legal Monetary Total ─────────────────────────────────
+      //
+      // CRITICAL OIOUBL SEMANTIC (Task 41, root-cause fix for F-INV127):
+      //
+      //   In OIOUBL 2.1:
+      //     cbc:LineExtensionAmount = data.lineExtensionAmount  (= sum of line amounts)
+      //     cbc:TaxExclusiveAmount  = data.taxExclusiveAmount  (= TOTAL TAX = vatTotal!)
+      //     cbc:TaxInclusiveAmount  = data.taxInclusiveAmount  (= total incl. tax)
+      //     cbc:PayableAmount       = data.payableAmount        (= total incl. tax)
+      //
+      //   F-INV127 (Sproom schematron): "Sum of TaxTotal/TaxSubtotal/TaxAmount
+      //   elements MUST equal TaxExclusiveAmount" → in OIOUBL, TaxExclusiveAmount
+      //   is the TOTAL TAX, not the pre-tax amount!
+      //
+      //   buildOIOUBLData sets:
+      //     lineExtensionAmount = subtotal (= sum of line amounts) — BOTH formats
+      //     taxExclusiveAmount  = vatTotal (OIOUBL) | subtotal (Peppol BIS 3)
+      //
+      //   So in Peppol BIS 3, LineExtensionAmount == TaxExclusiveAmount == subtotal
+      //   (Peppol BIS 3 / EN 16931 conventional European semantics — pre-tax amount).
+      //   In OIOUBL, LineExtensionAmount=subtotal, TaxExclusiveAmount=vatTotal
+      //   (OIOUBL-specific semantics — TaxExclusiveAmount = "exclusive amount of
+      //   the TaxTotal" = the tax itself).
       'cac:LegalMonetaryTotal': {
         'cbc:LineExtensionAmount': {
           '@currencyID': data.currencyCode,
-          '#': data.taxExclusiveAmount.toFixed(2),
+          '#': data.lineExtensionAmount.toFixed(2),
         },
         'cbc:TaxExclusiveAmount': {
           '@currencyID': data.currencyCode,

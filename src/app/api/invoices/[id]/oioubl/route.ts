@@ -104,8 +104,21 @@ export const GET = withGuard(
       }));
 
       // ── Build totals ─────────────────────────────────────────────────
+      //
+      // OIOUBL 2.1 semantic (Task 41 root-cause fix for F-INV127):
+      //   taxExclusiveAmount = TOTAL TAX (NOT the pre-tax amount).
+      //   In Peppol BIS 3 / EN 16931, TaxExclusiveAmount = pre-tax subtotal.
+      //   In OIOUBL 2.1, TaxExclusiveAmount = sum of TaxSubtotal/TaxAmount.
+      //   F-INV127 schematron: Sum(TaxSubtotal/TaxAmount) MUST equal TaxExclusiveAmount.
+      //
+      // This route emits OIOUBL format (no `format` field set → defaults to OIOUBL),
+      // so we populate:
+      //     lineExtensionAmount = subtotal (sum of line amounts)
+      //     taxExclusiveAmount  = taxTotal (the VAT total — OIOUBL semantic)
+      //     taxInclusiveAmount  = total (incl. tax)
+      //     payableAmount       = total (incl. tax)
       const currencyCode = invoice.currency || 'DKK';
-      const taxExclusiveAmount = Number(invoice.subtotal) || 0;
+      const lineExtensionAmount = Number(invoice.subtotal) || 0;
       const taxTotal = Number(invoice.vatTotal) || 0;
       const taxInclusiveAmount = Number(invoice.total) || 0;
       const payableAmount = Number(invoice.total) || 0;
@@ -138,7 +151,8 @@ export const GET = withGuard(
         lines,
         taxTotal,
         payableAmount,
-        taxExclusiveAmount,
+        lineExtensionAmount,
+        taxExclusiveAmount: taxTotal, // OIOUBL semantic: TaxExclusiveAmount = TOTAL TAX (F-INV127)
         taxInclusiveAmount,
         paymentMeansCode: '30', // Credit transfer
         paymentAccountId: companyInfo?.bankIban || companyInfo?.bankAccount || undefined,
