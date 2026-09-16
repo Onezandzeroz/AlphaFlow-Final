@@ -761,14 +761,11 @@ export class SproomClient {
       const error = await this.parseError(response);
       throw new Error(`Failed to fetch Sproom child company ${childCompanyId}: ${error.message || response.statusText}`);
     }
-    // Sproom returns an ARRAY (per OpenAPI) even for a single-id GET.
-    const arr = (await response.json()) as Array<{
-      id: string;
-      companyName: string;
-      organizationIdentifier: SproomOrganizationIdentifier;
-      glnNumber?: string | null;
-    }>;
-    const found = arr.find((c) => c.id === childCompanyId) ?? arr[0];
+    // Sproom may return a single object OR an array (swagger says array,
+    // but the actual response is often a single object). Handle both.
+    const data = await response.json();
+    const arr = Array.isArray(data) ? data : [data];
+    const found = arr.find((c: { id: string }) => c.id === childCompanyId) ?? arr[0];
     if (!found) return null;
     return {
       id: found.id,

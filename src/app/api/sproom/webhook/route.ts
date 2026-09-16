@@ -81,14 +81,15 @@ export async function POST(request: Request) {
     // ── 2. Parse the webhook event ─────────────────────────────────
     const event = JSON.parse(rawBody) as SproomWebhookEvent;
 
-    logger.info('[WEBHOOK] Received webhook event', {
+    // WARN-level logging (INFO is suppressed in production) so we can see
+    // the actual event payload + type from Sproom.
+    const eventType = (event.type || '').toLowerCase();
+    logger.warn('[WEBHOOK] Event received', {
       type: event.type,
+      eventTypeLower: eventType,
       documentId: event.documentId,
-      status: event.status,
-      timestamp: event.timestamp,
       companyId: event.companyId,
-      recipientIdentifier: event.recipientIdentifier,
-      senderIdentifier: event.senderIdentifier,
+      rawBodyPreview: rawBody.substring(0, 500),
     });
 
     // ── 3. Dispatch on event type ──
