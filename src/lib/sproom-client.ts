@@ -83,6 +83,7 @@ import {
   createVerify,
   createHash,
   timingSafeEqual,
+  constants as cryptoConstants,
   type Verify,
 } from 'crypto';
 
@@ -352,6 +353,29 @@ export class SproomChildCompanyConflictError extends Error {
     super(message);
     this.name = 'SproomChildCompanyConflictError';
     this.childCompanyId = childCompanyId;
+  }
+}
+
+/**
+ * Error thrown when Sproom returns HTTP 410 from `GET /api/documents/{id}`.
+ *
+ * Per the Sproom swagger:
+ *   "An error occurred during retrieval of the document. The resource should
+ *    be considered gone, and the request should not be retried."
+ *
+ * The 410 response body contains `schemaValidationErrors` — a list of UBL
+ * schema validation failures that caused Sproom to refuse storage of the
+ * document. This error surfaces them so the webhook handler can store the
+ * document as "received with validation errors" in the inbox.
+ */
+export class SproomDocumentGoneError extends Error {
+  /** The parsed 410 response body (typically `{ schemaValidationErrors: [...] }`). */
+  readonly validationErrors: unknown;
+
+  constructor(message: string, validationErrors: unknown) {
+    super(message);
+    this.name = 'SproomDocumentGoneError';
+    this.validationErrors = validationErrors;
   }
 }
 
@@ -1119,14 +1143,52 @@ export class SproomClient {
       );
     }
 
-    if (response.status === 404 || response.status === 410) {
-      logger.warn('[SPROOM] getDocument returned 404/410 — document not (yet) available', {
+    if (response.status === 404) {
+      logger.warn('[SPROOM] getDocument returned 404 — document not found', {
         documentId,
         format,
         childCompanyId: options.childCompanyId,
         status: response.status,
       });
       return null;
+    }
+    if (response.status === 410) {
+      // Sproom returns 410 with schemaValidationErrors when the document
+      // XML fails UBL schema validation. The resource is "gone" because
+      // Sproom refused to store/convert the invalid document. We MUST read
+      // the body to surface the validation errors — otherwise the user
+      // has no way to know WHY the document is unreachable.
+      let validationErrors: unknown = null;
+      let errorMessage = 'Document gone (410)';
+      try {
+        const body = await response.json();
+        validationErrors = body;
+        errorMessage =
+          (body as { message?: string })?.message ||
+          (body as { reason?: string })?.reason ||
+          `Schema validation failed: ${JSON.stringify(body).substring(0, 300)}`;
+      } catch {
+        try {
+          errorMessage = `410 body: ${(await response.text()).substring(0, 300)}`;
+        } catch {
+          /* ignore */
+        }
+      }
+      logger.error('[SPROOM] getDocument returned 410 — schema validation failed', {
+        documentId,
+        format,
+        childCompanyId: options.childCompanyId,
+        status: response.status,
+        errorMessage,
+        validationErrors,
+      });
+      // Throw a typed error so the webhook handler can surface the
+      // validation errors to the user (e.g. as a "received with errors"
+      // entry in the inbox).
+      throw new SproomDocumentGoneError(
+        `Document ${documentId} is gone (HTTP 410): ${errorMessage}`,
+        validationErrors,
+      );
     }
     if (!response.ok) {
       const error = await this.parseError(response);
@@ -1778,6 +1840,17 @@ export class SproomClient {
    * WEBHOOK_KEY_CACHE_TTL_MS (1 hour) to avoid re-fetching on every webhook.
    */
   async getWebhookKey(): Promise<{ publicKey: string; signatureAlgorithm: string } | null> {
+    // If SPROOM_WEBHOOK_PUBLIC_KEY is set in .env, prefer it (manual override
+    // — useful when /api/webhooks/key is unreachable or returns a stale key).
+    const envKey = process.env.SPROOM_WEBHOOK_PUBLIC_KEY?.trim();
+    if (envKey) {
+      logger.info('[SPROOM] Using SPROOM_WEBHOOK_PUBLIC_KEY from env (manual override)', {
+        keyLength: envKey.length,
+        keyPreview: envKey.substring(0, 60) + (envKey.length > 60 ? '...' : ''),
+      });
+      return { publicKey: envKey, signatureAlgorithm: 'SHA256withRSA' };
+    }
+
     if (this.simulationMode) {
       return {
         publicKey: SPROOM_SIM_PUBLIC_KEY,
@@ -1794,6 +1867,7 @@ export class SproomClient {
       // Webhook key endpoint is auth-agnostic but Sproom may require a token;
       // try the parent token first, fall back to unauthenticated.
       let response: Response;
+      let usedAuthMethod: 'parent_token' | 'unauthenticated' = 'parent_token';
       try {
         const parentToken = await this.getAccessToken();
         response = await this.makeRequestWithRetry(
@@ -1803,18 +1877,41 @@ export class SproomClient {
           { accessToken: parentToken },
         );
       } catch {
+        usedAuthMethod = 'unauthenticated';
         response = await this.makeRawRequest('GET', '/api/webhooks/key');
       }
 
       if (!response.ok) {
-        logger.warn('[SPROOM] Failed to fetch webhook key', { status: response.status });
+        logger.warn('[SPROOM] Failed to fetch webhook key from /api/webhooks/key', {
+          status: response.status,
+          statusText: response.statusText,
+          authMethod: usedAuthMethod,
+        });
         return null;
       }
-      const data = (await response.json()) as { publicKey?: string | null; signatureAlgorithm?: string | null };
+      const data = (await response.json()) as {
+        publicKey?: string | null;
+        signatureAlgorithm?: string | null;
+      };
       if (!data.publicKey) {
-        logger.warn('[SPROOM] Webhook key response missing publicKey');
+        logger.warn('[SPROOM] Webhook key response missing publicKey', {
+          responseKeys: Object.keys(data),
+          fullResponse: JSON.stringify(data).substring(0, 300),
+        });
         return null;
       }
+      // Log diagnostics for the key so we can debug verification failures:
+      // - length reveals whether it's a real RSA key (~450 chars for 2048-bit)
+      // - the header reveals whether it's PKCS#1 (`-----BEGIN RSA PUBLIC KEY-----`)
+      //   or SubjectPublicKeyInfo (`-----BEGIN PUBLIC KEY-----`)
+      // - signatureAlgorithm reveals if Sproom changed from RSA-SHA256
+      logger.info('[SPROOM] Webhook key fetched', {
+        authMethod: usedAuthMethod,
+        keyLength: data.publicKey.length,
+        keyHeader: data.publicKey.split('\n')[0],
+        keyPreview: data.publicKey.substring(0, 60) + '...',
+        signatureAlgorithm: data.signatureAlgorithm || 'SHA256withRSA',
+      });
       this.webhookKeyCache = { key: data.publicKey, fetchedAt: now };
       return {
         publicKey: data.publicKey,
@@ -1854,29 +1951,104 @@ export class SproomClient {
       return false;
     }
 
-    try {
-      // Node's crypto: 'RSA-SHA256' == SHA256withRSA. createVerify accepts
-      // PEM-encoded public keys, which is exactly what Sproom returns.
-      const verifier: Verify = createVerify('RSA-SHA256');
-      verifier.update(typeof payload === 'string' ? payload : Buffer.from(payload));
-      verifier.end();
+    // Log diagnostics about the signature header so we can debug encoding
+    // issues — base64 vs hex, length reveals modulus size, etc.
+    const payloadBuffer = typeof payload === 'string' ? Buffer.from(payload) : payload;
+    logger.info('[SPROOM] Verifying webhook signature', {
+      payloadBytes: payloadBuffer.length,
+      payloadPreview: payloadBuffer.subarray(0, 60).toString('utf-8'),
+      signatureHeaderLength: signature.length,
+      signatureHeaderPreview: signature.substring(0, 40) + (signature.length > 40 ? '...' : ''),
+      keyLength: keyInfo.publicKey.length,
+      signatureAlgorithm: keyInfo.signatureAlgorithm,
+    });
 
-      const signatureBuffer = Buffer.from(signature, 'base64');
-      const isValid = verifier.verify(
-        { key: keyInfo.publicKey, padding: undefined },
-        signatureBuffer,
-      );
+    // Try a matrix of decodings + paddings until one matches. Sproom's
+    // documentation only says "RSA-SHA256 signature in X-Signature"; the
+    // exact encoding (base64 vs hex) and padding (PKCS#1 v1.5 vs PSS) are
+    // not documented, so we try the most common combinations.
+    const signatureCandidates: Array<{ name: string; buf: Buffer | null }> = [
+      { name: 'base64', buf: this.tryBase64(signature) },
+      { name: 'hex', buf: this.tryHex(signature) },
+    ];
 
-      if (!isValid) {
-        // Invalidate cached key in case Sproom rotated it.
-        this.webhookKeyCache = null;
-        logger.warn('[SPROOM] WEBHOOK REJECTED: RSA signature did not match (key may have rotated)');
-        return false;
+    const paddingCandidates: Array<{ name: string; padding: number }> = [
+      // RSA_PKCS1_PADDING (default for RSA-SHA256)
+      { name: 'PKCS1', padding: cryptoConstants.RSA_PKCS1_PADDING },
+      // RSA_PKCS1_PSS_PADDING (PSS with auto salt length)
+      { name: 'PSS', padding: cryptoConstants.RSA_PKCS1_PSS_PADDING },
+    ];
+
+    for (const sig of signatureCandidates) {
+      if (!sig.buf) continue;
+      for (const pad of paddingCandidates) {
+        try {
+          const verifier: Verify = createVerify('RSA-SHA256');
+          verifier.update(payloadBuffer);
+          verifier.end();
+          const isValid = verifier.verify(
+            {
+              key: keyInfo.publicKey,
+              padding: pad.padding,
+              saltLength: cryptoConstants.RSA_PSS_SALTLEN_AUTO,
+            },
+            sig.buf,
+          );
+          if (isValid) {
+            logger.info('[SPROOM] Webhook signature VERIFIED', {
+              encoding: sig.name,
+              padding: pad.name,
+            });
+            return true;
+          }
+        } catch (err) {
+          // Try next combination — keep going. Don't log each attempt
+          // to avoid noise; the final failure log below will surface the
+          // signature details so we can manually reproduce.
+        }
       }
-      return true;
-    } catch (error) {
-      logger.error('[SPROOM] Webhook verification error:', error);
-      return false;
+    }
+
+    // All combinations failed — invalidate cached key in case Sproom rotated.
+    this.webhookKeyCache = null;
+    logger.warn('[SPROOM] WEBHOOK REJECTED: RSA signature did not match (key may have rotated)', {
+      triedEncodings: signatureCandidates.map((s) => s.name).filter(Boolean),
+      triedPaddings: paddingCandidates.map((p) => p.name),
+      signatureHeaderLength: signature.length,
+      signatureHeaderFirstChars: signature.substring(0, 8),
+      payloadBytes: payloadBuffer.length,
+    });
+    return false;
+  }
+
+  /** Try to decode a string as base64. Returns null if not valid base64. */
+  private tryBase64(s: string): Buffer | null {
+    // Strict base64 — only A-Z, a-z, 0-9, +, /, = padding. Hex strings
+    // (only 0-9a-f) would also pass base64 decode but produce garbage,
+    // so we sanity-check the character set.
+    if (!/^[A-Za-z0-9+/]+=*$/.test(s)) return null;
+    try {
+      const buf = Buffer.from(s, 'base64');
+      // A 2048-bit RSA signature is 256 bytes; 4096-bit is 512. If we
+      // get a wildly different size, this isn't a base64-encoded RSA sig.
+      if (buf.length < 128 || buf.length > 1024) return null;
+      return buf;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Try to decode a string as hex. Returns null if not valid hex. */
+  private tryHex(s: string): Buffer | null {
+    if (!/^[0-9a-fA-F]+$/.test(s)) return null;
+    // Hex must be even-length.
+    if (s.length % 2 !== 0) return null;
+    try {
+      const buf = Buffer.from(s, 'hex');
+      if (buf.length < 128 || buf.length > 1024) return null;
+      return buf;
+    } catch {
+      return null;
     }
   }
 

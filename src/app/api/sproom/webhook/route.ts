@@ -3,6 +3,7 @@ import {
   sproomClient,
   type SproomWebhookEvent,
   type SproomPeppolVerification,
+  SproomDocumentGoneError,
 } from '@/lib/sproom-client';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
@@ -228,9 +229,11 @@ async function handleReceivedDocument(event: SproomWebhookEvent) {
           });
           break;
         }
-        // 404/410 → Sproom no longer has the document in this format.
+        // 404 → Sproom no longer has the document in this format.
         // Try the next format (or, on the last attempt, fall through).
-        logger.warn('[WEBHOOK] Sproom getDocument returned null (404/410)', {
+        // (Note: 410 now throws SproomDocumentGoneError and is handled
+        // in the catch block below — schema validation failure.)
+        logger.warn('[WEBHOOK] Sproom getDocument returned null (404)', {
           documentId,
           childCompanyId: fetchChildId,
           format: fmt,
@@ -240,8 +243,25 @@ async function handleReceivedDocument(event: SproomWebhookEvent) {
         // not a "format not available" error.
         const msg = err instanceof Error ? err.message : String(err);
         const isLastFormat = fmt === formatsToTry[formatsToTry.length - 1];
+        // SproomDocumentGoneError (HTTP 410) means the document failed
+        // schema validation — switching formats won't help, so stop
+        // immediately and surface the validation errors to the caller.
+        const isDocumentGone = err instanceof SproomDocumentGoneError;
         const isFormatUnavailable =
           /\[HTTP 40[46]\b|\[HTTP 406\b|not acceptable|no content/i.test(msg);
+        if (isDocumentGone) {
+          fetchError = msg;
+          logger.error('[WEBHOOK] Document gone (HTTP 410) — schema validation failed', {
+            documentId,
+            companyId: company.id,
+            childCompanyId: fetchChildId,
+            format: fmt,
+            error: fetchError,
+            validationErrors:
+              (err as SproomDocumentGoneError).validationErrors ?? null,
+          });
+          break; // Don't try other formats — the document itself is invalid.
+        }
         if (isLastFormat || !isFormatUnavailable) {
           fetchError = msg;
           // Log the FULL error (including any HTTP status code embedded in
