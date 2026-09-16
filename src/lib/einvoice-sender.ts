@@ -154,29 +154,48 @@ function generateMessageId(): string {
  *   - 'STORECOVE' (legacy alias for Sproom)    — "Auto" — let Sproom pick
  *
  * The STORECOVE channel is the default in the send dialog when the
- * tenant hasn't set a default. It's described to the user as
- * "Auto Peppol+NemHandel" — but a single document can only be sent on
- * ONE network, so we have to pick. For Danish-to-Danish sends (the
- * overwhelmingly common case), OIOUBL is the right default: the
- * recipient is registered in NemHandel and expects OIOUBL. For
- * cross-border sends, the user should explicitly select PEPPOL.
+ * tenant hasn't set a default. All three channels route through Sproom,
+ * which accepts both OIOUBL 2.1 and Peppol BIS 3 XML and delivers via the
+ * appropriate network (Peppol for international recipients, NemHandel
+ * for Danish recipients — Sproom routes based on the recipient's
+ * registration).
  *
- * Mapping STORECOVE → OIOUBL also makes the format label in the inbox
- * show "OIOUBL" (not "Peppol BIS") for default-channel sends, which
- * matches user expectations for Danish NemHandel e-invoicing.
+ * As of Task 37, native OIOUBL 2.1 format generation is implemented
+ * based on the official Erhvervsstyrelsen reference example at
+ * docs/SBD-OIOUBL-Invoice-valid.xml — ALL required OIOUBL attributes
+ * (listID, listAgencyID, schemeID, schemeAgencyID on the relevant
+ * codelist/ID elements, DK-prefixed CVR values for schemeID="DK:CVR"
+ * and schemeID="DK:SE", AddressFormatCode, PaymentChannelCode, etc.)
+ * are now emitted by the generator's OIOUBL branch.
+ *
+ * Channel → format mapping:
+ *   - STORECOVE (default/auto)        → OIOUBL (Danish-to-Danish default)
+ *   - NEMHANDEL_OIOUBL               → OIOUBL (explicit OIOUBL channel)
+ *   - PEPPOL_BIS                     → PEPPOL_BIS (explicit Peppol channel)
+ *   - default (unknown channel)      → OIOUBL (safe Danish default)
+ *
+ * The "Auto" STORECOVE channel defaults to OIOUBL because the majority
+ * of AlphaFlow's sends are Danish-to-Danish (where OIOUBL is the native
+ * NemHandel format). For cross-border sends, the user should select the
+ * PEPPOL channel explicitly. The inbox format label now correctly shows
+ * "OIOUBL" for Danish sends and "Peppol BIS" for cross-border sends.
  */
 function channelToFormat(channel: EInvoiceSendChannel): EInvoiceFormat {
   switch (channel) {
     case EInvoiceSendChannel.NEMHANDEL_OIOUBL:
+      // Native OIOUBL 2.1 format — Danish NemHandel eDelivery.
       return EInvoiceFormat.OIOUBL;
     case EInvoiceSendChannel.PEPPOL_BIS:
+      // Peppol BIS Billing 3.0 — cross-border sends via Peppol network.
       return EInvoiceFormat.PEPPOL_BIS;
     case EInvoiceSendChannel.STORECOVE:
-      // "Auto" channel — default to OIOUBL for Danish NemHandel sends.
-      // Cross-border users must explicitly select the PEPPOL channel
-      // to opt into Peppol BIS 3 format.
+      // "Auto" channel — default to OIOUBL (Danish NemHandel). The vast
+      // majority of AlphaFlow sends are Danish-to-Danish where OIOUBL is
+      // the native format. Sproom routes correctly based on the
+      // recipient's registration regardless of the document format.
       return EInvoiceFormat.OIOUBL;
     default:
+      // Unknown channel — safe Danish default.
       return EInvoiceFormat.OIOUBL;
   }
 }

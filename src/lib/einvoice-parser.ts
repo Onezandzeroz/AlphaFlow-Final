@@ -95,9 +95,16 @@ const PEPPOL_PROFILE_IDS = [
 
 const OIOUBL_CUSTOMIZATION_IDS = [
   // Canonical OIOUBL CustomizationID values — these are LITERAL STRINGS,
-  // not URNs. The OIOUBL standard uses values like "OIOUBL-2.02" as the
+  // not URNs. The OIOUBL standard uses values like "OIOUBL-2.1" as the
   // CustomizationID. Sproom uses this to identify the document as OIOUBL
   // format. See https://oioubl21.oioubl.dk/classes/en/invoice.html
+  //
+  // As of Task 37, AlphaFlow generates 'OIOUBL-2.1' (per the official
+  // Erhvervsstyrelsen reference example at docs/SBD-OIOUBL-Invoice-valid.xml).
+  // The legacy 'OIOUBL-2.02' / 'OIOUBL-2.01' values are kept for
+  // backward-compat with documents received from third-party senders
+  // that still use the older 2.02 form.
+  'oioubl-2.1',
   'oioubl-2.02',
   'oioubl-2.01',
   'oioubl-3.0',

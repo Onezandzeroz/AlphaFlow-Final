@@ -301,10 +301,16 @@ export function validateOIOUBL(xml: string): ValidationResult {
   //      ProfileID      = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0'
   //      Used for cross-border sends via Peppol network.
   //
-  //   2. OIOUBL 2.02 — Danish NemHandel format. CustomizationID is a
+  //   2. OIOUBL 2.1 — Danish NemHandel format. CustomizationID is a
   //      LITERAL STRING (not a URN).
-  //      CustomizationID = 'OIOUBL-2.02'
-  //      ProfileID      = 'urn:dk:oioubl:sbs:1.0'  (SBS profile)
+  //      CustomizationID = 'OIOUBL-2.1'    (per the official Erhvervsstyrelsen
+  //                                         reference example at
+  //                                         docs/SBD-OIOUBL-Invoice-valid.xml)
+  //      ProfileID      = structured object with @schemeID + @schemeAgencyID
+  //                       attributes AND a text value (NES Profile 5 URN).
+  //                       schemeID = 'urn:oioubl:id:profileid-1.2'
+  //                       schemeAgencyID = '320'
+  //                       text = 'urn:www.nesubl.eu:profiles:profile5:ver2.0'
   //      Used for Danish-to-Danish sends via NemHandel network.
   //
   // Sproom accepts both formats and uses the CustomizationID to identify
@@ -312,7 +318,11 @@ export function validateOIOUBL(xml: string): ValidationResult {
   // "cannot find format for document" on POST /api/documents.
   const PEPPOL_BIS3_CUSTOMIZATION_ID = 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0';
   const PEPPOL_BIS3_PROFILE_ID = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
-  const OIOUBL_2_02_CUSTOMIZATION_ID = 'OIOUBL-2.02';
+  // As of Task 37, AlphaFlow generates the official 'OIOUBL-2.1' value
+  // (per the Erhvervsstyrelsen reference example). The legacy 'OIOUBL-2.02'
+  // form is still accepted for backward compat with documents received
+  // from third-party senders using the older 2.02 form.
+  const OIOUBL_VALID_CUSTOMIZATION_IDS = ['OIOUBL-2.1', 'OIOUBL-2.02'];
   // OIOUBL ProfileID is structured: an element with @schemeID + @schemeAgencyID
   // attributes AND a text value. The schemeID must be one of:
   //   urn:oioubl:id:profileid-1.1, 1.2, 1.3, 1.4, 1.5, 1.6
@@ -333,8 +343,8 @@ export function validateOIOUBL(xml: string): ValidationResult {
   if (!customizationMatch) {
     errors.push(
       'Missing CustomizationID. Expected either the Peppol BIS Billing 3.0 compliant variant (' +
-      PEPPOL_BIS3_CUSTOMIZATION_ID + ') for Peppol sends, or the OIOUBL 2.02 literal string (' +
-      OIOUBL_2_02_CUSTOMIZATION_ID + ') for NemHandel sends.'
+      PEPPOL_BIS3_CUSTOMIZATION_ID + ') for Peppol sends, or the OIOUBL 2.1 literal string (' +
+      OIOUBL_VALID_CUSTOMIZATION_IDS[0] + ') for NemHandel sends.'
     );
   } else {
     const cid = customizationMatch[1].trim();
@@ -346,13 +356,13 @@ export function validateOIOUBL(xml: string): ValidationResult {
       );
     } else if (cid === PEPPOL_BIS3_CUSTOMIZATION_ID) {
       // ✓ Valid Peppol BIS 3 — no warning.
-    } else if (cid === OIOUBL_2_02_CUSTOMIZATION_ID) {
-      // ✓ Valid OIOUBL 2.02 — no warning.
+    } else if (OIOUBL_VALID_CUSTOMIZATION_IDS.includes(cid)) {
+      // ✓ Valid OIOUBL (either 2.1 or legacy 2.02) — no warning.
     } else {
       warnings.push(
         'CustomizationID "' + cid + '" is not a standard AlphaFlow value. ' +
         'Expected either Peppol BIS 3.0 (' + PEPPOL_BIS3_CUSTOMIZATION_ID + ') or ' +
-        'OIOUBL 2.02 (' + OIOUBL_2_02_CUSTOMIZATION_ID + '). ' +
+        'OIOUBL 2.1 (' + OIOUBL_VALID_CUSTOMIZATION_IDS.join(' or ') + '). ' +
         'Sproom may reject the document with "cannot find format for document".'
       );
     }
