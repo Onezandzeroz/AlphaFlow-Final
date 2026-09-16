@@ -582,6 +582,28 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
     data: updateData,
   });
 
+  // Notify the frontend of the status change so any open send-history
+  // dialogs auto-refresh via the useDataVersion hook. Without this, the
+  // UI only shows the new status when the user manually clicks Refresh
+  // or reopens the dialog. Sproom fires DocumentStatusChanged webhooks
+  // when the receiving AP delivers/accepts/rejects the document — these
+  // events should be reflected in real time.
+  try {
+    const { notifyDataChange } = await import('@/lib/notify-data-change');
+    await notifyDataChange({
+      scope: 'einvoice-sends',
+      companyId: sending.companyId,
+      action: 'update',
+    });
+  } catch (err) {
+    // Non-blocking — the DB update + audit log already succeeded. The
+    // notify call is best-effort for real-time UI updates.
+    logger.warn('[SPROOM_WEBHOOK] Failed to notify frontend of status change', {
+      sendingId: sending.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
   // Audit trail for the status change.
   // Attribute to the user who initiated the send (sending.sentBy) — this
   // preserves the original behaviour where the delivery event is tied to the

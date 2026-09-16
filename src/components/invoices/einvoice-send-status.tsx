@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from '@/lib/use-translation';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { formatCurrency } from '@/lib/currency-utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -214,9 +215,21 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [isLiveUpdating, setIsLiveUpdating] = useState(false);
+
+  // ── Real-time refresh trigger ──
+  // Subscribe to the 'einvoice-sends' data-sync scope. The Sproom webhook
+  // handler calls notifyDataChange({ scope: 'einvoice-sends' }) when a
+  // DocumentStatusChanged event arrives (delivered/accepted/rejected).
+  // This bumps the version number → triggers the useEffect below →
+  // fetches the latest status. Combined with the 15s polling fallback,
+  // the dialog stays live without manual refreshes.
+  const einvoiceSendsVersion = useDataVersion('einvoice-sends');
+  const receivedInvoicesVersion = useDataVersion('received-invoices');
 
   // ── Fetch send + receive history ──
-  const fetchHistory = useCallback(async () => {
+  const fetchHistory = useCallback(async (isLiveUpdate = false) => {
+    if (isLiveUpdate) setIsLiveUpdating(true);
     try {
       const res = await fetch(`/api/invoices/${invoiceId}/einvoice-sends`);
       if (res.ok) {
@@ -231,11 +244,23 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
       console.error('Failed to fetch e-invoice send history:', err);
     } finally {
       setIsLoading(false);
+      setIsLiveUpdating(false);
     }
   }, [invoiceId]);
 
+  // Initial fetch + re-fetch on data-version bumps (real-time WS updates).
   useEffect(() => {
     fetchHistory();
+  }, [fetchHistory, einvoiceSendsVersion, receivedInvoicesVersion]);
+
+  // Polling fallback (every 15s) — covers cases where the WS connection
+  // isn't established, or the user is on a flaky network. Stops when the
+  // component unmounts (dialog closed).
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchHistory(true);
+    }, 15000);
+    return () => clearInterval(interval);
   }, [fetchHistory]);
 
   // ── Retry failed send ──
@@ -332,14 +357,25 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
             <Badge variant="secondary" className="text-[10px] px-1.5">
               {records.length}
             </Badge>
+            {/* Live-update indicator — shows when the dialog is auto-refreshing
+                (either via WS data-version bump or 15s polling). Pulsates while
+                a fetch is in flight, otherwise shows a small green dot to signal
+                that the dialog is live-updating. */}
+            <span
+              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+              title={isDa ? 'Opdaterer automatisk' : 'Auto-refreshing'}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${isLiveUpdating ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`} />
+              {isDa ? 'Live' : 'Live'}
+            </span>
           </div>
           <Button
             variant="ghost"
             size="sm"
             className="h-7 text-xs text-muted-foreground"
-            onClick={fetchHistory}
+            onClick={() => fetchHistory()}
           >
-            <RefreshCw className="h-3 w-3 mr-1" />
+            <RefreshCw className={isLiveUpdating ? 'h-3 w-3 mr-1 animate-spin' : 'h-3 w-3 mr-1'} />
             {isDa ? 'Opdater' : 'Refresh'}
           </Button>
         </div>

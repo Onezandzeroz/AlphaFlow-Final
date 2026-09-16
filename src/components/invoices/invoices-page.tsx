@@ -3756,7 +3756,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       )}
       {showEInvoiceSendStatus && (
         <Dialog open={!!showEInvoiceSendStatus} onOpenChange={() => setShowEInvoiceSendStatus(null)}>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-5xl w-[95vw] sm:w-[90vw] max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{language === 'da' ? 'E-faktura send-historik' : 'E-invoice send history'}</DialogTitle>
             </DialogHeader>
