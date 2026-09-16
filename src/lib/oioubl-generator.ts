@@ -20,17 +20,25 @@ export interface OIOUBLInvoiceData {
    *
    *   'OIOUBL'    (default) — Danish NemHandel eDelivery format.
    *     CustomizationID = 'OIOUBL-2.02'      (literal string, NOT a URN)
-   *     ProfileID      = 'urn:dk:oioubl:sbs:1.0' (SBS billing profile)
+   *     ProfileID      = { @schemeID: 'urn:oioubl:id:profileid-1.2',
+   *                        @schemeAgencyID: '320',
+   *                        #: 'urn:www.nesubl.eu:profiles:profile5:ver2.0' }
+   *                       (NES Profile 5 Basic Billing — Invoice + CreditNote only)
    *
    *   'PEPPOL_BIS' — Peppol BIS Billing 3.0 (EN 16931 + Peppol extension).
    *     CustomizationID = 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0'
-   *     ProfileID      = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0'
+   *     ProfileID      = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0'  (plain string)
    *
    * IMPORTANT — the OIOUBL CustomizationID is the LITERAL string
    * "OIOUBL-2.02", not a URN. This is the value Sproom uses to identify
    * the document as OIOUBL format. Using a URN like
    * "urn:oioubl:invoice:1.0" causes Sproom to return
    * "cannot find format for document".
+   *
+   * The OIOUBL ProfileID also requires @schemeID + @schemeAgencyID
+   * attributes — without them, Sproom returns
+   * "[W-LIB003] Invalid schemeID. Must be 'urn:oioubl:id:profileid-1.1'
+   * or 'urn:oioubl:id:profileid-1.2' or..." (one of six valid scheme IDs).
    *
    * The choice must match the receiving network: NemHandel expects OIOUBL,
    * Peppol expects Peppol BIS 3. Setting the wrong format will cause the
@@ -189,24 +197,44 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
   //   https://oioubl21.oioubl.dk/classes/en/invoice.html
   //   https://docs.peppol.eu/poacc/code-lists/document-types/
   // (the OIOUBL-2.02 entry is listed there as an active Peppol document type)
+  //
+  // The ProfileID structure differs between the two formats:
+  //   OIOUBL: ProfileID element has @schemeID + @schemeAgencyID attributes
+  //           AND a text value (e.g. NES Profile 5 URN). Sproom's W-LIB003
+  //           schematron rule rejects ProfileID elements that lack the
+  //           schemeID attribute.
+  //   PEPPOL_BIS: ProfileID is a plain string URN (no attributes).
+  //
+  // Per the official OIOUBL 2.1 documentation (Erhvervsstyrelsen), the
+  // two mandatory profiles that public authorities must support are:
+  //   1. Procurement-BilSim — basic billing simulation (Invoice,
+  //      CreditNote, Reminder, ApplicationResponse). schemeID = 1.1
+  //   2. NES Profile 5 Basic Billing — Invoice + CreditNote only.
+  //      schemeID = 1.2
+  // AlphaFlow uses NES Profile 5 because we don't currently support
+  // receiving ApplicationResponse documents — Procurement-BilSim
+  // requires both parties to support it.
   const fmt = data.format ?? 'OIOUBL';
-  const { customizationId, profileId } = fmt === 'PEPPOL_BIS'
-    ? {
-        // Peppol BIS Billing 3.0 — URN format (EN 16931 + Peppol extension).
-        customizationId: 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0',
-        profileId: 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0',
-      }
-    : {
-        // OIOUBL 2.02 — Danish NemHandel eDelivery format.
-        // CustomizationID is the LITERAL string "OIOUBL-2.02" — Sproom
-        // uses this to identify the document as OIOUBL. The root element
-        // (<Invoice> for type 380, <CreditNote> for type 381) distinguishes
-        // invoices from credit notes, not the CustomizationID.
-        // ProfileID is the SBS (Standard Bookkeeping Specification) URN —
-        // the standard billing profile for OIOUBL.
-        customizationId: 'OIOUBL-2.02',
-        profileId: 'urn:dk:oioubl:sbs:1.0',
-      };
+  const isPeppolBis = fmt === 'PEPPOL_BIS';
+  const customizationId = isPeppolBis
+    ? 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0'
+    : 'OIOUBL-2.02';
+  // ProfileID is an object for OIOUBL (with @schemeID + @schemeAgencyID
+  // attributes) and a plain string for Peppol BIS 3 (no attributes).
+  // fast-xml-parser handles both shapes when the value is interpolated
+  // into the 'cbc:ProfileID' field below.
+  const profileId: string | { '@schemeID': string; '@schemeAgencyID': string; '#': string } =
+    isPeppolBis
+      ? 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0'
+      : {
+          // OIOUBL 2.02 — Danish NemHandel eDelivery format.
+          // schemeID = the profile naming scheme (1.2 = NES profiles)
+          // schemeAgencyID = 320 (Danish Business Authority, ERST)
+          // # = the actual profile URN (NES Profile 5 Basic Billing)
+          '@schemeID': 'urn:oioubl:id:profileid-1.2',
+          '@schemeAgencyID': '320',
+          '#': 'urn:www.nesubl.eu:profiles:profile5:ver2.0',
+        };
 
   const invoice = {
     Invoice: {

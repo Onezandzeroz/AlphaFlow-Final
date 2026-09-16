@@ -313,7 +313,21 @@ export function validateOIOUBL(xml: string): ValidationResult {
   const PEPPOL_BIS3_CUSTOMIZATION_ID = 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0';
   const PEPPOL_BIS3_PROFILE_ID = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
   const OIOUBL_2_02_CUSTOMIZATION_ID = 'OIOUBL-2.02';
-  const OIOUBL_SBS_PROFILE_ID = 'urn:dk:oioubl:sbs:1.0';
+  // OIOUBL ProfileID is structured: an element with @schemeID + @schemeAgencyID
+  // attributes AND a text value. The schemeID must be one of:
+  //   urn:oioubl:id:profileid-1.1, 1.2, 1.3, 1.4, 1.5, 1.6
+  // (per Sproom's W-LIB003 schematron rule).
+  // AlphaFlow uses schemeID=1.2 with NES Profile 5 Basic Billing:
+  //   urn:www.nesubl.eu:profiles:profile5:ver2.0
+  // (Invoice + CreditNote only — simplest profile).
+  const OIOUBL_PROFILE_SCHEME_IDS = [
+    'urn:oioubl:id:profileid-1.1',
+    'urn:oioubl:id:profileid-1.2',
+    'urn:oioubl:id:profileid-1.3',
+    'urn:oioubl:id:profileid-1.4',
+    'urn:oioubl:id:profileid-1.5',
+    'urn:oioubl:id:profileid-1.6',
+  ];
 
   const customizationMatch = xml.match(/<cbc:CustomizationID[^>]*>([^<]+)<\/cbc:CustomizationID>/);
   if (!customizationMatch) {
@@ -344,20 +358,61 @@ export function validateOIOUBL(xml: string): ValidationResult {
     }
   }
 
-  const profileMatch = xml.match(/<cbc:ProfileID[^>]*>([^<]+)<\/cbc:ProfileID>/);
+  // ProfileID check — captures both the @schemeID attribute (if present)
+  // AND the element's text value. Sproom's W-LIB003 schematron rule
+  // REQUIRES the schemeID attribute on OIOUBL ProfileID elements.
+  const profileMatch = xml.match(/<cbc:ProfileID([^>]*)>([^<]+)<\/cbc:ProfileID>/);
   if (!profileMatch) {
     errors.push(
       'Missing ProfileID. Expected either "' + PEPPOL_BIS3_PROFILE_ID +
-      '" (Peppol BIS 3) or "' + OIOUBL_SBS_PROFILE_ID + '" (OIOUBL SBS).'
+      '" (Peppol BIS 3, plain string) or a structured OIOUBL ProfileID with ' +
+      '@schemeID="urn:oioubl:id:profileid-1.2" + @schemeAgencyID="320" + ' +
+      'text="urn:www.nesubl.eu:profiles:profile5:ver2.0" (NES Profile 5).'
     );
   } else {
-    const pid = profileMatch[1].trim();
-    if (pid !== PEPPOL_BIS3_PROFILE_ID && pid !== OIOUBL_SBS_PROFILE_ID) {
-      warnings.push(
-        'ProfileID "' + pid + '" is not a standard value. ' +
-        'Expected either Peppol BIS 3.0 (' + PEPPOL_BIS3_PROFILE_ID + ') or ' +
-        'OIOUBL SBS (' + OIOUBL_SBS_PROFILE_ID + ').'
-      );
+    const attrs = profileMatch[1] || '';
+    const pid = profileMatch[2].trim();
+
+    // Check if this is a Peppol BIS 3 ProfileID (plain URN, no attributes)
+    if (pid === PEPPOL_BIS3_PROFILE_ID && !attrs.trim()) {
+      // ✓ Valid Peppol BIS 3 ProfileID — no warning.
+    } else {
+      // OIOUBL ProfileID — must have @schemeID + @schemeAgencyID attributes
+      const schemeIdMatch = attrs.match(/schemeID="([^"]+)"/);
+      const schemeAgencyMatch = attrs.match(/schemeAgencyID="([^"]+)"/);
+
+      if (!schemeIdMatch) {
+        errors.push(
+          'ProfileID is missing the @schemeID attribute. Sproom returns ' +
+          '"[W-LIB003] Invalid schemeID. Must be one of: ' +
+          OIOUBL_PROFILE_SCHEME_IDS.join(', ') + '". ' +
+          'AlphaFlow uses schemeID="urn:oioubl:id:profileid-1.2" for NES Profile 5.'
+        );
+      } else if (!OIOUBL_PROFILE_SCHEME_IDS.includes(schemeIdMatch[1])) {
+        warnings.push(
+          'ProfileID @schemeID="' + schemeIdMatch[1] + '" is not a standard OIOUBL value. ' +
+          'Must be one of: ' + OIOUBL_PROFILE_SCHEME_IDS.join(', ') + '.'
+        );
+      }
+
+      if (!schemeAgencyMatch) {
+        warnings.push(
+          'ProfileID is missing the @schemeAgencyID attribute. Expected "320" (Danish Business Authority).'
+        );
+      } else if (schemeAgencyMatch[1] !== '320') {
+        warnings.push(
+          'ProfileID @schemeAgencyID="' + schemeAgencyMatch[1] + '" is not "320" (Danish Business Authority).'
+        );
+      }
+
+      // Check the profile value itself (NES Profile 5 = urn:www.nesubl.eu:profiles:profile5:ver2.0)
+      if (schemeIdMatch && schemeIdMatch[1] === 'urn:oioubl:id:profileid-1.2' &&
+          pid !== 'urn:www.nesubl.eu:profiles:profile5:ver2.0') {
+        warnings.push(
+          'ProfileID value "' + pid + '" with schemeID=1.2 is not the standard NES Profile 5 ' +
+          '("urn:www.nesubl.eu:profiles:profile5:ver2.0").'
+        );
+      }
     }
   }
 
