@@ -204,15 +204,29 @@ async function handleReceivedDocument(event: SproomWebhookEvent) {
       companyId: company.id,
     });
   } else {
-    // Try formats in order: legacy 'xml' first, then 'OioUbl2' (most
-    // common NemHandel format), then 'PeppolBis3' (cross-border). The
-    // webhook payload doesn't tell us the document format, so we attempt
-    // each in sequence until one succeeds.
-    const formatsToTry: Array<'xml' | 'OioUbl2' | 'PeppolBis3'> = [
-      'xml',
-      'OioUbl2',
+    // Try formats in order, preferring the SOURCE format first.
+    //
+    // Per the Sproom swagger, GET /api/documents/{id}/{format} can
+    // return 410 ("document gone") if Sproom can't CONVERT the source
+    // format to the requested format. The most common case is:
+    //   - Source: PeppolBis3 (sent via Peppol network)
+    //   - Request: 'xml' or 'OioUbl2' (NemHandel / OIOUBL format)
+    //   - Result: Sproom tries to convert PeppolBis3 → OioUbl2, but
+    //     the OIOUBL schematron requires 'DK' prefix on CVR values
+    //     (e.g. 'DK30518330', not just '30518330'), and the Peppol
+    //     source doesn't include the prefix → conversion fails → 410.
+    //
+    // Solution: try the permissive formats first (PeppolBis3), then
+    // stricter ones (OioUbl2), then the legacy 'xml' endpoint that
+    // triggers conversion. If a 410 fires on a conversion attempt, we
+    // DON'T break — we try the next format which may succeed by
+    // returning the document in its original (unconverted) form.
+    const formatsToTry: Array<'PeppolBis3' | 'OioUbl2' | 'xml'> = [
       'PeppolBis3',
+      'OioUbl2',
+      'xml',
     ];
+    let lastValidationError: SproomDocumentGoneError | null = null;
     for (const fmt of formatsToTry) {
       try {
         const raw = await sproomClient.getDocument(documentId, fmt, {
@@ -231,42 +245,34 @@ async function handleReceivedDocument(event: SproomWebhookEvent) {
         }
         // 404 → Sproom no longer has the document in this format.
         // Try the next format (or, on the last attempt, fall through).
-        // (Note: 410 now throws SproomDocumentGoneError and is handled
-        // in the catch block below — schema validation failure.)
         logger.warn('[WEBHOOK] Sproom getDocument returned null (404)', {
           documentId,
           childCompanyId: fetchChildId,
           format: fmt,
         });
       } catch (err) {
-        // Capture the error — surface it on the LAST attempt or if it's
-        // not a "format not available" error.
         const msg = err instanceof Error ? err.message : String(err);
         const isLastFormat = fmt === formatsToTry[formatsToTry.length - 1];
-        // SproomDocumentGoneError (HTTP 410) means the document failed
-        // schema validation — switching formats won't help, so stop
-        // immediately and surface the validation errors to the caller.
         const isDocumentGone = err instanceof SproomDocumentGoneError;
         const isFormatUnavailable =
           /\[HTTP 40[46]\b|\[HTTP 406\b|not acceptable|no content/i.test(msg);
         if (isDocumentGone) {
-          fetchError = msg;
-          logger.error('[WEBHOOK] Document gone (HTTP 410) — schema validation failed', {
+          // 410 means Sproom couldn't convert to this format — but the
+          // document may be retrievable in its original format. Capture
+          // the validation errors but DON'T break — try the next format.
+          lastValidationError = err as SproomDocumentGoneError;
+          logger.warn('[WEBHOOK] Format conversion failed (HTTP 410) — trying next format', {
             documentId,
             companyId: company.id,
             childCompanyId: fetchChildId,
             format: fmt,
-            error: fetchError,
-            validationErrors:
-              (err as SproomDocumentGoneError).validationErrors ?? null,
+            nextFormat: isLastFormat ? null : formatsToTry[formatsToTry.indexOf(fmt) + 1],
+            validationErrors: lastValidationError.validationErrors,
           });
-          break; // Don't try other formats — the document itself is invalid.
+          continue;
         }
         if (isLastFormat || !isFormatUnavailable) {
           fetchError = msg;
-          // Log the FULL error (including any HTTP status code embedded in
-          // the Sproom client's thrown message) in the SAME log line so it
-          // isn't lost when grepping with a tight --lines window.
           logger.error('[WEBHOOK] Could not fetch received document XML', {
             documentId,
             companyId: company.id,
@@ -286,6 +292,21 @@ async function handleReceivedDocument(event: SproomWebhookEvent) {
           });
         }
       }
+    }
+
+    // If we never retrieved XML but captured schema validation errors
+    // on at least one format attempt, surface them so the user can see
+    // WHY the document failed OIOUBL conversion (so they can fix the
+    // OIOUBL generator to add 'DK' prefixes etc.).
+    if (!xml && lastValidationError) {
+      fetchError = lastValidationError.message;
+      logger.error('[WEBHOOK] All formats failed — last 410 schema validation errors', {
+        documentId,
+        companyId: company.id,
+        childCompanyId: fetchChildId,
+        error: fetchError,
+        validationErrors: lastValidationError.validationErrors,
+      });
     }
   }
 
