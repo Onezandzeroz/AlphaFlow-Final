@@ -20,6 +20,7 @@ import {
   Landmark,
   BookOpen,
   CheckCircle2,
+  Inbox,
   X,
 } from 'lucide-react';
 
@@ -29,7 +30,7 @@ interface NotificationCenterProps {
 
 interface NotificationItem {
   id: string;
-  type: 'overdue' | 'vat' | 'bank-recon' | 'journal';
+  type: 'overdue' | 'vat' | 'bank-recon' | 'journal' | 'received-einvoice';
   icon: React.ReactNode;
   title: string;
   description: string;
@@ -62,6 +63,11 @@ const strings = {
     viewVat: 'Momsrapport',
     viewBankRecon: 'Bankafstemning',
     viewJournal: 'Finansjournal',
+    receivedEinvoice: 'Ny e-faktura modtaget',
+    receivedEinvoiceDesc: (supplier: string, invoiceNumber: string) =>
+      `${supplier} · ${invoiceNumber}`,
+    receivedEinvoiceCredit: 'Kreditnota modtaget',
+    viewInbox: 'Indbakke',
   },
   en: {
     title: 'Notifications',
@@ -83,6 +89,11 @@ const strings = {
     viewVat: 'VAT Report',
     viewBankRecon: 'Bank Reconciliation',
     viewJournal: 'Journal',
+    receivedEinvoice: 'New e-invoice received',
+    receivedEinvoiceDesc: (supplier: string, invoiceNumber: string) =>
+      `${supplier} · ${invoiceNumber}`,
+    receivedEinvoiceCredit: 'Credit note received',
+    viewInbox: 'Inbox',
   },
 };
 
@@ -320,6 +331,50 @@ export function NotificationCenter({ onNavigate }: NotificationCenterProps) {
         }
       } catch {
         // Silently fail journal fetch
+      }
+
+      // 5. Unread received e-invoices (last 10 newest — Sproom DocumentReceived webhook)
+      // Each becomes an individual notification so the bell badge reflects
+      // the actual count of newly received invoices/credit notes in the inbox.
+      // Clicking a notification navigates to the 'transactions' view, which
+      // contains the e-invoice inbox as a tab.
+      try {
+        const recvRes = await fetch('/api/invoices/received/unread');
+        if (recvRes.ok) {
+          const recvData = await recvRes.json();
+          const recvInvoices = (recvData.invoices || []) as Array<{
+            id: string;
+            supplierName: string;
+            invoiceNumber: string;
+            documentType: string;
+            format: string;
+            totalAmount: number;
+            currency: string;
+            createdAt: string;
+          }>;
+
+          for (const inv of recvInvoices) {
+            const createdAt = new Date(inv.createdAt);
+            const isCreditNote = inv.documentType === 'CREDIT_NOTE';
+            items.push({
+              id: `received-einvoice-${inv.id}`,
+              type: 'received-einvoice',
+              icon: (
+                <div className="h-8 w-8 rounded-full bg-teal-100 dark:bg-teal-950/40 flex items-center justify-center shrink-0">
+                  <Inbox className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                </div>
+              ),
+              title: isCreditNote ? t.receivedEinvoiceCredit : t.receivedEinvoice,
+              description: t.receivedEinvoiceDesc(inv.supplierName, inv.invoiceNumber),
+              timeAgo: formatDistanceToNow(createdAt, { addSuffix: true, locale }),
+              timestamp: createdAt.getTime(),
+              actionView: 'transactions',
+              actionLabel: t.viewInbox,
+            });
+          }
+        }
+      } catch {
+        // Silently fail received-einvoice fetch
       }
 
       // *** KEY FIX: Sort all notifications by timestamp DESCENDING (newest first) ***

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from '@/lib/use-translation';
+import { formatCurrency } from '@/lib/currency-utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,9 @@ import {
   ChevronDown,
   ChevronUp,
   Send,
+  FileText,
+  FileMinus,
+  ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -49,6 +53,27 @@ interface EInvoiceSendingRecord {
   nextRetryAt: string | null;
   messageId: string | null;
   createdAt: string;
+}
+
+interface ReceivedInvoiceRecord {
+  id: string;
+  supplierName: string;
+  supplierCvr: string | null;
+  invoiceNumber: string;
+  issueDate: string;
+  dueDate: string | null;
+  currencyCode: string;
+  format: string;
+  documentType: string;
+  customizationId: string | null;
+  status: string;
+  readAt: string | null;
+  payableAmount: number;
+  taxExclusiveAmount: number;
+  taxAmount: number;
+  taxInclusiveAmount: number;
+  createdAt: string;
+  notes: string | null;
 }
 
 interface EInvoiceSendStatusProps {
@@ -99,6 +124,22 @@ function getStatusConfig(status: string, isDa: boolean) {
       colorClass: 'bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700/40',
       icon: <XCircle className="h-3 w-3" />,
     },
+    // Inbound ReceivedInvoice statuses
+    RECEIVED: {
+      label: isDa ? 'Modtaget' : 'Received',
+      colorClass: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40',
+      icon: <Clock className="h-3 w-3" />,
+    },
+    APPROVED: {
+      label: isDa ? 'Accepteret' : 'Approved',
+      colorClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40',
+      icon: <CheckCircle2 className="h-3 w-3" />,
+    },
+    POSTED: {
+      label: isDa ? 'Bogført' : 'Posted',
+      colorClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40',
+      icon: <CheckCircle2 className="h-3 w-3" />,
+    },
   };
   return configs[status] || configs.PENDING;
 }
@@ -127,6 +168,39 @@ function getChannelLabel(channel: string, isDa: boolean) {
   return channel;
 }
 
+// Inbound format label (for received invoices)
+function getReceiveFormatLabel(format: string): string {
+  if (format === 'OIOUBL') return 'OIOUBL';
+  if (format === 'PEPPOL_BIS') return 'Peppol BIS';
+  return format;
+}
+
+// Document type icon for received invoices (Invoice / Credit note)
+function getDocumentTypeIcon(docType: string) {
+  if (docType === 'CREDIT_NOTE') {
+    return <FileMinus className="h-3.5 w-3.5 text-amber-500" />;
+  }
+  if (docType === 'CORRECTED' || docType === 'SELF_BILLED') {
+    return <FileText className="h-3.5 w-3.5 text-blue-500" />;
+  }
+  // INVOICE (default)
+  return <FileText className="h-3.5 w-3.5 text-muted-foreground" />;
+}
+
+function getDocumentTypeLabel(docType: string, isDa: boolean) {
+  switch (docType) {
+    case 'CREDIT_NOTE':
+      return isDa ? 'Kreditnota' : 'Credit note';
+    case 'CORRECTED':
+      return isDa ? 'Korrigeret' : 'Corrected';
+    case 'SELF_BILLED':
+      return isDa ? 'Selvfaktura' : 'Self-billed';
+    case 'INVOICE':
+    default:
+      return isDa ? 'Faktura' : 'Invoice';
+  }
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
@@ -136,17 +210,22 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
 
   // ── State ──
   const [records, setRecords] = useState<EInvoiceSendingRecord[]>([]);
+  const [receivedRecords, setReceivedRecords] = useState<ReceivedInvoiceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  // ── Fetch send history ──
+  // ── Fetch send + receive history ──
   const fetchHistory = useCallback(async () => {
     try {
       const res = await fetch(`/api/invoices/${invoiceId}/einvoice-sends`);
       if (res.ok) {
         const data = await res.json();
-        setRecords(data.sends || data.records || []);
+        // Backward compat: support both `einvoiceSends` (canonical) and the
+        // legacy `sends` / `records` field names (the API now returns
+        // `einvoiceSends` + `receivedInvoices`).
+        setRecords(data.einvoiceSends || data.sends || data.records || []);
+        setReceivedRecords(data.receivedInvoices || []);
       }
     } catch (err) {
       console.error('Failed to fetch e-invoice send history:', err);
@@ -215,8 +294,8 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
     );
   }
 
-  // ── Empty state ──
-  if (records.length === 0) {
+  // ── Combined empty state (both sends AND receives empty) ──
+  if (records.length === 0 && receivedRecords.length === 0) {
     return (
       <Card className="stat-card border-0 shadow-lg">
         <CardContent className="p-4 lg:p-6">
@@ -226,12 +305,12 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
             </div>
             <div>
               <p className="font-medium text-sm">
-                {isDa ? 'Ingen e-faktura afsendelser' : 'No e-invoice sends'}
+                {isDa ? 'Ingen e-faktura historik' : 'No e-invoice history'}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {isDa
-                  ? 'Denne faktura er endnu ikke sendt som e-faktura.'
-                  : 'This invoice has not yet been sent as an e-invoice.'}
+                  ? 'Denne faktura er endnu ikke sendt eller modtaget som e-faktura.'
+                  : 'This invoice has not yet been sent or received as an e-invoice.'}
               </p>
             </div>
           </div>
@@ -265,123 +344,131 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
           </Button>
         </div>
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-xs uppercase tracking-wide">
-                  {isDa ? 'Kanal' : 'Channel'}
-                </TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-center">
-                  {isDa ? 'Status' : 'Status'}
-                </TableHead>
-                <TableHead className="text-xs uppercase tracking-wide hidden sm:table-cell">
-                  {isDa ? 'Sendt' : 'Sent'}
-                </TableHead>
-                <TableHead className="text-xs uppercase tracking-wide hidden md:table-cell">
-                  {isDa ? 'Leveret' : 'Delivered'}
-                </TableHead>
-                <TableHead className="text-xs uppercase tracking-wide text-right">
-                  {isDa ? 'Handling' : 'Action'}
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {records.map((record) => {
-                const statusConfig = getStatusConfig(record.status, isDa);
-                const isExpanded = expandedRow === record.id;
-                const isFailed = record.status === 'FAILED' || record.status === 'REJECTED';
-                const canRetry = isFailed && record.retryCount < record.maxRetries;
+        {/* Send table — or its own empty state */}
+        {records.length === 0 ? (
+          <div className="px-4 lg:px-6 py-6 text-center">
+            <p className="text-xs text-muted-foreground">
+              {isDa ? 'Ingen e-faktura afsendelser' : 'No e-invoice sends'}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs uppercase tracking-wide">
+                    {isDa ? 'Kanal' : 'Channel'}
+                  </TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide text-center">
+                    {isDa ? 'Status' : 'Status'}
+                  </TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide hidden sm:table-cell">
+                    {isDa ? 'Sendt' : 'Sent'}
+                  </TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide hidden md:table-cell">
+                    {isDa ? 'Leveret' : 'Delivered'}
+                  </TableHead>
+                  <TableHead className="text-xs uppercase tracking-wide text-right">
+                    {isDa ? 'Handling' : 'Action'}
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {records.map((record) => {
+                  const statusConfig = getStatusConfig(record.status, isDa);
+                  const isExpanded = expandedRow === record.id;
+                  const isFailed = record.status === 'FAILED' || record.status === 'REJECTED';
+                  const canRetry = isFailed && record.retryCount < record.maxRetries;
 
-                return (
-                  <TableRow key={record.id} className="group">
-                    {/* Channel */}
-                    <TableCell>
-                      <div className="flex items-center gap-1.5">
-                        {getChannelIcon(record.channel)}
-                        <span className="text-xs font-medium">
-                          {getChannelLabel(record.channel, isDa)}
-                        </span>
-                      </div>
-                    </TableCell>
+                  return (
+                    <TableRow key={record.id} className="group">
+                      {/* Channel */}
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {getChannelIcon(record.channel)}
+                          <span className="text-xs font-medium">
+                            {getChannelLabel(record.channel, isDa)}
+                          </span>
+                        </div>
+                      </TableCell>
 
-                    {/* Status */}
-                    <TableCell className="text-center">
-                      <Badge className={`${statusConfig.colorClass} text-[10px] font-medium gap-1 border`}>
-                        {statusConfig.icon}
-                        {statusConfig.label}
-                      </Badge>
-                    </TableCell>
+                      {/* Status */}
+                      <TableCell className="text-center">
+                        <Badge className={`${statusConfig.colorClass} text-[10px] font-medium gap-1 border`}>
+                          {statusConfig.icon}
+                          {statusConfig.label}
+                        </Badge>
+                      </TableCell>
 
-                    {/* Sent */}
-                    <TableCell className="hidden sm:table-cell">
-                      {record.sentAt ? (
-                        <span className="text-xs text-muted-foreground">
-                          {format(new Date(record.sentAt), 'dd.MM.yyyy HH:mm', { locale })}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-
-                    {/* Delivered */}
-                    <TableCell className="hidden md:table-cell">
-                      {record.deliveredAt ? (
-                        <span className="text-xs text-green-600 dark:text-green-400">
-                          {format(new Date(record.deliveredAt), 'dd.MM.yyyy HH:mm', { locale })}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-
-                    {/* Action */}
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* Retry button for failed */}
-                        {canRetry && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 gap-1"
-                            onClick={() => handleRetry(record)}
-                            disabled={retryingId === record.id}
-                          >
-                            {retryingId === record.id ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-3 w-3" />
-                            )}
-                            {isDa ? 'Forsøg igen' : 'Retry'}
-                          </Button>
+                      {/* Sent */}
+                      <TableCell className="hidden sm:table-cell">
+                        {record.sentAt ? (
+                          <span className="text-xs text-muted-foreground">
+                            {format(new Date(record.sentAt), 'dd.MM.yyyy HH:mm', { locale })}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
+                      </TableCell>
 
-                        {/* Expand/collapse for error details */}
-                        {(record.errorMessage || record.errorCode || record.messageId) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => setExpandedRow(isExpanded ? null : record.id)}
-                          >
-                            {isExpanded ? (
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
+                      {/* Delivered */}
+                      <TableCell className="hidden md:table-cell">
+                        {record.deliveredAt ? (
+                          <span className="text-xs text-green-600 dark:text-green-400">
+                            {format(new Date(record.deliveredAt), 'dd.MM.yyyy HH:mm', { locale })}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+                      </TableCell>
 
-        {/* Expanded detail rows */}
+                      {/* Action */}
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Retry button for failed */}
+                          {canRetry && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 gap-1"
+                              onClick={() => handleRetry(record)}
+                              disabled={retryingId === record.id}
+                            >
+                              {retryingId === record.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3 w-3" />
+                              )}
+                              {isDa ? 'Forsøg igen' : 'Retry'}
+                            </Button>
+                          )}
+
+                          {/* Expand/collapse for error details */}
+                          {(record.errorMessage || record.errorCode || record.messageId) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => setExpandedRow(isExpanded ? null : record.id)}
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {/* Expanded detail rows for sends */}
         {records.map((record) => {
           const isExpanded = expandedRow === record.id;
           if (!isExpanded) return null;
@@ -474,6 +561,144 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
             </div>
           );
         })}
+
+        {/* ─── Received e-invoices section ─────────────────────────────── */}
+        <div className="border-t border-gray-100 dark:border-white/5">
+          {/* Section title */}
+          <div className="px-4 lg:px-6 py-3 border-b border-gray-100 dark:border-white/5 flex items-center gap-2">
+            <Inbox className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+              {isDa ? 'Modtagne e-fakturaer' : 'Received e-invoices'}
+            </h3>
+            <Badge variant="secondary" className="text-[10px] px-1.5">
+              {receivedRecords.length}
+            </Badge>
+          </div>
+
+          {/* Received table — or its own empty state */}
+          {receivedRecords.length === 0 ? (
+            <div className="px-4 lg:px-6 py-6 text-center">
+              <p className="text-xs text-muted-foreground">
+                {isDa ? 'Ingen modtagne e-fakturaer' : 'No received e-invoices'}
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-96 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs uppercase tracking-wide">
+                      {isDa ? 'Type' : 'Type'}
+                    </TableHead>
+                    <TableHead className="text-xs uppercase tracking-wide">
+                      {isDa ? 'Afsender' : 'Supplier'}
+                    </TableHead>
+                    <TableHead className="text-xs uppercase tracking-wide hidden sm:table-cell">
+                      {isDa ? 'Nr.' : 'No.'}
+                    </TableHead>
+                    <TableHead className="text-xs uppercase tracking-wide hidden md:table-cell">
+                      {isDa ? 'Format' : 'Format'}
+                    </TableHead>
+                    <TableHead className="text-xs uppercase tracking-wide text-center">
+                      {isDa ? 'Status' : 'Status'}
+                    </TableHead>
+                    <TableHead className="text-xs uppercase tracking-wide hidden lg:table-cell">
+                      {isDa ? 'Modtaget' : 'Received'}
+                    </TableHead>
+                    <TableHead className="text-xs uppercase tracking-wide text-right">
+                      {isDa ? 'Beløb' : 'Amount'}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {receivedRecords.map((record) => {
+                    const statusConfig = getStatusConfig(record.status, isDa);
+                    return (
+                      <TableRow key={record.id} className="group">
+                        {/* Type icon */}
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            {getDocumentTypeIcon(record.documentType)}
+                            <span className="text-xs font-medium hidden sm:inline">
+                              {getDocumentTypeLabel(record.documentType, isDa)}
+                            </span>
+                          </div>
+                        </TableCell>
+
+                        {/* Supplier name */}
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs font-medium truncate max-w-[180px]">
+                              {record.supplierName}
+                            </span>
+                            {record.supplierCvr && (
+                              <span className="text-[10px] text-muted-foreground">
+                                CVR: {record.supplierCvr}
+                              </span>
+                            )}
+                            {/* Auto-received badge */}
+                            {record.notes && (
+                              record.notes.includes('Sproom webhook') ||
+                              record.notes.includes('ap_webhook') ||
+                              record.notes.includes('Storecove webhook')
+                            ) && (
+                              <Badge
+                                variant="outline"
+                                className="mt-0.5 w-fit text-[9px] py-0 px-1.5 font-normal text-emerald-700 border-emerald-300 bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:bg-emerald-950/40"
+                                title={record.notes}
+                              >
+                                <ShieldCheck className="h-2.5 w-2.5 mr-0.5" />
+                                Auto
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        {/* Invoice number */}
+                        <TableCell className="hidden sm:table-cell">
+                          <span className="text-xs font-mono">{record.invoiceNumber}</span>
+                        </TableCell>
+
+                        {/* Format */}
+                        <TableCell className="hidden md:table-cell">
+                          <span className="text-xs text-muted-foreground">
+                            {getReceiveFormatLabel(record.format)}
+                          </span>
+                        </TableCell>
+
+                        {/* Status */}
+                        <TableCell className="text-center">
+                          <Badge className={`${statusConfig.colorClass} text-[10px] font-medium gap-1 border`}>
+                            {statusConfig.icon}
+                            {statusConfig.label}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Received date */}
+                        <TableCell className="hidden lg:table-cell">
+                          {record.createdAt ? (
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(record.createdAt), 'dd.MM.yyyy HH:mm', { locale })}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+
+                        {/* Amount */}
+                        <TableCell className="text-right">
+                          <span className="text-xs font-medium tabular-nums">
+                            {formatCurrency(record.payableAmount, record.currencyCode)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

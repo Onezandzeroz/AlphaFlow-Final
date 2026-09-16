@@ -29,7 +29,7 @@
  * - auditLog for immutable audit trail (Danish Bookkeeping Law §10-12)
  */
 
-import { EInvoiceSendChannel, EInvoiceSendStatus, EInvoiceFormat } from '@prisma/client';
+import { EInvoiceSendChannel, EInvoiceSendStatus, EInvoiceFormat, ReceivedInvoiceStatus } from '@prisma/client';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auditLog } from '@/lib/audit';
@@ -1041,6 +1041,124 @@ export async function getInvoiceSendHistory(
   });
 
   return records.map(serializeSending);
+}
+
+/**
+ * Serializable ReceivedInvoice (inbound e-invoice).
+ *
+ * Decimal fields are converted to numbers and Date fields to ISO strings
+ * so they survive JSON serialisation in the API route layer.
+ */
+export interface ReceivedInvoiceSummary {
+  id: string;
+  supplierName: string;
+  supplierCvr: string | null;
+  invoiceNumber: string;
+  issueDate: string;
+  dueDate: string | null;
+  currencyCode: string;
+  format: string;
+  documentType: string;
+  customizationId: string | null;
+  status: string;
+  readAt: string | null;
+  payableAmount: number;
+  taxExclusiveAmount: number;
+  taxAmount: number;
+  taxInclusiveAmount: number;
+  createdAt: string;
+  updatedAt: string;
+  companyId: string;
+  notes: string | null;
+  validationErrors: string | null;
+  validationWarnings: string | null;
+}
+
+/**
+ * Helper: serialise a raw Prisma ReceivedInvoice record into the
+ * ReceivedInvoiceSummary shape (numbers + ISO strings). Decimal
+ * fields are coerced via Number() so they survive JSON.stringify
+ * (otherwise decimal.js returns a string from .toJSON()).
+ */
+function serializeReceived(record: {
+  id: string;
+  supplierName: string;
+  supplierCvr: string | null;
+  invoiceNumber: string;
+  issueDate: Date;
+  dueDate: Date | null;
+  currencyCode: string;
+  format: EInvoiceFormat;
+  documentType: string;
+  customizationId: string | null;
+  status: ReceivedInvoiceStatus;
+  readAt: Date | null;
+  payableAmount: { toNumber(): number } | number;
+  taxExclusiveAmount: { toNumber(): number } | number;
+  taxAmount: { toNumber(): number } | number;
+  taxInclusiveAmount: { toNumber(): number } | number;
+  createdAt: Date;
+  updatedAt: Date;
+  companyId: string;
+  notes: string | null;
+  validationErrors: string | null;
+  validationWarnings: string | null;
+}): ReceivedInvoiceSummary {
+  const toNum = (v: { toNumber(): number } | number) =>
+    typeof v === 'number' ? v : v.toNumber();
+  return {
+    id: record.id,
+    supplierName: record.supplierName,
+    supplierCvr: record.supplierCvr,
+    invoiceNumber: record.invoiceNumber,
+    issueDate: record.issueDate.toISOString(),
+    dueDate: record.dueDate?.toISOString() ?? null,
+    currencyCode: record.currencyCode,
+    format: record.format as string,
+    documentType: record.documentType as string,
+    customizationId: record.customizationId,
+    status: record.status as string,
+    readAt: record.readAt?.toISOString() ?? null,
+    payableAmount: toNum(record.payableAmount),
+    taxExclusiveAmount: toNum(record.taxExclusiveAmount),
+    taxAmount: toNum(record.taxAmount),
+    taxInclusiveAmount: toNum(record.taxInclusiveAmount),
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    companyId: record.companyId,
+    notes: record.notes,
+    validationErrors: record.validationErrors,
+    validationWarnings: record.validationWarnings,
+  };
+}
+
+/**
+ * Get the inbound receive history for a specific invoice number.
+ *
+ * Looks up ReceivedInvoice records (incoming OIOUBL / Peppol BIS
+ * invoices + credit notes) whose `invoiceNumber` matches the given
+ * invoice number, scoped to the same tenant (companyId). This lets the
+ * send-status popup show BOTH directions of the e-invoice lifecycle:
+ * outbound sends (EInvoiceSending) AND inbound receives (ReceivedInvoice).
+ *
+ * For example: if INV-2026-0008 was sent FROM Virksomhed C and the
+ * recipient later sent back a credit note with the same number, both
+ * will show up in the popup.
+ *
+ * @param invoiceNumber - The invoice number to match (cbc:ID in the XML)
+ * @param companyId      - ID of the Company (tenant isolation)
+ * @returns Array of ReceivedInvoiceSummary records, newest first
+ */
+export async function getInvoiceReceiveHistory(
+  invoiceNumber: string,
+  companyId: string,
+): Promise<ReceivedInvoiceSummary[]> {
+  const records = await db.receivedInvoice.findMany({
+    where: { invoiceNumber, companyId },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return records.map(serializeReceived);
 }
 
 /**
