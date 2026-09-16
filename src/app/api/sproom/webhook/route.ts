@@ -192,25 +192,93 @@ async function handleReceivedDocument(event: SproomWebhookEvent) {
   const fetchChildId = childCompanyId ?? company.sproomChildCompanyId ?? undefined;
 
   let xml: string | null = null;
-  try {
-    const raw = await sproomClient.getDocument(documentId, 'xml', {
-      childCompanyId: fetchChildId,
-    });
-    xml = raw ? (typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf-8')) : null;
-  } catch (err) {
-    logger.error('[WEBHOOK] Sproom getDocument failed', {
+  let fetchError: string | null = null;
+  if (!fetchChildId) {
+    fetchError =
+      'No childCompanyId available — neither webhook payload nor DB had one';
+    logger.error('[WEBHOOK] Cannot fetch document XML — no childCompanyId', {
       documentId,
-      childCompanyId: fetchChildId,
-      error: err instanceof Error ? err.message : String(err),
+      webhookCompanyId: childCompanyId ?? null,
+      dbChildCompanyId: company.sproomChildCompanyId ?? null,
+      companyId: company.id,
     });
+  } else {
+    // Try formats in order: legacy 'xml' first, then 'OioUbl2' (most
+    // common NemHandel format), then 'PeppolBis3' (cross-border). The
+    // webhook payload doesn't tell us the document format, so we attempt
+    // each in sequence until one succeeds.
+    const formatsToTry: Array<'xml' | 'OioUbl2' | 'PeppolBis3'> = [
+      'xml',
+      'OioUbl2',
+      'PeppolBis3',
+    ];
+    for (const fmt of formatsToTry) {
+      try {
+        const raw = await sproomClient.getDocument(documentId, fmt, {
+          childCompanyId: fetchChildId,
+        });
+        xml = raw ? (typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf-8')) : null;
+        if (xml) {
+          logger.info('[WEBHOOK] Sproom getDocument succeeded', {
+            documentId,
+            childCompanyId: fetchChildId,
+            format: fmt,
+            bytes: xml.length,
+            preview: xml.substring(0, 200),
+          });
+          break;
+        }
+        // 404/410 → Sproom no longer has the document in this format.
+        // Try the next format (or, on the last attempt, fall through).
+        logger.warn('[WEBHOOK] Sproom getDocument returned null (404/410)', {
+          documentId,
+          childCompanyId: fetchChildId,
+          format: fmt,
+        });
+      } catch (err) {
+        // Capture the error — surface it on the LAST attempt or if it's
+        // not a "format not available" error.
+        const msg = err instanceof Error ? err.message : String(err);
+        const isLastFormat = fmt === formatsToTry[formatsToTry.length - 1];
+        const isFormatUnavailable =
+          /\[HTTP 40[46]\b|\[HTTP 406\b|not acceptable|no content/i.test(msg);
+        if (isLastFormat || !isFormatUnavailable) {
+          fetchError = msg;
+          // Log the FULL error (including any HTTP status code embedded in
+          // the Sproom client's thrown message) in the SAME log line so it
+          // isn't lost when grepping with a tight --lines window.
+          logger.error('[WEBHOOK] Could not fetch received document XML', {
+            documentId,
+            companyId: company.id,
+            childCompanyId: fetchChildId,
+            format: fmt,
+            error: fetchError,
+            stack: err instanceof Error ? err.stack : undefined,
+          });
+          if (!isFormatUnavailable) break; // non-format error → stop trying
+        } else {
+          // Intermediate format attempt failed with 404/406 → try next.
+          logger.info('[WEBHOOK] Format not available, trying next', {
+            documentId,
+            childCompanyId: fetchChildId,
+            format: fmt,
+            error: msg,
+          });
+        }
+      }
+    }
   }
 
   if (!xml) {
-    logger.error('[WEBHOOK] Could not fetch received document XML', {
-      documentId,
-      companyId: company.id,
+    // Return 200 so Sproom doesn't retry — we've logged the failure and
+    // the raw XML is still available in Sproom's dashboard for manual
+    // retrieval if needed. Sproom retries for up to 5 days; if the
+    // failure is transient (e.g. child token expired), we'd see retries.
+    return NextResponse.json({
+      received: true,
+      warning: 'document_fetch_failed',
+      error: fetchError,
     });
-    return NextResponse.json({ received: true, warning: 'document_fetch_failed' });
   }
 
   // ── Parse + store (idempotent) ──────────────────────────────────

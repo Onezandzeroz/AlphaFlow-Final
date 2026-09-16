@@ -1119,10 +1119,34 @@ export class SproomClient {
       );
     }
 
-    if (response.status === 404 || response.status === 410) return null;
+    if (response.status === 404 || response.status === 410) {
+      logger.warn('[SPROOM] getDocument returned 404/410 — document not (yet) available', {
+        documentId,
+        format,
+        childCompanyId: options.childCompanyId,
+        status: response.status,
+      });
+      return null;
+    }
     if (!response.ok) {
       const error = await this.parseError(response);
-      throw new Error(`Failed to fetch Sproom document ${documentId} (${format}): ${error.message || response.statusText}`);
+      // Eagerly log the HTTP status + body for the e-invoice receive
+      // flow — this is the most common failure point (auth, format,
+      // document-not-yet-available), and the verbose log makes it
+      // trivial to diagnose from `pm2 logs`.
+      logger.error('[SPROOM] getDocument failed', {
+        documentId,
+        format,
+        childCompanyId: options.childCompanyId,
+        httpStatus: response.status,
+        httpStatusText: response.statusText,
+        errorCode: error.errorCode,
+        errorMessage: error.message,
+        errorDetails: error.details,
+      });
+      throw new Error(
+        `Failed to fetch Sproom document ${documentId} (${format}) [HTTP ${response.status} ${response.statusText}]: ${error.message || response.statusText}`,
+      );
     }
 
     // Binary content → return as Buffer. HTML/XML text → return as string.
