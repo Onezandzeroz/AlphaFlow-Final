@@ -84,13 +84,26 @@ export function validateOIOUBL(xml: string): ValidationResult {
   }
 
   // ── 1. Basic XML structure ──────────────────────────────────────────
+  //
+  // UBL 2.1 supports two root document types:
+  //   <Invoice>     — commercial invoices (and Peppol BIS 3 credit notes
+  //                   which use InvoiceTypeCode=381 to distinguish them).
+  //   <CreditNote>  — OIOUBL credit notes (separate document type, NO
+  //                   InvoiceTypeCode element). The official Erhvervsstyrelsen
+  //                   reference example is at docs/SBD-OIOUBL-CreditNote-valid.xml.
+  // Detect the root type up front so we can apply format-specific rules
+  // (e.g. accept the absence of InvoiceTypeCode for CreditNote).
+  const isCreditNoteRoot = /<CreditNote[\s>]/.test(xml) &&
+    xml.includes('xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2"');
+  const isInvoiceRoot = /<Invoice[\s>]/.test(xml) &&
+    xml.includes('xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"');
 
-  if (!xml.includes('<Invoice')) {
-    errors.push('Missing root <Invoice> element.');
-  }
-
-  if (!xml.includes('xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"')) {
-    errors.push('Missing UBL Invoice namespace declaration.');
+  if (!isInvoiceRoot && !isCreditNoteRoot) {
+    errors.push(
+      'Missing root <Invoice> or <CreditNote> element with the correct UBL namespace. ' +
+      'Expected <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"> ' +
+      'or <CreditNote xmlns="urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2">.'
+    );
   }
 
   if (!xml.includes('cbc:UBLVersionID')) {
@@ -134,28 +147,38 @@ export function validateOIOUBL(xml: string): ValidationResult {
     }
   }
 
-  // ── 4. Invoice line items ───────────────────────────────────────────
-
+  // ── 4. Line items ───────────────────────────────────────────────────
+  //
+  // OIOUBL credit notes use <cac:CreditNoteLine> with <cbc:CreditedQuantity>;
+  // invoices (and Peppol BIS 3 credit notes) use <cac:InvoiceLine> with
+  // <cbc:InvoicedQuantity>. The validator accepts either set of element
+  // names and counts whichever is present.
   const invoiceLineCount = countOccurrences(xml, 'cac:InvoiceLine');
-  if (invoiceLineCount === 0) {
-    errors.push('Invoice must contain at least one line item.');
+  const creditNoteLineCount = countOccurrences(xml, 'cac:CreditNoteLine');
+  const totalLineCount = invoiceLineCount + creditNoteLineCount;
+  if (totalLineCount === 0) {
+    errors.push('Document must contain at least one line item (cac:InvoiceLine or cac:CreditNoteLine).');
   }
 
-  // Validate each invoice line
-  for (let i = 0; i < invoiceLineCount; i++) {
+  // Validate each invoice line. For OIOUBL CreditNote documents, the
+  // quantity element is cbc:CreditedQuantity; for Invoice documents, it's
+  // cbc:InvoicedQuantity. The validator extracts whichever is present.
+  const quantityTagName = isCreditNoteRoot ? 'cbc:CreditedQuantity' : 'cbc:InvoicedQuantity';
+  const lineCountForLoop = isCreditNoteRoot ? creditNoteLineCount : invoiceLineCount;
+  for (let i = 0; i < lineCountForLoop; i++) {
     const lineDescription = extractNthElement(xml, 'cbc:Description', i);
     if (!lineDescription) {
-      errors.push(`Invoice line ${i + 1}: description is missing.`);
+      errors.push(`Line ${i + 1}: description is missing.`);
     }
 
-    const lineQuantity = extractNthElement(xml, 'cbc:InvoicedQuantity', i);
+    const lineQuantity = extractNthElement(xml, quantityTagName, i);
     if (!lineQuantity || parseFloat(lineQuantity) <= 0) {
-      errors.push(`Invoice line ${i + 1}: quantity must be greater than 0.`);
+      errors.push(`Line ${i + 1}: quantity must be greater than 0.`);
     }
 
     const linePrice = extractNthElement(xml, 'cbc:PriceAmount', i);
     if (!linePrice || parseFloat(linePrice) < 0) {
-      errors.push(`Invoice line ${i + 1}: unit price must be 0 or greater.`);
+      errors.push(`Line ${i + 1}: unit price must be 0 or greater.`);
     }
   }
 
@@ -188,11 +211,24 @@ export function validateOIOUBL(xml: string): ValidationResult {
   const customizationIdValue = customizationIdForTotals ? customizationIdForTotals[1].trim() : '';
   const isOIOUBLFormat = customizationIdValue === 'OIOUBL-2.1' || customizationIdValue === 'OIOUBL-2.02';
 
-  // Sum only the per-line LineExtensionAmounts (inside InvoiceLine), NOT
-  // the LegalMonetaryTotal/LineExtensionAmount (which is the total of all
-  // lines — including it would double-count: total + sum(lines) = 2×total,
-  // producing a false "TaxExclusiveAmount mismatch" error).
-  const invoiceLineBlocks = xml.match(/<cac:InvoiceLine[\s\S]*?<\/cac:InvoiceLine>/g) || [];
+  // Sum only the per-line LineExtensionAmounts (inside InvoiceLine OR
+  // CreditNoteLine), NOT the LegalMonetaryTotal/LineExtensionAmount (which
+  // is the total of all lines — including it would double-count:
+  // total + sum(lines) = 2×total, producing a false "TaxExclusiveAmount
+  // mismatch" error). Both element names are accepted (Task 43: OIOUBL
+  // CreditNotes use cac:CreditNoteLine instead of cac:InvoiceLine).
+  const lineBlockRegex = isCreditNoteRoot
+    ? /<cac:CreditNoteLine[\s\S]*?<\/cac:CreditNoteLine>/g
+    : /<cac:InvoiceLine[\s\S]*?<\/cac:InvoiceLine>/g;
+  let invoiceLineBlocks: string[] = xml.match(lineBlockRegex) ?? [];
+  // Fallback: if the document is a CreditNote but for some reason uses
+  // InvoiceLine elements (or vice versa), also try the other element name.
+  if (invoiceLineBlocks.length === 0) {
+    const fallbackRegex = isCreditNoteRoot
+      ? /<cac:InvoiceLine[\s\S]*?<\/cac:InvoiceLine>/g
+      : /<cac:CreditNoteLine[\s\S]*?<\/cac:CreditNoteLine>/g;
+    invoiceLineBlocks = xml.match(fallbackRegex) ?? [];
+  }
   const perLineXml = invoiceLineBlocks.join('');
   const lineExtensionAmounts = extractAllValues(perLineXml, 'cbc:LineExtensionAmount');
   const calculatedLineTotal = lineExtensionAmounts.reduce((sum, val) => sum + parseFloat(val || '0'), 0);
@@ -543,13 +579,41 @@ export function validateOIOUBL(xml: string): ValidationResult {
     }
   }
 
+  // ── 10a. InvoiceTypeCode ────────────────────────────────────────────
+  //
+  // For OIOUBL <Invoice> documents: InvoiceTypeCode is REQUIRED (one of
+  // 380, 381, 384, 389). Its absence is a validation error.
+  //
+  // For OIOUBL <CreditNote> documents: InvoiceTypeCode is OMITTED entirely
+  // (Task 43 — OIOUBL credit notes are a separate document type with no
+  // InvoiceTypeCode element; emitting InvoiceTypeCode=381 on a CreditNote
+  // triggers Sproom's [F-INV011] "Invalid InvoiceTypeCode" schematron
+  // rejection). Its absence on a CreditNote root is correct, NOT an error.
+  //
+  // For Peppol BIS 3 documents: InvoiceTypeCode is REQUIRED (one of
+  // 380, 381, ...) — Peppol BIS 3 has no separate CreditNote document
+  // type; credit notes are <Invoice> documents with InvoiceTypeCode=381.
   const invoiceTypeMatch = xml.match(/<cbc:InvoiceTypeCode[^>]*>([^<]+)/);
   if (!invoiceTypeMatch) {
-    errors.push('Missing InvoiceTypeCode. Value 380 (Commercial invoice) is expected.');
+    if (isCreditNoteRoot) {
+      // OK — OIOUBL CreditNotes have no InvoiceTypeCode (Task 43).
+    } else {
+      errors.push('Missing InvoiceTypeCode. Value 380 (Commercial invoice) is expected.');
+    }
   } else {
     const typeCode = invoiceTypeMatch[1].trim();
     if (typeCode !== '380' && typeCode !== '381' && typeCode !== '384' && typeCode !== '389') {
       warnings.push(`InvoiceTypeCode "${typeCode}" is not standard. Expected 380 (Commercial invoice), 381 (Credit note), 384 (Corrected invoice), or 389 (Self-billed invoice).`);
+    }
+    // Extra warning: InvoiceTypeCode present on a CreditNote root — Sproom
+    // would reject this with [F-INV011]. Recommend removing the element.
+    if (isCreditNoteRoot) {
+      warnings.push(
+        'InvoiceTypeCode is present on a <CreditNote> root element. ' +
+        'OIOUBL 2.1 credit notes must NOT have an InvoiceTypeCode — Sproom ' +
+        'rejects it with [F-INV011] "Invalid InvoiceTypeCode" because 381 ' +
+        'is not in the urn:oioubl:codelist:invoicetypecode-1.1 codelist.'
+      );
     }
   }
 
@@ -575,9 +639,12 @@ export function validateOIOUBL(xml: string): ValidationResult {
     }
   }
 
-  // DK-R-016: CreditNote PayableAmount must not be negative
+  // DK-R-016: CreditNote PayableAmount must not be negative.
+  // Applies to BOTH OIOUBL CreditNote root documents AND Peppol BIS 3
+  // <Invoice> documents with InvoiceTypeCode=381.
   const typeCodeForTotal = invoiceTypeMatch ? invoiceTypeMatch[1].trim() : '';
-  if (typeCodeForTotal === '381') {
+  const isCreditNoteForTotalCheck = isCreditNoteRoot || typeCodeForTotal === '381';
+  if (isCreditNoteForTotalCheck) {
     const payableMatch = xml.match(/<cbc:PayableAmount[^>]*>([^<]+)<\/cbc:PayableAmount>/);
     if (payableMatch) {
       const payable = parseFloat(payableMatch[1]);

@@ -559,6 +559,53 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
   //   PEPPOL_BIS: ProfileID is a plain string URN (no attributes).
   const fmt = data.format ?? 'OIOUBL';
   const isPeppolBis = fmt === 'PEPPOL_BIS';
+
+  // ── Credit note detection (Task 43 root-cause fix for F-INV011) ──
+  //
+  // In OIOUBL 2.1, credit notes are a SEPARATE document type — they use
+  // the <CreditNote> root element (in namespace ...CreditNote-2) and
+  // <cac:CreditNoteLine> line items with <cbc:CreditedQuantity>, and
+  // they OMIT the <cbc:InvoiceTypeCode> element entirely (the document
+  // IS the type — no code needed). The official Erhvervsstyrelsen
+  // reference example is at docs/SBD-OIOUBL-CreditNote-valid.xml.
+  //
+  // Before Task 43, the generator emitted a credit note as an <Invoice>
+  // document with InvoiceTypeCode=381. Sproom rejects this with
+  // "[F-INV011] Invalid InvoiceTypeCode: '381'" because in the OIOUBL
+  // codelist urn:oioubl:codelist:invoicetypecode-1.1, 381 is NOT a valid
+  // value — credit notes have their own document type.
+  //
+  // In Peppol BIS 3, credit notes ARE expressed as <Invoice> with
+  // InvoiceTypeCode=381 (Peppol BIS 3 uses the Invoice document type
+  // for both invoices and credit notes, distinguished only by the code).
+  // So the CreditNote root element substitution applies ONLY to the
+  // OIOUBL branch.
+  //
+  // isCreditNote:        data.invoiceTypeCode === '381' (both formats).
+  // useCreditNoteRoot:   only on the OIOUBL branch — switches the root
+  //                      element, omits InvoiceTypeCode, switches line
+  //                      item element + quantity element names.
+  const isCreditNote = data.invoiceTypeCode === '381';
+  const useCreditNoteRoot = !isPeppolBis && isCreditNote;
+  const rootElementName = useCreditNoteRoot ? 'CreditNote' : 'Invoice';
+  const rootNamespace = useCreditNoteRoot
+    ? 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2'
+    : 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
+  // Line item element name — OIOUBL CreditNote uses cac:CreditNoteLine
+  // with cbc:CreditedQuantity; everything else (Invoice OIOUBL, Invoice
+  // Peppol BIS 3, CreditNote Peppol BIS 3) uses cac:InvoiceLine with
+  // cbc:InvoicedQuantity.
+  const lineItemElementName = useCreditNoteRoot
+    ? 'cac:CreditNoteLine'
+    : 'cac:InvoiceLine';
+  const quantityElementName = useCreditNoteRoot
+    ? 'cbc:CreditedQuantity'
+    : 'cbc:InvoicedQuantity';
+
+  // CustomizationID — literal string for OIOUBL ('OIOUBL-2.1' per the
+  // official Erhvervsstyrelsen example), URN for Peppol BIS 3. Same value
+  // is used for both Invoice and CreditNote root elements — the document
+  // type is distinguished by the root element, not by the CustomizationID.
   const customizationId = isPeppolBis
     ? 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0'
     : 'OIOUBL-2.1';
@@ -617,12 +664,14 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
   //   PEPPOL_BIS → '0184'  (ISO 6523 ICD for Danish CVR)
   //   Value: DK-prefixed CVR (OIOUBL) or bare CVR (PEPPOL_BIS — DK-R-014)
 
-  // ── BUILD INVOICE OBJECT ──
+  // ── BUILD ROOT DOCUMENT OBJECT ──
   //
   // The OIOUBL branch produces XML matching the official Erhvervsstyrelsen
-  // reference example at docs/SBD-OIOUBL-Invoice-valid.xml EXACTLY (as a
-  // structural template, not a patch on Peppol BIS 3). The Peppol BIS branch
-  // preserves the original EN 16931 / Peppol BIS 3 structure unchanged.
+  // reference examples at:
+  //   docs/SBD-OIOUBL-Invoice-valid.xml     (for invoices)
+  //   docs/SBD-OIOUBL-CreditNote-valid.xml  (for credit notes — Task 43)
+  // The Peppol BIS branch preserves the original EN 16931 / Peppol BIS 3
+  // structure unchanged.
   //
   // OIOUBL-specific structural elements added in Task 41 (matching the
   // official example) — ALL emitted ONLY on the OIOUBL branch:
@@ -636,14 +685,27 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
   // OIOUBL also OMITS cbc:BuyerReference (the OrderReference above serves
   // the same purpose and matches the official example).
   //
+  // OIOUBL CreditNote-specific changes added in Task 43:
+  //   • Root element name switches from <Invoice> to <CreditNote> with the
+  //     CreditNote-2 namespace. xmlbuilder2 supports computed object keys
+  //     ({ [rootElementName]: { ... } }) so the same body builds both.
+  //   • cbc:InvoiceTypeCode is OMITTED entirely (the document IS the type,
+  //     no code needed — Sproom would otherwise reject with [F-INV011]
+  //     "Invalid InvoiceTypeCode: '381'" because 381 is not in the
+  //     urn:oioubl:codelist:invoicetypecode-1.1 codelist).
+  //   • Line items use <cac:CreditNoteLine> with <cbc:CreditedQuantity>
+  //     instead of <cac:InvoiceLine> with <cbc:InvoicedQuantity>.
+  //   • All other elements (CustomizationID, ProfileID, parties, totals,
+  //     payment means, BillingReference) are unchanged.
+  //
   // The PRIMARY semantic fix (Task 41) is in LegalMonetaryTotal:
   //   cbc:LineExtensionAmount = data.lineExtensionAmount (sum of line amounts)
   //   cbc:TaxExclusiveAmount  = data.taxExclusiveAmount  (= vatTotal for OIOUBL!)
   // For OIOUBL, F-INV127 requires: Sum(TaxSubtotal/TaxAmount) = TaxExclusiveAmount.
   // buildOIOUBLData sets taxExclusiveAmount=vatTotal for OIOUBL → F-INV127 satisfied.
-  const invoice = {
-    Invoice: {
-      '@xmlns': 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2',
+  const doc = {
+    [rootElementName]: {
+      '@xmlns': rootNamespace,
       '@xmlns:cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
       '@xmlns:cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
 
@@ -677,7 +739,20 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       // The UBL 2.1 / Peppol BIS 3 XSD lax-allows it — sequence-validated
       // known elements skip past it, so its position relative to DueDate
       // is not sequence-critical.
-      'cbc:InvoiceTypeCode': invoiceTypeCode,
+      //
+      // OMITTED for OIOUBL credit notes (Task 43) — OIOUBL credit notes
+      // are a separate <CreditNote> document type with NO InvoiceTypeCode
+      // element. Emitting InvoiceTypeCode=381 on a CreditNote causes
+      // Sproom to reject with [F-INV011] because 381 is not a valid
+      // value in urn:oioubl:codelist:invoicetypecode-1.1.
+      //
+      // Peppol BIS 3 still uses InvoiceTypeCode=381 on the <Invoice>
+      // root element (Peppol BIS 3 has no separate CreditNote document
+      // type — invoices and credit notes are both <Invoice> documents
+      // distinguished only by the InvoiceTypeCode).
+      ...(useCreditNoteRoot
+        ? {}
+        : { 'cbc:InvoiceTypeCode': invoiceTypeCode }),
       'cbc:DocumentCurrencyCode': data.currencyCode,
 
       // OIOUBL only — AccountingCost (synthetic value derived from the
@@ -1014,24 +1089,33 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
         },
       },
       
-      // ── Invoice Lines ────────────────────────────────────────
+      // ── Invoice/CreditNote Lines ────────────────────────────────
       //
-      // OIOUBL InvoiceLine includes (per the official example):
-      //   ID, InvoicedQuantity, LineExtensionAmount, OrderLineReference,
-      //   TaxTotal (with TaxSubtotal + TaxCategory), Item (Description, Name,
-      //   SellersItemIdentification when GTIN available), Price (PriceAmount,
-      //   BaseQuantity, OrderableUnitFactorRate)
+      // For OIOUBL credit notes, the line item element is <cac:CreditNoteLine>
+      // with <cbc:CreditedQuantity> (Task 43 — the official example at
+      // docs/SBD-OIOUBL-CreditNote-valid.xml shows this structure). For
+      // everything else (OIOUBL Invoice, Peppol BIS 3 Invoice, Peppol BIS 3
+      // credit note) it's <cac:InvoiceLine> with <cbc:InvoicedQuantity>.
+      // The dynamic keys are computed once at the top of generateOIOUBL
+      // (lineItemElementName + quantityElementName).
+      //
+      // OIOUBL InvoiceLine/CreditNoteLine includes (per the official example):
+      //   ID, [InvoicedQuantity|CreditedQuantity], LineExtensionAmount,
+      //   OrderLineReference, TaxTotal (with TaxSubtotal + TaxCategory),
+      //   Item (Description, Name, SellersItemIdentification when GTIN
+      //   available), Price (PriceAmount, BaseQuantity,
+      //   OrderableUnitFactorRate)
       //
       // Peppol BIS 3 InvoiceLine is simpler:
       //   ID, InvoicedQuantity, LineExtensionAmount, Item (Description, Name,
       //   ClassifiedTaxCategory), Price (PriceAmount only)
-      'cac:InvoiceLine': data.lines.map((line) => {
+      [lineItemElementName]: data.lines.map((line) => {
         const lineNetAmount = Number(line.quantity) * Number(line.unitPrice);
         const lineTaxAmount = lineNetAmount * Number(line.vatPercent) / 100;
 
         return {
           'cbc:ID': line.id,
-          'cbc:InvoicedQuantity': {
+          [quantityElementName]: {
             '@unitCode': line.unitCode,
             '#': line.quantity.toString(),
           },
@@ -1118,10 +1202,10 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       }),
     },
   };
-  
+
   // Generate XML
-  const doc = create(invoice);
-  return doc.end({ prettyPrint: true });
+  const xmlDoc = create(doc);
+  return xmlDoc.end({ prettyPrint: true });
 }
 
 /**

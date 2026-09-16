@@ -209,14 +209,39 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     };
   }
 
-  // 2. Find the root invoice element
-  // UBL namespace: may be wrapped in {urn:oasis:names:specification:ubl:schema:xsd:Invoice-2}Invoice
+  // 2. Find the root document element.
+  // UBL 2.1 has TWO separate document types that AlphaFlow can receive:
+  //   - <Invoice>         (commercial invoices — InvoiceTypeCode 380/384/389)
+  //   - <CreditNote>      (credit notes — OIOUBL credit notes have NO
+  //                        InvoiceTypeCode element at all; the document IS
+  //                        the type. Peppol BIS 3 still uses <Invoice> with
+  //                        InvoiceTypeCode=381 for credit notes.)
+  // The XML parser may also wrap the root in a namespaced key like
+  // {urn:oasis:names:specification:ubl:schema:xsd:Invoice-2}Invoice.
   let invoiceRoot = first(parsed['Invoice']) as Record<string, unknown> | undefined;
+  let rootElementName = 'Invoice';
   if (!invoiceRoot) {
-    // Try to find it by iterating keys
+    // Try the CreditNote root (Task 43 — OIOUBL CreditNote is a separate
+    // document type, NOT an Invoice with InvoiceTypeCode=381).
+    invoiceRoot = first(parsed['CreditNote']) as Record<string, unknown> | undefined;
+    if (invoiceRoot) {
+      rootElementName = 'CreditNote';
+    }
+  }
+  if (!invoiceRoot) {
+    // Try to find a UBL Invoice or CreditNote root by iterating keys —
+    // handles namespaced wrappers like
+    // {urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2}CreditNote.
     for (const key of Object.keys(parsed)) {
-      if (key.toLowerCase().includes('invoice')) {
+      const lower = key.toLowerCase();
+      if (lower.includes('creditnote')) {
         invoiceRoot = first(parsed[key]) as Record<string, unknown>;
+        rootElementName = 'CreditNote';
+        break;
+      }
+      if (lower.includes('invoice')) {
+        invoiceRoot = first(parsed[key]) as Record<string, unknown>;
+        rootElementName = 'Invoice';
         break;
       }
     }
@@ -225,7 +250,7 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
   if (!invoiceRoot) {
     return {
       data: null,
-      errors: ['No Invoice element found in XML. Expected UBL 2.1 Invoice document.'],
+      errors: ['No Invoice or CreditNote element found in XML. Expected a UBL 2.1 Invoice or CreditNote document.'],
       warnings,
     };
   }
@@ -265,13 +290,36 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     );
   }
 
-  // Invoice type code
+  // Document type detection (Task 43):
+  //   - If the root element is <CreditNote>, the document IS a credit note
+  //     → documentType = '381' (regardless of whether InvoiceTypeCode is
+  //     present — OIOUBL CreditNotes have no InvoiceTypeCode, but a
+  //     third-party CreditNote might include one).
+  //   - Otherwise, fall back to the InvoiceTypeCode value (380/381/384/389).
+  //     For a Peppol BIS 3 credit note, the root is still <Invoice> and
+  //     InvoiceTypeCode=381.
+  //   - If no InvoiceTypeCode is present and the root is <Invoice>, default
+  //     to '380' (commercial invoice).
   const typeCodeRaw = getText(first(cbc['cbc:InvoiceTypeCode']));
-  const documentType: EInvoiceTypeCode = VALID_TYPE_CODES.includes(typeCodeRaw as EInvoiceTypeCode)
-    ? (typeCodeRaw as EInvoiceTypeCode)
-    : '380';
-  if (typeCodeRaw && !VALID_TYPE_CODES.includes(typeCodeRaw as EInvoiceTypeCode)) {
-    warnings.push(`Unknown InvoiceTypeCode "${typeCodeRaw}" — defaulting to 380 (invoice)`);
+  let documentType: EInvoiceTypeCode;
+  if (rootElementName === 'CreditNote') {
+    documentType = '381';
+    if (typeCodeRaw && !VALID_TYPE_CODES.includes(typeCodeRaw as EInvoiceTypeCode)) {
+      warnings.push(
+        `CreditNote root with unexpected InvoiceTypeCode "${typeCodeRaw}" — using 381 (credit note) anyway`,
+      );
+    } else if (typeCodeRaw && typeCodeRaw !== '381') {
+      warnings.push(
+        `CreditNote root with InvoiceTypeCode "${typeCodeRaw}" — using 381 (credit note) per the root element type`,
+      );
+    }
+  } else {
+    documentType = VALID_TYPE_CODES.includes(typeCodeRaw as EInvoiceTypeCode)
+      ? (typeCodeRaw as EInvoiceTypeCode)
+      : '380';
+    if (typeCodeRaw && !VALID_TYPE_CODES.includes(typeCodeRaw as EInvoiceTypeCode)) {
+      warnings.push(`Unknown InvoiceTypeCode "${typeCodeRaw}" — defaulting to 380 (invoice)`);
+    }
   }
 
   // Invoice ID
@@ -351,13 +399,49 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     errors.push('Missing AccountingSupplierParty — supplier information not found');
   }
 
-  // ── LINE ITEMS (InvoiceLine) ────────────────────────────────
+  // ── LINE ITEMS ─────────────────────────────────────────────
+  // UBL 2.1 has two line-item element names depending on the document type:
+  //   <Invoice>      → <cac:InvoiceLine>  with <cbc:InvoicedQuantity>
+  //   <CreditNote>   → <cac:CreditNoteLine> with <cbc:CreditedQuantity>
+  // (Task 43 — OIOUBL credit notes are a separate document type with their
+  // own line element. Peppol BIS 3 credit notes are still <Invoice> with
+  // <cac:InvoiceLine>, distinguished by InvoiceTypeCode=381.)
+  // The parser tries both element names and falls back gracefully.
 
   const lineItems: ParsedLineItem[] = [];
-  const invoiceLines = first(cac['cac:InvoiceLine']) as
+  // Per-loop quantity key — either 'cbc:InvoicedQuantity' or
+  // 'cbc:CreditedQuantity'. Defaults to the value matching the root
+  // element type; may be reassigned by the fallback branch below if
+  // the document mixes element names unexpectedly.
+  let qtyKeyForLoop: 'cbc:InvoicedQuantity' | 'cbc:CreditedQuantity' =
+    rootElementName === 'CreditNote' ? 'cbc:CreditedQuantity' : 'cbc:InvoicedQuantity';
+  const lineNodeKey = rootElementName === 'CreditNote'
+    ? 'cac:CreditNoteLine'
+    : 'cac:InvoiceLine';
+
+  let invoiceLines = first(cac[lineNodeKey]) as
     | Record<string, unknown>[]
     | Record<string, unknown>
     | undefined;
+
+  // Fall back to the other line element name (e.g. if a CreditNote document
+  // contains InvoiceLine elements anyway, or vice versa — defensive).
+  if (!invoiceLines) {
+    const fallbackLineKey = rootElementName === 'CreditNote'
+      ? 'cac:InvoiceLine'
+      : 'cac:CreditNoteLine';
+    const fallbackQtyKey = rootElementName === 'CreditNote'
+      ? 'cbc:InvoicedQuantity'
+      : 'cbc:CreditedQuantity';
+    const fallbackLines = first(cac[fallbackLineKey]) as
+      | Record<string, unknown>[]
+      | Record<string, unknown>
+      | undefined;
+    if (fallbackLines) {
+      invoiceLines = fallbackLines;
+      qtyKeyForLoop = fallbackQtyKey;
+    }
+  }
 
   const lineArray = Array.isArray(invoiceLines)
     ? invoiceLines
@@ -369,8 +453,18 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     const lineId = getText(first(line['cbc:ID'])) ?? '';
     const lineNote = getText(first(line['cbc:Note']));
 
-    // Price line (InvoicedQuantity, LineExtensionAmount, Price)
-    const quantity = toNum(getText(first(line['cbc:InvoicedQuantity'])));
+    // Quantity — uses the format-appropriate element name
+    // (cbc:InvoicedQuantity for <Invoice>, cbc:CreditedQuantity for
+    // <CreditNote>). Falls back to the other name if absent (defensive —
+    // some non-conforming implementations mix names).
+    let quantityNode = line[qtyKeyForLoop];
+    if (!quantityNode) {
+      const fallbackQtyKey = qtyKeyForLoop === 'cbc:InvoicedQuantity'
+        ? 'cbc:CreditedQuantity'
+        : 'cbc:InvoicedQuantity';
+      quantityNode = line[fallbackQtyKey];
+    }
+    const quantity = toNum(getText(first(quantityNode)));
     const lineAmount = toNum(getText(first(line['cbc:LineExtensionAmount'])));
 
     const priceNode = first(
@@ -382,10 +476,10 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
       first((priceAmountNode as Record<string, unknown> | undefined)?.['cbc:PriceAmount']?.['@_unitCode'] ??
         (priceAmountNode as Record<string, unknown> | undefined)?.['@_unitCode'])
     );
-    const invoicedQtyUnitCode = getText(
-      first(line['cbc:InvoicedQuantity']?.['@_unitCode'] ?? line['cbc:InvoicedQuantity'])
+    const quantityUnitCode = getText(
+      first((quantityNode as Record<string, unknown> | undefined)?.['@_unitCode'] ?? quantityNode)
     );
-    const unitCode = invoicedQtyUnitCode || unitCodeRaw || 'C62';
+    const unitCode = quantityUnitCode || unitCodeRaw || 'C62';
 
     // Item name / description
     const itemNode = first(line['cac:Item']) as Record<string, unknown> | undefined;
