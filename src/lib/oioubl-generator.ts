@@ -126,6 +126,7 @@ export interface OIOUBLInvoiceData {
     country?: string;
     vatNumber?: string;
     contactEmail?: string;
+    contactPhone?: string;
   };
   
   // Invoice line items
@@ -654,7 +655,15 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
                 // come before ElectronicMail — emitting ElectronicMail first
                 // caused Sproom's XSD to reject with "invalid child element
                 // 'Telephone' ... expected: Note / OtherCommunication".
+                //
+                // OIOUBL F-INV051 (Sproom): AccountingSupplierParty/Contact/ID
+                // must contain a value when the Contact element is present.
+                // We use the supplier's CVR (data.supplier.id) as a synthetic
+                // contact identifier — AlphaFlow doesn't track individual
+                // contact persons, just the company.
                 'cac:Contact': {
+                  'cbc:ID': data.supplier.id || '1',
+                  'cbc:Name': data.supplier.name,
                   ...(data.supplier.contactPhone && {
                     'cbc:Telephone': data.supplier.contactPhone,
                   }),
@@ -719,10 +728,25 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
                 },
               }
             : {}),
-          ...(data.customer.contactEmail
+          ...(data.customer.contactEmail || data.customer.contactPhone
             ? {
+                // OIOUBL F-INV051 (Sproom): AccountingCustomerParty/Contact/ID
+                // must contain a value when the Contact element is present.
+                // We use the customer's CVR (data.customer.id) as a synthetic
+                // contact identifier — AlphaFlow doesn't track individual
+                // contact persons, just the company.
+                //
+                // UBL 2.1 Contact sequence: ID, Name, Telephone, Telefax,
+                // ElectronicMail, Note, OtherCommunication.
                 'cac:Contact': {
-                  'cbc:ElectronicMail': data.customer.contactEmail,
+                  'cbc:ID': data.customer.id || '1',
+                  'cbc:Name': data.customer.name,
+                  ...(data.customer.contactPhone && {
+                    'cbc:Telephone': data.customer.contactPhone,
+                  }),
+                  ...(data.customer.contactEmail && {
+                    'cbc:ElectronicMail': data.customer.contactEmail,
+                  }),
                 },
               }
             : {}),

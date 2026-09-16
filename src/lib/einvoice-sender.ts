@@ -358,6 +358,7 @@ function buildOIOUBLData(
       country: 'DK',
       vatNumber: invoice.customerCvr ? `DK${invoice.customerCvr}` : undefined,
       contactEmail: invoice.customerEmail || undefined,
+      contactPhone: invoice.customerPhone || undefined,
     },
     lines: lines.map((line, index) => ({
       id: String(index + 1),
