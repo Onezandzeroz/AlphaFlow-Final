@@ -100,8 +100,7 @@ export async function POST(request: Request) {
     //   { "type": "documentReceived",    "documentId": "<guid>", ... }
     //   { "type": "documentStatusChanged","documentId": "<guid>", ... }
     //
-    const eventType = (event.type || '').toLowerCase();
-
+    // (eventType was already computed above for logging — reuse it here.)
     if (eventType === 'documentreceived') {
       return await handleReceivedDocument(event);
     }
