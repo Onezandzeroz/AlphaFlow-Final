@@ -82,9 +82,9 @@ export const GET = withGuard(
     report.webhookListError = webhookListError;
 
     // Check if both required webhook types are registered
-    const registeredTypes = new Set(webhooks.map((w) => (w as { type?: string }).type).filter(Boolean) as string[]);
-    report.hasDocumentReceived = registeredTypes.has('DocumentReceived');
-    report.hasDocumentStatusChanged = registeredTypes.has('DocumentStatusChanged');
+    const registeredTypes = new Set(webhooks.map((w) => (w as { type?: string }).type?.toLowerCase()).filter(Boolean) as string[]);
+    report.hasDocumentReceived = registeredTypes.has('documentreceived');
+    report.hasDocumentStatusChanged = registeredTypes.has('documentstatuschanged');
 
     // Check if the registered URLs match the expected URL
     const registeredUrls = webhooks.map((w) => (w as { url?: string }).url).filter(Boolean) as string[];

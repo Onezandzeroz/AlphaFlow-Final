@@ -158,9 +158,35 @@ export const GET = withGuard(
           const webhookUrl = `${appUrl}/api/sproom/webhook`;
           try {
             const existing = await sproomClient.listWebhooks({ childCompanyId: company.sproomChildCompanyId! });
-            const existingTypes = new Set(existing.map((w) => w.type).filter(Boolean) as string[]);
+            // Case-insensitive type matching: Sproom returns lowercase
+            // "documentReceived" but we create with "DocumentReceived".
+            const existingTypes = new Set(existing.map((w) => (w.type || '').toLowerCase()).filter(Boolean));
+            // Clean up duplicates (created by the previous case-sensitive
+            // bug): keep only the first webhook per type, delete the rest.
+            const seenTypes = new Set<string>();
+            for (const wh of existing) {
+              const whTypeLower = (wh.type || '').toLowerCase();
+              if (seenTypes.has(whTypeLower)) {
+                try {
+                  await sproomClient.deleteWebhook(wh.id, { childCompanyId: company.sproomChildCompanyId! });
+                  logger.info('[SPROOM_STATUS] Deleted duplicate webhook', {
+                    companyId: ctx.activeCompanyId,
+                    childCompanyId: company.sproomChildCompanyId,
+                    webhookId: wh.id,
+                    type: wh.type,
+                  });
+                } catch (err) {
+                  logger.warn('[SPROOM_STATUS] Failed to delete duplicate webhook (non-fatal)', {
+                    webhookId: wh.id,
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                }
+              } else {
+                seenTypes.add(whTypeLower);
+              }
+            }
             for (const whType of ['DocumentReceived', 'DocumentStatusChanged'] as const) {
-              if (existingTypes.has(whType)) continue;
+              if (existingTypes.has(whType.toLowerCase())) continue;
               try {
                 await sproomClient.createWebhook(whType, webhookUrl, { childCompanyId: company.sproomChildCompanyId! });
                 logger.info('[SPROOM_STATUS] Auto-registered missing webhook', {

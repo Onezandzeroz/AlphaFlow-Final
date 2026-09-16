@@ -77,14 +77,14 @@ export const POST = withGuard(
           error: err instanceof Error ? err.message : String(err),
         });
       }
-      const existingTypes = new Set(existingWebhooks.map((w) => w.type).filter(Boolean) as string[]);
+      const existingTypes = new Set(existingWebhooks.map((w) => (w.type || '').toLowerCase()).filter(Boolean) as string[]);
 
       const desiredTypes = ['DocumentReceived', 'DocumentStatusChanged'] as const;
       const registered: string[] = [];
       const errors: string[] = [];
 
       for (const type of desiredTypes) {
-        if (existingTypes.has(type)) continue;
+        if (existingTypes.has(type.toLowerCase())) continue;
         try {
           await sproomClient.createWebhook(type, webhookUrl, { childCompanyId });
           registered.push(type);

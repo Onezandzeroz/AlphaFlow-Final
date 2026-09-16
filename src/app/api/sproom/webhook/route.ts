@@ -84,19 +84,23 @@ export async function POST(request: Request) {
 
     // ── 3. Dispatch on event type ──
     //
-    // SPROOM webhook format:
-    //   { "type": "DocumentReceived",    "documentId": "<guid>", ... }
-    //   { "type": "DocumentStatusChanged","documentId": "<guid>", ... }
+    // SPROOM webhook format (NOTE: Sproom returns type in LOWERCASE
+    // "documentReceived" — NOT the capitalized "DocumentReceived" from the
+    // swagger enum. Match case-insensitively to handle both forms).
+    //   { "type": "documentReceived",    "documentId": "<guid>", ... }
+    //   { "type": "documentStatusChanged","documentId": "<guid>", ... }
     //
-    if (event.type === 'DocumentReceived') {
+    const eventType = (event.type || '').toLowerCase();
+
+    if (eventType === 'documentreceived') {
       return await handleReceivedDocument(event);
     }
 
-    if (event.type === 'DocumentStatusChanged') {
+    if (eventType === 'documentstatuschanged') {
       return await handleSubmissionStatusChanged(event);
     }
 
-    if (event.type === 'PeppolParticipantVerificationChanged') {
+    if (eventType === 'peppolparticipantverificationchanged') {
       return await handlePeppolParticipantVerificationChanged(event);
     }
 
