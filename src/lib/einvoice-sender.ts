@@ -374,13 +374,69 @@ function buildOIOUBLData(
     taxExclusiveAmount: subtotal,
     taxInclusiveAmount: total,
     paymentMeansCode: '42',
-    paymentAccountId: invoice.bankIban || company.bankIban || company.bankAccount || undefined,
-    bankRegistration: company.bankRegistration || undefined,
+    // OIOUBL F-LIB131: PayeeFinancialAccount/ID must be ≤10 chars.
+    // Peppol BIS 3 accepts the full IBAN (18 chars for DK).
+    // For OIOUBL, prefer the separate bankAccount (BBAN) field. If
+    // missing, extract the BBAN from the IBAN (last 10 chars of a
+    // Danish IBAN). For PEPPOL_BIS, use the IBAN directly.
+    paymentAccountId:
+      format === 'PEPPOL_BIS'
+        ? (invoice.bankIban || company.bankIban || company.bankAccount || undefined)
+        : (company.bankAccount || extractBbanFromIban(company.bankIban) || extractBbanFromIban(invoice.bankIban) || undefined),
+    // DK-R-006: bankRegistration (4-digit registreringsnummer) goes in
+    // FinancialInstitutionBranch/ID. If not directly populated, extract
+    // from the IBAN (positions 4-7 of a Danish IBAN).
+    bankRegistration:
+      company.bankRegistration || extractRegFromIban(company.bankIban) || undefined,
     currencyCode,
   };
 }
 
-// ─── PUBLIC API ───────────────────────────────────────────────────
+/**
+ * Extract the Danish BBAN account number (≤10 chars) from an IBAN.
+ *
+ * Danish IBAN format (18 chars total):
+ *   "DK" + 2 check digits + 4 bank code (registration) + 10 account number
+ *   Example: "DK12 3456 7890 1234 56" → account = "7890123456"
+ *
+ * OIOUBL's F-LIB131 schematron rule limits PayeeFinancialAccount/ID to
+ * 10 characters — so the full IBAN (18 chars) can't be used directly.
+ * We extract the last 10 chars (the BBAN account number) when the
+ * separate bankAccount field isn't populated.
+ *
+ * For non-Danish IBANs or malformed input, returns the original
+ * (will fail F-LIB131 but at least surface a value for diagnosis).
+ */
+function extractBbanFromIban(iban?: string | null): string | undefined {
+  if (!iban) return undefined;
+  const clean = iban.replace(/\s+/g, '').toUpperCase();
+  // Danish IBAN: starts with "DK" and is exactly 18 chars
+  if (clean.startsWith('DK') && clean.length === 18) {
+    return clean.substring(8); // last 10 chars = account number
+  }
+  return clean;
+}
+
+/**
+ * Extract the Danish bank registration number (4-digit "registreringsnummer")
+ * from an IBAN. Used when company.bankRegistration isn't directly populated.
+ *
+ * Danish IBAN positions (0-indexed):
+ *   0-1: "DK" country code
+ *   2-3: check digits
+ *   4-7: bank code (registreringsnummer, 4 digits)
+ *   8-17: account number (10 digits)
+ */
+function extractRegFromIban(iban?: string | null): string | undefined {
+  if (!iban) return undefined;
+  const clean = iban.replace(/\s+/g, '').toUpperCase();
+  if (clean.startsWith('DK') && clean.length === 18) {
+    return clean.substring(4, 8); // 4-digit bank code
+  }
+  return undefined;
+}
+
+
 
 /**
  * Queue an e-invoice for sending via NemHandel or Peppol.
