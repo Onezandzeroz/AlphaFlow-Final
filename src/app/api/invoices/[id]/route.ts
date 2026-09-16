@@ -52,7 +52,34 @@ async function createAccrualJournalEntry(
   // the lines exactly as for an invoice, then swap debit↔credit for every
   // line when this is a credit note. Amounts are stored as positive numbers
   // on the Invoice row; the documentType carries the sign.
-  const isCreditNote = existing.documentType === 'CREDIT_NOTE';
+  //
+  // ROBUST DETECTION: Check documentType FIRST (the canonical source). If
+  // it's not CREDIT_NOTE (e.g., old data created before the documentType
+  // field was added, or imported from a backup that didn't have the field),
+  // fall back to checking the invoice number prefix against the company's
+  // creditNotePrefix. This catches credit notes that have documentType=
+  // 'INVOICE' (the default) but were clearly created as credit notes
+  // (numbered with the KRE- prefix).
+  const companyForPrefix = await db.company.findFirst({
+    where: { ...tenantFilter(ctx as any) },
+    select: { creditNotePrefix: true, invoicePrefix: true },
+  });
+  const creditNotePrefix = companyForPrefix?.creditNotePrefix;
+  const isCreditNote =
+    existing.documentType === 'CREDIT_NOTE' ||
+    // Fallback: invoice number starts with the credit note prefix (e.g. "KRE-")
+    // This catches old credit notes where documentType defaulted to INVOICE.
+    (!!creditNotePrefix && existing.invoiceNumber.startsWith(creditNotePrefix + '-'));
+
+  // Log the detection result for debugging — if a credit note is being
+  // booked as an invoice, this log will show why.
+  if (isCreditNote && existing.documentType !== 'CREDIT_NOTE') {
+    logger.warn(
+      `[createAccrualJournalEntry] Credit note ${existing.invoiceNumber} has documentType="${existing.documentType}" but detected as credit note via prefix "${creditNotePrefix}". Consider updating the documentType field in the DB.`,
+      { invoiceId: existing.id, invoiceNumber: existing.invoiceNumber, documentType: existing.documentType, creditNotePrefix }
+    );
+  }
+
   const docLabel = isCreditNote ? 'Kreditnota' : 'Faktura';
   const lineItems = existing.lineItems as Array<{
     description: string;
@@ -181,7 +208,12 @@ async function createAccrualJournalEntry(
     const journalEntry = await tx.journalEntry.create({
       data: {
         date: existing.issueDate,
-        description: `Tilgodehavende – ${docLabel} ${existing.invoiceNumber} – ${existing.customerName}`,
+        // For invoices: "Tilgodehavende – Faktura INV-... – Customer"
+        // For credit notes: "Kreditnota – KRE-... – Customer" (no "Tilgodehavende"
+        // prefix since a credit note REDUCES the receivable, not increases it)
+        description: isCreditNote
+          ? `Kreditnota – ${existing.invoiceNumber} – ${existing.customerName}`
+          : `Tilgodehavende – ${docLabel} ${existing.invoiceNumber} – ${existing.customerName}`,
         reference: existing.invoiceNumber,
         status: 'POSTED',
         userId: ctx.id,
@@ -237,7 +269,17 @@ async function createCashReceiptJournalEntry(
   // so the cash entry is mirrored: Credit Bank / Debit Receivables (instead
   // of Debit Bank / Credit Receivables). We build the invoice-style lines
   // then swap when this is a credit note.
-  const isCreditNote = existing.documentType === 'CREDIT_NOTE';
+  //
+  // ROBUST DETECTION: Same fallback as createAccrualJournalEntry — check
+  // documentType first, then fall back to the creditNotePrefix.
+  const companyForPrefix = await db.company.findFirst({
+    where: { ...tenantFilter(ctx as any) },
+    select: { creditNotePrefix: true },
+  });
+  const creditNotePrefix = companyForPrefix?.creditNotePrefix;
+  const isCreditNote =
+    existing.documentType === 'CREDIT_NOTE' ||
+    (!!creditNotePrefix && existing.invoiceNumber.startsWith(creditNotePrefix + '-'));
   const docLabel = isCreditNote ? 'Kreditnota' : 'Faktura';
   // Look up Bank account (1100) and Receivables account (1200)
   const bankAccount = await db.account.findFirst({
