@@ -294,14 +294,34 @@ export function validateOIOUBL(xml: string): ValidationResult {
 
   // ── 10. ProfileID and CustomizationID ───────────────────────────────
 
-  // Peppol BIS Billing 3.0 requires the COMPLIANT customization variant
-  // (not the bare EN 16931 base). Receiving Access Points may reject the bare form.
+  // Two formats are supported by AlphaFlow's OIOUBL generator:
+  //
+  //   1. Peppol BIS Billing 3.0 — URN-form CustomizationID
+  //      CustomizationID = 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0'
+  //      ProfileID      = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0'
+  //      Used for cross-border sends via Peppol network.
+  //
+  //   2. OIOUBL 2.02 — Danish NemHandel format. CustomizationID is a
+  //      LITERAL STRING (not a URN).
+  //      CustomizationID = 'OIOUBL-2.02'
+  //      ProfileID      = 'urn:dk:oioubl:sbs:1.0'  (SBS profile)
+  //      Used for Danish-to-Danish sends via NemHandel network.
+  //
+  // Sproom accepts both formats and uses the CustomizationID to identify
+  // the document format. A wrong CustomizationID causes Sproom to return
+  // "cannot find format for document" on POST /api/documents.
   const PEPPOL_BIS3_CUSTOMIZATION_ID = 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0';
   const PEPPOL_BIS3_PROFILE_ID = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
+  const OIOUBL_2_02_CUSTOMIZATION_ID = 'OIOUBL-2.02';
+  const OIOUBL_SBS_PROFILE_ID = 'urn:dk:oioubl:sbs:1.0';
 
   const customizationMatch = xml.match(/<cbc:CustomizationID[^>]*>([^<]+)<\/cbc:CustomizationID>/);
   if (!customizationMatch) {
-    errors.push('Missing CustomizationID. Expected the Peppol BIS Billing 3.0 compliant variant: ' + PEPPOL_BIS3_CUSTOMIZATION_ID);
+    errors.push(
+      'Missing CustomizationID. Expected either the Peppol BIS Billing 3.0 compliant variant (' +
+      PEPPOL_BIS3_CUSTOMIZATION_ID + ') for Peppol sends, or the OIOUBL 2.02 literal string (' +
+      OIOUBL_2_02_CUSTOMIZATION_ID + ') for NemHandel sends.'
+    );
   } else {
     const cid = customizationMatch[1].trim();
     if (cid === 'urn:cen.eu:en16931:2017') {
@@ -310,21 +330,34 @@ export function validateOIOUBL(xml: string): ValidationResult {
         'Peppol BIS Billing 3.0 requires the compliant variant: ' + PEPPOL_BIS3_CUSTOMIZATION_ID + '. ' +
         'Receiving Access Points will reject the bare form.'
       );
-    } else if (cid !== PEPPOL_BIS3_CUSTOMIZATION_ID) {
+    } else if (cid === PEPPOL_BIS3_CUSTOMIZATION_ID) {
+      // ✓ Valid Peppol BIS 3 — no warning.
+    } else if (cid === OIOUBL_2_02_CUSTOMIZATION_ID) {
+      // ✓ Valid OIOUBL 2.02 — no warning.
+    } else {
       warnings.push(
-        'CustomizationID "' + cid + '" is not the standard Peppol BIS Billing 3.0 value. ' +
-        'Expected: ' + PEPPOL_BIS3_CUSTOMIZATION_ID
+        'CustomizationID "' + cid + '" is not a standard AlphaFlow value. ' +
+        'Expected either Peppol BIS 3.0 (' + PEPPOL_BIS3_CUSTOMIZATION_ID + ') or ' +
+        'OIOUBL 2.02 (' + OIOUBL_2_02_CUSTOMIZATION_ID + '). ' +
+        'Sproom may reject the document with "cannot find format for document".'
       );
     }
   }
 
   const profileMatch = xml.match(/<cbc:ProfileID[^>]*>([^<]+)<\/cbc:ProfileID>/);
   if (!profileMatch) {
-    errors.push('Missing ProfileID. Expected "' + PEPPOL_BIS3_PROFILE_ID + '" for Peppol BIS Billing 3.0.');
+    errors.push(
+      'Missing ProfileID. Expected either "' + PEPPOL_BIS3_PROFILE_ID +
+      '" (Peppol BIS 3) or "' + OIOUBL_SBS_PROFILE_ID + '" (OIOUBL SBS).'
+    );
   } else {
     const pid = profileMatch[1].trim();
-    if (pid !== PEPPOL_BIS3_PROFILE_ID) {
-      warnings.push('ProfileID "' + pid + '" is not the standard Peppol BIS 3.0 value. Expected: ' + PEPPOL_BIS3_PROFILE_ID);
+    if (pid !== PEPPOL_BIS3_PROFILE_ID && pid !== OIOUBL_SBS_PROFILE_ID) {
+      warnings.push(
+        'ProfileID "' + pid + '" is not a standard value. ' +
+        'Expected either Peppol BIS 3.0 (' + PEPPOL_BIS3_PROFILE_ID + ') or ' +
+        'OIOUBL SBS (' + OIOUBL_SBS_PROFILE_ID + ').'
+      );
     }
   }
 

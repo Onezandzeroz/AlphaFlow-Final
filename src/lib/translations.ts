@@ -1002,6 +1002,10 @@ export const translations = {
     da: 'Faktura forhåndsvisning',
     en: 'Invoice Preview',
   },
+  creditNotePreview: {
+    da: 'Kreditnota forhåndsvisning',
+    en: 'Credit Note Preview',
+  },
   printInvoice: {
     da: 'Udskriv faktura',
     en: 'Print Invoice',

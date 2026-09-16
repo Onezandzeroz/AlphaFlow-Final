@@ -59,6 +59,8 @@ interface Invoice {
   status: string;
   notes: string | null;
   createdAt: string;
+  /** 'INVOICE' (default) | 'CREDIT_NOTE' — drives button labels & dialog title */
+  documentType?: string;
 }
 
 interface CompanyInfo {
@@ -110,6 +112,17 @@ export function SendEInvoiceDialog({
 }: SendEInvoiceDialogProps) {
   const { language, tc } = useTranslation();
   const isDa = language === 'da';
+
+  // ── Document type ──
+  // Determines whether labels say "Faktura"/"Invoice" or "Kreditnota"/"Credit Note".
+  // The OIOUBL generator translates this to InvoiceTypeCode 380 (invoice) vs 381 (credit note).
+  const isCreditNote = invoice?.documentType === 'CREDIT_NOTE';
+  // Reusable noun for the document being sent — used in dialog title,
+  // button labels, success/error toasts, etc.
+  const docNounDa = isCreditNote ? 'kreditnota' : 'faktura';
+  const docNounEn = isCreditNote ? 'credit note' : 'invoice';
+  const docNounDaCap = isCreditNote ? 'Kreditnota' : 'Faktura';
+  const docNounEnCap = isCreditNote ? 'Credit Note' : 'Invoice';
 
   // ── State ──
   const [channel, setChannel] = useState<string>(
@@ -248,7 +261,7 @@ export function SendEInvoiceDialog({
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || (isDa ? 'Kunne ikke sende faktura' : 'Failed to send invoice'));
+        throw new Error(data.error || (isDa ? `Kunne ikke sende ${docNounDa}` : `Failed to send ${docNounEn}`));
       }
 
       const data = await res.json();
@@ -296,7 +309,7 @@ export function SendEInvoiceDialog({
           );
         } else if (sendStatus === 'DELIVERED') {
           toast.success(
-            isDa ? 'E-faktura sendt!' : 'E-invoice sent!',
+            isDa ? `E-${docNounDa} sendt!` : `E-${docNounEn} sent!`,
             {
               description: isDa
                 ? `${invoice.invoiceNumber} er afleveret til ${apName}. Klik "Send-historik" for at se status.`
@@ -306,7 +319,7 @@ export function SendEInvoiceDialog({
         } else {
           // Still PENDING or SENDING — fallback message
           toast.success(
-            isDa ? 'E-faktura afsendt!' : 'E-invoice sent!',
+            isDa ? `E-${docNounDa} afsendt!` : `E-${docNounEn} sent!`,
             {
               description: isDa
                 ? `${invoice.invoiceNumber} sendes via ${channel === 'STORECOVE' ? `${apName} (Auto)` : `${apName} (Peppol)`}. Klik "Send-historik" for at se status.`
@@ -318,7 +331,7 @@ export function SendEInvoiceDialog({
       onSuccess();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : (isDa ? 'Kunne ikke sende faktura' : 'Failed to send invoice'),
+        err instanceof Error ? err.message : (isDa ? `Kunne ikke sende ${docNounDa}` : `Failed to send ${docNounEn}`),
       );
     } finally {
       setIsSending(false);
@@ -366,14 +379,14 @@ export function SendEInvoiceDialog({
               <div>
                 <h2 className="text-lg font-semibold text-white">
                   {isSent
-                    ? (isDa ? 'E-faktura sendt' : 'E-invoice sent')
-                    : (isDa ? 'Send e-faktura' : 'Send e-invoice')
+                    ? (isDa ? `E-${docNounDa} sendt` : `E-${docNounEn} sent`)
+                    : (isDa ? `Send e-${docNounDa}` : `Send e-${docNounEn}`)
                   }
                 </h2>
                 <p className="text-sm text-white/80 mt-0.5">
                   {isDa
-                    ? `Faktura ${invoice.invoiceNumber} — ${invoice.customerName}`
-                    : `Invoice ${invoice.invoiceNumber} — ${invoice.customerName}`
+                    ? `${docNounDaCap} ${invoice.invoiceNumber} — ${invoice.customerName}`
+                    : `${docNounEnCap} ${invoice.invoiceNumber} — ${invoice.customerName}`
                   }
                 </p>
               </div>
@@ -493,8 +506,8 @@ export function SendEInvoiceDialog({
                 <div className="flex-1 min-w-0 space-y-2">
                   <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
                     {sendResult.channel === 'EMAIL'
-                      ? (isDa ? 'Faktura sendt via e-mail' : 'Invoice sent via email')
-                      : (isDa ? 'E-faktura sat i kø' : 'E-invoice queued')
+                      ? (isDa ? `${docNounDaCap} sendt via e-mail` : `${docNounEnCap} sent via email`)
+                      : (isDa ? `E-${docNounDa} sat i kø` : `E-${docNounEn} queued`)
                     }
                   </p>
                   <div className="space-y-1 text-xs text-emerald-700 dark:text-emerald-400">
@@ -731,7 +744,7 @@ export function SendEInvoiceDialog({
                   ? (isDa ? 'Sender...' : 'Sending...')
                   : isEmailChannel
                     ? (isDa ? 'Send e-mail' : 'Send email')
-                    : (isDa ? 'Send e-faktura' : 'Send e-invoice')
+                    : (isDa ? `Send e-${docNounDa}` : `Send e-${docNounEn}`)
                 }
               </Button>
             )}

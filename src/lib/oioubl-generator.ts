@@ -19,12 +19,18 @@ export interface OIOUBLInvoiceData {
    * Output format — controls the CustomizationID/ProfileID pair:
    *
    *   'OIOUBL'    (default) — Danish NemHandel eDelivery format.
-   *     CustomizationID = 'urn:oioubl:invoice:1.0'
-   *     ProfileID      = 'urn:dk:oioubl:sbs:1.0'
+   *     CustomizationID = 'OIOUBL-2.02'      (literal string, NOT a URN)
+   *     ProfileID      = 'urn:dk:oioubl:sbs:1.0' (SBS billing profile)
    *
    *   'PEPPOL_BIS' — Peppol BIS Billing 3.0 (EN 16931 + Peppol extension).
    *     CustomizationID = 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0'
    *     ProfileID      = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0'
+   *
+   * IMPORTANT — the OIOUBL CustomizationID is the LITERAL string
+   * "OIOUBL-2.02", not a URN. This is the value Sproom uses to identify
+   * the document as OIOUBL format. Using a URN like
+   * "urn:oioubl:invoice:1.0" causes Sproom to return
+   * "cannot find format for document".
    *
    * The choice must match the receiving network: NemHandel expects OIOUBL,
    * Peppol expects Peppol BIS 3. Setting the wrong format will cause the
@@ -174,21 +180,31 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
   // Default to OIOUBL — the function name says so, and Danish-to-Danish
   // sends via NemHandel expect OIOUBL format. Callers that need to send
   // cross-border via Peppol should pass `format: 'PEPPOL_BIS'` explicitly.
+  //
+  // IMPORTANT — the OIOUBL CustomizationID is a LITERAL STRING, not a URN:
+  //   "OIOUBL-2.02" (not "urn:oioubl:invoice:1.0" or "urn:oioubl:invoice:2.02")
+  // Sproom uses the CustomizationID to identify the document format. If
+  // the value doesn't match the OIOUBL standard's literal string, Sproom
+  // returns "cannot find format for document". See:
+  //   https://oioubl21.oioubl.dk/classes/en/invoice.html
+  //   https://docs.peppol.eu/poacc/code-lists/document-types/
+  // (the OIOUBL-2.02 entry is listed there as an active Peppol document type)
   const fmt = data.format ?? 'OIOUBL';
   const { customizationId, profileId } = fmt === 'PEPPOL_BIS'
     ? {
+        // Peppol BIS Billing 3.0 — URN format (EN 16931 + Peppol extension).
         customizationId: 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0',
         profileId: 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0',
       }
     : {
-        // OIOUBL — Danish NemHandel eDelivery format.
-        // Per https://oioubl.info/ and the Danish Business Authority's
-        // OIOUBL 2.1 schematron, the canonical IDs are:
-        //   CustomizationID = 'urn:oioubl:invoice:1.0' (or 'urn:oioubl:creditnote:1.0' for credit notes)
-        //   ProfileID       = 'urn:dk:oioubl:sbs:1.0' (the standard SBS billing profile)
-        customizationId: data.invoiceTypeCode === '381'
-          ? 'urn:oioubl:creditnote:1.0'
-          : 'urn:oioubl:invoice:1.0',
+        // OIOUBL 2.02 — Danish NemHandel eDelivery format.
+        // CustomizationID is the LITERAL string "OIOUBL-2.02" — Sproom
+        // uses this to identify the document as OIOUBL. The root element
+        // (<Invoice> for type 380, <CreditNote> for type 381) distinguishes
+        // invoices from credit notes, not the CustomizationID.
+        // ProfileID is the SBS (Standard Bookkeeping Specification) URN —
+        // the standard billing profile for OIOUBL.
+        customizationId: 'OIOUBL-2.02',
         profileId: 'urn:dk:oioubl:sbs:1.0',
       };
 

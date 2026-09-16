@@ -1711,7 +1711,11 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           <DialogHeader className="flex-shrink-0 space-y-0">
             {/* Row 1: Title + status actions */}
             <div className="flex items-center justify-between gap-2">
-              <DialogTitle className="dark:text-white text-base sm:text-lg">{t('invoicePreview')}</DialogTitle>
+              <DialogTitle className="dark:text-white text-base sm:text-lg">
+                {previewInvoice.documentType === 'CREDIT_NOTE'
+                  ? t('creditNotePreview')
+                  : t('invoicePreview')}
+              </DialogTitle>
               <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
                 {previewInvoice.status !== 'PAID' && previewInvoice.status !== 'CANCELLED' && (
                   <>
@@ -1802,7 +1806,9 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                       </DropdownMenuLabel>
                       <DropdownMenuItem onClick={() => setSendEInvoiceInvoice(previewInvoice)}>
                         <FileSpreadsheet className="h-4 w-4 mr-2" />
-                        {language === 'da' ? 'Send E-faktura' : 'Send E-invoice'}
+                        {previewInvoice.documentType === 'CREDIT_NOTE'
+                          ? (language === 'da' ? 'Send e-Kreditnota' : 'Send e-Credit Note')
+                          : (language === 'da' ? 'Send E-faktura' : 'Send E-invoice')}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setShowEInvoiceSendStatus(previewInvoice.id)}>
                         <Inbox className="h-4 w-4 mr-2" />
@@ -1844,7 +1850,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{language === 'da' ? 'E-faktura' : 'E-invoice'}</span>
                 <Button variant="ghost" size="sm" onClick={() => setSendEInvoiceInvoice(previewInvoice)} className="gap-1.5 h-7 px-2 text-xs hover:bg-muted">
                   <FileSpreadsheet className="h-3.5 w-3.5" />
-                  <span className="hidden lg:inline">{language === 'da' ? 'Send E-faktura' : 'Send E-invoice'}</span>
+                  <span className="hidden lg:inline">{previewInvoice.documentType === 'CREDIT_NOTE' ? (language === 'da' ? 'Send e-Kreditnota' : 'Send e-Credit Note') : (language === 'da' ? 'Send E-faktura' : 'Send E-invoice')}</span>
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => setShowEInvoiceSendStatus(previewInvoice.id)} className="gap-1.5 h-7 px-2 text-xs hover:bg-muted">
                   <Inbox className="h-3.5 w-3.5" />
@@ -2421,7 +2427,9 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center shrink-0">
                 <Eye className="h-4 w-4 text-white" />
               </div>
-              {language === 'da' ? 'Faktura forhåndsvisning' : 'Invoice Preview'}
+              {previewInvoice?.documentType === 'CREDIT_NOTE'
+                ? (language === 'da' ? 'Kreditnota forhåndsvisning' : 'Credit Note Preview')
+                : (language === 'da' ? 'Faktura forhåndsvisning' : 'Invoice Preview')}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col">

@@ -94,6 +94,15 @@ const PEPPOL_PROFILE_IDS = [
 ];
 
 const OIOUBL_CUSTOMIZATION_IDS = [
+  // Canonical OIOUBL CustomizationID values — these are LITERAL STRINGS,
+  // not URNs. The OIOUBL standard uses values like "OIOUBL-2.02" as the
+  // CustomizationID. Sproom uses this to identify the document as OIOUBL
+  // format. See https://oioubl21.oioubl.dk/classes/en/invoice.html
+  'oioubl-2.02',
+  'oioubl-2.01',
+  'oioubl-3.0',
+  // Legacy URN-form values (some OIOUBL 1.0 implementations used URNs).
+  // Kept for backward compat with older documents.
   'urn:oioubl:invoice:1.0',
   'urn:oioubl:creditnote:1.0',
   'urn:oioubl:invoice:2.02',
