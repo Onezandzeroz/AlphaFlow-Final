@@ -204,26 +204,36 @@ async function handleReceivedDocument(event: SproomWebhookEvent) {
       companyId: company.id,
     });
   } else {
-    // Try formats in order, preferring the SOURCE format first.
+    // Try formats in order, preferring the NATIVE NemHandel format first.
     //
     // Per the Sproom swagger, GET /api/documents/{id}/{format} can
     // return 410 ("document gone") if Sproom can't CONVERT the source
-    // format to the requested format. The most common case is:
-    //   - Source: PeppolBis3 (sent via Peppol network)
-    //   - Request: 'xml' or 'OioUbl2' (NemHandel / OIOUBL format)
-    //   - Result: Sproom tries to convert PeppolBis3 → OioUbl2, but
-    //     the OIOUBL schematron requires 'DK' prefix on CVR values
-    //     (e.g. 'DK30518330', not just '30518330'), and the Peppol
-    //     source doesn't include the prefix → conversion fails → 410.
+    // format to the requested format. Conversion failure modes:
     //
-    // Solution: try the permissive formats first (PeppolBis3), then
-    // stricter ones (OioUbl2), then the legacy 'xml' endpoint that
-    // triggers conversion. If a 410 fires on a conversion attempt, we
-    // DON'T break — we try the next format which may succeed by
-    // returning the document in its original (unconverted) form.
-    const formatsToTry: Array<'PeppolBis3' | 'OioUbl2' | 'xml'> = [
-      'PeppolBis3',
+    //   PeppolBis3 source → request 'OioUbl2' = FAILS with 410
+    //     (Peppol source has no 'DK' prefix on CVR values; OIOUBL
+    //     schematron requires the prefix. Sproom's converter doesn't
+    //     add it → validation fails → 410.)
+    //
+    //   OioUbl2 source → request 'PeppolBis3' = SUCCEEDS but
+    //     the stored XML will have Peppol CustomizationID and be
+    //     detected as PEPPOL_BIS in the inbox — losing the native
+    //     Danish OIOUBL format the user expects to see.
+    //
+    // So the order is critical:
+    //   1. 'OioUbl2' first — if source is OIOUBL, succeed directly and
+    //      preserve the native NemHandel format.
+    //   2. 'PeppolBis3' fallback — if OioUbl2 returned 410, the source
+    //      was PeppolBis3, so fetch in source format (no conversion).
+    //   3. 'xml' legacy endpoint — last resort, triggers conversion to
+    //      OIOUBL (same as #1 but via the deprecated endpoint).
+    //
+    // If a 410 fires on a conversion attempt, we DON'T break — we try
+    // the next format which may succeed by returning the document in
+    // its original (unconverted) form.
+    const formatsToTry: Array<'OioUbl2' | 'PeppolBis3' | 'xml'> = [
       'OioUbl2',
+      'PeppolBis3',
       'xml',
     ];
     let lastValidationError: SproomDocumentGoneError | null = null;

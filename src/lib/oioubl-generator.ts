@@ -16,6 +16,23 @@ export interface OIOUBLInvoiceData {
   originalInvoiceNumber?: string;
 
   /**
+   * Output format — controls the CustomizationID/ProfileID pair:
+   *
+   *   'OIOUBL'    (default) — Danish NemHandel eDelivery format.
+   *     CustomizationID = 'urn:oioubl:invoice:1.0'
+   *     ProfileID      = 'urn:dk:oioubl:sbs:1.0'
+   *
+   *   'PEPPOL_BIS' — Peppol BIS Billing 3.0 (EN 16931 + Peppol extension).
+   *     CustomizationID = 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0'
+   *     ProfileID      = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0'
+   *
+   * The choice must match the receiving network: NemHandel expects OIOUBL,
+   * Peppol expects Peppol BIS 3. Setting the wrong format will cause the
+   * receiving AP to reject the document.
+   */
+  format?: 'OIOUBL' | 'PEPPOL_BIS';
+
+  /**
    * Buyer reference (cbc:BuyerReference). Peppol BIS 3 / EN 16931 rule
    * R003 requires a buyer reference OR a purchase order reference
    * (cac:OrderReference). If unset, the generator falls back to the
@@ -153,20 +170,40 @@ function generateTaxSubtotals(data: OIOUBLInvoiceData): Record<string, unknown>[
  * Generate OIOUBL Invoice XML string
  */
 export function generateOIOUBL(data: OIOUBLInvoiceData): string {
+  // Resolve the format → (CustomizationID, ProfileID) pair.
+  // Default to OIOUBL — the function name says so, and Danish-to-Danish
+  // sends via NemHandel expect OIOUBL format. Callers that need to send
+  // cross-border via Peppol should pass `format: 'PEPPOL_BIS'` explicitly.
+  const fmt = data.format ?? 'OIOUBL';
+  const { customizationId, profileId } = fmt === 'PEPPOL_BIS'
+    ? {
+        customizationId: 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0',
+        profileId: 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0',
+      }
+    : {
+        // OIOUBL — Danish NemHandel eDelivery format.
+        // Per https://oioubl.info/ and the Danish Business Authority's
+        // OIOUBL 2.1 schematron, the canonical IDs are:
+        //   CustomizationID = 'urn:oioubl:invoice:1.0' (or 'urn:oioubl:creditnote:1.0' for credit notes)
+        //   ProfileID       = 'urn:dk:oioubl:sbs:1.0' (the standard SBS billing profile)
+        customizationId: data.invoiceTypeCode === '381'
+          ? 'urn:oioubl:creditnote:1.0'
+          : 'urn:oioubl:invoice:1.0',
+        profileId: 'urn:dk:oioubl:sbs:1.0',
+      };
+
   const invoice = {
     Invoice: {
       '@xmlns': 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2',
       '@xmlns:cac': 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2',
       '@xmlns:cbc': 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2',
-      
+
       // Document identification
-      // CustomizationID: Peppol BIS Billing 3.0 compliant variant (EN 16931 + Peppol extension).
-      // The bare 'urn:cen.eu:en16931:2017' is the EN 16931 base — receiving Access Points
-      // may reject it. The compliant variant is required for Peppol/NemHandel eDelivery.
-      // See: https://docs.peppol.eu/poacc/billing/3.0/rules/ubl-peppol/
+      // CustomizationID + ProfileID identify the document specification.
+      // See the OIOUBLInvoiceData.format field docs above for the mapping.
       'cbc:UBLVersionID': '2.1',
-      'cbc:CustomizationID': 'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0',
-      'cbc:ProfileID': 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0',
+      'cbc:CustomizationID': customizationId,
+      'cbc:ProfileID': profileId,
       'cbc:ID': data.invoiceId,
       'cbc:IssueDate': data.issueDate,
 

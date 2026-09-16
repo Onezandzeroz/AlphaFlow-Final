@@ -222,6 +222,13 @@ function serializeSending(record: {
 
 /**
  * Build OIOUBL invoice data from an Invoice and Company record
+ *
+ * @param invoice   - Invoice record (with line items, totals, customer info)
+ * @param company   - Sender company (CVR, bank details, contact info)
+ * @param format    - Output format: 'OIOUBL' (default, NemHandel eDelivery)
+ *                    or 'PEPPOL_BIS' (Peppol BIS Billing 3.0 for cross-border).
+ *                    Derived from the EInvoiceSending.format field which
+ *                    in turn is derived from the channel via channelToFormat().
  */
 function buildOIOUBLData(
   invoice: {
@@ -262,6 +269,7 @@ function buildOIOUBLData(
     bankRegistration?: string;
     bankIban?: string | null;
   },
+  format?: 'OIOUBL' | 'PEPPOL_BIS',
 ): OIOUBLInvoiceData {
   // Parse line items from JSON
   const lines = (Array.isArray(invoice.lineItems) ? invoice.lineItems : []) as Array<{
@@ -288,6 +296,11 @@ function buildOIOUBLData(
     originalInvoiceNumber: invoice.documentType === 'CREDIT_NOTE'
       ? (invoice.originalInvoiceNumber || undefined)
       : undefined,
+    // Pass through to the generator so it picks the right
+    // CustomizationID/ProfileID pair. Default 'OIOUBL' preserves the
+    // Danish NemHandel format on domestic sends; 'PEPPOL_BIS' for
+    // cross-border Peppol sends.
+    format: format ?? 'OIOUBL',
     supplier: {
       id: company.cvrNumber || 'DK00000000',
       name: company.name,
@@ -594,11 +607,20 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
       ...sending.invoice,
       originalInvoiceNumber: sending.invoice.originalInvoice?.invoiceNumber ?? null,
     };
-    const invoiceData = buildOIOUBLData(invoiceInput, sending.company);
+    // Pass the channel-derived format ('OIOUBL' for NemHandel, 'PEPPOL_BIS'
+    // for Peppol) so the generator picks the correct CustomizationID/ProfileID
+    // pair. Without this, all sends are tagged as Peppol BIS regardless of
+    // channel, and Danish NemHandel recipients see the format label wrong
+    // in their inbox.
+    const sendFormat = (sending.format === 'PEPPOL_BIS' ? 'PEPPOL_BIS' : 'OIOUBL') as
+      | 'OIOUBL'
+      | 'PEPPOL_BIS';
+    const invoiceData = buildOIOUBLData(invoiceInput, sending.company, sendFormat);
     const xmlContent = generateOIOUBL(invoiceData);
 
     logger.info('[EINVOICE_SEND] Generated OIOUBL XML', {
       sendingId,
+      format: sendFormat,
       xmlLength: xmlContent.length,
     });
 
