@@ -708,9 +708,14 @@ export function generateOIOUBL(data: OIOUBLInvoiceData): string {
       ...(isPeppolBis ? { 'cbc:BuyerReference': data.buyerReference || data.customer.id } : {}),
 
       // ── Credit note: BillingReference ────────────────────────
+      // cac:BillingReference contains cac:InvoiceDocumentReference (an
+      // AGGREGATE component — CommonAggregateComponents-2, NOT basic).
+      // Using 'cbc:InvoiceDocumentReference' emits it in the wrong
+      // namespace → Sproom XSD rejects with "has invalid child element
+      // 'InvoiceDocumentReference' in namespace '...CommonBasicComponents-2'".
       ...(data.invoiceTypeCode === '381' && {
         'cac:BillingReference': {
-          'cbc:InvoiceDocumentReference': {
+          'cac:InvoiceDocumentReference': {
             'cbc:ID': data.originalInvoiceNumber || data.invoiceId,
           },
         },

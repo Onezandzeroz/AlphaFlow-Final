@@ -300,7 +300,7 @@ export function SendEInvoiceDialog({
 
         if (sendStatus === 'FAILED' || transmissionError) {
           toast.error(
-            isDa ? 'E-faktura kunne ikke sendes' : 'E-invoice could not be sent',
+            isDa ? `E-${docNounDa} kunne ikke sendes` : `E-${docNounEn} could not be sent`,
             {
               description: transmissionError || (isDa
                 ? 'Afsendelsen fejlede. Se afsendelseshistorik for detaljer.'
