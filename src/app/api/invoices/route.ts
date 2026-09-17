@@ -6,6 +6,7 @@ import { tenantFilter, Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { notifyDataChanges } from '@/lib/notify-data-change';
+import { createCashReceiptJournalEntry } from './[id]/route';
 
 // GET /api/invoices - List all non-cancelled invoices
 export const GET = withGuard(
@@ -25,6 +26,45 @@ export const GET = withGuard(
           project: { select: { id: true, name: true, color: true, code: true } },
         },
       });
+
+      // ── Self-healing: ensure cash receipt JEs exist for PAID invoices ──
+      // For each PAID invoice missing its cash receipt entry (reference =
+      // invoiceNumber-IND), create it now (idempotent, non-fatal). This
+      // catches invoices whose Mark-Paid PAID transition failed to create
+      // the cash receipt (transient DB error) — the user sees the invoice as
+      // PAID in the list, and this backfills the missing closing entry so the
+      // financial journal reflects the payment.
+      const paidInvoices = invoices.filter((inv) => inv.status === 'PAID');
+      if (paidInvoices.length > 0) {
+        const accrualRefs = paidInvoices.map((inv) => inv.invoiceNumber);
+        const cashRefs = paidInvoices.map((inv) => `${inv.invoiceNumber}-IND`);
+        const existingJEs = await db.journalEntry.findMany({
+          where: { ...tenantFilter(ctx), reference: { in: [...accrualRefs, ...cashRefs] }, cancelled: false },
+          select: { reference: true },
+        });
+        const existingRefs = new Set(existingJEs.map((je) => je.reference));
+        for (const inv of paidInvoices) {
+          const accrualRef = inv.invoiceNumber;
+          const cashRef = `${inv.invoiceNumber}-IND`;
+          // Only create the cash receipt if the accrual entry exists — otherwise
+          // crediting Receivables without the accrual's debit would make the
+          // Receivables balance negative (inconsistent). A missing accrual is a
+          // separate failure that needs its own backfill.
+          if (!existingRefs.has(accrualRef)) {
+            logger.warn(
+              `[Invoices GET] Self-healing skipped for ${inv.invoiceNumber}: accrual entry missing (reference=${accrualRef}) — create the accrual first.`,
+            );
+            continue;
+          }
+          if (!existingRefs.has(cashRef)) {
+            try {
+              await createCashReceiptJournalEntry(ctx, inv, inv.paidDate ?? undefined);
+            } catch (err) {
+              logger.warn(`[Invoices GET] Self-healing cash receipt failed for ${inv.invoiceNumber}:`, err);
+            }
+          }
+        }
+      }
 
       return NextResponse.json({ invoices });
     } catch (error) {

@@ -23,6 +23,41 @@ export const GET = withGuard(
         return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
       }
 
+      // ── Self-healing: ensure the cash receipt JE exists for a PAID invoice ──
+      // If the invoice is PAID but the cash receipt journal entry (Debit Bank /
+      // Credit Receivables, reference = invoiceNumber-IND) is missing — e.g.
+      // because the Mark-Paid PAID transition failed to create it (transient
+      // DB error) — create it now (idempotent). This guarantees the financial
+      // journal reflects the payment. Non-fatal: a failure is logged, not
+      // thrown, so the GET still returns the invoice.
+      if (invoice.status === 'PAID') {
+        try {
+          const accrualRef = invoice.invoiceNumber;
+          const cashRef = `${invoice.invoiceNumber}-IND`;
+          const existingJEs = await db.journalEntry.findMany({
+            where: { ...tenantFilter(ctx), reference: { in: [accrualRef, cashRef] }, cancelled: false },
+            select: { reference: true },
+          });
+          const existingRefs = new Set(existingJEs.map((je) => je.reference));
+          // Only create the cash receipt if the accrual entry exists — otherwise
+          // crediting Receivables without the accrual's debit would make the
+          // Receivables balance negative (inconsistent). A missing accrual is a
+          // separate failure that needs its own backfill.
+          if (!existingRefs.has(accrualRef)) {
+            logger.warn(
+              `[Invoice GET] Self-healing skipped for ${invoice.invoiceNumber}: accrual entry missing (reference=${accrualRef}) — create the accrual first.`,
+            );
+          } else if (!existingRefs.has(cashRef)) {
+            await createCashReceiptJournalEntry(ctx, invoice, invoice.paidDate ?? undefined);
+          }
+        } catch (err) {
+          logger.warn(
+            `[Invoice GET] Self-healing cash receipt failed for ${invoice.invoiceNumber} (companyId=${ctx.activeCompanyId}):`,
+            err,
+          );
+        }
+      }
+
       return NextResponse.json({ invoice });
     } catch (error) {
       logger.error('Failed to fetch invoice:', error);
@@ -61,7 +96,7 @@ async function createAccrualJournalEntry(
   // 'INVOICE' (the default) but were clearly created as credit notes
   // (numbered with the KRE- prefix).
   const companyForPrefix = await db.company.findFirst({
-    where: { ...tenantFilter(ctx as any) },
+    where: { id: effectiveCompanyId(ctx) },
     select: { creditNotePrefix: true, invoicePrefix: true },
   });
   const creditNotePrefix = companyForPrefix?.creditNotePrefix;
@@ -260,7 +295,7 @@ async function createAccrualJournalEntry(
 //   DEBIT  1100 Bankkonto           (gross amount incl. VAT)
 //   CREDIT 1200 Tilgodehavender     (gross amount – clears the receivable)
 //
-async function createCashReceiptJournalEntry(
+export async function createCashReceiptJournalEntry(
   ctx: { id: string; activeCompanyId: string | null; isOversightMode: boolean; demoModeEnabled: boolean; isDemoCompany: boolean },
   existing: { id: string; invoiceNumber: string; customerName: string; issueDate: Date; total: number | { toNumber(): number }; projectId?: string | null; documentType?: string },
   paymentDate?: Date,
@@ -273,7 +308,7 @@ async function createCashReceiptJournalEntry(
   // ROBUST DETECTION: Same fallback as createAccrualJournalEntry — check
   // documentType first, then fall back to the creditNotePrefix.
   const companyForPrefix = await db.company.findFirst({
-    where: { ...tenantFilter(ctx as any) },
+    where: { id: effectiveCompanyId(ctx) },
     select: { creditNotePrefix: true },
   });
   const creditNotePrefix = companyForPrefix?.creditNotePrefix;
@@ -606,7 +641,20 @@ export const PUT = withGuard(
           },
         });
         if (!existingCashJE) {
-          await createCashReceiptJournalEntry(ctx, existing, paymentDate);
+          // Non-fatal: the invoice status is already committed to PAID above.
+          // If the cash receipt creation throws, DON'T propagate — that would
+          // return a 500, leaving the user with a PAID invoice + no closing
+          // entry + an error toast. Instead, log the failure; the self-healing
+          // on GET /api/invoices/[id] will retry creating the cash receipt on
+          // the next fetch.
+          try {
+            await createCashReceiptJournalEntry(ctx, existing, paymentDate);
+          } catch (err) {
+            logger.error(
+              `[Invoice PAID] Failed to create cash receipt JE for ${existing.invoiceNumber} (status already PAID — self-healing will retry on next GET):`,
+              err,
+            );
+          }
         }
       }
 
