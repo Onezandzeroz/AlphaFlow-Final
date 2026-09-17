@@ -3149,7 +3149,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onClick={() => handleUpdateStatus(invoice.id, 'DRAFT')}
-                          disabled={invoice.status === 'DRAFT'}
+                          disabled={invoice.status === 'DRAFT' || invoice.status === 'SENT' || invoice.status === 'PAID' || invoice.status === 'CANCELLED'}
                           className={invoice.status === 'DRAFT' ? 'font-semibold bg-gray-50 dark:bg-white/5' : ''}
                         >
                           <FileText className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />
@@ -3466,7 +3466,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() => handleUpdateStatus(invoice.id, 'DRAFT')}
-                                  disabled={invoice.status === 'DRAFT'}
+                                  disabled={invoice.status === 'DRAFT' || invoice.status === 'SENT' || invoice.status === 'PAID' || invoice.status === 'CANCELLED'}
                                   className={invoice.status === 'DRAFT' ? 'font-semibold bg-gray-50 dark:bg-white/5' : ''}
                                 >
                                   <FileText className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />

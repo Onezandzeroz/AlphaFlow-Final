@@ -434,6 +434,24 @@ export const PUT = withGuard(
       const previousStatus = existing.status;
       const newStatus = body.status;
 
+      // ─── Guard: a sent/paid/cancelled invoice cannot be reverted to DRAFT ──
+      // Once an invoice has been sent (status SENT/PAID/CANCELLED), its accrual
+      // journal entry exists (+ for PAID, a cash receipt). Reverting to DRAFT
+      // would silently cancel those entries + let the user re-edit a document
+      // already transmitted to a customer / recorded in the ledger — a
+      // bookkeeping-integrity risk. Blocked server-side so the UI restriction
+      // (disabled "Skift status → Kladde" menu item) can't be bypassed via API.
+      if (newStatus === 'DRAFT' && previousStatus !== 'DRAFT') {
+        return NextResponse.json(
+          {
+            error:
+              'En sendt, betalt eller annulleret faktura kan ikke ændres tilbage til kladde. Dokumentet har allerede bogførte poster. Annuller fakturaen eller opret en ny i stedet.',
+            code: 'CANNOT_REVERT_TO_DRAFT',
+          },
+          { status: 400 }
+        );
+      }
+
       // ─── Paid date (user-selectable when marking an invoice as PAID) ─────
       // Allows the user to record the actual date the invoice was paid when
       // it differs from today (e.g. bank payment posted a few days ago).
