@@ -505,8 +505,12 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     const lineTaxTotalNode = first(line['cac:TaxTotal']) as Record<string, unknown> | undefined;
     if (!taxCategoryNode && lineTaxTotalNode) {
       const taxAmount = toNum(getText(first(lineTaxTotalNode['cbc:TaxAmount'])));
-      if (taxAmount > 0 && quantity > 0) {
-        vatPercent = Math.round((taxAmount / (lineAmount - taxAmount)) * 100);
+      // VAT rate = line VAT / line NET amount. cbc:LineExtensionAmount is
+      // exclusive of VAT, so the divisor is `lineAmount` (NOT
+      // `lineAmount - taxAmount` — that double-subtracted the VAT and
+      // produced wrong rates like 33% instead of 25% for a 25% invoice).
+      if (taxAmount > 0 && lineAmount > 0) {
+        vatPercent = Math.round((taxAmount / lineAmount) * 100);
       }
     }
 
@@ -584,6 +588,32 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     ? toNum(getText(first(monetaryTotalNode['cbc:PayableAmount'])))
     : taxInclusiveAmount;
 
+  // ── Totals robustness: recompute from line items when LegalMonetaryTotal ──
+  // is missing or doesn't match the sum of the lines. Some supplier XMLs
+  // carry a malformed LegalMonetaryTotal (e.g. TaxExclusiveAmount set to the
+  // VAT amount, TaxAmount = 0) — the preview + reports should show the
+  // correct computed totals, and the raw XML is still available for
+  // inspection. Only overrides on a real mismatch (> 0.50 to tolerate
+  // rounding) AND when the recomputed value is non-zero.
+  const computedNet = lineItems.reduce((s, l) => s + (l.lineAmount || 0), 0);
+  const computedVat = lineItems.reduce(
+    (s, l) => s + ((l.lineAmount || 0) * (l.vatPercent || 0)) / 100,
+    0,
+  );
+  const finalTaxExclusive =
+    computedNet > 0 && Math.abs(taxExclusiveAmount - computedNet) > 0.5
+      ? computedNet
+      : taxExclusiveAmount;
+  const finalTaxAmount =
+    computedVat > 0 && Math.abs(taxAmount - computedVat) > 0.5
+      ? computedVat
+      : taxAmount;
+  const finalTaxInclusive =
+    Math.abs(taxInclusiveAmount - (finalTaxExclusive + finalTaxAmount)) > 0.5
+      ? finalTaxExclusive + finalTaxAmount
+      : taxInclusiveAmount;
+  const finalPayable = payableAmount > 0 ? payableAmount : finalTaxInclusive;
+
   if (!monetaryTotalNode) {
     warnings.push('LegalMonetaryTotal not found — totals may be zero');
   }
@@ -637,10 +667,10 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     profileId: profileIdRaw ?? undefined,
     lineItems,
     vatSubtotals,
-    taxExclusiveAmount,
-    taxAmount,
-    taxInclusiveAmount,
-    payableAmount,
+    taxExclusiveAmount: finalTaxExclusive,
+    taxAmount: finalTaxAmount,
+    taxInclusiveAmount: finalTaxInclusive,
+    payableAmount: finalPayable,
     paymentMeansCode,
     paymentAccountId,
   };

@@ -117,6 +117,37 @@ function fmtAmount(amount: number | string, currency: string) {
   return formatCurrency(Number(amount), currency);
 }
 
+/** Map a UBL PaymentMeansCode (e.g. 31, 42) to a human-readable label. */
+function paymentMeansLabel(code: string | null | undefined, language: string): string {
+  if (!code) return '—';
+  const labels: Record<string, { da: string; en: string }> = {
+    '30': { da: 'Kreditoverførsel', en: 'Credit transfer' },
+    '31': { da: 'Indenlandsk kontooverførsel', en: 'Domestic account transfer' },
+    '42': { da: 'Bankoverførsel til bankkonto', en: 'Bank transfer to bank account' },
+    '49': { da: 'Direkte debet', en: 'Direct debit' },
+    '59': { da: 'SEPA-kreditoverførsel', en: 'SEPA credit transfer' },
+  };
+  const entry = labels[code];
+  return entry ? (language === 'da' ? entry.da : entry.en) : code;
+}
+
+/** Format a payment account id (Danish IBAN / BBAN / foreign) for display. */
+function formatPaymentAccount(accountId: string | null | undefined): string {
+  if (!accountId) return '—';
+  const digits = accountId.replace(/\D/g, '');
+  // Danish IBAN: DK + 2 check digits + 4 reg + 10 account = 18 digits
+  if (accountId.toUpperCase().startsWith('DK') && digits.length === 18) {
+    const reg = digits.slice(4, 8);
+    const account = digits.slice(8, 18);
+    return `Reg. nr. ${reg} · Konto nr. ${account}`;
+  }
+  // Danish BBAN: 4 reg + 10 account = 14 digits
+  if (digits.length === 14) {
+    return `Reg. nr. ${digits.slice(0, 4)} · Konto nr. ${digits.slice(4, 14)}`;
+  }
+  return accountId;
+}
+
 // ── Component ──────────────────────────────────────────────────────────
 
 export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
@@ -739,7 +770,7 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
                         <span className="tabular-nums">{fmtAmount(selectedInvoice.taxExclusiveAmount, selectedInvoice.currencyCode)}</span>
                       </div>
                       <div className="flex justify-between w-full sm:w-64">
-                        <span className="text-muted-foreground">{language === 'da' ? 'Moms' : 'Tax'}</span>
+                        <span className="text-muted-foreground">{language === 'da' ? 'Indgående moms (købsmoms)' : 'Input VAT (purchase)'}</span>
                         <span className="tabular-nums">{fmtAmount(selectedInvoice.taxAmount, selectedInvoice.currencyCode)}</span>
                       </div>
                       <div className="flex justify-between w-full sm:w-64">
@@ -756,6 +787,37 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Payment info */}
+                {(selectedInvoice.dueDate || selectedInvoice.paymentAccountId || selectedInvoice.paymentMeansCode) && (
+                  <Card className="bg-muted/40">
+                    <CardContent className="p-4">
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                        {language === 'da' ? 'Betaling' : 'Payment'}
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        {selectedInvoice.dueDate && (
+                          <div>
+                            <span className="text-muted-foreground">{language === 'da' ? 'Forfaldsdato' : 'Due date'}: </span>
+                            <span className="font-medium">{format(new Date(selectedInvoice.dueDate), 'dd.MM.yyyy', { locale })}</span>
+                          </div>
+                        )}
+                        {selectedInvoice.paymentMeansCode && (
+                          <div>
+                            <span className="text-muted-foreground">{language === 'da' ? 'Betalingsmåde' : 'Payment method'}: </span>
+                            <span className="font-medium">{paymentMeansLabel(selectedInvoice.paymentMeansCode, language)}</span>
+                          </div>
+                        )}
+                        {selectedInvoice.paymentAccountId && (
+                          <div className="sm:col-span-2">
+                            <span className="text-muted-foreground">{language === 'da' ? 'Konto' : 'Account'}: </span>
+                            <span className="font-medium tabular-nums">{formatPaymentAccount(selectedInvoice.paymentAccountId)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Rejection reason */}
                 {selectedInvoice.rejectionReason && (
