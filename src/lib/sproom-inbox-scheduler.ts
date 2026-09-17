@@ -56,6 +56,17 @@ function markProcessed(companyId: string, documentId: string): void {
   processedGuids.add(key);
 }
 
+/**
+ * Normalise a CVR / endpoint identifier to its 8-digit core for comparison.
+ * Handles "12345678", "DK:CVR:12345678", "0184:12345678", etc. — strips
+ * non-digits and takes the last 8 (a Danish CVR is always the trailing 8
+ * digits regardless of the scheme prefix).
+ */
+function normalizeCvrIdentifier(value: string | null | undefined): string {
+  if (!value) return '';
+  return value.replace(/\D/g, '').slice(-8);
+}
+
 // ─── Per-company pull ────────────────────────────────────────────────────
 
 /**
@@ -66,6 +77,14 @@ function markProcessed(companyId: string, documentId: string): void {
 async function pullInboxForCompany(company: {
   id: string;
   sproomChildCompanyId: string;
+  /**
+   * The tenant's CVR (8 digits). Used to filter listDocuments to ONLY
+   * documents where this child company is the RECIPIENT (received),
+   * skipping documents the child company SENT — otherwise the puller would
+   * store the tenant's own outbound invoices as "received" in its own
+   * e-inbox (a perfect copy appearing shortly after sending).
+   */
+  cvrNumber: string;
 }): Promise<{ fetched: number; stored: number }> {
   let fetched = 0;
   let stored = 0;
@@ -92,6 +111,24 @@ async function pullInboxForCompany(company: {
     const documentId = doc.documentId;
     if (!documentId) continue;
     if (processedGuids.has(dedupKey(company.id, documentId))) continue; // seen by this puller
+
+    // ── Direction filter: only process documents where this child company is
+    // the RECIPIENT (received). Sproom's listDocuments returns BOTH sent and
+    // received documents for a child company — without this filter, the
+    // puller would store the tenant's OWN outbound invoices as "received" in
+    // its own e-inbox (a perfect copy appearing shortly after sending). We
+    // compare the document's recipientParty identifier to the tenant's CVR.
+    const recipientId = doc.recipientParty?.companyIdentifier?.value;
+    const recipientIsThisCompany =
+      !!company.cvrNumber &&
+      normalizeCvrIdentifier(recipientId) === normalizeCvrIdentifier(company.cvrNumber);
+    if (!recipientIsThisCompany) {
+      // The child company is the SENDER (or the recipient is unknown) — this
+      // is an outbound document, not an inbound one. Mark processed so we
+      // don't re-evaluate it every poll, and skip storing.
+      markProcessed(company.id, documentId);
+      continue;
+    }
 
     // Per-document try/catch: a single document's failure must NOT abort the
     // rest of the company's batch. markProcessed is called only on a
@@ -226,7 +263,7 @@ export async function runSproomInboxCycle(): Promise<{
       einvoiceEnabled: true,
       isActive: true,
     },
-    select: { id: true, sproomChildCompanyId: true },
+    select: { id: true, sproomChildCompanyId: true, cvrNumber: true },
   });
 
   let totalFetched = 0;
@@ -237,6 +274,7 @@ export async function runSproomInboxCycle(): Promise<{
       const { fetched, stored } = await pullInboxForCompany({
         id: company.id,
         sproomChildCompanyId: company.sproomChildCompanyId,
+        cvrNumber: company.cvrNumber ?? '',
       });
       totalFetched += fetched;
       totalStored += stored;
