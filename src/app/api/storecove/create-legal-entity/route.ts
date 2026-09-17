@@ -59,6 +59,9 @@ export const POST = withGuard(
           cvrNumber: true,
           cvrVerifiedAt: true,
           address: true,
+          postalCode: true,
+          city: true,
+          country: true,
           email: true,
           companyType: true,
           storecoveConnected: true,
@@ -154,20 +157,19 @@ export const POST = withGuard(
       // ── Create the legal entity in Storecove ──
       // Peppol identifier scheme 0184 = Danish CVR register.
       // Storecove requires: party_name, line1, city, zip, country (all required).
-      // The Company model stores address as a single string — we use it as line1
-      // and try to extract a Danish postal code (4 digits) + city from it.
-      const addressStr = company.address || company.name;
-      // Danish postal codes are exactly 4 digits, often followed by the city name
-      const postalMatch = addressStr.match(/(\d{4})\s+([A-Za-zÆØÅæøå\s]+)/);
-      const line1 = addressStr.split(',').map(s => s.trim())[0] || company.name;
-      const city = postalMatch ? postalMatch[2].trim() : (addressStr.split(',').map(s => s.trim())[1] || 'Danmark');
-      const zip = postalMatch ? postalMatch[1] : '0000';
+      // The Company model now stores structured address parts (address = street
+      // line, postalCode, city, country) — required for NemHandel/OIOUBL/PEppol.
+      // Fall back to sensible defaults only if a field is somehow empty.
+      const line1 = company.address?.trim() || company.name;
+      const city = company.city?.trim() || 'Danmark';
+      const zip = company.postalCode?.trim() || '0000';
+      const country = company.country?.trim() || 'DK';
 
       const legalEntity = await storecoveClient.createLegalEntity({
         name: company.name,
         peppolIdentifiers: [{ scheme: '0184', identifier: cvr }],
         address: {
-          country: 'DK',
+          country,
           street: line1,
           city,
           zip,

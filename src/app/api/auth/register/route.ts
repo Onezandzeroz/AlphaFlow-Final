@@ -4,7 +4,6 @@ import { hashPassword } from '@/lib/password';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { auditAuth, requestMetadata } from '@/lib/audit';
 import { sendVerificationEmail } from '@/lib/email-service';
-import { notifyNewCustomerAboutNemHandel } from '@/lib/nemhandel-notification';
 import { logger } from '@/lib/logger';
 import crypto from 'crypto';
 import { withGuard } from '@/lib/route-guard';
@@ -144,20 +143,13 @@ export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
         logger.warn('Failed to send verification email during registration:', emailError);
       });
 
-    // Notify the new customer about NemHandelsregisteret enrollment —
-    // Erhvervsstyrelsen compliance (Bilag 2, Row 47 / Krav 8): the system
-    // MUST notify NEW customers at registration about the possibility of
-    // being registered in NemHandelsregisteret. Fire-and-forget; never
-    // blocks registration. Bilag 2, Row 48 (Krav 9) is also addressed
-    // because the notice email links to the in-app enrollment flow.
-    notifyNewCustomerAboutNemHandel(user.id, normalizedEmail, company.id).catch(
-      (nemhandelError) => {
-        logger.warn(
-          'Failed to send NemHandel registration notice during registration:',
-          nemhandelError,
-        );
-      },
-    );
+    // NemHandel registration-notice email is NO LONGER sent at registration.
+    // It is now gated: it fires for ALL tenants (any plan) AFTER they save
+    // their company information with a verified CVR (see
+    // maybeNotifyNemHandelAfterCompanySave in src/lib/nemhandel-notification.ts,
+    // triggered from PUT /api/company and /api/cvr/lookup). NemHandel/OIOUBL
+    // is offered to every customer — no plan-tier gate. New tenants have no
+    // verified CVR at registration time, so they never qualify here anyway.
 
     // Audit registration
     await auditAuth(user.id, 'REGISTER', requestMetadata(request), company.id);

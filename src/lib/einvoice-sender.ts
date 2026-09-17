@@ -300,6 +300,9 @@ function buildOIOUBLData(
   company: {
     name: string;
     address: string;
+    postalCode?: string;
+    city?: string;
+    country?: string;
     email: string;
     phone: string;
     cvrNumber: string;
@@ -344,8 +347,9 @@ function buildOIOUBLData(
       id: company.cvrNumber || 'DK00000000',
       name: company.name,
       streetAddress: company.address || undefined,
-      city: undefined,
-      country: 'DK',
+      postalCode: company.postalCode || undefined,
+      city: company.city || undefined,
+      country: company.country || 'DK',
       vatNumber: company.cvrNumber ? `DK${company.cvrNumber}` : undefined,
       contactEmail: company.email || undefined,
       contactPhone: company.phone || undefined,

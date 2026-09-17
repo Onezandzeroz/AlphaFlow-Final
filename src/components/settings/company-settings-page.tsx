@@ -66,6 +66,9 @@ interface CompanyInfo {
   showCompanyLogo?: boolean;
   companyName: string;
   address: string;
+  postalCode: string;
+  city: string;
+  country: string;
   phone: string;
   email: string;
   cvrNumber: string;
@@ -109,6 +112,12 @@ function validatePhone(phone: string): boolean {
 
 function validateCvr(cvr: string): boolean {
   return /^\d{8}$/.test(cvr.trim());
+}
+
+function validatePostalCode(postal: string): boolean {
+  // Danish postnumre are exactly 4 digits. Required for NemHandel/OIOUBL/PEppol
+  // (cac:PostalAddress/cbc:PostalZone).
+  return /^\d{4}$/.test(postal.trim());
 }
 
 function validateIban(iban: string): boolean {
@@ -185,9 +194,12 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
     if (!companyInfo) return false;
     const hasName = !!companyInfo.companyName?.trim();
     const hasAddress = !!companyInfo.address?.trim();
+    const hasPostal = !!companyInfo.postalCode?.trim();
+    const hasCity = !!companyInfo.city?.trim();
+    const hasCountry = !!companyInfo.country?.trim();
     const hasCvr = !!companyInfo.cvrNumber?.trim();
     const hasPhone = !!companyInfo.phone?.trim();
-    return hasName && hasAddress && hasCvr && hasPhone;
+    return hasName && hasAddress && hasPostal && hasCity && hasCountry && hasCvr && hasPhone;
   }, [companyInfo]);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [showBankPreview, setShowBankPreview] = useState(true);
@@ -198,6 +210,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
     showCompanyLogo: false as boolean,
     companyName: '',
     address: '',
+    postalCode: '',
+    city: '',
+    country: 'DK',
     phone: '',
     email: '',
     cvrNumber: '',
@@ -228,6 +243,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
     {
       companyName: form.companyName,
       address: form.address,
+      postalCode: form.postalCode,
+      city: form.city,
+      country: form.country,
       phone: form.phone,
       email: form.email,
       cvrNumber: form.cvrNumber,
@@ -262,6 +280,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
       | {
           companyName?: unknown;
           address?: unknown;
+          postalCode?: unknown;
+          city?: unknown;
+          country?: unknown;
           phone?: unknown;
           email?: unknown;
           cvrNumber?: unknown;
@@ -283,6 +304,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
       ...prev,
       companyName: typeof d.companyName === 'string' ? d.companyName : prev.companyName,
       address: typeof d.address === 'string' ? d.address : prev.address,
+      postalCode: typeof d.postalCode === 'string' ? d.postalCode : prev.postalCode,
+      city: typeof d.city === 'string' ? d.city : prev.city,
+      country: typeof d.country === 'string' ? d.country : prev.country,
       phone: typeof d.phone === 'string' ? d.phone : prev.phone,
       email: typeof d.email === 'string' ? d.email : prev.email,
       cvrNumber: typeof d.cvrNumber === 'string' ? d.cvrNumber : prev.cvrNumber,
@@ -314,9 +338,12 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
     if (form.email && !validateEmail(form.email)) errs.email = t('invalidEmail');
     if (form.phone && !validatePhone(form.phone)) errs.phone = t('invalidPhone');
     if (form.cvrNumber && !validateCvr(form.cvrNumber)) errs.cvrNumber = t('invalidCvr');
+    if (form.postalCode && !validatePostalCode(form.postalCode)) {
+      errs.postalCode = language === 'da' ? 'Ugyldigt postnummer (4 cifre)' : 'Invalid postal code (4 digits)';
+    }
     if (form.bankIban && !validateIban(form.bankIban)) errs.bankIban = t('invalidIban');
     return errs;
-  }, [form, t]);
+  }, [form, t, language]);
 
   // ── Bank account preview ──
   const bankPreview = useMemo(() => {
@@ -340,6 +367,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
             showCompanyLogo: !!info.showCompanyLogo,
             companyName: info.companyName || '',
             address: info.address || '',
+            postalCode: info.postalCode || '',
+            city: info.city || '',
+            country: info.country || 'DK',
             phone: info.phone || '',
             email: info.email || '',
             cvrNumber: info.cvrNumber || '',
@@ -377,6 +407,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
       const changed =
         form.companyName !== (companyInfo.companyName || '') ||
         form.address !== (companyInfo.address || '') ||
+        form.postalCode !== (companyInfo.postalCode || '') ||
+        form.city !== (companyInfo.city || '') ||
+        form.country !== (companyInfo.country || '') ||
         form.phone !== (companyInfo.phone || '') ||
         form.email !== (companyInfo.email || '') ||
         form.cvrNumber !== (companyInfo.cvrNumber || '') ||
@@ -398,6 +431,8 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
       const hasAny =
         form.companyName.trim() !== '' ||
         form.address.trim() !== '' ||
+        form.postalCode.trim() !== '' ||
+        form.city.trim() !== '' ||
         form.phone.trim() !== '' ||
         form.email.trim() !== '' ||
         form.cvrNumber.trim() !== '' ||
@@ -473,6 +508,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
     const requiredFields = [
       'companyName',
       'address',
+      'postalCode',
+      'city',
+      'country',
       'phone',
       'email',
       'cvrNumber',
@@ -508,6 +546,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
           showCompanyLogo: form.showCompanyLogo,
           companyName: form.companyName.trim(),
           address: form.address.trim(),
+          postalCode: form.postalCode.trim(),
+          city: form.city.trim(),
+          country: form.country.trim(),
           phone: form.phone.trim(),
           email: form.email.trim(),
           cvrNumber: form.cvrNumber.trim(),
@@ -621,6 +662,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                 showCompanyLogo: !!companyInfo.showCompanyLogo,
                 companyName: companyInfo.companyName || '',
                 address: companyInfo.address || '',
+                postalCode: companyInfo.postalCode || '',
+                city: companyInfo.city || '',
+                country: companyInfo.country || 'DK',
                 phone: companyInfo.phone || '',
                 email: companyInfo.email || '',
                 cvrNumber: companyInfo.cvrNumber || '',
@@ -642,6 +686,9 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                 showCompanyLogo: false,
                 companyName: '',
                 address: '',
+                postalCode: '',
+                city: '',
+                country: 'DK',
                 phone: '',
                 email: '',
                 cvrNumber: '',
@@ -929,7 +976,7 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
               {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
             </div>
 
-            {/* Address */}
+            {/* Address (street line) */}
             <div className="space-y-2">
               <Label htmlFor="address" className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 {t('companyAddress')} <span className="text-red-500">*</span>
@@ -938,10 +985,64 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                 id="address"
                 value={form.address}
                 onChange={(e) => updateField('address', e.target.value)}
-                placeholder={language === 'da' ? 'f.eks. Strøget 1, 1234 København' : 'e.g. Strøget 1, 1234 Copenhagen'}
+                placeholder={language === 'da' ? 'f.eks. Strøget 1' : 'e.g. Strøget 1'}
                 className="h-10 focus-ring-teal"
               />
               {errors.address && <p className="text-xs text-red-500">{errors.address}</p>}
+            </div>
+
+            {/* Postal code + City + Country — required for NemHandel / OIOUBL / PEppol */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="postalCode" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {language === 'da' ? 'Postnummer' : 'Postal code'} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="postalCode"
+                  value={form.postalCode}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    updateField('postalCode', val);
+                  }}
+                  placeholder={language === 'da' ? 'f.eks. 1234' : 'e.g. 1234'}
+                  maxLength={4}
+                  inputMode="numeric"
+                  className={`h-10 focus-ring-teal ${validationErrors.postalCode ? 'border-red-500 dark:border-red-500' : ''}`}
+                />
+                {validationErrors.postalCode && (
+                  <div className="flex items-center gap-1 text-xs text-red-500">
+                    <AlertTriangle className="h-3 w-3" />
+                    {validationErrors.postalCode}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {language === 'da' ? 'By' : 'City'} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="city"
+                  value={form.city}
+                  onChange={(e) => updateField('city', e.target.value)}
+                  placeholder={language === 'da' ? 'f.eks. København' : 'e.g. Copenhagen'}
+                  className="h-10 focus-ring-teal"
+                />
+                {errors.city && <p className="text-xs text-red-500">{errors.city}</p>}
+              </div>
+              <div className="space-y-2 col-span-2 sm:col-span-1">
+                <Label htmlFor="country" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {language === 'da' ? 'Land' : 'Country'} <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="country"
+                  value={form.country}
+                  onChange={(e) => updateField('country', e.target.value.toUpperCase())}
+                  placeholder="DK"
+                  maxLength={2}
+                  className="h-10 focus-ring-teal uppercase"
+                />
+                {errors.country && <p className="text-xs text-red-500">{errors.country}</p>}
+              </div>
             </div>
 
             {/* Phone & Email row */}
@@ -1014,20 +1115,18 @@ export function CompanySettingsPage({ user, onNavigate }: CompanySettingsPagePro
                       cvr={form.cvrNumber}
                       compact
                       onVerified={(info: CvrInfo) => {
-                        // Auto-fill company name, type + combined address from CVR.
-                        // companyType is always set from CVR's virksomhedsform
-                        // (kortBeskrivelse mapped to AlphaFlow's select values)
-                        // since the CVR register is the authoritative source.
+                        // Auto-fill company identity from the CVR register —
+                        // the authoritative source for name, type, and address.
+                        // Postal code, city, and country are filled into the
+                        // dedicated fields (required for NemHandel/OIOUBL/PEppol)
+                        // rather than mashed into the street-address line.
                         if (info.name) updateField('companyName', info.name);
                         const mappedType = mapCvrFormToCompanyType(info.companyForm);
                         if (mappedType) updateField('companyType', mappedType);
-                        if (info.address) {
-                          const parts = [
-                            info.address,
-                            [info.postalCode, info.city].filter(Boolean).join(' '),
-                          ].filter(Boolean);
-                          updateField('address', parts.join(', '));
-                        }
+                        if (info.address) updateField('address', info.address);
+                        if (info.postalCode) updateField('postalCode', info.postalCode);
+                        if (info.city) updateField('city', info.city);
+                        if (info.country) updateField('country', info.country);
                       }}
                     />
                   </div>

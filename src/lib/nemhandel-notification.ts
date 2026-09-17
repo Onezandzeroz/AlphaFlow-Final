@@ -114,6 +114,174 @@ export async function notifyNewCustomerAboutNemHandel(
   }
 }
 
+// ─── 1b. GATED POST-SAVE NOTIFICATION (verified-CVR tenants, all plans) ──
+
+/**
+ * Minimal view of a Company row needed to decide whether to send the
+ * NemHandel registration-notice email after the tenant saves their
+ * company information. Designed so a full Prisma `Company` object (or a
+ * `findUnique` with the listed fields) is directly assignable.
+ */
+export interface NemHandelNoticeCompany {
+  id: string;
+  email: string;
+  name: string;
+  cvrVerifiedAt: Date | null;
+  nemhandelNoticeSentAt: Date | null;
+  // Completeness check — all NemHandel / OIOUBL / PEppol required fields:
+  address: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  phone: string;
+  cvrNumber: string;
+  bankAccount: string;
+  bankRegistration: string;
+}
+
+export interface NemHandelNoticeResult {
+  sent: boolean;
+  /** Why the notice was NOT sent (only meaningful when sent=false). */
+  reason?:
+    | 'cvr_not_verified'
+    | 'already_sent'
+    | 'company_info_incomplete'
+    | 'send_failed'
+    | 'exception';
+}
+
+/**
+ * Conditionally send the NemHandel registration-notice email to a tenant
+ * AFTER they save their company information.
+ *
+ * Business rules (all must hold for the notice to fire):
+ *   1. The tenant's CVR number is verified (`cvrVerifiedAt != null`). The
+ *      CVR is verified against the Danish CVR register via /api/cvr/lookup;
+ *      PUT /api/company resets `cvrVerifiedAt` to null whenever the CVR
+ *      string changes, so a changed CVR forces re-verification before the
+ *      notice can fire again. NemHandel/OIOUBL is offered to ALL tenants
+ *      regardless of plan — there is NO plan-tier gate.
+ *   2. The notice has not already been sent (`nemhandelNoticeSentAt == null`).
+ *      On a successful dispatch, `nemhandelNoticeSentAt` is stamped to now,
+ *      so subsequent saves never re-trigger the notice (dedup).
+ *   3. The company information is complete — every NemHandel / OIOUBL /
+ *      PEppol required field is non-empty (name, address, postalCode, city,
+ *      country, phone, email, cvrNumber, bankAccount, bankRegistration).
+ *
+ * Safe to call fire-and-forget: never throws to the caller. Records an
+ * AuditLog entry + EmailLog row on dispatch (Bilag 2 traceability).
+ *
+ * @param company      The tenant's company row (post-update for the save
+ *                     path, freshly fetched for the CVR-verify path).
+ * @param actingUserId The user who triggered the save/verify (for audit).
+ */
+export async function maybeNotifyNemHandelAfterCompanySave(
+  company: NemHandelNoticeCompany,
+  actingUserId: string,
+): Promise<NemHandelNoticeResult> {
+  try {
+    // 1. CVR must be verified against the Danish CVR register. NemHandel /
+    //    OIOUBL is offered to ALL tenants regardless of plan — there is no
+    //    plan-tier gate. The only condition is a verified CVR.
+    if (!company.cvrVerifiedAt) {
+      return { sent: false, reason: 'cvr_not_verified' };
+    }
+
+    // 2. Dedup — never send the notice twice to the same tenant.
+    if (company.nemhandelNoticeSentAt) {
+      return { sent: false, reason: 'already_sent' };
+    }
+
+    // 3. Company info completeness — every NemHandel / OIOUBL / PEppol
+    //    required field must be present. This mirrors the required-fields
+    //    list in the company settings form.
+    const requiredFilled =
+      !!company.name?.trim() &&
+      !!company.address?.trim() &&
+      !!company.postalCode?.trim() &&
+      !!company.city?.trim() &&
+      !!company.country?.trim() &&
+      !!company.phone?.trim() &&
+      !!company.email?.trim() &&
+      !!company.cvrNumber?.trim() &&
+      !!company.bankAccount?.trim() &&
+      !!company.bankRegistration?.trim();
+    if (!requiredFilled) {
+      return { sent: false, reason: 'company_info_incomplete' };
+    }
+
+    // 4. Dispatch the notice email.
+    const language: Language = 'da';
+    const appUrl = getAppUrl();
+    const result = await sendNemHandelNoticeEmail(
+      company.email,
+      { appUrl, settingsPath: '/settings-edelivery' },
+      language,
+      company.id,
+      { trigger: 'company_completed_with_verified_cvr' },
+    );
+
+    // 5. Stamp the dedup flag so subsequent saves don't re-send — but ONLY
+    //    on a SUCCESSFUL dispatch. A failed send must NOT be stamped,
+    //    otherwise the tenant would never receive the notice (the dedup
+    //    gate would return 'already_sent' on every retry). The audit entry
+    //    below still records the attempt regardless, so traceability is
+    //    preserved. Wrapped in its own try/catch so a DB hiccup doesn't
+    //    cause a duplicate send on the next save.
+    if (result.success) {
+      try {
+        await db.company.update({
+          where: { id: company.id },
+          data: { nemhandelNoticeSentAt: new Date() },
+          select: { id: true },
+        });
+      } catch (dbErr) {
+        logger.warn(
+          `[NEMHANDEL-NOTIFY] Could not persist nemhandelNoticeSentAt for companyId=${company.id}:`,
+          dbErr,
+        );
+      }
+    }
+
+    // 6. Audit the dispatch — Bilag 2 compliance traceability.
+    await auditLog({
+      action: 'CREATE',
+      entityType: 'Company',
+      entityId: company.id,
+      userId: actingUserId,
+      companyId: company.id,
+      performedByUserId: actingUserId,
+      metadata: {
+        type: 'nemhandel_registration_notice_sent',
+        trigger: 'company_completed_with_verified_cvr',
+        recipientEmail: company.email,
+        language,
+        emailLogId: result.logId,
+        emailSuccess: result.success,
+      },
+    });
+
+    if (!result.success) {
+      logger.warn(
+        `[NEMHANDEL-NOTIFY] Gated notice FAILED for companyId=${company.id} email=${company.email} logId=${result.logId}`,
+      );
+      return { sent: false, reason: 'send_failed' };
+    }
+
+    logger.warn(
+      `[NEMHANDEL-NOTIFY] Gated notice sent to ${company.email} (companyId=${company.id}, logId=${result.logId})`,
+    );
+    return { sent: true };
+  } catch (error) {
+    // NEVER throw to the caller — the save/verify flow must not be blocked.
+    logger.error(
+      `[NEMHANDEL-NOTIFY] Unexpected error in maybeNotifyNemHandelAfterCompanySave for companyId=${company.id}:`,
+      error,
+    );
+    return { sent: false, reason: 'exception' };
+  }
+}
+
 // ─── 2. EXISTING CUSTOMERS BATCH NOTIFICATION ───────────────────────
 
 interface ExistingCustomerRecipient {

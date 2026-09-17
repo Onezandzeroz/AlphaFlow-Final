@@ -6,6 +6,7 @@ import { auditCreate, auditUpdate, auditLog, requestMetadata } from '@/lib/audit
 import { logger } from '@/lib/logger';
 import { notifyOwner } from '@/lib/notify-owner';
 import { notifyDataChange } from '@/lib/notify-data-change';
+import { maybeNotifyNemHandelAfterCompanySave } from '@/lib/nemhandel-notification';
 
 const guard = routeConfig['/api/company'];
 
@@ -18,6 +19,7 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       where: { id: ctx.activeCompanyId! },
       select: {
         id: true, logo: true, name: true, address: true, phone: true,
+        postalCode: true, city: true, country: true,
         email: true, cvrNumber: true, invoicePrefix: true,
         bankName: true, bankAccount: true, bankRegistration: true,
         bankIban: true, bankStreet: true, bankCity: true, bankCountry: true,
@@ -59,6 +61,9 @@ export const GET = withGuard(guard.GET!, async (request, ctx) => {
       logo: company.logo,
       companyName: company.name,
       address: company.address,
+      postalCode: company.postalCode,
+      city: company.city,
+      country: company.country,
       phone: company.phone,
       email: company.email,
       cvrNumber: company.cvrNumber,
@@ -107,7 +112,7 @@ export const POST = withGuard(guard.POST!, async (request, ctx) => {
   try {
     const body = await request.json();
     const {
-      logo, companyName, address, phone, email, cvrNumber, invoicePrefix,
+      logo, companyName, address, postalCode, city, country, phone, email, cvrNumber, invoicePrefix,
       bankName, bankAccount, bankRegistration, bankIban, bankStreet, bankCity,
       bankCountry, invoiceTerms, companyType, invoiceNotesTemplate,
       showCompanyLogo,
@@ -142,6 +147,9 @@ export const POST = withGuard(guard.POST!, async (request, ctx) => {
         logo: logo || null,
         showCompanyLogo: typeof showCompanyLogo === 'boolean' ? showCompanyLogo : false,
         address: address || '',
+        postalCode: postalCode || '',
+        city: city || '',
+        country: country || 'DK',
         phone: phone || '',
         email: email || '',
         cvrNumber: cvrNumber || '',
@@ -179,6 +187,9 @@ export const POST = withGuard(guard.POST!, async (request, ctx) => {
       showCompanyLogo: company.showCompanyLogo,
       companyName: company.name,
       address: company.address,
+      postalCode: company.postalCode,
+      city: company.city,
+      country: company.country,
       phone: company.phone,
       email: company.email,
       cvrNumber: company.cvrNumber,
@@ -213,7 +224,7 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
   try {
     const body = await request.json();
     const {
-      logo, companyName, address, phone, email, cvrNumber, invoicePrefix,
+      logo, companyName, address, postalCode, city, country, phone, email, cvrNumber, invoicePrefix,
       bankName, bankAccount, bankRegistration, bankIban, bankStreet, bankCity,
       bankCountry, invoiceTerms, companyType, invoiceNotesTemplate,
       showCompanyLogo,
@@ -265,6 +276,9 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
         ...(typeof showCompanyLogo === 'boolean' && { showCompanyLogo }),
         ...(companyName && { name: companyName }),
         ...(address && { address }),
+        ...(postalCode && { postalCode }),
+        ...(city && { city }),
+        ...(country && { country }),
         ...(phone && { phone }),
         ...(email && { email }),
         ...(cvrNumber && { cvrNumber }),
@@ -302,12 +316,26 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
       ).catch(() => { /* fire-and-forget */ });
     }
 
+    // ─── NemHandel registration notice (gated) ───────────────────────
+    // Fires for ALL tenants whose CVR is verified and whose company info is
+    // complete — regardless of plan (NemHandel/OIOUBL is offered to every
+    // customer). Deduped via Company.nemhandelNoticeSentAt so it fires at
+    // most once per tenant. The `company` object returned by db.company.update
+    // carries the post-update cvrVerifiedAt (null if the CVR was just changed,
+    // forcing re-verification) and the nemhandelNoticeSentAt flag.
+    maybeNotifyNemHandelAfterCompanySave(company, ctx.id).catch((err) => {
+      logger.warn('maybeNotifyNemHandelAfterCompanySave failed:', err);
+    });
+
     const companyInfo = {
       id: company.id,
       logo: company.logo,
       showCompanyLogo: company.showCompanyLogo,
       companyName: company.name,
       address: company.address,
+      postalCode: company.postalCode,
+      city: company.city,
+      country: company.country,
       phone: company.phone,
       email: company.email,
       cvrNumber: company.cvrNumber,

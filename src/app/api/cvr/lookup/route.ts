@@ -26,6 +26,7 @@ import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { db } from '@/lib/db';
+import { maybeNotifyNemHandelAfterCompanySave } from '@/lib/nemhandel-notification';
 
 // GET /api/cvr/lookup — Verify a CVR number against the CVR register
 export const GET = withGuard(
@@ -121,6 +122,34 @@ export const GET = withGuard(
           await db.$executeRaw`UPDATE "Company" SET "cvrVerifiedAt" = NOW(), "cvrNumber" = ${cvrDigits} WHERE id = ${ctx.activeCompanyId}`;
         } catch (dbErr) {
           logger.warn('[CVR_LOOKUP] Could not persist cvrVerifiedAt', dbErr);
+        }
+
+        // ── Complementary NemHandel notice trigger ──
+        // The primary trigger is in PUT /api/company (fires on save with a
+        // verified CVR). This complementary trigger covers the reverse
+        // ordering: a tenant who SAVED their company info first (CVR field
+        // present but not yet verified) and THEN verifies the CVR via this
+        // lookup. NemHandel/OIOUBL is offered to ALL tenants regardless of
+        // plan — no plan-tier gate. The helper dedupes via
+        // Company.nemhandelNoticeSentAt, so it fires exactly once regardless
+        // of which path completes the conditions last. Fire-and-forget.
+        try {
+          const freshCompany = await db.company.findUnique({
+            where: { id: ctx.activeCompanyId },
+            select: {
+              id: true, email: true, name: true,
+              cvrVerifiedAt: true, nemhandelNoticeSentAt: true,
+              address: true, postalCode: true, city: true, country: true,
+              phone: true, cvrNumber: true, bankAccount: true, bankRegistration: true,
+            },
+          });
+          if (freshCompany) {
+            maybeNotifyNemHandelAfterCompanySave(freshCompany, ctx.id).catch((err) => {
+              logger.warn('[CVR_LOOKUP] maybeNotifyNemHandelAfterCompanySave failed:', err);
+            });
+          }
+        } catch (triggerErr) {
+          logger.warn('[CVR_LOOKUP] NemHandel notice trigger error:', triggerErr);
         }
       }
 
