@@ -67,6 +67,7 @@ export const POST = withGuard(
           address: true,
           email: true,
           phone: true,
+          einvoiceGLN: true,
           sproomChildCompanyId: true,
         },
       });
@@ -95,6 +96,23 @@ export const POST = withGuard(
           },
           { status: 400 }
         );
+      }
+
+      // ── GLN (Global Location Number / EAN-13) ──────────────────────
+      // Optional. If the tenant has entered a GLN in e-invoice settings
+      // (Company.einvoiceGLN), forward it to Sproom at child-company creation
+      // (Sproom stores it on the child company) and register it as a NemHandel
+      // endpoint so the tenant can RECEIVE e-invoices addressed to their GLN
+      // (not just their CVR). Sproom does NOT issue GLNs — they are
+      // company-owned (assigned by GS1 Denmark). Only a valid 13-digit GLN
+      // is forwarded; a malformed one is skipped so it doesn't break creation.
+      const rawGln = company.einvoiceGLN?.trim() || '';
+      const gln = /^\d{13}$/.test(rawGln) ? rawGln : undefined;
+      if (rawGln && !gln) {
+        logger.warn('[SPROOM_CREATE_CHILD] Skipping malformed GLN (not 13 digits)', {
+          companyId: ctx.activeCompanyId,
+          rawGln,
+        });
       }
 
       // Idempotency: refuse if already connected
@@ -151,6 +169,8 @@ export const POST = withGuard(
           name: company.name,
           cvr,
           schemeId: 'DK:CVR',
+          // Forward the tenant's GLN so Sproom stores it on the child company.
+          gln,
         });
         logger.info('[SPROOM_CREATE_CHILD] Child company created', {
           companyId: ctx.activeCompanyId,
@@ -291,6 +311,36 @@ export const POST = withGuard(
         });
       }
 
+      // ── 3b. Register the GLN endpoint in NemHandel (optional) ──────
+      // If the tenant has a GLN, register it as an ADDITIONAL NemHandel
+      // endpoint so they can RECEIVE e-invoices addressed to their GLN (not
+      // just their CVR). Sproom's NemHandel registration accepts CVR or GLN
+      // as the endpointId (per the swagger: "Registers a given ID (CVR, GLN)
+      // for reception of documents in NemHandel"). Non-fatal — the CVR
+      // registration above is the primary; a GLN failure just means
+      // GLN-addressed reception isn't enabled (retry via the dashboard).
+      let nemhandelGlnRegistered = false;
+      if (gln) {
+        try {
+          await sproomClient.registerNemHandel(
+            { schemeId: 'GLN', value: gln },
+            ['Nes5Customer'],
+            { childCompanyId: childCompany.id },
+          );
+          nemhandelGlnRegistered = true;
+          logger.info('[SPROOM_CREATE_CHILD] Registered GLN endpoint in NemHandel', {
+            childCompanyId: childCompany.id,
+            gln,
+          });
+        } catch (err) {
+          logger.warn('[SPROOM_CREATE_CHILD] GLN NemHandel registration failed (non-fatal)', {
+            childCompanyId: childCompany.id,
+            gln,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
       // ── 4. Peppol network registration ─────────────────────────────
       // Peppol is OPT-IN — NOT auto-registered at child creation. The
       // "Peppol afventer" badge in the Sproom card is clickable to start
@@ -342,6 +392,12 @@ export const POST = withGuard(
           einvoiceEndpointId: `0184:${cvr}`,
           einvoicePeppolAs4Id: `0188:CVR${cvr}`,
           einvoiceDeliveryMode: 'automatic',
+          // Persist the GLN Sproom has on file for this child company. On
+          // the create path this echoes the GLN we forwarded; on the
+          // rediscovery path it is Sproom's authoritative stored value
+          // (retrieved via listChildCompanies). Only set when non-null so we
+          // never clear an existing GLN.
+          ...(childCompany.glnNumber ? { einvoiceGLN: childCompany.glnNumber } : {}),
         },
       });
 
@@ -357,8 +413,10 @@ export const POST = withGuard(
               : 'sproom_child_company_created',
           childCompanyId: childCompany.id,
           nemhandelRegistered,
+          nemhandelGlnRegistered,
           peppolRegistered,
           cvr,
+          gln: childCompany.glnNumber ?? null,
         },
         requestMetadata(request),
         ctx.activeCompanyId
@@ -376,8 +434,12 @@ export const POST = withGuard(
         connected: true,
         childCompanyId: childCompany.id,
         nemhandelRegistered,
+        nemhandelGlnRegistered,
         peppolRegistered,
         endpointId: `0184:${cvr}`,
+        // The GLN Sproom has stored for this child company (null if the
+        // tenant has no GLN, or Sproom didn't return one).
+        gln: childCompany.glnNumber ?? null,
       });
     } catch (error) {
       logger.error('[SPROOM_CREATE_CHILD] Failed:', error);
