@@ -136,6 +136,20 @@ export const POST = withGuard(
           accountId?: string;
         }>;
 
+        // Credit-note detection (mirrors createAccrualJournalEntry in PUT
+        // /api/invoices/[id]): documentType is the canonical source; fall
+        // back to the creditNotePrefix for old data created before the
+        // documentType field existed. WITHOUT this detection + the debit/
+        // credit mirror below, a sent credit note is booked with the SAME
+        // directions as an invoice (debit receivables, credit revenue + VAT)
+        // — i.e. it INCREASES receivables/revenue/VAT instead of reversing
+        // them (the credit note would double the receivable instead of
+        // cancelling it).
+        const isCreditNote =
+          invoice.documentType === 'CREDIT_NOTE' ||
+          (!!company?.creditNotePrefix &&
+            invoice.invoiceNumber.startsWith(company.creditNotePrefix + '-'));
+
         const receivablesAccount = await db.account.findFirst({
           where: { companyId, number: '1200', isActive: true },
         });
@@ -212,6 +226,21 @@ export const POST = withGuard(
             });
           }
 
+          // Credit note: mirror every line (swap debit ↔ credit) so the
+          // entry REDUCES receivables + reverses revenue/VAT instead of
+          // booking them again with invoice directions. Mirrors
+          // createAccrualJournalEntry in PUT /api/invoices/[id]. Without
+          // this swap, a credit note is posted as if it were another
+          // invoice — doubling the receivable + revenue + VAT instead of
+          // reversing them.
+          if (isCreditNote) {
+            for (const l of jeLines) {
+              const d = l.debit;
+              l.debit = l.credit;
+              l.credit = d;
+            }
+          }
+
           const totalDebit = jeLines.reduce((s, l) => s + l.debit, 0);
           const totalCredit = jeLines.reduce((s, l) => s + l.credit, 0);
 
@@ -220,7 +249,9 @@ export const POST = withGuard(
               const je = await tx.journalEntry.create({
                 data: {
                   date: invoice.issueDate,
-                  description: `Tilgodehavende – Faktura ${invoice.invoiceNumber} – ${invoice.customerName}`,
+                  description: isCreditNote
+                    ? `Kreditnota – ${invoice.invoiceNumber} – ${invoice.customerName}`
+                    : `Tilgodehavende – Faktura ${invoice.invoiceNumber} – ${invoice.customerName}`,
                   reference: invoice.invoiceNumber,
                   status: 'POSTED',
                   userId: ctx.id,
