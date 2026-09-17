@@ -247,7 +247,10 @@ model Company {
   showCompanyLogo Boolean @default(false) // Show company logo in AlphaFlow sidebar instead of AlphaFlow logo
 
   // Business registration
-  address       String    @default("")
+  address       String    @default("") // Street address line (vej + husnr.)
+  postalCode    String    @default("") // Postnummer (4 digits DK) — required for NemHandel/OIOUBL/PEppol
+  city          String    @default("") // By — required for NemHandel/OIOUBL/PEppol
+  country       String    @default("DK") // ISO 3166-1 alpha-2 country code — required for NemHandel/OIOUBL/PEppol
   phone         String    @default("")
   email         String    @default("")
   cvrNumber     String    @default("")
@@ -311,6 +314,12 @@ model Company {
   sproomLastTestedAt     DateTime? // Last successful Sproom connection test
   sproomNemHandelRegistered Boolean @default(false) // Registered in NemHandel network
   sproomPeppolRegistered Boolean @default(false) // Registered in Peppol network
+  // ── NemHandel notice deduplication ──
+  // Timestamp of the first NemHandel registration-notice email sent to this
+  // tenant AFTER they saved company info with a verified CVR on a
+  // qualifying plan (Pro / Business / Business Extended). Null = not yet sent.
+  // Prevents re-sending the notice on every subsequent company-info save.
+  nemhandelNoticeSentAt DateTime?
 
   // ── Project Mode gating (FASE 4 — SuperDev controls per-tenant visibility) ──
   // When false, the Projects section, ProjectSelector dropdowns, project
