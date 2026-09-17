@@ -17,7 +17,7 @@ import { UpgradeAccessModal } from '@/components/upgrade-access-modal';
 import { useHermesEnabled } from '@/components/hermes/hermes-context';
 import { SubscriptionPlansPrompt } from '@/components/dashboard/subscription-plans-prompt';
 import { NotificationCenter } from '@/components/notification-center';
-import { ReceivedInvoiceNotifier } from '@/components/layout/received-invoice-notifier';
+import { EInvoiceEventNotifier } from '@/components/layout/einvoice-event-notifier';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -966,7 +966,7 @@ export function AppLayout({
         onNavigate={(view) => onViewChange(view as View)}
       />
 
-      <ReceivedInvoiceNotifier />
+      <EInvoiceEventNotifier />
 
       {/* Global Upgrade Access Modal — shown on any write attempt without .tbkey */}
       <UpgradeAccessModal />

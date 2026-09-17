@@ -369,6 +369,46 @@ async function handleReceivedDocument(event: SproomWebhookEvent) {
     });
   }
 
+  // ── Real-time toast: push the inbound received document to the tenant ──
+  // Only for NEW (non-duplicate) documents — duplicates are webhook retries
+  // and must NOT re-toast. The data-changed event (emitted inside
+  // storeReceivedInvoice) refreshes the inbox list/badge; this dedicated
+  // einvoice-event fires a sonner toast with supplier + invoiceNumber.
+  if (result.success && result.invoice?.id && !result.duplicate) {
+    try {
+      const { notifyEInvoiceEvent } = await import('@/lib/notify-einvoice-event');
+      const received = await db.receivedInvoice.findUnique({
+        where: { id: result.invoice.id },
+        select: {
+          supplierName: true,
+          invoiceNumber: true,
+          documentType: true,
+          payableAmount: true,
+          currencyCode: true,
+        },
+      });
+      if (received) {
+        await notifyEInvoiceEvent({
+          companyId: company.id,
+          direction: 'inbound',
+          status: 'RECEIVED',
+          invoiceNumber: received.invoiceNumber,
+          counterpartyName: received.supplierName,
+          documentType: received.documentType,
+          amount: received.payableAmount?.toString() ?? null,
+          currency: received.currencyCode,
+          receivedInvoiceId: result.invoice.id,
+        });
+      }
+    } catch (err) {
+      logger.warn('[SPROOM_WEBHOOK] Failed to emit einvoice-event for inbound document', {
+        documentId,
+        companyId: company.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
   // Always 200 — Sproom should not retry. Duplicates + parse failures are
   // logged and the raw XML is retained in Sproom's dashboard.
   return NextResponse.json({
@@ -600,6 +640,32 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
     // notify call is best-effort for real-time UI updates.
     logger.warn('[SPROOM_WEBHOOK] Failed to notify frontend of status change', {
       sendingId: sending.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // ── Real-time toast: push the outbound status transition to the tenant ──
+  // The data-changed event above refreshes subscribed UI (send-status popup).
+  // This dedicated einvoice-event fires a sonner toast so the tenant is
+  // notified even when not looking at the send-history dialog.
+  try {
+    const { notifyEInvoiceEvent } = await import('@/lib/notify-einvoice-event');
+    const invoice = await db.invoice.findUnique({
+      where: { id: sending.invoiceId },
+      select: { invoiceNumber: true },
+    });
+    await notifyEInvoiceEvent({
+      companyId: sending.companyId,
+      direction: 'outbound',
+      status: newStatus as 'DELIVERED' | 'ACCEPTED' | 'REJECTED' | 'FAILED',
+      invoiceNumber: invoice?.invoiceNumber ?? null,
+      counterpartyName: sending.recipientName || null,
+      sendingId: sending.id,
+    });
+  } catch (err) {
+    logger.warn('[SPROOM_WEBHOOK] Failed to emit einvoice-event for outbound status', {
+      sendingId: sending.id,
+      status: newStatus,
       error: err instanceof Error ? err.message : String(err),
     });
   }

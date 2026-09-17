@@ -89,9 +89,12 @@ async function connectSocketIO(userId: string): Promise<void> {
       // Socket.IO uses default path '/socket.io/' so the WS service's
       // HTTP endpoints (/health, /broadcast, /stats) remain accessible.
       query: { XTransformPort: WS_PORT },
-      // SECURITY (U-5): No auth payload needed. The HttpOnly session cookie
-      // is sent automatically by the browser. The server validates it
-      // against the database and derives userId from the session.
+      // Explicit auth: the WS service's connection handler REQUIRES a userId
+      // (rejects without one) and registers the socket under that userId so
+      // per-user 'notification-update' (read-state) broadcasts reach this
+      // client. Without this, the socket is rejected and read-state sync
+      // silently falls back to BroadcastChannel + polling.
+      auth: { userId },
       transports: ['polling', 'websocket'],
       // Reconnection settings
       reconnection: true,

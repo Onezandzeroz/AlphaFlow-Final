@@ -92,9 +92,13 @@ export function DataSyncProvider({ children }: { children: React.ReactNode }) {
         const socket = io({
           // Route through Caddy to the WS service on port 3001.
           query: { XTransformPort: WS_PORT },
-          // SECURITY (U-5): No auth payload needed. The HttpOnly session
-          // cookie is sent automatically by the browser. The server
-          // validates it and derives userId/companyId from the session.
+          // Explicit auth: the WS service's connection handler REQUIRES a
+          // userId (it rejects connections without one) and uses companyId to
+          // join the company:<companyId> room so 'data-changed' broadcasts
+          // reach this client. Without this, the socket is rejected and
+          // real-time invalidation silently falls back to polling. Same
+          // pattern as EInvoiceEventNotifier + notification-store.
+          auth: { userId, companyId },
           transports: ['polling', 'websocket'],
           reconnection: true,
           reconnectionAttempts: Infinity,

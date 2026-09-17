@@ -21,6 +21,8 @@
  *  - Billing scheduler   (subscription-lifecycle reminder emails — FASE 6)
  *  - Log monitor scheduler (daily AuditLog security scan, 06:00 Europe/Copenhagen
  *    — required by Erhvervsstyrelsen compliance review, Krav 18, row 18)
+ *  - Sproom inbox puller (safety-net poller for the e-invoice DocumentReceived
+ *    webhook — every 5 min, fires real-time toasts for new received documents)
  *
  * All are idempotent — guarded by internal `_schedulerStarted` flags — so
  * duplicate calls are safe.
@@ -30,6 +32,7 @@
  *   - DISABLE_RECURRING_SCHEDULER=true
  *   - DISABLE_BILLING_SCHEDULER=true
  *   - DISABLE_LOG_MONITOR_SCHEDULER=true
+ *   - DISABLE_SPROOM_INBOX_SCHEDULER=true
  *
  * NOTE ON IMPORTS: ALL imports here are dynamic (inside register/unregister),
  * including `logger`. This is intentional — a static top-level import of
@@ -59,12 +62,18 @@ export async function register(): Promise<void> {
     // Europe/Copenhagen). Required by Erhvervsstyrelsen compliance review,
     // Krav 18, row 18 ("Er der advarsler vedr. logs").
     const { startLogMonitorScheduler } = await import('@/lib/log-monitor-scheduler');
+    // Safety-net puller for the Sproom e-invoice inbox (DocumentReceived
+    // webhook fallback). Polls each tenant's inbox every 5 min for documents
+    // the webhook may have missed, and fires a real-time einvoice-event toast
+    // for new ones — mirroring the webhook path.
+    const { startSproomInboxScheduler } = await import('@/lib/sproom-inbox-scheduler');
 
     logger.info('[INSTRUMENTATION] Node.js runtime — initializing background services');
     startBackupScheduler();
     startRecurringScheduler();
     startBillingScheduler();
     startLogMonitorScheduler();
+    startSproomInboxScheduler();
     logger.info('[INSTRUMENTATION] Background services initialized successfully');
   } catch (error) {
     // Never let instrumentation failure crash the server boot. Background
@@ -85,12 +94,14 @@ export async function unregister(): Promise<void> {
     const { stopRecurringScheduler } = await import('@/lib/recurring-scheduler');
     const { stopBillingScheduler } = await import('@/lib/billing-scheduler');
     const { stopLogMonitorScheduler } = await import('@/lib/log-monitor-scheduler');
+    const { stopSproomInboxScheduler } = await import('@/lib/sproom-inbox-scheduler');
 
     logger.info('[INSTRUMENTATION] Server shutting down — stopping background services');
     stopBackupScheduler();
     stopRecurringScheduler();
     stopBillingScheduler();
     stopLogMonitorScheduler();
+    stopSproomInboxScheduler();
   } catch (error) {
     // Best-effort cleanup — never let unregister throw during shutdown.
     console.error('[INSTRUMENTATION] Error during unregister:', error);
