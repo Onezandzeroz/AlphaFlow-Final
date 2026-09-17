@@ -180,37 +180,33 @@ export async function maybeNotifyNemHandelAfterCompanySave(
   actingUserId: string,
 ): Promise<NemHandelNoticeResult> {
   try {
+    // Diagnostic entry log — surfaces in the PM2 error log so the tenant
+    // owner + the developer can see WHY the notice was (or wasn't) sent.
+    logger.warn(
+      `[NEMHANDEL-NOTIFY] maybeNotifyNemHandelAfterCompanySave called for companyId=${company.id} email=${company.email} cvrVerifiedAt=${company.cvrVerifiedAt ? 'set' : 'null'} nemhandelNoticeSentAt=${company.nemhandelNoticeSentAt ? 'set' : 'null'}`,
+    );
+
     // 1. CVR must be verified against the Danish CVR register. NemHandel /
     //    OIOUBL is offered to ALL tenants regardless of plan — there is no
     //    plan-tier gate. The only condition is a verified CVR.
     if (!company.cvrVerifiedAt) {
+      logger.warn(`[NEMHANDEL-NOTIFY] Skipped companyId=${company.id} reason=cvr_not_verified — CVR not verified (run CVR lookup first).`);
       return { sent: false, reason: 'cvr_not_verified' };
     }
 
     // 2. Dedup — never send the notice twice to the same tenant.
     if (company.nemhandelNoticeSentAt) {
+      logger.warn(`[NEMHANDEL-NOTIFY] Skipped companyId=${company.id} reason=already_sent — nemhandelNoticeSentAt=${company.nemhandelNoticeSentAt.toISOString()}.`);
       return { sent: false, reason: 'already_sent' };
     }
 
-    // 3. Company info completeness — every NemHandel / OIOUBL / PEppol
-    //    required field must be present. This mirrors the required-fields
-    //    list in the company settings form.
-    const requiredFilled =
-      !!company.name?.trim() &&
-      !!company.address?.trim() &&
-      !!company.postalCode?.trim() &&
-      !!company.city?.trim() &&
-      !!company.country?.trim() &&
-      !!company.phone?.trim() &&
-      !!company.email?.trim() &&
-      !!company.cvrNumber?.trim() &&
-      !!company.bankAccount?.trim() &&
-      !!company.bankRegistration?.trim();
-    if (!requiredFilled) {
-      return { sent: false, reason: 'company_info_incomplete' };
-    }
-
-    // 4. Dispatch the notice email.
+    // 3. Dispatch the notice email. (The completeness check was removed —
+    //    the notice is informational + should fire as soon as the CVR is
+    //    verified, NOT be blocked by missing OIOUBL/PEppol fields. The
+    //    company settings FORM enforces those separately at save time. The
+    //    "first complete company save" detection in PUT /api/company — which
+    //    fires this helper at the same time as the SuperDev "ny virksomhed
+    //    fuldført" email — already ensures the core fields are present.)
     const language: Language = 'da';
     const appUrl = getAppUrl();
     const result = await sendNemHandelNoticeEmail(
@@ -221,7 +217,7 @@ export async function maybeNotifyNemHandelAfterCompanySave(
       { trigger: 'company_completed_with_verified_cvr' },
     );
 
-    // 5. Stamp the dedup flag so subsequent saves don't re-send — but ONLY
+    // 4. Stamp the dedup flag so subsequent saves don't re-send — but ONLY
     //    on a SUCCESSFUL dispatch. A failed send must NOT be stamped,
     //    otherwise the tenant would never receive the notice (the dedup
     //    gate would return 'already_sent' on every retry). The audit entry
@@ -243,7 +239,7 @@ export async function maybeNotifyNemHandelAfterCompanySave(
       }
     }
 
-    // 6. Audit the dispatch — Bilag 2 compliance traceability.
+    // 5. Audit the dispatch — Bilag 2 compliance traceability.
     await auditLog({
       action: 'CREATE',
       entityType: 'Company',

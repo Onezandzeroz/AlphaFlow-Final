@@ -314,18 +314,19 @@ export const PUT = withGuard(guard.PUT!, async (request, ctx) => {
         { event: 'company_completed', userId: ctx.id, companyId: company.id, companyName: company.name },
         'da'
       ).catch(() => { /* fire-and-forget */ });
-    }
 
-    // ─── NemHandel registration notice (gated) ───────────────────────
-    // Fires for ALL tenants whose CVR is verified and whose company info is
-    // complete — regardless of plan (NemHandel/OIOUBL is offered to every
-    // customer). Deduped via Company.nemhandelNoticeSentAt so it fires at
-    // most once per tenant. The `company` object returned by db.company.update
-    // carries the post-update cvrVerifiedAt (null if the CVR was just changed,
-    // forcing re-verification) and the nemhandelNoticeSentAt flag.
-    maybeNotifyNemHandelAfterCompanySave(company, ctx.id).catch((err) => {
-      logger.warn('maybeNotifyNemHandelAfterCompanySave failed:', err);
-    });
+      // ─── NemHandel registration notice — sent to the tenant owner AT THE
+      // SAME TIME as the SuperDev "ny virksomhed fuldført" email above.
+      // Gated by a verified CVR + deduped via Company.nemhandelNoticeSentAt
+      // (both checked inside the helper). If the CVR isn't verified yet at
+      // this first-complete-save, the helper skips (cvr_not_verified) + the
+      // /api/cvr/lookup complementary trigger fires the notice once the CVR
+      // is verified. The completeness check was removed from the helper —
+      // the notice is informational + fires as soon as the CVR is verified.
+      maybeNotifyNemHandelAfterCompanySave(company, ctx.id).catch((err) => {
+        logger.warn('maybeNotifyNemHandelAfterCompanySave failed:', err);
+      });
+    }
 
     const companyInfo = {
       id: company.id,
