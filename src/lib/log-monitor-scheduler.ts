@@ -24,6 +24,40 @@ import { scanAuditLogForAlerts, notifyAlertsViaEmail } from '@/lib/log-monitor';
 
 const scheduledTasks: ScheduledTask[] = [];
 let _schedulerStarted = false;
+// Timestamp the log-monitor scheduler was (re)started — used to suppress
+// the daily digest email on the platform's start/restart day so frequent
+// restarts during development don't spam the SuperDev. The first email is
+// sent at the 06:00 check on the day AFTER the (re)start.
+let _bootedAt: Date | null = null;
+
+// ─── Boot-day helpers ─────────────────────────────────────────────────────
+
+/**
+ * Return the calendar date of `date` in Europe/Copenhagen as 'YYYY-MM-DD'.
+ * Uses Intl.DateTimeFormat (DST-safe) so the comparison is always against
+ * the Copenhagen calendar day — matching the 06:00 Europe/Copenhagen cron.
+ */
+function copenhagenDateKey(date: Date): string {
+  // en-CA locale formats as 'YYYY-MM-DD' which is directly comparable as a
+  // string (lexicographic order = chronological order for zero-padded dates).
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Copenhagen',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/**
+ * True when `now` falls on the same Copenhagen calendar day as the scheduler
+ * (re)start. Used to skip the daily digest email on the start/restart day.
+ * Returns false if the boot timestamp is unknown (defensive: don't suppress
+ * if we can't determine the boot day).
+ */
+function isBootDay(now: Date = new Date()): boolean {
+  if (!_bootedAt) return false;
+  return copenhagenDateKey(_bootedAt) === copenhagenDateKey(now);
+}
 
 /**
  * Run one scan cycle. Wrapped in try/catch so the cron schedule never
@@ -32,14 +66,21 @@ let _schedulerStarted = false;
  *
  * BEHAVIOUR:
  *   - Scans AuditLog for the last 24 hours (all tenants, no company filter).
- *   - ALWAYS sends a daily digest email to ALERT_EMAIL_RECIPIENT:
+ *   - Sends a daily digest email to ALERT_EMAIL_RECIPIENT, EXCEPT on the
+ *     platform's start/restart day (see isBootDay). Skipping the email on
+ *     the boot day prevents the startup catch-up run + the same-day 06:00
+ *     cron from spamming the SuperDev during frequent dev restarts. The
+ *     first email is sent at the 06:00 check on the day AFTER the (re)start.
+ *     The scan still runs on the boot day (alerts are logged server-side);
+ *     only the email is suppressed.
+ *   - When sending (non-boot day):
  *     • If there are critical/high alerts → full alert table + details.
  *     • If there are NO critical/high alerts → "all nominal" email
  *       confirming no incidents were observed and the application is
  *       operating normally.
  *   - This ensures the SuperDev receives a daily status email every 24h
- *     regardless of whether incidents occurred, so they know the monitor
- *     is running and the system is healthy.
+ *     (once past the boot day) regardless of whether incidents occurred,
+ *     so they know the monitor is running and the system is healthy.
  */
 export async function runLogMonitorCycle(): Promise<
   ReturnType<typeof scanAuditLogForAlerts>
@@ -68,9 +109,24 @@ export async function runLogMonitorCycle(): Promise<
       })),
     );
 
-    // ALWAYS send the daily digest email — even if there are no alerts.
-    // This ensures the SuperDev gets a "system nominal" confirmation
-    // every 24 hours, so they know the monitor is alive and running.
+    // ── Boot-day suppression ──────────────────────────────────────
+    // Skip the daily digest email when today is the platform's start/restart
+    // day. Frequent restarts during development would otherwise spam the
+    // SuperDev with one catch-up email per restart (plus the same-day 06:00
+    // cron). The first email is sent at the 06:00 check on the day AFTER the
+    // (re)start. The scan above still ran — alerts are logged server-side —
+    // only the email is suppressed on the boot day.
+    if (isBootDay()) {
+      logger.info(
+        '[LOG-MONITOR-SCHEDULER] Skipping daily digest email — today is the platform start/restart day. ' +
+          'First email will be sent at the 06:00 check tomorrow.',
+      );
+      return alerts;
+    }
+
+    // Send the daily digest email — even if there are no alerts. This
+    // ensures the SuperDev gets a "system nominal" confirmation every 24h
+    // (once past the boot day), so they know the monitor is alive and running.
     // notifyAlertsViaEmail handles both cases (incidents vs. all clear).
     await notifyAlertsViaEmail(alerts);
 
@@ -102,6 +158,7 @@ export function startLogMonitorScheduler(): void {
   }
 
   _schedulerStarted = true;
+  _bootedAt = new Date();
 
   // Daily at 06:00 Europe/Copenhagen. 0 6 * * * = "at 06:00 every day".
   // Danish Business Authority (Erhvervsstyrelsen) requires documented log
