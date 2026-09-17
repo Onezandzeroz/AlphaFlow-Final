@@ -24,7 +24,7 @@ import { generateApplicationResponse, generateMessageLevelResponse } from '@/lib
 import { logger } from '@/lib/logger';
 import { notifyDataChange } from '@/lib/notify-data-change';
 
-export type ReceiveSource = 'manual_upload' | 'storecove_webhook' | 'ap_webhook';
+export type ReceiveSource = 'manual_upload' | 'storecove_webhook' | 'ap_webhook' | 'ap_poller';
 
 export interface StoreReceivedInvoiceParams {
   /** Tenant that owns the received invoice. */
@@ -36,7 +36,8 @@ export interface StoreReceivedInvoiceParams {
   /**
    * Where this invoice came from. The `'storecove_webhook'` value is a
    * legacy string kept for backward compat with existing DB rows; the
-   * active Sproom webhook uses `'ap_webhook'`.
+   * active Sproom webhook uses `'ap_webhook'`; the safety-net inbox puller
+   * (src/lib/sproom-inbox-scheduler.ts) uses `'ap_poller'`.
    */
   source: ReceiveSource;
   /** Access Point document GUID (when source is a webhook delivery). */
