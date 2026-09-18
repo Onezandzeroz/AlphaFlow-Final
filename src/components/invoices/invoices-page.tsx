@@ -203,6 +203,7 @@ interface ReceivedInvoice {
   taxAmount: number | string;
   taxExclusiveAmount: number | string;
   currencyCode: string;
+  format: string; // OIOUBL | PEPPOL_BIS
   documentType: string; // INVOICE | CREDIT_NOTE | CORRECTED | SELF_BILLED
   status: string; // RECEIVED | APPROVED | REJECTED | POSTED
   journalEntryId: string | null;
