@@ -47,6 +47,7 @@ import {
   RefreshCw,
   CheckCircle2,
   CheckCircle,
+  Inbox,
   Clock,
   Wand2,
   Building2,
@@ -133,6 +134,21 @@ interface Invoice {
   total: number;
   status: string;
   customerName: string;
+  documentType?: string;
+}
+
+/** Received e-invoice (purchase from a supplier via Sproom/NemHandel). */
+interface ReceivedInvoice {
+  id: string;
+  invoiceNumber: string;
+  supplierName: string;
+  issueDate: string;
+  payableAmount: number | string;
+  taxAmount: number | string;
+  taxExclusiveAmount: number | string;
+  documentType: string; // INVOICE | CREDIT_NOTE | CORRECTED | SELF_BILLED
+  status: string; // RECEIVED | APPROVED | REJECTED | POSTED
+  journalEntryId: string | null;
 }
 
 interface JournalEntry {
@@ -247,6 +263,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   const [hasAccounts, setHasAccounts] = useState(false);
   const [hasEInvoiceSetup, setHasEInvoiceSetup] = useState(false);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [receivedInvoices, setReceivedInvoices] = useState<ReceivedInvoice[]>([]);
   const [demoModeEnabled, setDemoModeEnabled] = useState(false);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date } | null>(null);
   const [widgetPickerOpen, setWidgetPickerOpen] = useState(false);
@@ -353,19 +370,27 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
 
   const fetchLegacyData = useCallback(async () => {
     try {
-      const [txResponse, invResponse] = await Promise.all([
+      const [txResponse, invResponse, receivedResponse] = await Promise.all([
         fetch('/api/transactions'),
         fetch('/api/invoices'),
+        // Fetch received e-invoices so the Invoice Overview widget can show
+        // posted purchase invoices from the e-inbox (the user's explicit
+        // concern: "bogførte fakturaer fra e-indboksen fremgår ikke").
+        // limit=100 covers typical tenant volumes; pagination exists if needed.
+        fetch('/api/invoices/received?limit=100'),
       ]);
 
       if (!txResponse.ok) console.error('Transactions API error:', txResponse.status);
       if (!invResponse.ok) console.error('Invoices API error:', invResponse.status);
+      if (!receivedResponse.ok) console.error('Received invoices API error:', receivedResponse.status);
 
       const txData = txResponse.ok ? await txResponse.json() : {};
       const invData = invResponse.ok ? await invResponse.json() : {};
+      const receivedData = receivedResponse.ok ? await receivedResponse.json() : {};
 
       const allTransactions: Transaction[] = txData.transactions || [];
       const invoices: Invoice[] = invData.invoices || [];
+      const receivedInvoices: ReceivedInvoice[] = receivedData.receivedInvoices || [];
 
       const invoiceIdsWithTransactions = new Set(
         allTransactions
@@ -405,6 +430,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
 
       setTransactions([...allTransactions, ...virtualTransactions]);
       setInvoices(invoices);
+      setReceivedInvoices(receivedInvoices);
     } catch (error) {
       console.error('Failed to fetch legacy data:', error);
     }
@@ -638,6 +664,28 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
       overdueTotal: overdueInvoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0), // Document-level estimate
     };
   }, [invoices, ledgerAccounts]);
+
+  // ─── Received e-invoice stats (purchases from the e-inbox) ──────
+  // Surfaces posted received e-invoices in the Invoice Overview widget so
+  // the dashboard reflects ALL invoices — both sales (sent to customers)
+  // and purchases (received from suppliers via Sproom/NemHandel). The
+  // posted total is SIGNED: credit notes subtract (reversal reduces the
+  // net payables), mirroring how the JournalEntry books them.
+  const receivedInvoiceStats = useMemo(() => {
+    const pending = receivedInvoices.filter((ri) => ri.status === 'RECEIVED');
+    const posted = receivedInvoices.filter((ri) => ri.status === 'POSTED');
+    const postedTotal = posted.reduce((sum, ri) => {
+      const amt = Number(ri.payableAmount) || 0;
+      const isCreditNote =
+        ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED';
+      return sum + (isCreditNote ? -amt : amt);
+    }, 0);
+    return {
+      pendingCount: pending.length,
+      postedCount: posted.length,
+      postedTotal,
+    };
+  }, [receivedInvoices]);
 
   // ─── Onboarding / empty state ──────────────────────────────────
 
@@ -2394,7 +2442,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
           )}
 
           {/* ─── Invoice Overview Widget ────────────────────────── */}
-          {isWidgetVisible('invoice-overview') && invoices.length > 0 && (
+          {isWidgetVisible('invoice-overview') && (invoices.length > 0 || receivedInvoices.length > 0) && (
           <div data-widget-id="invoice-overview">
             <Card className="stat-card card-hover-lift overflow-hidden flex flex-col">
               {/* Header */}
@@ -2489,6 +2537,47 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                     </p>
                   </div>
                 </div>
+
+                {/* ── Received e-invoices (purchases from the e-inbox) ── */}
+                {receivedInvoices.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/5">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <Inbox className="h-3.5 w-3.5 text-[#0d9488] dark:text-[#2dd4bf]" />
+                      <span className="text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400">
+                        {language === 'da' ? 'Modtagne e-fakturaer' : 'Received e-invoices'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Pending approval */}
+                      <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/20 p-3">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Clock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                          <span className="text-[10px] uppercase tracking-wider font-medium text-amber-600 dark:text-amber-400">
+                            {language === 'da' ? 'Til godkendelse' : 'Pending'}
+                          </span>
+                        </div>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">
+                          {receivedInvoiceStats.pendingCount}
+                        </p>
+                      </div>
+                      {/* Posted */}
+                      <div className="rounded-xl bg-[#0d9488]/5 dark:bg-[#2dd4bf]/10 border border-[#0d9488]/20 dark:border-[#2dd4bf]/20 p-3">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <CheckCircle className="h-3.5 w-3.5 text-[#0d9488] dark:text-[#2dd4bf]" />
+                          <span className="text-[10px] uppercase tracking-wider font-medium text-[#0d9488] dark:text-[#2dd4bf]">
+                            {language === 'da' ? 'Bogførte' : 'Posted'}
+                          </span>
+                        </div>
+                        <p className="text-lg font-bold text-gray-900 dark:text-white tabular-nums">
+                          {receivedInvoiceStats.postedCount}
+                        </p>
+                        <p className="text-xs font-semibold text-[#0d9488] dark:text-[#2dd4bf] tabular-nums">
+                          {tc(receivedInvoiceStats.postedTotal)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -3017,14 +3106,37 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                     if (item.kind === 'journal') {
                       const entry = item.entry;
                       const total = getJournalEntryTotal(entry);
+                      // Detect e-invoice journal entries (created by the
+                      // received-invoice post action). The description prefix
+                      // "E-faktura:" / "E-kreditnota:" is the convention set in
+                      // /api/invoices/received/[id]/route.ts. Surface a distinct
+                      // Inbox badge + the green/red money-flow convention so
+                      // e-invoice activity is recognisable in the feed.
+                      const desc = entry.description || '';
+                      const isEInvoice = desc.startsWith('E-faktura:') || desc.startsWith('E-kreditnota:');
+                      const isECreditNote = desc.startsWith('E-kreditnota:');
                       return (
                         <div
                           key={`je-${entry.id}`}
                           className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-[#1e2a28] transition-all duration-200 group cursor-pointer"
                           onClick={() => onNavigate?.('journal')}
                         >
-                          <div className="h-8 w-8 rounded-lg bg-[#f0fdf9] dark:bg-[#1a2e2b] flex items-center justify-center shrink-0">
-                            <PenLine className="h-3.5 w-3.5 text-[#0d9488] dark:text-[#2dd4bf]" />
+                          <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                            isEInvoice
+                              ? (isECreditNote
+                                ? 'bg-green-50 dark:bg-green-900/20'
+                                : 'bg-red-50 dark:bg-red-900/20')
+                              : 'bg-[#f0fdf9] dark:bg-[#1a2e2b]'
+                          }`}>
+                            {isEInvoice ? (
+                              <Inbox className={`h-3.5 w-3.5 ${
+                                isECreditNote
+                                  ? 'text-green-600 dark:text-green-400'
+                                  : 'text-red-600 dark:text-red-400'
+                              }`} />
+                            ) : (
+                              <PenLine className="h-3.5 w-3.5 text-[#0d9488] dark:text-[#2dd4bf]" />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -3032,6 +3144,17 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                             </p>
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="text-xs text-gray-500 dark:text-gray-400">{getRelativeTime(entry.date)}</span>
+                              {isEInvoice && (
+                                <Badge className={`text-[8px] px-1 py-0 h-4 ${
+                                  isECreditNote
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
+                                    : 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300'
+                                }`}>
+                                  {isECreditNote
+                                    ? (language === 'da' ? 'E-kreditnota' : 'E-credit note')
+                                    : (language === 'da' ? 'E-faktura' : 'E-invoice')}
+                                </Badge>
+                              )}
                               <Badge
                                 className={`text-[8px] px-1 py-0 h-4 ${
                                   entry.status === 'POSTED'
