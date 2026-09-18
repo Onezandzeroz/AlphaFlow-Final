@@ -2894,15 +2894,15 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
         }
       />
 
-      {/* ── Tab bar: Fakturaer / Kreditnota (salg) ──
+      {/* ── Tab bar: Salgsfakturaer / Salgs-kreditnota ──
           Both tabs use the exact same list design (stats cards + filters +
           table). The tab just filters which invoices (regular vs credit
           notes) feed into the shared rendering. */}
       <div className="px-4 lg:px-0">
         <div className="flex items-center gap-1 border-b border-[#e2e8e6] dark:border-[#2a3330]">
           {([
-            { id: 'invoices', labelDa: 'Fakturaer', labelEn: 'Invoices', count: invoices.filter(i => i.documentType !== 'CREDIT_NOTE').length },
-            { id: 'credit-notes', labelDa: 'Kreditnota (salg)', labelEn: 'Credit notes (sales)', count: invoices.filter(i => i.documentType === 'CREDIT_NOTE').length },
+            { id: 'invoices', labelDa: 'Salgsfakturaer', labelEn: 'Sales invoices', count: invoices.filter(i => i.documentType !== 'CREDIT_NOTE').length },
+            { id: 'credit-notes', labelDa: 'Salgs-kreditnota', labelEn: 'Sales credit notes', count: invoices.filter(i => i.documentType === 'CREDIT_NOTE').length },
           ] as const).map((tab) => {
             const isActive = listTab === tab.id;
             return (
