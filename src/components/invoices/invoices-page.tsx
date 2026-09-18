@@ -111,6 +111,7 @@ import {
 import { formatDistanceToNow, format } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
 import { DK_DATE_SHORT } from '@/lib/date-utils';
+import { cn } from '@/lib/utils';
 import { Calendar } from '@/components/ui/calendar';
 import { toast } from "sonner";
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
@@ -188,6 +189,27 @@ interface Invoice {
   project?: { id: string; name: string; color: string | null; code: string | null } | null;
 }
 
+/** Posted received e-invoice (purchase from a supplier via Sproom/NemHandel).
+ *  Surfaced in the Salg & Faktura page's "Modtagne e-fakturaer" + "Kreditnota
+ *  (salg)" tabs — posted items leave the e-inbox and "graduate" here. */
+interface ReceivedInvoice {
+  id: string;
+  invoiceNumber: string;
+  supplierName: string;
+  supplierCvr: string | null;
+  issueDate: string;
+  dueDate: string | null;
+  payableAmount: number | string;
+  taxAmount: number | string;
+  taxExclusiveAmount: number | string;
+  currencyCode: string;
+  documentType: string; // INVOICE | CREDIT_NOTE | CORRECTED | SELF_BILLED
+  status: string; // RECEIVED | APPROVED | REJECTED | POSTED
+  journalEntryId: string | null;
+  postedAt: string | null;
+  createdAt: string;
+}
+
 interface Contact {
   id: string;
   name: string;
@@ -229,6 +251,10 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
 
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [postedReceivedInvoices, setPostedReceivedInvoices] = useState<ReceivedInvoice[]>([]);
+  // Tab within the list view: sales invoices / posted received e-invoices /
+  // credit notes (sales credit notes + posted received e-credit notes).
+  const [listTab, setListTab] = useState<'sales' | 'received' | 'credit-notes'>('sales');
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentView, setCurrentView] = useState<PageView>(
@@ -477,9 +503,19 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
 
   const fetchInvoices = useCallback(async () => {
     try {
-      const response = await fetch('/api/invoices');
+      const [response, receivedResponse] = await Promise.all([
+        fetch('/api/invoices'),
+        // Fetch POSTED received e-invoices so they appear in the
+        // "Modtagne e-fakturaer" + "Kreditnota (salg)" tabs. Posted items
+        // leave the e-inbox and "graduate" to the Salg & Faktura page.
+        fetch('/api/invoices/received?status=POSTED&limit=100'),
+      ]);
       const data = await response.json();
       setInvoices(data.invoices || []);
+      if (receivedResponse.ok) {
+        const receivedData = await receivedResponse.json();
+        setPostedReceivedInvoices(receivedData.receivedInvoices || []);
+      }
     } catch (error) {
       console.error('Failed to fetch invoices:', error);
     } finally {
@@ -509,13 +545,17 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
 
   // Auto-refresh invoices when the server signals a data-changed event.
   const invoicesVersion = useDataVersion('invoices');
+  // Also refresh when received e-invoices change (e.g. when one is posted —
+  // it leaves the e-inbox and appears here in the "Modtagne e-fakturaer" /
+  // "Kreditnota (salg)" tabs).
+  const receivedInvoicesVersion = useDataVersion('received-invoices');
 
   useEffect(() => {
     fetchCompanyInfo();
     fetchInvoices();
     fetchAccounts();
     fetchEInvoiceConfig();
-  }, [fetchCompanyInfo, fetchInvoices, fetchAccounts, fetchEInvoiceConfig, invoicesVersion]);
+  }, [fetchCompanyInfo, fetchInvoices, fetchAccounts, fetchEInvoiceConfig, invoicesVersion, receivedInvoicesVersion]);
 
   // Sync initialView prop changes to internal currentView state.
   // This handles the case where the component is already mounted (e.g. rendered
@@ -2917,6 +2957,46 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       </div>
       )}
 
+      {/* ── Tab bar: Salg / Modtagne e-fakturaer / Kreditnota (salg) ──
+          Posted received e-invoices leave the e-inbox and appear here.
+          The sales stats cards above stay sales-only (not conflated). */}
+      {(invoices.length > 0 || postedReceivedInvoices.length > 0) && (
+        <div className="px-4 lg:px-0">
+          <div className="flex items-center gap-1 border-b border-[#e2e8e6] dark:border-[#2a3330]">
+            {([
+              { id: 'sales', labelDa: 'Salg', labelEn: 'Sales', count: invoices.filter(i => i.status !== 'CANCELLED').length },
+              { id: 'received', labelDa: 'Modtagne e-fakturaer', labelEn: 'Received e-invoices', count: postedReceivedInvoices.filter(ri => ri.documentType === 'INVOICE' || ri.documentType === 'CORRECTED').length },
+              { id: 'credit-notes', labelDa: 'Kreditnota (salg)', labelEn: 'Credit notes (sales)', count: invoices.filter(i => i.documentType === 'CREDIT_NOTE' && i.status !== 'CANCELLED').length + postedReceivedInvoices.filter(ri => ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED').length },
+            ] as const).map((tab) => {
+              const isActive = listTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setListTab(tab.id)}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors duration-150 -mb-px',
+                    isActive
+                      ? 'border-[#0d9488] text-[#0d9488] dark:border-[#2dd4bf] dark:text-[#2dd4bf]'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                  )}
+                >
+                  {isDanish ? tab.labelDa : tab.labelEn}
+                  <span className={cn(
+                    'text-[10px] px-1.5 py-0.5 rounded-full tabular-nums',
+                    isActive ? 'bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                  )}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {listTab === 'sales' && (
+      <>
       {/* Filters Section */}
       {invoices.length > 0 && (
       <Card className="stat-card">
@@ -3598,6 +3678,180 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           )}
         </CardContent>
       </Card>
+
+      {/* ── Close sales tab fragment ── */}
+      </>
+      )}
+
+      {/* ── "Modtagne e-fakturaer" tab — posted received purchase invoices ── */}
+      {listTab === 'received' && (
+        <Card className="stat-card border-0 shadow-lg">
+          <CardContent className="p-0">
+            {(() => {
+              const received = postedReceivedInvoices.filter(
+                (ri) => ri.documentType !== 'CREDIT_NOTE' && ri.documentType !== 'SELF_BILLED'
+              );
+              if (received.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <Inbox className="h-10 w-10 text-gray-300 dark:text-gray-600" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {isDanish ? 'Ingen bogførte modtagne e-fakturaer' : 'No posted received e-invoices'}
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                      {isDanish ? 'Bogførte e-fakturaer fra e-indbakken vises her' : 'Posted e-invoices from the e-inbox appear here'}
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50 dark:bg-gray-700/50">
+                      <TableHead>{isDanish ? 'Leverandør' : 'Supplier'}</TableHead>
+                      <TableHead>{isDanish ? 'Faktura nr.' : 'Invoice no.'}</TableHead>
+                      <TableHead>{isDanish ? 'Dato' : 'Date'}</TableHead>
+                      <TableHead className="text-right">{isDanish ? 'Beløb' : 'Amount'}</TableHead>
+                      <TableHead>{isDanish ? 'Format' : 'Format'}</TableHead>
+                      <TableHead>{isDanish ? 'Status' : 'Status'}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {received.map((ri) => (
+                      <TableRow key={ri.id} className="border-b border-gray-50/50">
+                        <TableCell className="font-medium text-gray-900 dark:text-white">
+                          {ri.supplierName}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{ri.invoiceNumber}</TableCell>
+                        <TableCell className="text-sm">{td(new Date(ri.issueDate))}</TableCell>
+                        <TableCell className="text-right font-semibold tabular-nums text-red-600 dark:text-red-400">
+                          {tc(Number(ri.payableAmount) || 0)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[10px]">
+                            {ri.format === 'PEPPOL_BIS' ? 'Peppol' : 'OIOUBL'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[10px]">
+                            {isDanish ? 'Bogført' : 'Posted'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── "Kreditnota (salg)" tab — sales credit notes + posted received e-credit notes ── */}
+      {listTab === 'credit-notes' && (
+        <Card className="stat-card border-0 shadow-lg">
+          <CardContent className="p-0">
+            {(() => {
+              // Sales credit notes (issued by the tenant to customers)
+              const salesCN = invoices
+                .filter((i) => i.documentType === 'CREDIT_NOTE' && i.status !== 'CANCELLED')
+                .map((i) => ({
+                  kind: 'sales' as const,
+                  id: i.id,
+                  number: i.invoiceNumber,
+                  name: i.customerName,
+                  date: i.issueDate,
+                  amount: -Number(i.total || 0), // credit note reverses sales → negative
+                  status: i.status,
+                }));
+              // Posted received e-credit notes (from suppliers — reverse a purchase)
+              const receivedCN = postedReceivedInvoices
+                .filter((ri) => ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED')
+                .map((ri) => ({
+                  kind: 'received' as const,
+                  id: ri.id,
+                  number: ri.invoiceNumber,
+                  name: ri.supplierName,
+                  date: ri.issueDate,
+                  amount: Number(ri.payableAmount) || 0, // reverses a purchase → money back (positive)
+                  status: 'POSTED',
+                }));
+              const combined = [...salesCN, ...receivedCN].sort(
+                (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+              );
+              if (combined.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3">
+                    <FileMinus className="h-10 w-10 text-gray-300 dark:text-gray-600" />
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {isDanish ? 'Ingen kreditnotaer' : 'No credit notes'}
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-gray-50 dark:bg-gray-700/50">
+                      <TableHead>{isDanish ? 'Type' : 'Type'}</TableHead>
+                      <TableHead>{isDanish ? 'Nr.' : 'No.'}</TableHead>
+                      <TableHead>{isDanish ? 'Navn' : 'Name'}</TableHead>
+                      <TableHead>{isDanish ? 'Dato' : 'Date'}</TableHead>
+                      <TableHead className="text-right">{isDanish ? 'Beløb' : 'Amount'}</TableHead>
+                      <TableHead>{isDanish ? 'Status' : 'Status'}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {combined.map((note) => (
+                      <TableRow key={`${note.kind}-${note.id}`} className="border-b border-gray-50/50">
+                        <TableCell>
+                          <Badge className={cn(
+                            'text-[10px] gap-1',
+                            note.kind === 'sales'
+                              ? 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                              : 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                          )}>
+                            {note.kind === 'sales'
+                              ? (isDanish ? 'Salg' : 'Sales')
+                              : (isDanish ? 'Modtagne' : 'Received')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{note.number}</TableCell>
+                        <TableCell className="font-medium text-gray-900 dark:text-white">{note.name}</TableCell>
+                        <TableCell className="text-sm">{td(new Date(note.date))}</TableCell>
+                        <TableCell className={cn(
+                          'text-right font-semibold tabular-nums',
+                          note.kind === 'sales'
+                            ? 'text-red-600 dark:text-red-400'
+                            : 'text-green-600 dark:text-green-400'
+                        )}>
+                          {tc(note.amount)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={cn(
+                            'text-[10px]',
+                            note.status === 'PAID' || note.status === 'POSTED'
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+                          )}>
+                            {note.status === 'POSTED'
+                              ? (isDanish ? 'Bogført' : 'Posted')
+                              : note.status === 'PAID'
+                                ? (isDanish ? 'Betalt' : 'Paid')
+                                : note.status === 'SENT'
+                                  ? (isDanish ? 'Sendt' : 'Sent')
+                                  : note.status}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 

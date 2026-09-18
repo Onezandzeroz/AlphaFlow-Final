@@ -181,7 +181,14 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
       const res = await fetch(`/api/invoices/received?${params}`);
       if (res.ok) {
         const data = await res.json();
-        setInvoices(data.receivedInvoices || []);
+        // The e-inbox is a STAGING area for incoming e-invoices awaiting
+        // approval + posting. Once posted (status=POSTED), an e-invoice
+        // "leaves" the inbox and appears on the Salg & Faktura page's
+        // "Modtagne e-fakturaer" tab instead. Filter POSTED out here so the
+        // inbox only shows actionable items (RECEIVED/APPROVED/REJECTED).
+        // The underlying record is preserved (not deleted) — just hidden.
+        const all = data.receivedInvoices || [];
+        setInvoices(all.filter((ri: ReceivedInvoice) => ri.status !== 'POSTED'));
       }
     } catch (err) {
       console.error('Failed to fetch received invoices:', err);
@@ -469,7 +476,8 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
             <SelectItem value="RECEIVED">{language === 'da' ? 'Modtaget' : 'Received'}</SelectItem>
             <SelectItem value="APPROVED">{language === 'da' ? 'Godkendt' : 'Approved'}</SelectItem>
             <SelectItem value="REJECTED">{language === 'da' ? 'Afvist' : 'Rejected'}</SelectItem>
-            <SelectItem value="POSTED">{language === 'da' ? 'Bogført' : 'Posted'}</SelectItem>
+            {/* POSTED removed — posted e-invoices leave the inbox and appear on
+                the Salg & Faktura page's "Modtagne e-fakturaer" tab. */}
           </SelectContent>
         </Select>
       </div>

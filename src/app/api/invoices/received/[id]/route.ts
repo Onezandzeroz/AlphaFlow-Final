@@ -413,6 +413,11 @@ export const PUT = withGuard(
         // source of truth" the user observed.
         notifyDataChanges([
           { scope: 'received-invoices', companyId, action: 'update' },
+          // 'invoices' scope: the Salg & Faktura page now shows posted
+          // received e-invoices in a dedicated tab — bump so it auto-refreshes
+          // when an e-invoice is posted (the posted item leaves the e-inbox
+          // and appears on the invoice list).
+          { scope: 'invoices', companyId, action: 'update' },
           { scope: 'dashboard', companyId, action: 'update' },
           { scope: 'journal-entries', companyId, action: 'create' },
           { scope: 'ledger', companyId, action: 'update' },
