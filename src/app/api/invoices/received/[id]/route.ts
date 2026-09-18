@@ -12,8 +12,9 @@ import { generateInvoiceResponse } from '@/lib/einvoice-response';
 import { logger } from '@/lib/logger';
 import { JournalEntryStatus, VATCode } from '@prisma/client';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
+import { sealJournalEntry } from '@/lib/journal-hash-chain';
 import { withGuard } from '@/lib/route-guard';
-import { notifyDataChange } from '@/lib/notify-data-change';
+import { notifyDataChange, notifyDataChanges } from '@/lib/notify-data-change';
 
 // ─── GET /api/invoices/received/[id] ────────────────────────────
 
@@ -335,6 +336,9 @@ export const PUT = withGuard(
 
           // Assign voucher number for POSTED journal entry
           await assignVoucherNumberIfPosted(tx, je.id, companyId, 'POSTED');
+          // Seal the hash chain (Bogføringsloven §10-12). Mirrors the manual
+          // JE flow at /api/journal-entries (line ~215).
+          await sealJournalEntry(tx, je.id, companyId);
 
           return je;
         });
@@ -379,9 +383,9 @@ export const PUT = withGuard(
             description,
             reference: existing.invoiceNumber,
             status: 'POSTED',
-            lineCount: 2,
-            totalDebit: totalAmount,
-            totalCredit: totalAmount,
+            lineCount: journalLineInputs.length,
+            totalDebit: journalLineInputs.reduce((s, l) => s + l.debit, 0),
+            totalCredit: journalLineInputs.reduce((s, l) => s + l.credit, 0),
             source: 'e-invoice-post',
             receivedInvoiceId: id,
           },
@@ -400,7 +404,22 @@ export const PUT = withGuard(
           companyId
         );
 
-        notifyDataChange({ scope: 'received-invoices', companyId, action: 'update' }).catch(() => {});
+        // Bump ALL dashboard-relevant scopes so the dashboard auto-refreshes
+        // after posting (the JE affects income-statement, balance-sheet,
+        // VAT register, ledger, cash-flow, journal-entries, + the received-
+        // invoices inbox). Mirrors the multi-scope bump in
+        // /api/journal-entries (line ~233-239). Without this, the dashboard
+        // stays stale until a manual page reload — the "hole in the single
+        // source of truth" the user observed.
+        notifyDataChanges([
+          { scope: 'received-invoices', companyId, action: 'update' },
+          { scope: 'dashboard', companyId, action: 'update' },
+          { scope: 'journal-entries', companyId, action: 'create' },
+          { scope: 'ledger', companyId, action: 'update' },
+          { scope: 'cash-flow', companyId, action: 'update' },
+          { scope: 'reports', companyId, action: 'update' },
+          { scope: 'vat-report', companyId, action: 'update' },
+        ]).catch(() => {});
 
         return NextResponse.json({
           receivedInvoice: updated,

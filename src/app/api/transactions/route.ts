@@ -42,20 +42,124 @@ export const GET = withGuard({
       },
     });
 
-    // Enrich with journal-entry-derived VAT data (single source of truth)
+    // ── HOLE 1 fix: also include POSTED received e-invoices (purchases) ──
+    // The received-invoice post action creates a JournalEntry but NOT a
+    // Transaction row. Without this UNION, the transactions list + the
+    // "X køb" badge on the VAT card miss every posted e-invoice. We map
+    // each posted ReceivedInvoice to a transaction-like object so the UI
+    // can render it alongside manual transactions.
+    //
+    // Authoritative VAT comes directly from the linked JournalEntry's
+    // INPUT_VAT line (single source of truth). The e-invoice JE uses
+    // reference = invoiceNumber (NOT `TX-{id}`), so the generic
+    // enrichTransactionsWithVAT lookup (which matches `TX-` prefixes)
+    // would MISS these — we populate journalVAT here instead.
+    //
+    // `amount` is set to the NET (tax-exclusive) value, mirroring how
+    // manual PURCHASE transactions store net amounts — this keeps the
+    // client's fallback VAT formula (net × rate / 100) correct when
+    // journalVAT is somehow unavailable. Credit notes are negated so
+    // they reduce the purchases total (reversal).
+    const postedReceivedInvoices = await db.receivedInvoice.findMany({
+      where: { ...tenantFilter(ctx), status: 'POSTED' },
+      orderBy: { issueDate: 'desc' },
+      select: {
+        id: true, invoiceNumber: true, supplierName: true, issueDate: true,
+        payableAmount: true, taxAmount: true, taxExclusiveAmount: true,
+        documentType: true, currencyCode: true, journalEntryId: true,
+        createdAt: true,
+      },
+    });
+
+    // Fetch the linked JournalEntries once + extract INPUT_VAT per JE.
+    const linkedJeIds = postedReceivedInvoices
+      .map(ri => ri.journalEntryId)
+      .filter((v): v is string => !!v);
+    const jeVatMap = new Map<string, { vatAmount: number; vatCode: string | null; vatRate: number }>();
+    if (linkedJeIds.length > 0 && ctx.activeCompanyId) {
+      const linkedJEs = await db.journalEntry.findMany({
+        where: { id: { in: linkedJeIds }, companyId: ctx.activeCompanyId },
+        include: {
+          lines: {
+            include: { account: { select: { id: true, number: true, group: true } } },
+          },
+        },
+      });
+      for (const je of linkedJEs) {
+        let vatAmount = 0;
+        let vatCode: string | null = null;
+        let vatRate = 0;
+        for (const line of je.lines) {
+          const group = line.account?.group;
+          const code = line.vatCode;
+          if (group === 'INPUT_VAT' && code) {
+            // Input VAT: debit increases, credit decreases (credit-note reversal)
+            const net = (Number(line.debit) || 0) - (Number(line.credit) || 0);
+            if (Math.abs(net) > 0.005) {
+              vatAmount = Math.round(net * 100) / 100;
+              vatCode = code;
+              vatRate = VAT_RATE_MAP[code] ?? 0;
+            }
+          }
+        }
+        jeVatMap.set(je.id, { vatAmount, vatCode, vatRate });
+      }
+    }
+
+    const receivedAsTransactions: any[] = postedReceivedInvoices.map(ri => {
+      const net = Number(ri.taxExclusiveAmount) || 0;
+      const vat = Number(ri.taxAmount) || 0;
+      const isCreditNote = ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED';
+      const docNoun = isCreditNote ? 'E-kreditnota' : 'E-faktura';
+      // Net amount, negated for credit notes (reversal reduces purchases total)
+      const amount = isCreditNote ? -net : net;
+      const vatPercent = net > 0 ? Math.round((vat / net) * 10000) / 100 : 0;
+      const jeVAT = ri.journalEntryId ? jeVatMap.get(ri.journalEntryId) : null;
+      return {
+        id: ri.id,
+        type: 'PURCHASE',
+        date: ri.issueDate,
+        amount,
+        vatPercent,
+        description: `${docNoun}: ${ri.invoiceNumber} fra ${ri.supplierName}`,
+        accountId: null,
+        projectId: null,
+        documentType: isCreditNote ? 'PURCHASE_CREDIT_NOTE' : null,
+        cancelled: false,
+        currency: ri.currencyCode || 'DKK',
+        exchangeRate: null,
+        receiptImage: null,
+        isReceivedInvoice: true,
+        supplierName: ri.supplierName,
+        invoiceNumber: ri.invoiceNumber,
+        journalEntryId: ri.journalEntryId,
+        // Authoritative VAT from the linked JournalEntry (single source of truth)
+        journalVAT: jeVAT
+          ? { amount: jeVAT.vatAmount, code: jeVAT.vatCode, rate: jeVAT.vatRate }
+          : null,
+        createdAt: ri.createdAt,
+        project: null,
+      };
+    });
+    const allTransactions = [...receivedAsTransactions, ...transactions];
+
+    // Enrich manual transactions with journal-entry-derived VAT data.
+    // E-invoice entries already carry their authoritative journalVAT above
+    // (their JE reference is the invoice number, not `TX-`, so the generic
+    // lookup would miss them). enrichTransactionsWithVAT still handles the
+    // manual Transaction rows (reference = `TX-{id}`).
     const companyId = ctx.activeCompanyId;
     if (companyId) {
       try {
-        const vatMap = await enrichTransactionsWithVAT(transactions.map(t => ({
+        const vatMap = await enrichTransactionsWithVAT(allTransactions.map(t => ({
           ...t,
           amount: Number(t.amount),
           vatPercent: Number(t.vatPercent),
         })), companyId);
-        // Add journal-derived VAT to each transaction.
-        // IMPORTANT: If no journal entry is found for a transaction, journalVAT
-        // is set to null — we do NOT fall back to a fabricated amount × vatPercent
-        // calculation. The summary totals are always correct via computeVATRegister().
-        const enriched = transactions.map(t => {
+        const enriched = allTransactions.map(t => {
+          // Preserve the e-invoice's authoritative journalVAT; only fill in
+          // VAT for entries that don't already have it (manual transactions).
+          if (t.journalVAT) return t;
           const jeVAT = vatMap.get(t.id);
           return {
             ...t,
@@ -70,7 +174,7 @@ export const GET = withGuard({
       }
     }
 
-    return NextResponse.json({ transactions });
+    return NextResponse.json({ transactions: allTransactions });
   } catch (error) {
     logger.error('Get transactions error:', error);
     return NextResponse.json(

@@ -863,12 +863,12 @@ export const translations = {
 
   // ========== INVOICES ==========
   invoicesNav: {
-    da: 'Fakturaer',
-    en: 'Invoices',
+    da: 'Salg & Faktura',
+    en: 'Sales & Invoice',
   },
   invoicesTitle: {
-    da: 'Fakturaer',
-    en: 'Invoices',
+    da: 'Salg & Faktura',
+    en: 'Sales & Invoice',
   },
   manageInvoices: {
     da: 'Opret og håndter dine fakturaer',

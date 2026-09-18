@@ -139,17 +139,26 @@ interface Invoice {
  *    - Real PURCHASE/other transactions carry NET amounts → VAT = net × rate / 100
  */
 function getDisplayVAT(tx: Transaction): { rate: number; amount: number; code: string | null } {
-  if (tx.journalVAT && tx.journalVAT.amount > 0) {
+  // Use the authoritative journal VAT whenever it is non-zero. Signed: a
+  // credit note's INPUT/OUTPUT VAT is negative (reversal) and must stay
+  // negative so the stat totals net it out correctly. Using `!== 0` (not
+  // `> 0`) ensures credit notes use the authoritative signed value rather
+  // than falling back to a positive-only formula.
+  if (tx.journalVAT && tx.journalVAT.amount !== 0) {
     return { rate: tx.journalVAT.rate, amount: tx.journalVAT.amount, code: tx.journalVAT.code };
   }
   const rate = tx.vatPercent || 0;
   const dkkAmt = getDKKAmount(tx);
-  if (rate === 0 || dkkAmt <= 0) return { rate: 0, amount: 0, code: null };
-  // Virtual invoice-derived transactions have net amounts
+  if (rate === 0 || dkkAmt === 0) return { rate: 0, amount: 0, code: null };
+  // Virtual invoice-derived transactions have net amounts. Credit notes
+  // carry NEGATIVE amounts (reversal) — preserve the sign so the fallback
+  // also yields a negative VAT for them (mirrors the authoritative path).
   const isVirtual = tx.id?.startsWith('inv-');
+  const sign = dkkAmt < 0 ? -1 : 1;
+  const base = Math.abs(dkkAmt);
   const netVat = isVirtual || tx.type !== 'SALE'
-    ? dkkAmt * rate / 100
-    : dkkAmt * rate / (100 + rate);
+    ? sign * (base * rate / 100)
+    : sign * (base * rate / (100 + rate));
   return { rate, amount: Math.round(netVat * 100) / 100, code: null };
 }
 
@@ -601,12 +610,16 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
     const salesAmount = sales.reduce((sum, t) => sum + getDKKAmount(t), 0);
     const purchasesAmount = purchases.reduce((sum, t) => sum + getDKKAmount(t), 0);
 
+    // Signed VAT sums: credit notes carry negative journalVAT (reversal)
+    // and must REDUCE the totals, not inflate them. Previously Math.abs()
+    // was used which double-counted reversals — wrong for 100% accurate
+    // figures once e-credit notes flow through the same pipeline.
     const outputVAT = active
       .filter(t => t.type === 'SALE' || !t.type)
-      .reduce((sum, t) => sum + Math.abs(getDisplayVAT(t).amount), 0);
+      .reduce((sum, t) => sum + getDisplayVAT(t).amount, 0);
     const inputVAT = active
       .filter(t => t.type === 'PURCHASE')
-      .reduce((sum, t) => sum + Math.abs(getDisplayVAT(t).amount), 0);
+      .reduce((sum, t) => sum + getDisplayVAT(t).amount, 0);
 
     return {
       salesCount: sales.length,
@@ -1373,9 +1386,9 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                     <TableCell />
                     <TableCell />
                     <TableCell className="font-semibold">{t('total')}</TableCell>
-                    <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + Math.abs(getDKKAmount(tx)), 0))}</TableCell>
+                    <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + getDKKAmount(tx), 0))}</TableCell>
                     <TableCell />
-                    <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + Math.abs(getDisplayVAT(tx).amount), 0))}</TableCell>
+                    <TableCell className="text-right font-semibold">{tc(activeFiltered.reduce((sum, tx) => sum + getDisplayVAT(tx).amount, 0))}</TableCell>
                     <TableCell />
                   </TableRow>
                 </TableBody>
