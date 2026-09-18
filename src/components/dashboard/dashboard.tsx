@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } fro
 import { User, useAuthStore } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { getRelativeDate } from '@/lib/date-utils';
+import { getTransactionKind, getKindStyle, getKindLabel } from '@/lib/transaction-kind';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -30,15 +31,12 @@ import {
   TrendingDown,
   FileText,
   Loader2,
-  ArrowUpRight,
-  ArrowDownRight,
   ArrowUpCircle,
   ArrowDownCircle,
   Zap,
   Shield,
   Scale,
   BookOpen,
-  Landmark,
   AlertTriangle,
   PenLine,
   BarChart3,
@@ -2501,11 +2499,11 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
           <div data-widget-id="vat-output">
               <Card className="stat-card card-hover-lift overflow-hidden">
                 {/* Header with total */}
-                <div className="bg-gradient-to-r from-[#0d9488]/8 to-transparent dark:from-[#0d9488]/15 px-4 sm:px-5 pt-4 pb-3">
+                <div className="bg-gradient-to-r from-green-500/8 to-transparent dark:from-green-500/15 px-4 sm:px-5 pt-4 pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-8 w-8 rounded-lg bg-[#0d9488]/10 flex items-center justify-center">
-                        <ArrowUpCircle className="h-4 w-4 text-[#0d9488] dark:text-[#2dd4bf]" />
+                      <div className="h-8 w-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                        <ArrowUpCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -2518,7 +2516,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                       {salesThisMonth.length} {language === 'da' ? 'salg' : 'sales'}
                     </Badge>
                   </div>
-                  <p className="text-xl sm:text-2xl font-bold text-[#0d9488] dark:text-[#2dd4bf] mt-1.5 tabular-nums">
+                  <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 mt-1.5 tabular-nums">
                     {tc(outputVAT)}
                   </p>
                 </div>
@@ -2593,11 +2591,11 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
           <div data-widget-id="vat-input">
               <Card className="stat-card card-hover-lift overflow-hidden">
                 {/* Header with total */}
-                <div className="bg-gradient-to-r from-amber-500/8 to-transparent dark:from-amber-500/15 px-4 sm:px-5 pt-4 pb-3">
+                <div className="bg-gradient-to-r from-red-500/8 to-transparent dark:from-red-500/15 px-4 sm:px-5 pt-4 pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                        <ArrowDownCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <div className="h-8 w-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+                        <ArrowDownCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -2610,7 +2608,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                       {purchasesThisMonth.length} {language === 'da' ? 'køb' : 'purchases'}
                     </Badge>
                   </div>
-                  <p className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1.5 tabular-nums">
+                  <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400 mt-1.5 tabular-nums">
                     {tc(inputVAT)}
                   </p>
                 </div>
@@ -3054,8 +3052,15 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                       );
                     }
 
-                    // Transaction item
+                    // Transaction item — uses the shared 4-type kind system +
+                    // green/red money-flow convention (consistent with the
+                    // Køb & Kvittering page): green = money IN (Sale, Purchase
+                    // credit note), red = money OUT (Purchase, Sales credit note).
                     const tx = item.tx;
+                    const kind = getTransactionKind(tx);
+                    const kindStyle = getKindStyle(kind);
+                    const KindIcon = kindStyle.icon;
+                    const amount = tx.amountDKK != null ? Number(tx.amountDKK) : Number(tx.amount);
                     return (
                       <div
                         key={`tx-${tx.id}`}
@@ -3063,23 +3068,13 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                         onClick={() => onNavigate?.('transactions')}
                       >
                         <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-                          tx.type === 'PURCHASE'
-                            ? 'bg-amber-50 dark:bg-amber-900/20'
-                            : tx.type === 'SALARY'
-                            ? 'bg-purple-50 dark:bg-purple-900/20'
-                            : tx.type === 'BANK'
-                            ? 'bg-blue-50 dark:bg-blue-900/20'
-                            : 'bg-[#f0fdf9] dark:bg-[#1a2e2b]'
+                          kindStyle.direction === 'out'
+                            ? 'bg-red-50 dark:bg-red-900/20'
+                            : kindStyle.direction === 'in'
+                            ? 'bg-green-50 dark:bg-green-900/20'
+                            : 'bg-gray-50 dark:bg-gray-900/20'
                         }`}>
-                          {tx.type === 'PURCHASE' ? (
-                            <ArrowDownRight className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                          ) : tx.type === 'SALARY' ? (
-                            <Wallet className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                          ) : tx.type === 'BANK' ? (
-                            <Landmark className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                          ) : (
-                            <ArrowUpRight className="h-3.5 w-3.5 text-[#0d9488] dark:text-[#2dd4bf]" />
-                          )}
+                          <KindIcon className={`h-3.5 w-3.5 ${kindStyle.textClass}`} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
@@ -3087,40 +3082,13 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                           </p>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-xs text-gray-500 dark:text-gray-400">{getRelativeTime(tx.date)}</span>
-                            <Badge
-                              className={`text-[8px] px-1 py-0 h-4 ${
-                                tx.type === 'PURCHASE'
-                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
-                                  : tx.type === 'SALARY'
-                                  ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300'
-                                  : tx.type === 'BANK'
-                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                                  : tx.type === 'Z_REPORT'
-                                  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/50 dark:text-orange-300'
-                                  : tx.type === 'ADJUSTMENT'
-                                  ? 'bg-gray-100 text-gray-700 dark:bg-gray-900/50 dark:text-gray-300'
-                                  : 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
-                              }`}
-                            >
-                              {tx.type === 'PURCHASE'
-                                ? (language === 'da' ? 'Køb' : 'Purchase')
-                                : tx.type === 'SALARY'
-                                ? (language === 'da' ? 'Løn' : 'Salary')
-                                : tx.type === 'BANK'
-                                ? (language === 'da' ? 'Bank' : 'Bank')
-                                : tx.type === 'Z_REPORT'
-                                ? (language === 'da' ? 'Moms' : 'VAT')
-                                : tx.type === 'ADJUSTMENT'
-                                ? (language === 'da' ? 'Justering' : 'Adjustment')
-                                : (language === 'da' ? 'Salg' : 'Sale')
-                              }
+                            <Badge className={`text-[8px] px-1 py-0 h-4 ${kindStyle.badgeClass}`}>
+                              {getKindLabel(kind, language)}
                             </Badge>
                           </div>
                         </div>
-                        <span className={`text-sm font-semibold tabular-nums ${
-                          tx.type === 'PURCHASE' ? 'text-amber-600 dark:text-amber-400' : tx.type === 'SALARY' ? 'text-purple-600 dark:text-purple-400' : tx.type === 'BANK' ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'
-                        }`}>
-                          {tx.type === 'PURCHASE' ? '-' : tx.type === 'SALE' ? '+' : ''}{tc(tx.amountDKK != null ? Number(tx.amountDKK) : tx.amount)}
+                        <span className={`text-sm font-semibold tabular-nums ${kindStyle.textClass}`}>
+                          {kindStyle.direction === 'in' ? '+' : kindStyle.direction === 'out' ? '-' : ''}{tc(amount)}
                         </span>
                       </div>
                     );

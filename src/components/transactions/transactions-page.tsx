@@ -64,7 +64,6 @@ import {
   Trash2,
   Eye,
   FileText,
-  FileMinus,
   Loader2,
   Filter,
   X,
@@ -84,6 +83,12 @@ import {
 import { format } from 'date-fns';
 import { getCurrencySymbol } from '@/lib/currency-utils';
 import { useDataVersion } from '@/hooks/use-data-version';
+import {
+  getTransactionKind,
+  getKindStyle,
+  getKindLabel,
+  type TransactionKind,
+} from '@/lib/transaction-kind';
 
 interface Transaction {
   id: string;
@@ -129,6 +134,8 @@ interface Invoice {
   total: number;
   status: string;
   customerName: string;
+  /** INVOICE | CREDIT_NOTE — distinguishes sales credit notes from regular sales. */
+  documentType?: string;
 }
 
 /** Compute display VAT rate and amount for a transaction.
@@ -265,6 +272,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
         if (invoice.status === 'DRAFT') continue;
         if (invoiceIdsWithTransactions.has(invoice.id)) continue;
 
+        // Sales credit notes (documentType = 'CREDIT_NOTE') reverse a sale —
+        // money goes back OUT to the customer. Flag via documentType so the
+        // 4-type kind system + green/red convention applies, and NEGATE the
+        // amount so the sales total + output VAT net out the reversal.
+        const isSalesCreditNote = invoice.documentType === 'CREDIT_NOTE';
+
         const lineItems = (invoice.lineItems as Array<{
           description: string;
           quantity: number;
@@ -280,11 +293,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
             id: `inv-${invoice.id}-${item.description.slice(0, 20)}`,
             date: invoice.issueDate,
             type: 'SALE',
-            amount: lineTotal,
+            amount: isSalesCreditNote ? -lineTotal : lineTotal,
             description: `${invoice.invoiceNumber} - ${item.description}`,
             vatPercent: item.vatPercent,
             receiptImage: null,
             invoiceId: invoice.id,
+            documentType: isSalesCreditNote ? 'SALE_CREDIT_NOTE' : null,
           });
         }
       }
@@ -510,9 +524,13 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
       );
     }
 
-    // Type filter
+    // Type filter — uses the 4-type kind system (SALE / PURCHASE /
+    // SALE_CREDIT_NOTE / PURCHASE_CREDIT_NOTE). Credit notes are matched via
+    // getTransactionKind (documentType), not raw `type`, so a sales credit
+    // note (type='SALE' + documentType='SALE_CREDIT_NOTE') is correctly
+    // filtered as a credit note rather than a regular sale.
     if (typeFilter !== 'all') {
-      result = result.filter((t) => t.type === typeFilter);
+      result = result.filter((t) => getTransactionKind(t) === (typeFilter as TransactionKind));
     }
 
     // VAT filter
@@ -637,41 +655,19 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
     return transactions.find(t => t.receiptImage === selectedReceipt) || null;
   }, [selectedReceipt, transactions]);
 
-  // Helper: get type display info for mobile cards
-  const getTypeInfo = (type: string) => {
-    const isIncome = type === 'SALE' || !type;
-    const isExpense = type === 'PURCHASE';
-
-    if (isIncome) {
-      return {
-        label: language === 'da' ? 'Indtægt' : 'Income',
-        amountClass: 'text-green-600 dark:text-green-400',
-        badgeClass: 'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-      };
-    }
-
-    if (isExpense) {
-      return {
-        label: language === 'da' ? 'Udgift' : 'Expense',
-        amountClass: 'text-red-600 dark:text-red-400',
-        badgeClass: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-      };
-    }
-
-    // Other types (SALARY, BANK, Z_REPORT, PRIVATE, ADJUSTMENT)
-    const otherLabels: Record<string, { da: string; en: string }> = {
-      SALARY: { da: 'Løn', en: 'Salary' },
-      BANK: { da: 'Bank', en: 'Bank' },
-      Z_REPORT: { da: 'Z-Rapport', en: 'Z-Report' },
-      PRIVATE: { da: 'Privat', en: 'Private' },
-      ADJUSTMENT: { da: 'Regulering', en: 'Adjustment' },
-    };
-    const labelInfo = otherLabels[type] || { da: 'Andet', en: 'Other' };
-
+  // Helper: get type display info from the 4-type kind system + green/red
+  // money-flow convention. Green = money IN (Sale, Purchase credit note),
+  // red = money OUT (Purchase, Sales credit note). Applied consistently with
+  // the dashboard activity feed.
+  const getTypeInfo = (tx: Transaction) => {
+    const kind = getTransactionKind(tx);
+    const style = getKindStyle(kind);
     return {
-      label: language === 'da' ? labelInfo.da : labelInfo.en,
-      amountClass: 'text-blue-600 dark:text-blue-400',
-      badgeClass: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+      label: getKindLabel(kind, language),
+      amountClass: style.textClass,
+      badgeClass: style.badgeClass,
+      Icon: style.icon,
+      direction: style.direction,
     };
   };
 
@@ -729,20 +725,20 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
           icon={ArrowDownCircle}
           label={t('purchases')}
           value={stats.purchasesAmount}
-          variant="amber"
+          variant="red"
           badge={`${stats.purchasesCount}`}
         />
         <StatsCard
           icon={ArrowUpCircle}
           label={t('outputVAT')}
           value={stats.outputVAT}
-          variant="primary"
+          variant="green"
         />
         <StatsCard
           icon={ArrowDownCircle}
           label={t('inputVAT')}
           value={stats.inputVAT}
-          variant="purple"
+          variant="red"
         />
       </div>
       )}
@@ -779,13 +775,10 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                   </SelectTrigger>
                   <SelectContent className="bg-white dark:bg-[#1a1f1e]" align="end">
                     <SelectItem value="all">{t('allTypes')}</SelectItem>
-                    <SelectItem value="SALE">{t('sale')}</SelectItem>
-                    <SelectItem value="PURCHASE">{t('purchase')}</SelectItem>
-                    <SelectItem value="SALARY">{t('transactionTypeSalary')}</SelectItem>
-                    <SelectItem value="BANK">{t('transactionTypeBank')}</SelectItem>
-                    <SelectItem value="Z_REPORT">{t('transactionTypeZReport')}</SelectItem>
-                    <SelectItem value="PRIVATE">{t('transactionTypePrivate')}</SelectItem>
-                    <SelectItem value="ADJUSTMENT">{t('transactionTypeAdjustment')}</SelectItem>
+                    <SelectItem value="SALE">{getKindLabel('SALE', language)}</SelectItem>
+                    <SelectItem value="PURCHASE">{getKindLabel('PURCHASE', language)}</SelectItem>
+                    <SelectItem value="SALE_CREDIT_NOTE">{getKindLabel('SALE_CREDIT_NOTE', language)}</SelectItem>
+                    <SelectItem value="PURCHASE_CREDIT_NOTE">{getKindLabel('PURCHASE_CREDIT_NOTE', language)}</SelectItem>
                   </SelectContent>
                 </Select>
               <Select value={vatFilter} onValueChange={setVatFilter}>
@@ -863,7 +856,8 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
               {/* ===== Mobile Card List (lg:hidden) ===== */}
               <div className="lg:hidden p-3 space-y-3">
                 {mobileVisibleTransactions.map((transaction) => {
-                  const typeInfo = getTypeInfo(transaction.type);
+                  const typeInfo = getTypeInfo(transaction);
+                  const TypeIcon = typeInfo.Icon;
                   const outsideProject = isOutsideProject(transaction);
                   const isCancelled = !!transaction.cancelled;
                   return (
@@ -894,18 +888,11 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                                 {language === 'da' ? 'Annulleret' : 'Cancelled'}
                               </Badge>
                             )}
-                            {transaction.id.startsWith('inv-') && (
-                              <Badge className="text-[10px] px-1.5 py-0 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#0d9488]/20 dark:text-[#2dd4bf] border-0 gap-1">
-                                <FileText className="h-2.5 w-2.5" />
-                                {language === 'da' ? 'Faktura' : 'Invoice'}
-                              </Badge>
-                            )}
-                            {transaction.documentType === 'PURCHASE_CREDIT_NOTE' && (
-                              <Badge className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 border-0 gap-1">
-                                <FileMinus className="h-2.5 w-2.5" />
-                                {language === 'da' ? 'Købskreditnota' : 'Credit'}
-                              </Badge>
-                            )}
+                            {/* Unified kind badge — green (money in) / red (money out) */}
+                            <Badge className={cn("text-[10px] px-1.5 py-0 border-0 gap-1", typeInfo.badgeClass)}>
+                              <TypeIcon className="h-2.5 w-2.5" />
+                              {typeInfo.label}
+                            </Badge>
                             {transaction.project && (
                               <Badge
                                 className="text-[10px] px-1.5 py-0 border-0 gap-1"
@@ -1155,6 +1142,8 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                 </TableHeader>
                 <TableBody>
                   {paginatedTransactions.map((transaction) => {
+                    const typeInfo = getTypeInfo(transaction);
+                    const TypeIcon = typeInfo.Icon;
                     const outsideProject = isOutsideProject(transaction);
                     const isCancelled = !!transaction.cancelled;
                     return (
@@ -1174,15 +1163,11 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                             <XCircle className="h-3 w-3" />
                             {language === 'da' ? 'Annulleret' : 'Cancelled'}
                           </Badge>
-                        ) : transaction.type === 'PURCHASE' ? (
-                          <Badge className="bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 gap-1">
-                            <ArrowDownCircle className="h-3 w-3" />
-                            {language === 'da' ? 'Køb' : 'Buy'}
-                          </Badge>
                         ) : (
-                          <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#0d9488]/20 dark:text-[#2dd4bf] gap-1">
-                            <ArrowUpCircle className="h-3 w-3" />
-                            {language === 'da' ? 'Salg' : 'Sale'}
+                          // Unified kind badge — green (money in) / red (money out)
+                          <Badge className={cn("gap-1", typeInfo.badgeClass)}>
+                            <TypeIcon className="h-3 w-3" />
+                            {typeInfo.label}
                           </Badge>
                         )}
                       </TableCell>
@@ -1192,12 +1177,6 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       <TableCell className="max-w-[150px] lg:max-w-[250px] truncate">
                         <div className="flex items-center gap-1.5">
                           <span className={cn("truncate", isCancelled ? "text-gray-400 dark:text-gray-500" : "")}>{transaction.description}</span>
-                          {transaction.documentType === 'PURCHASE_CREDIT_NOTE' && (
-                            <Badge className="shrink-0 text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300 border-0 gap-1">
-                              <FileMinus className="h-2.5 w-2.5" />
-                              {language === 'da' ? 'Købskreditnota' : 'Credit'}
-                            </Badge>
-                          )}
                           {transaction.project && (
                             <Badge
                               className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1"
@@ -1232,7 +1211,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       </TableCell>
                       <TableCell className={cn(
                         "text-right whitespace-nowrap font-medium",
-                        isCancelled ? "text-gray-400 dark:text-gray-500" : transaction.type === 'PURCHASE' ? 'text-amber-600 dark:text-amber-400' : 'text-[#0d9488] dark:text-[#2dd4bf]'
+                        isCancelled ? "text-gray-400 dark:text-gray-500" : typeInfo.amountClass
                       )}>
                         {tc(getDisplayVAT(transaction).amount)}
                       </TableCell>
