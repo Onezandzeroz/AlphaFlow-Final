@@ -7,6 +7,7 @@ import { useScannerStore } from '@/lib/scanner-store';
 import { TransactionsPage } from '@/components/transactions/transactions-page';
 import { RecurringEntriesPage } from '@/components/recurring-entries/recurring-entries-page';
 import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
+import { PostedEInvoicesList } from '@/components/invoices/posted-einvoices-list';
 import { PageHeader } from '@/components/shared/page-header';
 import { AddTransactionForm } from '@/components/transaction/add-transaction-form';
 import { clearDraftBeforeUnmount } from '@/lib/draft-store';
@@ -18,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Receipt, RefreshCw, Plus, Inbox, FileMinus } from 'lucide-react';
+import { Receipt, RefreshCw, Plus, Inbox, FileMinus, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 
@@ -26,7 +27,7 @@ type PageView = 'list' | 'create';
 
 interface PosteringerPageProps {
   user: any; // User type from auth-store
-  defaultTab?: 'transactions' | 'recurring' | 'einvoice';
+  defaultTab?: 'transactions' | 'recurring' | 'einvoice' | 'posted-einvoice';
 }
 
 export function PosteringerPage({ user, defaultTab = 'transactions' }: PosteringerPageProps) {
@@ -34,7 +35,7 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   const { t } = useTranslation();
   const isDa = language === 'da';
   const { guardWriteAccess } = useWriteAccessGuard(user);
-  const [activeTab, setActiveTab] = useState<'transactions' | 'recurring' | 'einvoice'>(defaultTab);
+  const [activeTab, setActiveTab] = useState<'transactions' | 'recurring' | 'einvoice' | 'posted-einvoice'>(defaultTab);
   const [currentView, setCurrentView] = useState<PageView>('list');
   const [isMobileDialogOpen, setIsMobileDialogOpen] = useState(false);
   // Create mode: 'purchase' (default) or 'credit-note' (supplier credit note).
@@ -174,6 +175,8 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
     { id: 'transactions' as const, labelDa: 'Alle posteringer', labelEn: 'All Transactions', icon: Receipt },
     { id: 'recurring' as const, labelDa: 'Gentagende posteringer', labelEn: 'Recurring Entries', icon: RefreshCw },
     { id: 'einvoice' as const, labelDa: 'E-faktura Indbakke', labelEn: 'E-Invoice Inbox', icon: Inbox },
+    // Posted e-invoices leave the e-inbox (staging area) and appear here.
+    { id: 'posted-einvoice' as const, labelDa: 'Bogførte e-fakturaer', labelEn: 'Posted e-invoices', icon: CheckCircle },
   ];
 
   // ── Full-page create form (desktop) ──
@@ -325,8 +328,10 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
             <TransactionsPage user={user} hideHeader defaultTypeFilter="PURCHASE" />
           ) : activeTab === 'recurring' ? (
             <RecurringEntriesPage user={user} hideHeader />
-          ) : (
+          ) : activeTab === 'einvoice' ? (
             <EInvoiceInbox user={user} />
+          ) : (
+            <PostedEInvoicesList user={user} />
           )}
         </div>
       </div>
