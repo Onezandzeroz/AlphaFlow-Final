@@ -242,6 +242,10 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  // Tab within the list view: regular invoices vs sales credit notes.
+  // Both tabs use the exact same list design — the tab just filters which
+  // invoices are displayed.
+  const [listTab, setListTab] = useState<'invoices' | 'credit-notes'>('invoices');
   const [showCompanySetup, setShowCompanySetup] = useState(false);
   const [showEditCompany, setShowEditCompany] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<Invoice | null>(null);
@@ -1260,9 +1264,20 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
     return invoice.status;
   }, []);
 
+  // Tab-filtered invoices: regular invoices vs sales credit notes.
+  // The active tab determines which subset of `invoices` feeds into the
+  // search filter, stats, and rendering — so the credit notes list gets
+  // the EXACT same design as the invoice list, just with different data.
+  const tabInvoices = useMemo(() => {
+    if (listTab === 'credit-notes') {
+      return invoices.filter(i => i.documentType === 'CREDIT_NOTE');
+    }
+    return invoices.filter(i => i.documentType !== 'CREDIT_NOTE');
+  }, [invoices, listTab]);
+
   // Filtered invoices
   const filteredInvoices = useMemo(() => {
-    let result = [...invoices];
+    let result = [...tabInvoices];
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(inv =>
@@ -1279,11 +1294,11 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       }
     }
     return result;
-  }, [invoices, searchQuery, statusFilter, getInvoiceDisplayStatus]);
+  }, [tabInvoices, searchQuery, statusFilter, getInvoiceDisplayStatus]);
 
   // Stats (with overdue awareness)
   const invoiceStats = useMemo(() => {
-    const active = invoices.filter(i => i.status !== 'CANCELLED');
+    const active = tabInvoices.filter(i => i.status !== 'CANCELLED');
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -1303,9 +1318,9 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       paid: active.filter(i => i.status === 'PAID').reduce((sum, i) => sum + signed(i), 0),
       paidThisMonth: paidThisMonth.reduce((sum, i) => sum + signed(i), 0),
       overdueCount: overdueInvoices.length,
-      draftCount: invoices.filter(i => i.status === 'DRAFT').length,
+      draftCount: tabInvoices.filter(i => i.status === 'DRAFT').length,
     };
-  }, [invoices, getInvoiceDisplayStatus]);
+  }, [tabInvoices, getInvoiceDisplayStatus]);
 
   // Locale for date-fns
   const dateLocale = language === 'da' ? da : enGB;
@@ -1452,15 +1467,15 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   // Status filter pill data (must be before early returns to satisfy hooks rules)
   const statusFilterPills = useMemo(() => {
     const pills = [
-      { value: 'all', label: t('allStatuses'), count: invoices.length },
-      { value: 'DRAFT', label: t('draft'), count: invoices.filter(i => i.status === 'DRAFT').length },
-      { value: 'SENT', label: t('sent'), count: invoices.filter(i => i.status === 'SENT').length },
-      { value: 'PAID', label: t('paid'), count: invoices.filter(i => i.status === 'PAID').length },
+      { value: 'all', label: t('allStatuses'), count: tabInvoices.length },
+      { value: 'DRAFT', label: t('draft'), count: tabInvoices.filter(i => i.status === 'DRAFT').length },
+      { value: 'SENT', label: t('sent'), count: tabInvoices.filter(i => i.status === 'SENT').length },
+      { value: 'PAID', label: t('paid'), count: tabInvoices.filter(i => i.status === 'PAID').length },
       { value: 'OVERDUE', label: language === 'da' ? 'Forfalden' : 'Overdue', count: invoiceStats.overdueCount },
-      { value: 'CANCELLED', label: t('cancelled'), count: invoices.filter(i => i.status === 'CANCELLED').length },
+      { value: 'CANCELLED', label: t('cancelled'), count: tabInvoices.filter(i => i.status === 'CANCELLED').length },
     ];
     return pills;
-  }, [invoices, invoiceStats.overdueCount, t, language]);
+  }, [tabInvoices, invoiceStats.overdueCount, t, language]);
 
   // Loading state
   if (isLoading) {
@@ -2879,8 +2894,44 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
         }
       />
 
+      {/* ── Tab bar: Fakturaer / Kreditnota (salg) ──
+          Both tabs use the exact same list design (stats cards + filters +
+          table). The tab just filters which invoices (regular vs credit
+          notes) feed into the shared rendering. */}
+      <div className="px-4 lg:px-0">
+        <div className="flex items-center gap-1 border-b border-[#e2e8e6] dark:border-[#2a3330]">
+          {([
+            { id: 'invoices', labelDa: 'Fakturaer', labelEn: 'Invoices', count: invoices.filter(i => i.documentType !== 'CREDIT_NOTE').length },
+            { id: 'credit-notes', labelDa: 'Kreditnota (salg)', labelEn: 'Credit notes (sales)', count: invoices.filter(i => i.documentType === 'CREDIT_NOTE').length },
+          ] as const).map((tab) => {
+            const isActive = listTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => { setListTab(tab.id); setStatusFilter('all'); setSearchQuery(''); }}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors duration-150 -mb-px ${
+                  isActive
+                    ? 'border-[#0d9488] text-[#0d9488] dark:border-[#2dd4bf] dark:text-[#2dd4bf]'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                }`}
+              >
+                {isDanish ? tab.labelDa : tab.labelEn}
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full tabular-nums ${
+                  isActive
+                    ? 'bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Invoice Summary Cards */}
-      {invoices.length > 0 && (
+      {tabInvoices.length > 0 && (
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           icon={Wallet}
@@ -2918,7 +2969,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
       )}
 
       {/* Filters Section */}
-      {invoices.length > 0 && (
+      {tabInvoices.length > 0 && (
       <Card className="stat-card">
         <CardContent className="p-4 pb-2 lg:pb-4">
           <div className="flex flex-wrap gap-2 items-center">
@@ -3061,12 +3112,12 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                   </div>
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1.5">
-                  {invoices.length === 0
+                  {tabInvoices.length === 0
                     ? (language === 'da' ? 'Ingen fakturaer endnu' : 'No invoices yet')
                     : t('noInvoicesFound')}
                 </h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">
-                  {invoices.length === 0
+                  {tabInvoices.length === 0
                     ? (language === 'da'
                       ? 'Opret din første faktura for at begynde at holde styr på dine betalinger og fakturering.'
                       : 'Create your first invoice to start tracking your payments and billing.')
@@ -3074,7 +3125,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                       ? 'Ingen fakturaer matcher dine filtre. Prøv at ændre dine filtre.'
                       : 'No invoices match your current filters. Try adjusting your filters.')}
                 </p>
-                {invoices.length === 0 ? (
+                {tabInvoices.length === 0 ? (
                   <Button
                     onClick={() => {
                       guardWriteAccess(isDanish ? 'Tilføj salg' : 'Add Sale', () => {
@@ -3344,12 +3395,12 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 </div>
               </div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1.5">
-                {invoices.length === 0
+                {tabInvoices.length === 0
                   ? (language === 'da' ? 'Ingen fakturaer endnu' : 'No invoices yet')
                   : t('noInvoicesFound')}
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 max-w-sm mx-auto">
-                {invoices.length === 0
+                {tabInvoices.length === 0
                   ? (language === 'da'
                     ? 'Opret din første faktura for at begynde at holde styr på dine betalinger og fakturering.'
                     : 'Create your first invoice to start tracking your payments and billing.')
@@ -3357,7 +3408,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                     ? 'Ingen fakturaer matcher dine filtre. Prøv at ændre dine filtre.'
                     : 'No invoices match your current filters. Try adjusting your filters.')}
               </p>
-              {invoices.length === 0 ? (
+              {tabInvoices.length === 0 ? (
                 <Button
                   onClick={() => {
                     guardWriteAccess(isDanish ? 'Opret salg' : 'Create sale', () => {
