@@ -145,7 +145,7 @@ function createEmptyLine(): JournalLineInput {
 function getStatusBadgeStyle(status: string): string {
   switch (status) {
     case 'DRAFT':
-      return 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border-amber-500/20';
+      return 'bg-slate-500/10 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400 border-slate-500/20';
     case 'POSTED':
       return 'bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400 border-green-500/20';
     case 'CANCELLED':
@@ -158,7 +158,7 @@ function getStatusBadgeStyle(status: string): string {
 function getStatusLabel(status: string, isDanish: boolean): string {
   switch (status) {
     case 'DRAFT':
-      return isDanish ? 'Kladde' : 'Draft';
+      return isDanish ? 'Ikke Bogført' : 'Not Posted';
     case 'POSTED':
       return isDanish ? 'Bogført' : 'Posted';
     case 'CANCELLED':
@@ -1013,20 +1013,30 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           {getStatusLabel(entry.status, isDanish)}
                         </Badge>
 
-                        {/* Bank Reconciliation Badge — Afstemt/Uafstemt */}
-                        {entry.status === 'POSTED' && !isEntryCancelled && (() => {
+                        {/* Payment Status Badge — Ubetalt / Betalt / Uafstemt */}
+                        {(() => {
                           const isReconciled = entry.lines.some(
                             (line) => line.bankMatches && line.bankMatches.length > 0
                           );
-                          return isReconciled ? (
-                            <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] border-[#0d9488]/20 gap-1">
-                              {isDanish ? 'Afstemt' : 'Matched'}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
-                              {isDanish ? 'Uafstemt' : 'Unmatched'}
-                            </Badge>
-                          );
+                          if (entry.status === 'POSTED' && !isEntryCancelled) {
+                            return isReconciled ? (
+                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] border-[#0d9488]/20 gap-1">
+                                {isDanish ? 'Betalt' : 'Paid'}
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
+                                {isDanish ? 'Ubetalt' : 'Unpaid'}
+                              </Badge>
+                            );
+                          }
+                          if (entry.status === 'DRAFT') {
+                            return (
+                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
+                                {isDanish ? 'Uafstemt' : 'Unmatched'}
+                              </Badge>
+                            );
+                          }
+                          return null;
                         })()}
 
                         {/* Balance Indicator + Foreign Currency Info */}

@@ -898,12 +898,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                             </Badge>
                             {transaction.bankReconciled === true && (
                               <Badge className="text-[10px] px-1.5 py-0 border-0 gap-1 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]" title={transaction.settledAt ? new Date(transaction.settledAt).toLocaleDateString() : undefined}>
-                                {language === 'da' ? 'Afstemt' : 'Matched'}
+                                {language === 'da' ? 'Betalt' : 'Paid'}
                               </Badge>
                             )}
                             {transaction.bankReconciled === false && !transaction.id.startsWith('inv-') && (
                               <Badge className="text-[10px] px-1.5 py-0 border-0 gap-1 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
-                                {language === 'da' ? 'Uafstemt' : 'Unmatched'}
+                                {language === 'da' ? 'Ubetalt' : 'Unpaid'}
                               </Badge>
                             )}
                             {transaction.project && (
@@ -1192,12 +1192,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                           <span className={cn("truncate", isCancelled ? "text-gray-400 dark:text-gray-500" : "")}>{transaction.description}</span>
                           {transaction.bankReconciled === true && (
                             <Badge className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]" title={transaction.settledAt ? new Date(transaction.settledAt).toLocaleDateString() : undefined}>
-                              {language === 'da' ? 'Afstemt' : 'Matched'}
+                              {language === 'da' ? 'Betalt' : 'Paid'}
                             </Badge>
                           )}
                           {transaction.bankReconciled === false && !transaction.id.startsWith('inv-') && (
                             <Badge className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
-                              {language === 'da' ? 'Uafstemt' : 'Unmatched'}
+                              {language === 'da' ? 'Ubetalt' : 'Unpaid'}
                             </Badge>
                           )}
                           {transaction.project && (

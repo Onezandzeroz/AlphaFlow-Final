@@ -144,11 +144,11 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                           </Badge>
                           {ri.status === 'SETTLED' ? (
                             <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] text-[10px] gap-1" title={ri.settledAt ? new Date(ri.settledAt).toLocaleDateString() : undefined}>
-                              {isDa ? 'Afstemt' : 'Matched'}
+                              {isDa ? 'Betalt' : 'Paid'}
                             </Badge>
                           ) : (
                             <Badge className="bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 text-[10px] gap-1 border-orange-500/20">
-                              {isDa ? 'Uafstemt' : 'Unmatched'}
+                              {isDa ? 'Ubetalt' : 'Unpaid'}
                             </Badge>
                           )}
                         </div>
@@ -199,11 +199,11 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                         </Badge>
                         {ri.status === 'SETTLED' ? (
                           <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] text-[10px] gap-1">
-                            {isDa ? 'Afstemt' : 'Matched'}
+                            {isDa ? 'Betalt' : 'Paid'}
                           </Badge>
                         ) : (
                           <Badge className="bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 text-[10px] gap-1 border-orange-500/20">
-                            {isDa ? 'Uafstemt' : 'Unmatched'}
+                            {isDa ? 'Ubetalt' : 'Unpaid'}
                           </Badge>
                         )}
                       </div>

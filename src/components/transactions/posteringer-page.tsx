@@ -436,7 +436,7 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <StatsCard
                 icon={Wallet}
-                label={isDa ? 'Uafregnet' : 'Outstanding'}
+                label={isDa ? 'At betale' : 'To pay'}
                 value={purchaseStats.outstanding}
                 variant="primary"
                 badge={isDa ? 'inkl. moms' : 'incl. VAT'}
@@ -444,7 +444,7 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
               />
               <StatsCard
                 icon={AlertTriangle}
-                label={isDa ? 'Forfaldent beløb' : 'Overdue amount'}
+                label={isDa ? 'Forfaldent' : 'Overdue'}
                 value={purchaseStats.overdue}
                 variant="red"
                 badge={purchaseStats.overdueCount > 0 ? `${purchaseStats.overdueCount} ${isDa ? 'faktura(er)' : 'invoice(s)'}` : undefined}
@@ -452,15 +452,15 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
               />
               <StatsCard
                 icon={CheckCircle2}
-                label={isDa ? 'Afregnet denne måned' : 'Settled this month'}
+                label={isDa ? 'Betalt denne måned' : 'Paid this month'}
                 value={purchaseStats.settledThisMonthCount}
                 variant="green"
                 formatAsCurrency={false}
-                badge={isDa ? 'bogført' : 'posted'}
+                badge={isDa ? 'betalt' : 'paid'}
               />
               <StatsCard
                 icon={FileSpreadsheet}
-                label={isDa ? 'Kladder' : 'Pending'}
+                label={isDa ? 'Kladder' : 'Drafts'}
                 value={purchaseStats.pendingCount}
                 variant="blue"
                 formatAsCurrency={false}
