@@ -341,91 +341,98 @@ html.dark {
 
 /* ========================================
    BADGES
+   Wrapped in @layer components so Tailwind utility classes (bg-orange-500/10,
+   text-[#0d9488], etc.) in @layer utilities can OVERRIDE these defaults.
+   Previously unlayered — which gave [data-slot="badge"] higher priority than
+   all Tailwind utilities, making every badge appear teal/green regardless of
+   the utility classes applied.
    ======================================== */
 
-[data-slot="badge"] {
-  background: #f0fdf9;
-  color: #0d9488;
-  border: 1px solid #ccfbef;
-  font-weight: 500;
-}
+@layer components {
+  [data-slot="badge"] {
+    background: #f0fdf9;
+    color: #0d9488;
+    border: 1px solid #ccfbef;
+    font-weight: 500;
+  }
 
-.dark [data-slot="badge"] {
-  background: #1a2e2b;
-  color: #5eead4;
-  border: 1px solid #2a4038;
-}
+  .dark [data-slot="badge"] {
+    background: #1a2e2b;
+    color: #5eead4;
+    border: 1px solid #2a4038;
+  }
 
-.badge-green {
-  background: #f0fdf4;
-  color: #3d7a4a;
-  border: 1px solid #d1fae5;
-}
+  .badge-green {
+    background: #f0fdf4;
+    color: #3d7a4a;
+    border: 1px solid #d1fae5;
+  }
 
-.dark .badge-green {
-  background: #152e1e;
-  color: #86efac;
-  border: 1px solid #224830;
-}
+  .dark .badge-green {
+    background: #152e1e;
+    color: #86efac;
+    border: 1px solid #224830;
+  }
 
-.badge-amber {
-  background: #fffbeb;
-  color: #8a6a3e;
-  border: 1px solid #fef3c7;
-}
+  .badge-amber {
+    background: #fffbeb;
+    color: #8a6a3e;
+    border: 1px solid #fef3c7;
+  }
 
-.dark .badge-amber {
-  background: #2e2618;
-  color: #fcd34d;
-  border: 1px solid #3e3520;
-}
+  .dark .badge-amber {
+    background: #2e2618;
+    color: #fcd34d;
+    border: 1px solid #3e3520;
+  }
 
-.badge-red {
-  background: #fef2f2;
-  color: #dc4a45;
-  border: 1px solid #fee2e2;
-}
+  .badge-red {
+    background: #fef2f2;
+    color: #dc4a45;
+    border: 1px solid #fee2e2;
+  }
 
-.dark .badge-red {
-  background: #2e1a1a;
-  color: #fca5a5;
-  border: 1px solid #402020;
-}
+  .dark .badge-red {
+    background: #2e1a1a;
+    color: #fca5a5;
+    border: 1px solid #402020;
+  }
 
-.badge-purple {
-  background: #eef2ff;
-  color: #6366f1;
-  border: 1px solid #e0e7ff;
-}
+  .badge-purple {
+    background: #eef2ff;
+    color: #6366f1;
+    border: 1px solid #e0e7ff;
+  }
 
-.dark .badge-purple {
-  background: #1e1b3a;
-  color: #a5b4fc;
-  border: 1px solid #2e2a50;
-}
+  .dark .badge-purple {
+    background: #1e1b3a;
+    color: #a5b4fc;
+    border: 1px solid #2e2a50;
+  }
 
-.badge-turquoise {
-  background: #ecfdf5;
-  color: #0d9488;
-  border: 1px solid #ccfbef;
-}
+  .badge-turquoise {
+    background: #ecfdf5;
+    color: #0d9488;
+    border: 1px solid #ccfbef;
+  }
 
-.dark .badge-turquoise {
-  background: #152e22;
-  color: #5eead4;
-  border: 1px solid #1e4038;
-}
+  .dark .badge-turquoise {
+    background: #152e22;
+    color: #5eead4;
+    border: 1px solid #1e4038;
+  }
 
-.badge-blue {
-  background: #eff6ff;
-  color: #3b82f6;
-  border: 1px solid #dbeafe;
-}
+  .badge-blue {
+    background: #eff6ff;
+    color: #3b82f6;
+    border: 1px solid #dbeafe;
+  }
 
-.dark .badge-blue {
-  background: #17233a;
-  color: #93c5fd;
-  border: 1px solid #1e3050;
+  .dark .badge-blue {
+    background: #17233a;
+    color: #93c5fd;
+    border: 1px solid #1e3050;
+  }
 }
 
 /* ========================================
