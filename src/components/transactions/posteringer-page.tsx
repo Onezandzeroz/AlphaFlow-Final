@@ -5,7 +5,6 @@ import { useLanguageStore } from '@/lib/language-store';
 import { useTranslation } from '@/lib/use-translation';
 import { useScannerStore } from '@/lib/scanner-store';
 import { useDataVersion } from '@/hooks/use-data-version';
-import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
 import { PostedEInvoicesList, type ReceivedInvoice } from '@/components/invoices/posted-einvoices-list';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatsCard } from '@/components/shared/stats-card';
@@ -19,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Inbox, FileMinus, FileText, Wallet, AlertTriangle, CheckCircle2, FileSpreadsheet } from 'lucide-react';
+import { Plus, FileMinus, FileText, Wallet, AlertTriangle, CheckCircle2, FileSpreadsheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 
@@ -27,7 +26,7 @@ type PageView = 'list' | 'create';
 
 interface PosteringerPageProps {
   user: any; // User type from auth-store
-  defaultTab?: 'kobs-fakturaer' | 'kobs-kreditnota' | 'einvoice';
+  defaultTab?: 'kobs-fakturaer' | 'kobs-kreditnota';
 }
 
 export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: PosteringerPageProps) {
@@ -35,7 +34,7 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
   const { t } = useTranslation();
   const isDa = language === 'da';
   const { guardWriteAccess } = useWriteAccessGuard(user);
-  const [activeTab, setActiveTab] = useState<'kobs-fakturaer' | 'kobs-kreditnota' | 'einvoice'>(defaultTab);
+  const [activeTab, setActiveTab] = useState<'kobs-fakturaer' | 'kobs-kreditnota'>(defaultTab);
   const [currentView, setCurrentView] = useState<PageView>('list');
   const [isMobileDialogOpen, setIsMobileDialogOpen] = useState(false);
   // ── Received e-invoices (ALL statuses) for stats + tab counts ──
@@ -275,7 +274,6 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
     // Count badges match the Salg & Faktura tab display.
     { id: 'kobs-fakturaer' as const, labelDa: 'Købsfakturaer', labelEn: 'Purchase invoices', icon: FileText, count: postedRegularInvoices.length },
     { id: 'kobs-kreditnota' as const, labelDa: 'Købs-kreditnota', labelEn: 'Purchase credit notes', icon: FileMinus, count: postedCreditNotes.length },
-    { id: 'einvoice' as const, labelDa: 'E-faktura Indbakke', labelEn: 'E-Invoice Inbox', icon: Inbox, count: receivedInvoices.filter((ri) => ri.status !== 'POSTED').length },
   ];
 
   // ── Full-page create form (desktop) ──
@@ -474,8 +472,6 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
         <div className="mt-4">
           {activeTab === 'kobs-kreditnota' ? (
             <PostedEInvoicesList invoices={postedCreditNotes} />
-          ) : activeTab === 'einvoice' ? (
-            <EInvoiceInbox user={user} />
           ) : (
             <PostedEInvoicesList invoices={postedRegularInvoices} />
           )}

@@ -46,10 +46,12 @@ import { AnnualReportPage } from '@/components/annual-report/annual-report-page'
 import { ProjectsPage } from '@/components/projects/projects-page';
 import { HermesOversightPage } from '@/components/hermes/hermes-oversight-page';
 import { AuthMarketingNav } from '@/components/marketing/auth-marketing-nav';
+import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
+import { PageHeader } from '@/components/shared/page-header';
 
-type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight';
+type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight' | 'einvoice-inbox';
 
-const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report', 'hermes-oversight'];
+const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report', 'hermes-oversight', 'einvoice-inbox'];
 
 // ─── SEO: Dynamic document.title per view ─────────────────────────
 const VIEW_TITLES_DA: Record<View, string> = {
@@ -76,6 +78,7 @@ const VIEW_TITLES_DA: Record<View, string> = {
   'settings-edelivery': 'E-faktura Indstillinger — Peppol & Nemhandel',
   'annual-report': 'Årsafslutning — Resultatopgørelse & Balance',
   'hermes-oversight': 'Hermes AI — Oversigt & Konfiguration',
+  'einvoice-inbox': 'E-faktura Indbakke — NemHandel & Peppol',
 };
 
 const VIEW_TITLES_EN: Record<View, string> = {
@@ -102,6 +105,7 @@ const VIEW_TITLES_EN: Record<View, string> = {
   'settings-edelivery': 'E-invoicing Settings — Peppol & Nemhandel',
   'annual-report': 'Annual Report — Income Statement & Balance Sheet',
   'hermes-oversight': 'Hermes AI — Oversight & Configuration',
+  'einvoice-inbox': 'E-Invoice Inbox — NemHandel & Peppol',
 };
 
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
@@ -944,6 +948,18 @@ function Home() {
         return <AnnualReportPage user={user} />;
       case 'hermes-oversight':
         return <HermesOversightPage user={user} />;
+      case 'einvoice-inbox':
+        return (
+          <div className="p-3 lg:p-6">
+            <PageHeader
+              title={language === 'da' ? 'E-faktura Indbakke' : 'E-Invoice Inbox'}
+              description={language === 'da'
+                ? 'Modtag og håndter indkommende e-fakturaer og e-kreditnotaer'
+                : 'Receive and manage incoming e-invoices and e-credit notes'}
+            />
+            <EInvoiceInbox user={user} />
+          </div>
+        );
       default:
         return <Dashboard user={user} onNavigate={(navView) => navigateToView(navView as View)} onboardingStepJustDone={onboardingStepJustDone} onOnboardingStepDoneConsumed={() => setOnboardingStepJustDone(0)} />;
     }

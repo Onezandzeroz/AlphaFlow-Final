@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { useSidebarStore, type SidebarSectionId } from '@/lib/sidebar-store';
 import { useLanguageStore } from '@/lib/language-store';
 import { useAuthStore } from '@/lib/auth-store';
@@ -11,6 +11,7 @@ import {
   AccordionContent,
 } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
+import { useDataVersion } from '@/hooks/use-data-version';
 import {
   PROJECT_MODE_HIDDEN_VIEWS,
   PROJECT_MODE_GRAYED_VIEWS,
@@ -40,6 +41,7 @@ import {
   FileBarChart,
   ShieldCheck,
   Settings,
+  Inbox,
   Bot,
   type LucideIcon,
 } from 'lucide-react';
@@ -69,7 +71,8 @@ type View =
   | 'settings-company'
   | 'settings-edelivery'
   | 'annual-report'
-  | 'hermes-oversight';
+  | 'hermes-oversight'
+  | 'einvoice-inbox';
 
 interface NavItemDef {
   id: View;
@@ -105,6 +108,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
       { id: 'dashboard', nameDa: 'Kontrolpanel', nameEn: 'Dashboard', icon: LayoutDashboard },
       { id: 'invoices', nameDa: 'Salg & Faktura', nameEn: 'Sales & Invoice', icon: FileText },
       { id: 'transactions', nameDa: 'Køb & Kvittering', nameEn: 'Purchases & Receipts', icon: Receipt },
+      { id: 'einvoice-inbox', nameDa: 'E-faktura Indbakke', nameEn: 'E-Invoice Inbox', icon: Inbox },
       { id: 'contacts', nameDa: 'Kontakter', nameEn: 'Contacts', icon: Users },
       { id: 'projects', nameDa: 'Projekter', nameEn: 'Projects', icon: Briefcase },
     ],
@@ -199,6 +203,25 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
     useSidebarStore();
   const { user } = useAuthStore();
   const mounted = useRef(false);
+
+  // ── Unread e-invoice count for the inbox notification badge ──
+  const [unreadEInvoiceCount, setUnreadEInvoiceCount] = useState(0);
+  const receivedInvoicesVersion = useDataVersion('received-invoices');
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/invoices/received/unread-count');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setUnreadEInvoiceCount(data.count || 0);
+        }
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [user, receivedInvoicesVersion]);
 
   // Sync from server on mount (once)
   useEffect(() => {
@@ -391,6 +414,16 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
                               )}
                             />
                             <span className="truncate sidebar-label">{itemName}</span>
+                            {item.id === 'einvoice-inbox' && unreadEInvoiceCount > 0 && (
+                              <span className={cn(
+                                'ml-auto text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1.5',
+                                isItemActive
+                                  ? 'bg-white text-[#0d9488]'
+                                  : 'bg-red-500 text-white'
+                              )}>
+                                {unreadEInvoiceCount > 99 ? '99+' : unreadEInvoiceCount}
+                              </span>
+                            )}
                             {isItemActive && (
                               <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-full bg-white/80 shadow-sm" />
                             )}
