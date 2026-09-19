@@ -73,7 +73,8 @@ type View =
   | 'projects'
   | 'settings'
   | 'settings-edelivery'
-  | 'annual-report';
+  | 'annual-report'
+  | 'einvoice-inbox';
 
 export interface CommandPaletteProps {
   open: boolean;
