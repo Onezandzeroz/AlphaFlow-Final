@@ -138,6 +138,7 @@ enum ReceivedInvoiceStatus {
   APPROVED // User approved for booking
   REJECTED // User rejected
   POSTED // Journal entry created from e-invoice
+  SETTLED // Bank reconciliation matched the payment → supplier paid (afregnet)
 }
 
 enum EInvoiceFormat {
@@ -1416,6 +1417,13 @@ model ReceivedInvoice {
   postedBy        String? // userId who posted to journal
   postedAt        DateTime?
   journalEntryId  String? // JournalEntry created from this e-invoice
+
+  // Settlement tracking — when a bank reconciliation match links a bank
+  // payment to this e-invoice's PAYABLES journal line, the status flips
+  // POSTED → SETTLED (afregnet). Reversed on unmatch.
+  settledAt                  DateTime? // when the bank recon match settled this invoice
+  settledBy                  String?  // userId who triggered the settlement (often the import/match user)
+  settledByBankStatementLineId String? // FK to BankStatementLine (bare string, no @relation)
 
   // Response XML — generated after receiving
   responseXml  String? // Application Response / Message Level Response XML
