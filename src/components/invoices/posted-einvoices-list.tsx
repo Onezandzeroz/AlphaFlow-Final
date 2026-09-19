@@ -137,17 +137,21 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {ri.status === 'SETTLED' ? (
-                          <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] text-[10px] gap-1" title={ri.settledAt ? new Date(ri.settledAt).toLocaleDateString() : undefined}>
-                            <CheckCircle className="h-3 w-3" />
-                            {isDa ? 'Afregnet' : 'Settled'}
-                          </Badge>
-                        ) : (
+                        <div className="flex items-center gap-1 flex-wrap">
                           <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[10px] gap-1">
                             <CheckCircle className="h-3 w-3" />
                             {isDa ? 'Bogført' : 'Posted'}
                           </Badge>
-                        )}
+                          {ri.status === 'SETTLED' ? (
+                            <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] text-[10px] gap-1" title={ri.settledAt ? new Date(ri.settledAt).toLocaleDateString() : undefined}>
+                              {isDa ? 'Afstemt' : 'Matched'}
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] gap-1">
+                              {isDa ? 'Uafstemt' : 'Unmatched'}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -190,6 +194,15 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                         <Badge variant="outline" className="text-[10px]">
                           {ri.format === 'PEPPOL_BIS' ? 'Peppol' : 'OIOUBL'}
                         </Badge>
+                        {ri.status === 'SETTLED' ? (
+                          <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] text-[10px] gap-1">
+                            {isDa ? 'Afstemt' : 'Matched'}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] gap-1">
+                            {isDa ? 'Uafstemt' : 'Unmatched'}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">

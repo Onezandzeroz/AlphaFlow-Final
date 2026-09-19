@@ -67,6 +67,7 @@ export const GET = withGuard({
         id: true, invoiceNumber: true, supplierName: true, issueDate: true,
         payableAmount: true, taxAmount: true, taxExclusiveAmount: true,
         documentType: true, currencyCode: true, journalEntryId: true,
+        status: true, settledAt: true,
         createdAt: true,
       },
     });
@@ -133,6 +134,9 @@ export const GET = withGuard({
         supplierName: ri.supplierName,
         invoiceNumber: ri.invoiceNumber,
         journalEntryId: ri.journalEntryId,
+        // Bank reconciliation status: SETTLED = afstemt (matched), POSTED = uafstemt
+        bankReconciled: ri.status === 'SETTLED',
+        settledAt: ri.settledAt,
         // Authoritative VAT from the linked JournalEntry (single source of truth)
         journalVAT: jeVAT
           ? { amount: jeVAT.vatAmount, code: jeVAT.vatCode, rate: jeVAT.vatRate }
@@ -157,8 +161,8 @@ export const GET = withGuard({
           vatPercent: Number(t.vatPercent),
         })), companyId);
         const enriched = allTransactions.map(t => {
-          // Preserve the e-invoice's authoritative journalVAT; only fill in
-          // VAT for entries that don't already have it (manual transactions).
+          // Preserve the e-invoice's authoritative journalVAT + bankReconciled;
+          // only fill in for entries that don't already have it (manual transactions).
           if (t.journalVAT) return t;
           const jeVAT = vatMap.get(t.id);
           return {
@@ -166,6 +170,8 @@ export const GET = withGuard({
             journalVAT: jeVAT
               ? { amount: jeVAT.vatAmount, code: jeVAT.vatCode, rate: jeVAT.vatRate }
               : null,
+            // Bank reconciliation status from the enrichment map
+            bankReconciled: jeVAT?.bankReconciled ?? false,
           };
         });
         return NextResponse.json({ transactions: enriched });

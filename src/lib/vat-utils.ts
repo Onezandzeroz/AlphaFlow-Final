@@ -270,7 +270,7 @@ export async function enrichTransactionsWithVAT(
     date: string | Date;
   }>,
   companyId: string,
-): Promise<Map<string, { vatAmount: number; vatCode: string | null; vatRate: number }>> {
+): Promise<Map<string, { vatAmount: number; vatCode: string | null; vatRate: number; bankReconciled: boolean }>> {
   const txIds = transactions.filter(t => !t.id.startsWith('inv-')).map(t => t.id);
 
   if (txIds.length === 0) return new Map();
@@ -291,12 +291,15 @@ export async function enrichTransactionsWithVAT(
       lines: {
         include: {
           account: { select: { id: true, number: true, group: true } },
+          // Include bank-recon matches so we can flag the transaction as
+          // "Afstemt" (matched) vs "Uafstemt" (unmatched).
+          bankMatches: { select: { id: true } },
         },
       },
     },
   });
 
-  const result = new Map<string, { vatAmount: number; vatCode: string | null; vatRate: number }>();
+  const result = new Map<string, { vatAmount: number; vatCode: string | null; vatRate: number; bankReconciled: boolean }>();
 
   for (const je of journalEntries) {
     if (!je.reference?.startsWith('TX-')) continue;
@@ -304,6 +307,7 @@ export async function enrichTransactionsWithVAT(
     let vatAmount = 0;
     let vatCode: string | null = null;
     let vatRate = 0;
+    let bankReconciled = false;
 
     for (const line of je.lines) {
       const group = line.account?.group as AccountGroup | undefined;
@@ -320,18 +324,22 @@ export async function enrichTransactionsWithVAT(
           vatRate = VAT_RATE_MAP[code] ?? 0;
         }
       }
+
+      // Check if this JE line has been matched to a bank statement line
+      if (line.bankMatches && line.bankMatches.length > 0) {
+        bankReconciled = true;
+      }
     }
 
-    if (vatAmount > 0) {
-      const shortRef = je.reference;
-      const matchingTx = transactions.find(
-        t => t.id.startsWith('inv-') ? false :
-          `TX-${t.id.slice(0, 8)}` === shortRef ||
-          `TX-${t.id}` === shortRef
-      );
-      if (matchingTx) {
-        result.set(matchingTx.id, { vatAmount, vatCode, vatRate });
-      }
+    // Always add an entry (even if vatAmount is 0) so the caller can read
+    // the bankReconciled flag for transactions without VAT.
+    const matchingTx = transactions.find(
+      t => t.id.startsWith('inv-') ? false :
+        `TX-${t.id.slice(0, 8)}` === je.reference ||
+        `TX-${t.id}` === je.reference
+    );
+    if (matchingTx) {
+      result.set(matchingTx.id, { vatAmount, vatCode, vatRate, bankReconciled });
     }
   }
 

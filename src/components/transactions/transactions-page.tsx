@@ -108,6 +108,9 @@ interface Transaction {
   // Journal-entry-derived VAT (authoritative) — from double-entry journal.
   // null when no journal entry exists.
   journalVAT?: { amount: number; code: string | null; rate: number } | null;
+  // Bank reconciliation status: true = afstemt (matched), false/undefined = uafstemt.
+  bankReconciled?: boolean;
+  settledAt?: string | null; // when the bank recon match settled this invoice
   currency?: string | null;
   exchangeRate?: number | string | null;
   amountDKK?: number | string | null;
@@ -893,6 +896,16 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                               <TypeIcon className="h-2.5 w-2.5" />
                               {typeInfo.label}
                             </Badge>
+                            {transaction.bankReconciled === true && (
+                              <Badge className="text-[10px] px-1.5 py-0 border-0 gap-1 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]" title={transaction.settledAt ? new Date(transaction.settledAt).toLocaleDateString() : undefined}>
+                                {language === 'da' ? 'Afstemt' : 'Matched'}
+                              </Badge>
+                            )}
+                            {transaction.bankReconciled === false && !transaction.id.startsWith('inv-') && (
+                              <Badge className="text-[10px] px-1.5 py-0 border-0 gap-1 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                {language === 'da' ? 'Uafstemt' : 'Unmatched'}
+                              </Badge>
+                            )}
                             {transaction.project && (
                               <Badge
                                 className="text-[10px] px-1.5 py-0 border-0 gap-1"
@@ -1177,6 +1190,16 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                       <TableCell className="max-w-[150px] lg:max-w-[250px] truncate">
                         <div className="flex items-center gap-1.5">
                           <span className={cn("truncate", isCancelled ? "text-gray-400 dark:text-gray-500" : "")}>{transaction.description}</span>
+                          {transaction.bankReconciled === true && (
+                            <Badge className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]" title={transaction.settledAt ? new Date(transaction.settledAt).toLocaleDateString() : undefined}>
+                              {language === 'da' ? 'Afstemt' : 'Matched'}
+                            </Badge>
+                          )}
+                          {transaction.bankReconciled === false && !transaction.id.startsWith('inv-') && (
+                            <Badge className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1 bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                              {language === 'da' ? 'Uafstemt' : 'Unmatched'}
+                            </Badge>
+                          )}
                           {transaction.project && (
                             <Badge
                               className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1"
