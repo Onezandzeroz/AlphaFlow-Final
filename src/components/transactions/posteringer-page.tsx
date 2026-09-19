@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, useSyncExternalStore } from 'react';
 import { useLanguageStore } from '@/lib/language-store';
 import { useTranslation } from '@/lib/use-translation';
 import { useScannerStore } from '@/lib/scanner-store';
+import { useDataVersion } from '@/hooks/use-data-version';
 import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
-import { PostedEInvoicesList } from '@/components/invoices/posted-einvoices-list';
+import { PostedEInvoicesList, type ReceivedInvoice } from '@/components/invoices/posted-einvoices-list';
 import { PageHeader } from '@/components/shared/page-header';
+import { StatsCard } from '@/components/shared/stats-card';
 import { AddTransactionForm } from '@/components/transaction/add-transaction-form';
 import { clearDraftBeforeUnmount } from '@/lib/draft-store';
 import { Button } from '@/components/ui/button';
@@ -17,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Plus, Inbox, FileMinus, FileText } from 'lucide-react';
+import { Plus, Inbox, FileMinus, FileText, Wallet, AlertTriangle, CheckCircle2, FileSpreadsheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 
@@ -36,6 +38,28 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
   const [activeTab, setActiveTab] = useState<'kobs-fakturaer' | 'kobs-kreditnota' | 'einvoice'>(defaultTab);
   const [currentView, setCurrentView] = useState<PageView>('list');
   const [isMobileDialogOpen, setIsMobileDialogOpen] = useState(false);
+  // ── Received e-invoices (ALL statuses) for stats + tab counts ──
+  // Fetched here so PosteringerPage owns the data: stats cards (4 cards
+  // matching Salg & Faktura) + tab count badges + the PostedEInvoicesList
+  // table (which receives pre-filtered POSTED data as a prop).
+  const [receivedInvoices, setReceivedInvoices] = useState<ReceivedInvoice[]>([]);
+  const receivedInvoicesVersion = useDataVersion('received-invoices');
+
+  const fetchReceivedInvoices = useCallback(async () => {
+    try {
+      const res = await fetch('/api/invoices/received?limit=100');
+      if (res.ok) {
+        const data = await res.json();
+        setReceivedInvoices(data.receivedInvoices || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch received invoices:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchReceivedInvoices();
+  }, [fetchReceivedInvoices, receivedInvoicesVersion]);
   // Create mode: 'purchase' (default) or 'credit-note' (supplier credit note).
   // Mirrors the Salg & Faktura createMode — both flows reuse the same form.
   const [createMode, setCreateMode] = useState<'purchase' | 'credit-note'>('purchase');
@@ -48,6 +72,74 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
   const getIsDesktopSnapshot = useCallback(() => window.matchMedia('(min-width: 1024px)').matches, []);
   const getServerSnapshot = useCallback(() => false, []);
   const isDesktop = useSyncExternalStore(subscribeToMedia, getIsDesktopSnapshot, getServerSnapshot);
+
+  // ── Derived data: posted invoices, stats, tab counts ──────────────
+  // Mirrors the Salg & Faktura page's invoiceStats + tabInvoices pattern.
+  // The stats cards (Uafregnet / Forfaldent beløb / Afregnet denne måned /
+  // Kladder) match Salg & Faktura's layout, adapted for the purchase
+  // workflow (posted e-invoices = outstanding payables; pending = drafts).
+  const isCreditNoteType = (ri: ReceivedInvoice) =>
+    ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED';
+
+  const signedAmount = (ri: ReceivedInvoice) => {
+    const amt = Number(ri.payableAmount) || 0;
+    return isCreditNoteType(ri) ? -amt : amt;
+  };
+
+  // POSTED e-invoices (the ones that "left" the inbox and appear here)
+  const postedInvoices = useMemo(
+    () => receivedInvoices.filter((ri) => ri.status === 'POSTED'),
+    [receivedInvoices]
+  );
+  // Posted regular purchase invoices (Købsfakturaer tab)
+  const postedRegularInvoices = useMemo(
+    () => postedInvoices.filter((ri) => !isCreditNoteType(ri)),
+    [postedInvoices]
+  );
+  // Posted purchase credit notes (Købs-kreditnota tab)
+  const postedCreditNotes = useMemo(
+    () => postedInvoices.filter((ri) => isCreditNoteType(ri)),
+    [postedInvoices]
+  );
+
+  // Stats — 4 cards matching Salg & Faktura (Uafregnet / Forfaldent / Afregnet / Kladder)
+  const purchaseStats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Uafregnet (Outstanding) — sum of signed payableAmount for POSTED
+    const outstanding = postedInvoices.reduce((sum, ri) => sum + signedAmount(ri), 0);
+
+    // Forfaldent beløb (Overdue) — POSTED invoices past dueDate
+    const overdue = postedInvoices
+      .filter((ri) => ri.dueDate && new Date(ri.dueDate) < now)
+      .reduce((sum, ri) => sum + signedAmount(ri), 0);
+    const overdueCount = postedInvoices.filter(
+      (ri) => ri.dueDate && new Date(ri.dueDate) < now
+    ).length;
+
+    // Afregnet denne måned (Settled this month) — POSTED this month (proxy)
+    const settledThisMonth = postedInvoices.filter((ri) => {
+      if (!ri.postedAt) return false;
+      const d = new Date(ri.postedAt);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    // Kladder (Pending/Drafts) — RECEIVED + APPROVED (awaiting posting)
+    const pendingCount = receivedInvoices.filter(
+      (ri) => ri.status === 'RECEIVED' || ri.status === 'APPROVED'
+    ).length;
+
+    return {
+      outstanding,
+      overdue,
+      overdueCount,
+      settledThisMonthCount: settledThisMonth.length,
+      settledThisMonthAmount: settledThisMonth.reduce((sum, ri) => sum + signedAmount(ri), 0),
+      pendingCount,
+    };
+  }, [postedInvoices, receivedInvoices]);
 
   // ── Standalone scanner flow (FAB → scan → form) ──
   // PosteringerPage is the FALLBACK consumer: it only opens a new AddTransactionForm
@@ -173,9 +265,10 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
     // Posted e-invoices leave the e-inbox (staging area) and appear here,
     // split into regular purchase invoices + purchase credit notes —
     // mirroring the Salg & Faktura page's Salgsfakturaer / Salgs-kreditnota.
-    { id: 'kobs-fakturaer' as const, labelDa: 'Købsfakturaer', labelEn: 'Purchase invoices', icon: FileText },
-    { id: 'kobs-kreditnota' as const, labelDa: 'Købs-kreditnota', labelEn: 'Purchase credit notes', icon: FileMinus },
-    { id: 'einvoice' as const, labelDa: 'E-faktura Indbakke', labelEn: 'E-Invoice Inbox', icon: Inbox },
+    // Count badges match the Salg & Faktura tab display.
+    { id: 'kobs-fakturaer' as const, labelDa: 'Købsfakturaer', labelEn: 'Purchase invoices', icon: FileText, count: postedRegularInvoices.length },
+    { id: 'kobs-kreditnota' as const, labelDa: 'Købs-kreditnota', labelEn: 'Purchase credit notes', icon: FileMinus, count: postedCreditNotes.length },
+    { id: 'einvoice' as const, labelDa: 'E-faktura Indbakke', labelEn: 'E-Invoice Inbox', icon: Inbox, count: receivedInvoices.filter((ri) => ri.status !== 'POSTED').length },
   ];
 
   // ── Full-page create form (desktop) ──
@@ -295,7 +388,47 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
           />
         </div>
 
-        {/* Tab bar */}
+        {/* ── Stats cards (matching Salg & Faktura layout) ── */}
+        {receivedInvoices.length > 0 && (
+          <div className="p-3 lg:p-6 pt-0">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <StatsCard
+                icon={Wallet}
+                label={isDa ? 'Uafregnet' : 'Outstanding'}
+                value={purchaseStats.outstanding}
+                variant="primary"
+                badge={isDa ? 'inkl. moms' : 'incl. VAT'}
+                formatAsCurrency
+              />
+              <StatsCard
+                icon={AlertTriangle}
+                label={isDa ? 'Forfaldent beløb' : 'Overdue amount'}
+                value={purchaseStats.overdue}
+                variant="red"
+                badge={purchaseStats.overdueCount > 0 ? `${purchaseStats.overdueCount} ${isDa ? 'faktura(er)' : 'invoice(s)'}` : undefined}
+                formatAsCurrency
+              />
+              <StatsCard
+                icon={CheckCircle2}
+                label={isDa ? 'Afregnet denne måned' : 'Settled this month'}
+                value={purchaseStats.settledThisMonthCount}
+                variant="green"
+                formatAsCurrency={false}
+                badge={isDa ? 'bogført' : 'posted'}
+              />
+              <StatsCard
+                icon={FileSpreadsheet}
+                label={isDa ? 'Kladder' : 'Pending'}
+                value={purchaseStats.pendingCount}
+                variant="blue"
+                formatAsCurrency={false}
+                badge={purchaseStats.pendingCount > 0 ? (isDa ? 'Til godkendelse' : 'Pending review') : undefined}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tab bar — with count badges matching the Salg & Faktura tab display */}
         <div className="px-4 lg:px-8">
           <div className="flex items-center gap-1 border-b border-[#e2e8e6] dark:border-[#2a3330]">
             {tabs.map((tab) => {
@@ -315,6 +448,14 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
                 >
                   <Icon className="h-4 w-4" />
                   {isDa ? tab.labelDa : tab.labelEn}
+                  <span className={cn(
+                    'text-[10px] px-1.5 py-0.5 rounded-full tabular-nums',
+                    isActive
+                      ? 'bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                  )}>
+                    {tab.count}
+                  </span>
                 </button>
               );
             })}
@@ -324,11 +465,11 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
         {/* Tab content */}
         <div className="mt-4">
           {activeTab === 'kobs-kreditnota' ? (
-            <PostedEInvoicesList user={user} filter="credit-note" />
+            <PostedEInvoicesList invoices={postedCreditNotes} />
           ) : activeTab === 'einvoice' ? (
             <EInvoiceInbox user={user} />
           ) : (
-            <PostedEInvoicesList user={user} filter="invoice" />
+            <PostedEInvoicesList invoices={postedRegularInvoices} />
           )}
         </div>
       </div>

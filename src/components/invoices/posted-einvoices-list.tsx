@@ -1,9 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
 import { useLanguageStore } from '@/lib/language-store';
 import { useTranslation } from '@/lib/use-translation';
-import { useDataVersion } from '@/hooks/use-data-version';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -15,14 +13,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Inbox, FileMinus, CheckCircle, Loader2, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Inbox, FileMinus, CheckCircle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 
-interface ReceivedInvoice {
+export interface ReceivedInvoice {
   id: string;
   invoiceNumber: string;
   supplierName: string;
   supplierCvr: string | null;
   issueDate: string;
+  dueDate: string | null;
   payableAmount: number | string;
   taxAmount: number | string;
   taxExclusiveAmount: number | string;
@@ -36,85 +35,30 @@ interface ReceivedInvoice {
 }
 
 interface PostedEInvoicesListProps {
-  user: any;
-  /** Filter the displayed posted e-invoices by document type.
-   *  - 'all' (default): show everything
-   *  - 'invoice': only regular purchase invoices (INVOICE/CORRECTED)
-   *  - 'credit-note': only purchase credit notes (CREDIT_NOTE/SELF_BILLED)
-   *  Used by the Køb & Kvittering page's Købsfakturaer / Købs-kreditnota tabs. */
-  filter?: 'all' | 'invoice' | 'credit-note';
+  /** Pre-fetched + pre-filtered posted e-invoices to display.
+   *  The parent (PosteringerPage) owns the fetch + filtering. */
+  invoices: ReceivedInvoice[];
 }
 
 /**
- * "Bogførte e-fakturaer" — the permanent archive of posted received
- * e-invoices (purchases) on the Køb & Kvittering page. When a received
- * e-invoice is posted in the e-inbox, it leaves the inbox (staging area)
- * and appears here. Includes both regular purchase invoices and purchase
- * credit notes (reversals), distinguished by a badge + the green/red
- * money-flow convention:
+ * Table view for posted received e-invoices (purchases). This is a "dumb"
+ * component — it receives pre-filtered data from the parent and renders the
+ * table + mobile cards. Stats cards + tab counts live in the parent
+ * (PosteringerPage) so they match the Salg & Faktura layout.
+ *
+ * Green/red money-flow convention:
  *   - E-faktura (purchase):     red (money out)
  *   - E-kreditnota (reversal):  green (money back in)
  */
-export function PostedEInvoicesList({ user: _user, filter = 'all' }: PostedEInvoicesListProps) {
+export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
   const { language } = useLanguageStore();
   const { tc, td } = useTranslation();
   const isDa = language === 'da';
-  const [invoices, setInvoices] = useState<ReceivedInvoice[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const receivedInvoicesVersion = useDataVersion('received-invoices');
 
-  const fetchPosted = useCallback(async () => {
-    try {
-      const res = await fetch('/api/invoices/received?status=POSTED&limit=100');
-      if (res.ok) {
-        const data = await res.json();
-        setInvoices(data.receivedInvoices || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch posted received e-invoices:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchPosted();
-  }, [fetchPosted, receivedInvoicesVersion]);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <Loader2 className="h-6 w-6 text-[#0d9488] animate-spin" />
-      </div>
-    );
-  }
-
-  // Apply the document-type filter (invoice / credit-note / all), then sort
-  // by issue date descending.
-  const isCreditNoteType = (ri: ReceivedInvoice) =>
-    ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED';
-
-  const filtered = filter === 'invoice'
-    ? invoices.filter(ri => !isCreditNoteType(ri))
-    : filter === 'credit-note'
-    ? invoices.filter(ri => isCreditNoteType(ri))
-    : invoices;
-
-  const sorted = [...filtered].sort(
+  // Sort by issue date descending
+  const sorted = [...invoices].sort(
     (a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
   );
-
-  // Signed total: invoices add, credit notes subtract (reversal)
-  const totalAmount = sorted.reduce((sum, ri) => {
-    const amt = Number(ri.payableAmount) || 0;
-    const isCreditNote =
-      ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED';
-    return sum + (isCreditNote ? -amt : amt);
-  }, 0);
-  const postedCount = sorted.length;
-  const creditNoteCount = sorted.filter(
-    (ri) => ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED'
-  ).length;
 
   if (sorted.length === 0) {
     return (
@@ -139,63 +83,7 @@ export function PostedEInvoicesList({ user: _user, filter = 'all' }: PostedEInvo
   }
 
   return (
-    <div className="p-3 lg:p-6 space-y-4">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-        <Card className="stat-card">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <CheckCircle className="h-4 w-4 text-[#0d9488] dark:text-[#2dd4bf]" />
-              <span className="text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400">
-                {isDa ? 'Bogførte' : 'Posted'}
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
-              {postedCount}
-            </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">
-              {isDa ? 'e-fakturaer i alt' : 'e-invoices total'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="stat-card">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <FileMinus className="h-4 w-4 text-amber-500" />
-              <span className="text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400">
-                {isDa ? 'Heraf kreditnotaer' : 'Of which credit notes'}
-              </span>
-            </div>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">
-              {creditNoteCount}
-            </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">
-              {isDa ? 'e-kreditnotaer' : 'e-credit notes'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="stat-card">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <ArrowDownCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-              <span className="text-[10px] uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400">
-                {isDa ? 'Samlet beløb' : 'Total amount'}
-              </span>
-            </div>
-            <p className={cn(
-              'text-2xl font-bold tabular-nums',
-              totalAmount >= 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
-            )}>
-              {tc(totalAmount)}
-            </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">
-              {isDa ? 'netto (inkl. kreditnotaer)' : 'net (incl. credit notes)'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Posted e-invoices table */}
+    <div className="p-3 lg:p-6">
       <Card className="stat-card border-0 shadow-lg">
         <CardContent className="p-0">
           {/* Desktop table */}
@@ -220,7 +108,6 @@ export function PostedEInvoicesList({ user: _user, filter = 'all' }: PostedEInvo
                   const signedAmount = isCreditNote ? -amount : amount;
                   return (
                     <TableRow key={ri.id} className="border-b border-gray-50/50 table-row-teal-hover">
-                      {/* Type indicator */}
                       <TableCell>
                         {isCreditNote ? (
                           <div className="h-8 w-8 rounded-lg bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
