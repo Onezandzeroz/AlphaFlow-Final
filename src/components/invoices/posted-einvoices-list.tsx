@@ -138,7 +138,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1 flex-wrap">
-                          <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 text-[10px] gap-1 border-slate-200 dark:border-slate-600/50">
+                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[10px] gap-1 border-green-200 dark:border-green-500/20">
                             <CheckCircle className="h-3 w-3" />
                             {isDa ? 'Bogført' : 'Posted'}
                           </Badge>
@@ -194,7 +194,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                         <Badge variant="outline" className="text-[10px]">
                           {ri.format === 'PEPPOL_BIS' ? 'Peppol' : 'OIOUBL'}
                         </Badge>
-                        <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 text-[10px] gap-1 border-slate-200 dark:border-slate-600/50">
+                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[10px] gap-1 border-green-200 dark:border-green-500/20">
                           {isDa ? 'Bogført' : 'Posted'}
                         </Badge>
                         {ri.status === 'SETTLED' ? (
