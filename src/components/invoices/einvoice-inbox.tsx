@@ -94,7 +94,7 @@ interface ReceivedInvoice {
   payableAmount: number;
   paymentMeansCode?: string | null;
   paymentAccountId?: string | null;
-  status: 'RECEIVED' | 'APPROVED' | 'REJECTED' | 'POSTED';
+  status: 'RECEIVED' | 'APPROVED' | 'REJECTED' | 'POSTED' | 'SETTLED';
   rejectionReason?: string | null;
   rawXml?: string | null;
   responseXml?: string | null;
