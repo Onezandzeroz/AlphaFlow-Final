@@ -902,7 +902,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                               </Badge>
                             )}
                             {transaction.bankReconciled === false && !transaction.id.startsWith('inv-') && (
-                              <Badge className="text-[10px] px-1.5 py-0 border-0 gap-1 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                              <Badge className="text-[10px] px-1.5 py-0 border-0 gap-1 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
                                 {language === 'da' ? 'Uafstemt' : 'Unmatched'}
                               </Badge>
                             )}
@@ -1196,7 +1196,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                             </Badge>
                           )}
                           {transaction.bankReconciled === false && !transaction.id.startsWith('inv-') && (
-                            <Badge className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                            <Badge className="shrink-0 text-[10px] px-1.5 py-0 border-0 gap-1 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400">
                               {language === 'da' ? 'Uafstemt' : 'Unmatched'}
                             </Badge>
                           )}

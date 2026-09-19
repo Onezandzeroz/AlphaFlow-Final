@@ -137,21 +137,16 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[10px] gap-1">
+                        {ri.status === 'SETTLED' ? (
+                          <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] text-[10px] gap-1" title={ri.settledAt ? new Date(ri.settledAt).toLocaleDateString() : undefined}>
                             <CheckCircle className="h-3 w-3" />
-                            {isDa ? 'Bogført' : 'Posted'}
+                            {isDa ? 'Afstemt' : 'Matched'}
                           </Badge>
-                          {ri.status === 'SETTLED' ? (
-                            <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] text-[10px] gap-1" title={ri.settledAt ? new Date(ri.settledAt).toLocaleDateString() : undefined}>
-                              {isDa ? 'Afstemt' : 'Matched'}
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-[10px] gap-1">
-                              {isDa ? 'Uafstemt' : 'Unmatched'}
-                            </Badge>
-                          )}
-                        </div>
+                        ) : (
+                          <Badge className="bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 text-[10px] gap-1 border-orange-500/20">
+                            {isDa ? 'Uafstemt' : 'Unmatched'}
+                          </Badge>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -199,7 +194,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                             {isDa ? 'Afstemt' : 'Matched'}
                           </Badge>
                         ) : (
-                          <Badge className="bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-[10px] gap-1">
+                          <Badge className="bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 text-[10px] gap-1 border-orange-500/20">
                             {isDa ? 'Uafstemt' : 'Unmatched'}
                           </Badge>
                         )}
