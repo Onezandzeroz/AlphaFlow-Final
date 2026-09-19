@@ -675,7 +675,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   // net payables), mirroring how the JournalEntry books them.
   const receivedInvoiceStats = useMemo(() => {
     const pending = receivedInvoices.filter((ri) => ri.status === 'RECEIVED');
-    const posted = receivedInvoices.filter((ri) => ri.status === 'POSTED');
+    const posted = receivedInvoices.filter((ri) => ri.status === 'POSTED' || ri.status === 'SETTLED');
     const postedTotal = posted.reduce((sum, ri) => {
       const amt = Number(ri.payableAmount) || 0;
       const isCreditNote =

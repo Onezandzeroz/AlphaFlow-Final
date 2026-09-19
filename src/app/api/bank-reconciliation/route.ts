@@ -29,6 +29,95 @@ async function checkStatementReconciled(statementId: string): Promise<void> {
   }
 }
 
+// ── Received e-invoice settlement ──────────────────────────────────
+// When a bank-recon match links a bank payment to a PAYABLES-group
+// JournalEntryLine, check if that line belongs to a JournalEntry created
+// from a posted ReceivedInvoice. If so, flip the invoice POSTED → SETTLED
+// (afregnet). Reversed on unmatch.
+//
+// This closes the gap: previously posted e-invoices stayed POSTED forever
+// with no payment tracking. Now a verified bank match marks them as
+// "afregnet", and the Køb & Kvittering stats + badges reflect the real
+// outstanding/settled picture.
+async function maybeSettleReceivedInvoice(
+  journalLineId: string,
+  bankLineId: string,
+  ctx: AuthContext
+): Promise<{ invoiceId: string | null; settled: boolean }> {
+  try {
+    const jl = await db.journalEntryLine.findUnique({
+      where: { id: journalLineId },
+      include: { journalEntry: true, account: true },
+    });
+    if (!jl) return { invoiceId: null, settled: false };
+
+    // Only PAYABLES-group lines can settle a received invoice — that's the
+    // supplier-liability side of the posted e-invoice's accrual JE.
+    if (jl.account?.group !== 'PAYABLES') return { invoiceId: null, settled: false };
+
+    // Find the ReceivedInvoice that owns this JournalEntry (via the bare
+    // journalEntryId FK string — no Prisma @relation on this field).
+    const ri = await db.receivedInvoice.findFirst({
+      where: {
+        journalEntryId: jl.journalEntryId,
+        companyId: ctx.activeCompanyId!,
+      },
+    });
+    if (!ri || ri.status !== 'POSTED') return { invoiceId: ri?.id ?? null, settled: false };
+
+    await db.receivedInvoice.update({
+      where: { id: ri.id },
+      data: {
+        status: 'SETTLED',
+        settledAt: new Date(),
+        settledBy: ctx.id,
+        settledByBankStatementLineId: bankLineId,
+      },
+    });
+
+    logger.info(
+      `Received invoice ${ri.invoiceNumber} settled by bank line ${bankLineId}`
+    );
+    return { invoiceId: ri.id, settled: true };
+  } catch (err) {
+    logger.warn('maybeSettleReceivedInvoice failed (non-fatal):', err);
+    return { invoiceId: null, settled: false };
+  }
+}
+
+// Reverse the settlement when a bank line is unmatched. Finds any
+// ReceivedInvoice settled by this bank line and flips it SETTLED → POSTED.
+async function maybeUnsettleReceivedInvoice(
+  bankLineId: string,
+  ctx: AuthContext
+): Promise<void> {
+  try {
+    const ri = await db.receivedInvoice.findFirst({
+      where: {
+        settledByBankStatementLineId: bankLineId,
+        companyId: ctx.activeCompanyId!,
+      },
+    });
+    if (!ri || ri.status !== 'SETTLED') return;
+
+    await db.receivedInvoice.update({
+      where: { id: ri.id },
+      data: {
+        status: 'POSTED',
+        settledAt: null,
+        settledBy: null,
+        settledByBankStatementLineId: null,
+      },
+    });
+
+    logger.info(
+      `Received invoice ${ri.invoiceNumber} unsettled (bank line ${bankLineId} unmatched)`
+    );
+  } catch (err) {
+    logger.warn('maybeUnsettleReceivedInvoice failed (non-fatal):', err);
+  }
+}
+
 // GET candidates for manual matching
 async function getCandidates(request: Request, ctx: AuthContext) {
   const { searchParams } = new URL(request.url);
@@ -49,11 +138,14 @@ async function getCandidates(request: Request, ctx: AuthContext) {
     return NextResponse.json({ error: 'Bank statement line not found' }, { status: 404 });
   }
 
-  // Find bank accounts (filtered by tenant)
+  // Find bank + payables accounts (filtered by tenant).
+  // PAYABLES accounts are included so the user can match a bank payment
+  // directly to the supplier-liability line of a posted received e-invoice's
+  // accrual JournalEntry — which triggers settlement (POSTED → SETTLED).
   const bankAccounts = await db.account.findMany({
     where: {
       ...tenantFilter(ctx),
-      group: 'BANK',
+      group: { in: ['BANK', 'PAYABLES'] },
       isActive: true,
     },
   });
@@ -713,8 +805,12 @@ export const PUT = withGuard(
         );
 
         await checkStatementReconciled(bankLine.bankStatementId);
+        // If the matched JE line is the PAYABLES line of a posted received
+        // e-invoice, settle it (POSTED → SETTLED / afregnet).
+        await maybeSettleReceivedInvoice(journalLineId, bankLineId, ctx);
         notifyDataChanges([
           { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'received-invoices', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
@@ -791,8 +887,12 @@ export const PUT = withGuard(
           });
         }
 
+        // If the matched JE line is the PAYABLES line of a posted received
+        // e-invoice, settle it (POSTED → SETTLED / afregnet).
+        await maybeSettleReceivedInvoice(journalLineId, bankLineId, ctx);
         notifyDataChanges([
           { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'received-invoices', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },
@@ -851,8 +951,11 @@ export const PUT = withGuard(
           ctx.activeCompanyId
         );
 
+        // Reverse any settlement this bank line had triggered (SETTLED → POSTED).
+        await maybeUnsettleReceivedInvoice(bankLineId, ctx);
         notifyDataChanges([
           { scope: 'bank-reconciliation', companyId: ctx.activeCompanyId!, action: 'update' },
+          { scope: 'received-invoices', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'ledger', companyId: ctx.activeCompanyId!, action: 'update' },
           { scope: 'cash-flow', companyId: ctx.activeCompanyId!, action: 'update' },

@@ -61,7 +61,7 @@ export const GET = withGuard({
     // journalVAT is somehow unavailable. Credit notes are negated so
     // they reduce the purchases total (reversal).
     const postedReceivedInvoices = await db.receivedInvoice.findMany({
-      where: { ...tenantFilter(ctx), status: 'POSTED' },
+      where: { ...tenantFilter(ctx), status: { in: ['POSTED', 'SETTLED'] } },
       orderBy: { issueDate: 'desc' },
       select: {
         id: true, invoiceNumber: true, supplierName: true, issueDate: true,

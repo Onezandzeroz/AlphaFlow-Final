@@ -28,9 +28,10 @@ export interface ReceivedInvoice {
   currencyCode: string;
   format: string; // OIOUBL | PEPPOL_BIS
   documentType: string; // INVOICE | CREDIT_NOTE | CORRECTED | SELF_BILLED
-  status: string;
+  status: string; // POSTED | SETTLED (afregnet)
   journalEntryId: string | null;
   postedAt: string | null;
+  settledAt: string | null; // when bank recon matched the payment
   createdAt: string;
 }
 
@@ -136,10 +137,17 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[10px] gap-1">
-                          <CheckCircle className="h-3 w-3" />
-                          {isDa ? 'Bogført' : 'Posted'}
-                        </Badge>
+                        {ri.status === 'SETTLED' ? (
+                          <Badge className="bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] text-[10px] gap-1" title={ri.settledAt ? new Date(ri.settledAt).toLocaleDateString() : undefined}>
+                            <CheckCircle className="h-3 w-3" />
+                            {isDa ? 'Afregnet' : 'Settled'}
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 text-[10px] gap-1">
+                            <CheckCircle className="h-3 w-3" />
+                            {isDa ? 'Bogført' : 'Posted'}
+                          </Badge>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

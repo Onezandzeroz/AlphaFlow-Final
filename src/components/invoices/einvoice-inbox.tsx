@@ -188,7 +188,7 @@ export function EInvoiceInbox({ user }: EInvoiceInboxProps) {
         // inbox only shows actionable items (RECEIVED/APPROVED/REJECTED).
         // The underlying record is preserved (not deleted) — just hidden.
         const all = data.receivedInvoices || [];
-        setInvoices(all.filter((ri: ReceivedInvoice) => ri.status !== 'POSTED'));
+        setInvoices(all.filter((ri: ReceivedInvoice) => ri.status !== 'POSTED' && ri.status !== 'SETTLED'));
       }
     } catch (err) {
       console.error('Failed to fetch received invoices:', err);

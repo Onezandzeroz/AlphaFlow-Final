@@ -86,9 +86,11 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
     return isCreditNoteType(ri) ? -amt : amt;
   };
 
-  // POSTED e-invoices (the ones that "left" the inbox and appear here)
+  // POSTED + SETTLED e-invoices (the ones that "left" the inbox and appear
+  // here). SETTLED = bank recon matched the payment (afregnet). Both
+  // statuses appear in the Købsfakturaer / Købs-kreditnota tabs.
   const postedInvoices = useMemo(
-    () => receivedInvoices.filter((ri) => ri.status === 'POSTED'),
+    () => receivedInvoices.filter((ri) => ri.status === 'POSTED' || ri.status === 'SETTLED'),
     [receivedInvoices]
   );
   // Posted regular purchase invoices (Købsfakturaer tab)
@@ -108,21 +110,26 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
 
-    // Uafregnet (Outstanding) — sum of signed payableAmount for POSTED
-    const outstanding = postedInvoices.reduce((sum, ri) => sum + signedAmount(ri), 0);
+    // Only POSTED (not SETTLED) are "uafregnet" — SETTLED invoices have been
+    // paid (bank recon matched) and are no longer outstanding.
+    const unsettled = postedInvoices.filter((ri) => ri.status === 'POSTED');
 
-    // Forfaldent beløb (Overdue) — POSTED invoices past dueDate
-    const overdue = postedInvoices
-      .filter((ri) => ri.dueDate && new Date(ri.dueDate) < now)
-      .reduce((sum, ri) => sum + signedAmount(ri), 0);
-    const overdueCount = postedInvoices.filter(
+    // Uafregnet (Outstanding) — sum of signed payableAmount for POSTED only
+    const outstanding = unsettled.reduce((sum, ri) => sum + signedAmount(ri), 0);
+
+    // Forfaldent beløb (Overdue) — POSTED (not SETTLED) past dueDate
+    const overdueInvoices = unsettled.filter(
       (ri) => ri.dueDate && new Date(ri.dueDate) < now
-    ).length;
+    );
+    const overdue = overdueInvoices.reduce((sum, ri) => sum + signedAmount(ri), 0);
+    const overdueCount = overdueInvoices.length;
 
-    // Afregnet denne måned (Settled this month) — POSTED this month (proxy)
+    // Afregnet denne måned (Settled this month) — SETTLED this month
+    // (using settledAt, not postedAt — settledAt is set when the bank recon
+    // match occurs, which is the real "afregnet" moment).
     const settledThisMonth = postedInvoices.filter((ri) => {
-      if (!ri.postedAt) return false;
-      const d = new Date(ri.postedAt);
+      if (ri.status !== 'SETTLED' || !ri.settledAt) return false;
+      const d = new Date(ri.settledAt);
       return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
 
@@ -388,9 +395,44 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
           />
         </div>
 
+        {/* Tab bar — with count badges matching the Salg & Faktura tab display.
+            Placed ABOVE the stats cards (same order as Salg & Faktura). */}
+        <div className="px-4 lg:px-8">
+          <div className="flex items-center gap-1 border-b border-[#e2e8e6] dark:border-[#2a3330]">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors duration-150 -mb-px',
+                    isActive
+                      ? 'border-[#0d9488] text-[#0d9488] dark:border-[#2dd4bf] dark:text-[#2dd4bf]'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {isDa ? tab.labelDa : tab.labelEn}
+                  <span className={cn(
+                    'text-[10px] px-1.5 py-0.5 rounded-full tabular-nums',
+                    isActive
+                      ? 'bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                  )}>
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* ── Stats cards (matching Salg & Faktura layout) ── */}
         {receivedInvoices.length > 0 && (
-          <div className="p-3 lg:p-6 pt-0">
+          <div className="p-3 lg:p-6 pt-3">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <StatsCard
                 icon={Wallet}
@@ -427,40 +469,6 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
             </div>
           </div>
         )}
-
-        {/* Tab bar — with count badges matching the Salg & Faktura tab display */}
-        <div className="px-4 lg:px-8">
-          <div className="flex items-center gap-1 border-b border-[#e2e8e6] dark:border-[#2a3330]">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors duration-150 -mb-px',
-                    isActive
-                      ? 'border-[#0d9488] text-[#0d9488] dark:border-[#2dd4bf] dark:text-[#2dd4bf]'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {isDa ? tab.labelDa : tab.labelEn}
-                  <span className={cn(
-                    'text-[10px] px-1.5 py-0.5 rounded-full tabular-nums',
-                    isActive
-                      ? 'bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf]'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                  )}>
-                    {tab.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
         {/* Tab content */}
         <div className="mt-4">
