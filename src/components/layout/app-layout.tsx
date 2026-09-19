@@ -15,6 +15,7 @@ import { MobileBottomNav } from '@/components/mobile-bottom-nav';
 import { KeyboardShortcutsModal } from '@/components/keyboard-shortcuts-modal';
 import { UpgradeAccessModal } from '@/components/upgrade-access-modal';
 import { useHermesEnabled } from '@/components/hermes/hermes-context';
+import { useHermesOwlStore } from '@/lib/hermes-owl-store';
 import { SubscriptionPlansPrompt } from '@/components/dashboard/subscription-plans-prompt';
 import { NotificationCenter } from '@/components/notification-center';
 import { EInvoiceEventNotifier } from '@/components/layout/einvoice-event-notifier';
@@ -138,6 +139,11 @@ export function AppLayout({
 }: AppLayoutProps) {
   const { darkMode, toggleDarkMode } = useDarkMode();
   const hermesEnabled = useHermesEnabled();
+  // Runtime owl visibility — when the mobile owl slides off-screen, collapse
+  // the reserved right padding so the hamburger menu moves to the natural
+  // edge. Re-expands when the owl is summoned back.
+  const fabHidden = useHermesOwlStore((s) => s.fabHidden);
+  const owlVisible = hermesEnabled && !fabHidden;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -627,8 +633,11 @@ export function AppLayout({
             )}
           </div>
 
-          {/* Right: Menu button (left of owl when Hermes enabled) */}
-          <div className={cn("flex items-center justify-end w-1/3", hermesEnabled ? "pr-14" : "pr-2")}>
+          {/* Right: Menu button (left of owl when Hermes owl is visible) */}
+          <div className={cn(
+            "flex items-center justify-end w-1/3 transition-[padding] duration-500 ease-in-out",
+            owlVisible ? "pr-14" : "pr-2"
+          )}>
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="sm" className="lg:hidden shrink-0">

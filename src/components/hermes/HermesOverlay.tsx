@@ -7,6 +7,7 @@ import { HermesFab } from './HermesFab';
 import { HermesPanel } from './HermesPanel';
 import { HermesNotificationCard } from './HermesNotificationCard';
 import { HermesRevealTab } from './HermesRevealTab';
+import { useHermesOwlStore } from '@/lib/hermes-owl-store';
 import type { HermesOverlayProps } from './types';
 
 const DEFAULT_TENANT_ID = 'alphaflow-aps';
@@ -62,7 +63,13 @@ export function HermesOverlay({
   // When hidden, a small vertical tab (HermesRevealTab) appears at the
   // right edge. Hovering it (desktop) or tapping it (mobile) reveals the
   // owl again, which restarts the 5s timer (since the chat is still closed).
-  const [fabHidden, setFabHidden] = useState(false);
+  //
+  // The `fabHidden` state lives in the shared useHermesOwlStore so that
+  // downstream consumers (PageHeader banner padding, AppLayout mobile-header
+  // padding) can react in real time — collapsing/expanding their reserved
+  // space as the owl slides off/on screen.
+  const fabHidden = useHermesOwlStore((s) => s.fabHidden);
+  const setFabHidden = useHermesOwlStore((s) => s.setFabHidden);
 
   useEffect(() => {
     // First activation: owl stays visible, no timer.
@@ -83,7 +90,7 @@ export function HermesOverlay({
     }, FAB_AUTO_HIDE_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [isOpen, hasEverOpened, fabHidden]);
+  }, [isOpen, hasEverOpened, fabHidden, setFabHidden]);
 
   // Reveal the owl when the tab is hovered/tapped.
   const revealFab = () => setFabHidden(false);
