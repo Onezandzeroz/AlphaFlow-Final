@@ -10,7 +10,7 @@ import {
 import { tenantFilter, Permission } from '@/lib/rbac';
 import { generateInvoiceResponse } from '@/lib/einvoice-response';
 import { logger } from '@/lib/logger';
-import { JournalEntryStatus, VATCode } from '@prisma/client';
+import { JournalEntryStatus, VATCode, EInvoiceType, ReceivedInvoiceStatus } from '@prisma/client';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { sealJournalEntry } from '@/lib/journal-hash-chain';
 import { withGuard } from '@/lib/route-guard';
@@ -383,8 +383,8 @@ export const PUT = withGuard(
           const matchWhere = {
             companyId,
             id: { not: id }, // not the credit note itself
-            documentType: { in: ['INVOICE', 'CORRECTED'] },
-            status: { in: ['POSTED', 'SETTLED'] },
+            documentType: { in: ['INVOICE' as EInvoiceType, 'CORRECTED' as EInvoiceType] },
+            status: { in: ['POSTED' as ReceivedInvoiceStatus, 'SETTLED' as ReceivedInvoiceStatus] },
             // Match by supplier (CVR if available, else name)
             ...(existing.supplierCvr
               ? { supplierCvr: existing.supplierCvr }
