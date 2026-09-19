@@ -764,8 +764,8 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
         const isAccess = await handleMutationError(
           response,
           createMode === 'credit-note'
-            ? (language === 'da' ? 'Opret kreditnota' : 'Create credit note')
-            : (language === 'da' ? 'Tilføj salg' : 'Add Sale')
+            ? (language === 'da' ? 'Opret salgs-kreditnota' : 'Create Sales Credit Note')
+            : (language === 'da' ? 'Opret salg' : 'Create Sale')
         );
         if (isAccess) { setIsSubmitting(false); return; }
         const data = await response.json();
@@ -2862,7 +2862,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
           <div className="flex items-center gap-2">
             <Button
                 onClick={() => {
-                  guardWriteAccess(isDanish ? 'Tilføj salg' : 'Add Sale', () => {
+                  guardWriteAccess(isDanish ? 'Opret salg' : 'Create Sale', () => {
                     if (!companyInfo) {
                       setShowCompanySetup(true);
                     } else {
@@ -2877,7 +2877,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               </Button>
             <Button
                 onClick={() => {
-                  guardWriteAccess(isDanish ? 'Opret kreditnota' : 'Create credit note', () => {
+                  guardWriteAccess(isDanish ? 'Opret salgs-kreditnota' : 'Create Sales Credit Note', () => {
                     if (!companyInfo) {
                       setShowCompanySetup(true);
                     } else {
@@ -3128,7 +3128,7 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 {tabInvoices.length === 0 ? (
                   <Button
                     onClick={() => {
-                      guardWriteAccess(isDanish ? 'Tilføj salg' : 'Add Sale', () => {
+                      guardWriteAccess(isDanish ? 'Opret salg' : 'Create Sale', () => {
                         if (!companyInfo) {
                           setShowCompanySetup(true);
                         } else {

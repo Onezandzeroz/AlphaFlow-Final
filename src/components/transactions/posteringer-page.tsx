@@ -251,8 +251,8 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
   const openCreate = useCallback((mode: 'purchase' | 'credit-note' = 'purchase') => {
     guardWriteAccess(
       mode === 'credit-note'
-        ? (isDa ? 'Opret købskreditnota' : 'Create purchase credit note')
-        : (isDa ? 'Tilføj køb' : 'Add Purchase'),
+        ? (isDa ? 'Opret købs-kreditnota' : 'Create Purchase Credit Note')
+        : (isDa ? 'Opret køb' : 'Create Purchase'),
       () => {
         setCreateMode(mode);
         setCurrentView('create');
@@ -281,8 +281,8 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
     <div className="p-3 lg:p-6 space-y-4 lg:space-y-6">
       <PageHeader
         title={createMode === 'credit-note'
-          ? (isDa ? 'Opret købskreditnota' : 'Create Purchase Credit Note')
-          : (isDa ? 'Tilføj køb' : 'Add Purchase')}
+          ? (isDa ? 'Opret købs-kreditnota' : 'Create Purchase Credit Note')
+          : (isDa ? 'Opret køb' : 'Create Purchase')}
         description={createMode === 'credit-note'
           ? (isDa ? 'Registrer en kreditnota modtaget fra en leverandør' : 'Record a credit note received from a supplier')
           : (isDa
@@ -319,8 +319,8 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
               ? <FileMinus className="h-5 w-5 text-amber-500" />
               : <Plus className="h-5 w-5 text-[#2dd4bf]" />}
             {createMode === 'credit-note'
-              ? (isDa ? 'Opret købskreditnota' : 'Create Purchase Credit Note')
-              : (isDa ? 'Tilføj køb' : 'Add Purchase')}
+              ? (isDa ? 'Opret købs-kreditnota' : 'Create Purchase Credit Note')
+              : (isDa ? 'Opret køb' : 'Create Purchase')}
           </DialogTitle>
           <DialogDescription className="dark:text-gray-400">{createMode === 'credit-note'
             ? (isDa ? 'Registrer en kreditnota modtaget fra en leverandør' : 'Record a credit note received from a supplier')
@@ -379,14 +379,14 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
                   className="bg-[#0d9488] hover:bg-[#0f766e] text-white border border-[#0d9488] gap-2 lg:bg-white/20 lg:hover:bg-white/30 lg:border-white/30 lg:backdrop-blur-sm text-sm font-medium transition-all"
                 >
                   <Plus className="h-4 w-4" />
-                  {isDa ? 'Tilføj køb' : 'Add Purchase'}
+                  {isDa ? 'Opret køb' : 'Create Purchase'}
                 </Button>
                 <Button
                   onClick={handleAddCreditNoteClick}
                   className="bg-transparent text-[#0d9488] border border-[#0d9488]/40 hover:bg-[#0d9488] hover:text-white dark:text-[#2dd4bf] dark:border-[#2dd4bf]/40 dark:hover:bg-[#2dd4bf] dark:hover:text-[#0d9488] lg:text-white lg:border-white/40 lg:hover:bg-white/20 gap-2 text-sm font-medium transition-all"
                 >
                   <FileMinus className="h-4 w-4" />
-                  {isDa ? 'Opret købskreditnota' : 'Create Purchase Credit Note'}
+                  {isDa ? 'Opret købs-kreditnota' : 'Create Purchase Credit Note'}
                 </Button>
               </div>
             )}

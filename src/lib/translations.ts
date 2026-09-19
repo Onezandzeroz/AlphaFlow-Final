@@ -127,12 +127,12 @@ export const translations = {
     en: 'Purchase',
   },
   createInvoice: {
-    da: 'Tilføj salg',
-    en: 'Add Sale',
+    da: 'Opret salg',
+    en: 'Create Sale',
   },
   createCreditNote: {
-    da: 'Opret kreditnota',
-    en: 'Create Credit Note',
+    da: 'Opret salgs-kreditnota',
+    en: 'Create Sales Credit Note',
   },
   creditNote: {
     da: 'Kreditnota',
