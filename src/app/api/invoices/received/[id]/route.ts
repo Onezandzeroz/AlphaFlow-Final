@@ -373,6 +373,55 @@ export const PUT = withGuard(
           });
         }
 
+        // ── Auto-settlement for credit notes ──────────────────────────
+        // If this is a credit note that matches the full amount of a posted
+        // invoice from the same supplier, automatically mark it as SETTLED
+        // (Betalt). The credit note offsets the invoice — no bank recon
+        // match is needed. The match is by supplier (CVR or name) + amount.
+        if (isCreditNote) {
+          const creditAmount = Number(existing.payableAmount) || 0;
+          const matchWhere = {
+            companyId,
+            id: { not: id }, // not the credit note itself
+            documentType: { in: ['INVOICE', 'CORRECTED'] },
+            status: { in: ['POSTED', 'SETTLED'] },
+            // Match by supplier (CVR if available, else name)
+            ...(existing.supplierCvr
+              ? { supplierCvr: existing.supplierCvr }
+              : { supplierName: { equals: existing.supplierName, mode: 'insensitive' as const } }),
+            // Amount must match within 0.01 DKK
+            payableAmount: {
+              gte: creditAmount - 0.01,
+              lte: creditAmount + 0.01,
+            },
+          };
+
+          const matchingInvoice = await db.receivedInvoice.findFirst({
+            where: matchWhere,
+            select: { id: true, invoiceNumber: true },
+          });
+
+          if (matchingInvoice) {
+            await db.receivedInvoice.update({
+              where: { id },
+              data: {
+                status: 'SETTLED',
+                settledAt: new Date(),
+                settledBy: ctx.id,
+                // No settledByBankStatementLineId — this is an auto-settlement
+                // from a credit note match, not a bank recon match.
+              },
+            });
+            // Update the `updated` variable so the response returns SETTLED
+            updated.status = 'SETTLED';
+            updated.settledAt = new Date();
+            updated.settledBy = ctx.id;
+            logger.info(
+              `Credit note ${existing.invoiceNumber} auto-settled (matches invoice ${matchingInvoice.invoiceNumber} from ${existing.supplierName})`
+            );
+          }
+        }
+
         // Audit log — journal entry creation
         await auditCreate(
           ctx.id,
