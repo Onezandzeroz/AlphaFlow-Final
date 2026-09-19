@@ -147,7 +147,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                               {isDa ? 'Afstemt' : 'Matched'}
                             </Badge>
                           ) : (
-                            <Badge className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] gap-1">
+                            <Badge className="bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-[10px] gap-1">
                               {isDa ? 'Uafstemt' : 'Unmatched'}
                             </Badge>
                           )}
@@ -199,7 +199,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                             {isDa ? 'Afstemt' : 'Matched'}
                           </Badge>
                         ) : (
-                          <Badge className="bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300 text-[10px] gap-1">
+                          <Badge className="bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 text-[10px] gap-1">
                             {isDa ? 'Uafstemt' : 'Unmatched'}
                           </Badge>
                         )}

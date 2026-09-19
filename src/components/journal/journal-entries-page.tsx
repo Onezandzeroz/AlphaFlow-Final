@@ -95,6 +95,9 @@ interface JournalLine {
   description?: string;
   vatCode?: string | null;
   account?: AccountOption;
+  // Bank reconciliation matches — populated by /api/journal-entries GET
+  // (includes bankMatches on each line). Used to show "Afstemt/Uafstemt".
+  bankMatches?: { id: string }[];
 }
 
 interface JournalEntry {
@@ -1009,6 +1012,22 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                         >
                           {getStatusLabel(entry.status, isDanish)}
                         </Badge>
+
+                        {/* Bank Reconciliation Badge — Afstemt/Uafstemt */}
+                        {entry.status === 'POSTED' && !isEntryCancelled && (() => {
+                          const isReconciled = entry.lines.some(
+                            (line) => line.bankMatches && line.bankMatches.length > 0
+                          );
+                          return isReconciled ? (
+                            <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] border-[#0d9488]/20 gap-1">
+                              {isDanish ? 'Afstemt' : 'Matched'}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
+                              {isDanish ? 'Uafstemt' : 'Unmatched'}
+                            </Badge>
+                          );
+                        })()}
 
                         {/* Balance Indicator + Foreign Currency Info */}
                         <div className="flex items-center gap-1.5 text-xs shrink-0">

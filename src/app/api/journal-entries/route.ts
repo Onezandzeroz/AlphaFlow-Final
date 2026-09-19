@@ -53,6 +53,9 @@ export const GET = withGuard(
           lines: {
             include: {
               account: true,
+              // Include bank-recon matches so the Finansjournal page can
+              // show "Afstemt/Uafstemt" badges on each journal entry.
+              bankMatches: { select: { id: true } },
             },
           },
         },
