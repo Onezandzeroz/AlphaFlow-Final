@@ -37,6 +37,12 @@ interface ReceivedInvoice {
 
 interface PostedEInvoicesListProps {
   user: any;
+  /** Filter the displayed posted e-invoices by document type.
+   *  - 'all' (default): show everything
+   *  - 'invoice': only regular purchase invoices (INVOICE/CORRECTED)
+   *  - 'credit-note': only purchase credit notes (CREDIT_NOTE/SELF_BILLED)
+   *  Used by the Køb & Kvittering page's Købsfakturaer / Købs-kreditnota tabs. */
+  filter?: 'all' | 'invoice' | 'credit-note';
 }
 
 /**
@@ -49,7 +55,7 @@ interface PostedEInvoicesListProps {
  *   - E-faktura (purchase):     red (money out)
  *   - E-kreditnota (reversal):  green (money back in)
  */
-export function PostedEInvoicesList({ user: _user }: PostedEInvoicesListProps) {
+export function PostedEInvoicesList({ user: _user, filter = 'all' }: PostedEInvoicesListProps) {
   const { language } = useLanguageStore();
   const { tc, td } = useTranslation();
   const isDa = language === 'da';
@@ -83,8 +89,18 @@ export function PostedEInvoicesList({ user: _user }: PostedEInvoicesListProps) {
     );
   }
 
-  // Sort by issue date descending
-  const sorted = [...invoices].sort(
+  // Apply the document-type filter (invoice / credit-note / all), then sort
+  // by issue date descending.
+  const isCreditNoteType = (ri: ReceivedInvoice) =>
+    ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED';
+
+  const filtered = filter === 'invoice'
+    ? invoices.filter(ri => !isCreditNoteType(ri))
+    : filter === 'credit-note'
+    ? invoices.filter(ri => isCreditNoteType(ri))
+    : invoices;
+
+  const sorted = [...filtered].sort(
     (a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()
   );
 

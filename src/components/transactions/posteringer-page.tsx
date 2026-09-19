@@ -4,8 +4,6 @@ import { useState, useCallback, useEffect, useRef, useSyncExternalStore } from '
 import { useLanguageStore } from '@/lib/language-store';
 import { useTranslation } from '@/lib/use-translation';
 import { useScannerStore } from '@/lib/scanner-store';
-import { TransactionsPage } from '@/components/transactions/transactions-page';
-import { RecurringEntriesPage } from '@/components/recurring-entries/recurring-entries-page';
 import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
 import { PostedEInvoicesList } from '@/components/invoices/posted-einvoices-list';
 import { PageHeader } from '@/components/shared/page-header';
@@ -19,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Receipt, RefreshCw, Plus, Inbox, FileMinus, CheckCircle } from 'lucide-react';
+import { Plus, Inbox, FileMinus, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 
@@ -27,15 +25,15 @@ type PageView = 'list' | 'create';
 
 interface PosteringerPageProps {
   user: any; // User type from auth-store
-  defaultTab?: 'transactions' | 'recurring' | 'einvoice' | 'posted-einvoice';
+  defaultTab?: 'kobs-fakturaer' | 'kobs-kreditnota' | 'einvoice';
 }
 
-export function PosteringerPage({ user, defaultTab = 'transactions' }: PosteringerPageProps) {
+export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: PosteringerPageProps) {
   const { language } = useLanguageStore();
   const { t } = useTranslation();
   const isDa = language === 'da';
   const { guardWriteAccess } = useWriteAccessGuard(user);
-  const [activeTab, setActiveTab] = useState<'transactions' | 'recurring' | 'einvoice' | 'posted-einvoice'>(defaultTab);
+  const [activeTab, setActiveTab] = useState<'kobs-fakturaer' | 'kobs-kreditnota' | 'einvoice'>(defaultTab);
   const [currentView, setCurrentView] = useState<PageView>('list');
   const [isMobileDialogOpen, setIsMobileDialogOpen] = useState(false);
   // Create mode: 'purchase' (default) or 'credit-note' (supplier credit note).
@@ -172,11 +170,12 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
   const handleAddCreditNoteClick = useCallback(() => openCreate('credit-note'), [openCreate]);
 
   const tabs = [
-    { id: 'transactions' as const, labelDa: 'Alle posteringer', labelEn: 'All Transactions', icon: Receipt },
-    { id: 'recurring' as const, labelDa: 'Gentagende posteringer', labelEn: 'Recurring Entries', icon: RefreshCw },
+    // Posted e-invoices leave the e-inbox (staging area) and appear here,
+    // split into regular purchase invoices + purchase credit notes —
+    // mirroring the Salg & Faktura page's Salgsfakturaer / Salgs-kreditnota.
+    { id: 'kobs-fakturaer' as const, labelDa: 'Købsfakturaer', labelEn: 'Purchase invoices', icon: FileText },
+    { id: 'kobs-kreditnota' as const, labelDa: 'Købs-kreditnota', labelEn: 'Purchase credit notes', icon: FileMinus },
     { id: 'einvoice' as const, labelDa: 'E-faktura Indbakke', labelEn: 'E-Invoice Inbox', icon: Inbox },
-    // Posted e-invoices leave the e-inbox (staging area) and appear here.
-    { id: 'posted-einvoice' as const, labelDa: 'Bogførte e-fakturaer', labelEn: 'Posted e-invoices', icon: CheckCircle },
   ];
 
   // ── Full-page create form (desktop) ──
@@ -324,14 +323,12 @@ export function PosteringerPage({ user, defaultTab = 'transactions' }: Postering
 
         {/* Tab content */}
         <div className="mt-4">
-          {activeTab === 'transactions' ? (
-            <TransactionsPage user={user} hideHeader defaultTypeFilter="PURCHASE" />
-          ) : activeTab === 'recurring' ? (
-            <RecurringEntriesPage user={user} hideHeader />
+          {activeTab === 'kobs-kreditnota' ? (
+            <PostedEInvoicesList user={user} filter="credit-note" />
           ) : activeTab === 'einvoice' ? (
             <EInvoiceInbox user={user} />
           ) : (
-            <PostedEInvoicesList user={user} />
+            <PostedEInvoicesList user={user} filter="invoice" />
           )}
         </div>
       </div>

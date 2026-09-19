@@ -28,6 +28,10 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   { id: 'vat-input',            labelDa: 'Indgående moms',          labelEn: 'Input VAT',              icon: 'ArrowDownCircle',defaultVisible: true, defaultSize: 'quarter', section: 'indicators' },
   { id: 'cash-position',        labelDa: 'Likviditetsoversigt',     labelEn: 'Cash Position',          icon: 'Wallet',        defaultVisible: true,  defaultSize: 'third',   section: 'indicators' },
 
+  // ── DEFAULT VISIBLE: Full-width lists (moved from Køb & Kvittering) ──
+  { id: 'transactions-list',    labelDa: 'Alle posteringer',        labelEn: 'All Transactions',       icon: 'Receipt',       defaultVisible: true,  defaultSize: 'full',    section: 'details' },
+  { id: 'recurring-entries-widget', labelDa: 'Gentagende posteringer', labelEn: 'Recurring Entries',  icon: 'RefreshCw',     defaultVisible: true,  defaultSize: 'full',    section: 'details' },
+
   // ── HIDDEN BY DEFAULT: Indicators ─────────────────────────────
   { id: 'kpi-operating-result', labelDa: 'Driftsresultat',         labelEn: 'Operating Result',       icon: 'Scale',         defaultVisible: false, defaultSize: 'quarter', section: 'indicators' },
   { id: 'pnl-result',           labelDa: 'Resultat & Likviditet',   labelEn: 'P&L Result',             icon: 'Wallet',        defaultVisible: false, defaultSize: 'third',   section: 'indicators' },
@@ -58,7 +62,7 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
 // ─── Defaults version ──────────────────────────────────────────
 // Bump this when code-level defaults change (visibility, order, column layout).
 // The Zustand store compares this against localStorage to detect stale cache.
-export const WIDGET_DEFAULTS_VERSION = 5;
+export const WIDGET_DEFAULTS_VERSION = 6;
 
 export function getDefaultVisibilityMap(): Record<string, boolean> {
   const map: Record<string, boolean> = {};

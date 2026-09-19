@@ -929,7 +929,7 @@ function Home() {
       case 'cash-flow':
         return <CashFlowPage user={user} />;
       case 'recurring':
-        return <PosteringerPage user={user} defaultTab="recurring" />;
+        return <RecurringEntriesPage user={user} />;
       case 'budget':
         return <BudgetPage user={user} />;
       case 'settings':

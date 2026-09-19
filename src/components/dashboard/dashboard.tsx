@@ -86,6 +86,8 @@ import { OnboardingCompleteOverlay } from '@/components/dashboard/onboarding-com
 import { SubscriptionPlansWidget } from '@/components/dashboard/subscription-plans-widget';
 import { WidgetLayoutEditor } from '@/components/dashboard/widget-layout-editor';
 import { MasonryLayout } from '@/components/dashboard/masonry-layout';
+import { TransactionsPage } from '@/components/transactions/transactions-page';
+import { RecurringEntriesPage } from '@/components/recurring-entries/recurring-entries-page';
 import { useAccessCacheStore } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { hasAccess } from '@/lib/tokenpay';
@@ -3310,6 +3312,20 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
               </CardContent>
             </Card>
           </div>
+          )}
+
+          {/* ── Alle posteringer (full-width list, moved from Køb & Kvittering) ── */}
+          {isWidgetVisible('transactions-list') && (
+            <div data-widget-id="transactions-list">
+              <TransactionsPage user={user} hideHeader defaultTypeFilter="PURCHASE" />
+            </div>
+          )}
+
+          {/* ── Gentagende posteringer (full-width list, moved from Køb & Kvittering) ── */}
+          {isWidgetVisible('recurring-entries-widget') && (
+            <div data-widget-id="recurring-entries-widget">
+              <RecurringEntriesPage user={user} hideHeader />
+            </div>
           )}
         </MasonryLayout>
       </>
