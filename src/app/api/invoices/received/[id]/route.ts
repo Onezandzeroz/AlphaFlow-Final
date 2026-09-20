@@ -43,6 +43,118 @@ export const GET = withGuard(
   }
 );
 
+// ─── Helper: notify Sproom of approve/reject decision (GAP I-7 fix) ────
+//
+// When the recipient approves or rejects a received e-invoice, we call
+// Sproom's setDocumentState() to send an ApplicationResponse back to the
+// sender through the NemHandel/Peppol network. This is required for the
+// sender's AlphaFlow tenant to upgrade the sending status to ACCEPTED or
+// REJECTED — without this call, the sender's status stays DELIVERED forever.
+//
+// Resolves the Sproom document ID from:
+//   1. receivedInvoice.sproomDocumentId (new field, preferred)
+//   2. Fallback: extracts from notes string "document_guid: <guid>" (legacy)
+//
+// Resolves the childCompanyId from the tenant's Company record (needed for
+// the Sproom impersonation token).
+//
+// Non-throwing — callers should .catch() and treat failures as non-fatal
+// (the local APPROVED/REJECTED status is already committed).
+
+async function notifySproomOfDecision(
+  receivedInvoice: {
+    id: string;
+    companyId: string;
+    sproomDocumentId: string | null;
+    notes: string | null;
+    invoiceNumber: string;
+    supplierName: string;
+  },
+  decision: 'approve' | 'reject',
+  reason: string | null,
+): Promise<void> {
+  // Dynamic import to avoid loading sproom-client in routes that don't need it
+  const { sproomClient } = await import('@/lib/sproom-client');
+
+  if (!sproomClient?.isConfigured) {
+    logger.info('[SPROOM_DECISION] Sproom not configured — skipping ApplicationResponse', {
+      receivedInvoiceId: receivedInvoice.id,
+      decision,
+    });
+    return;
+  }
+
+  // ── Resolve Sproom document ID ──
+  let documentId = receivedInvoice.sproomDocumentId;
+
+  // Fallback: extract from notes string (legacy rows pre-sproomDocumentId field)
+  if (!documentId && receivedInvoice.notes) {
+    const match = receivedInvoice.notes.match(/document_guid:\s*([a-f0-9-]+)/i);
+    if (match && match[1]) {
+      documentId = match[1];
+      logger.info('[SPROOM_DECISION] Extracted documentId from notes (legacy fallback)', {
+        receivedInvoiceId: receivedInvoice.id,
+        documentId,
+      });
+    }
+  }
+
+  if (!documentId) {
+    logger.warn('[SPROOM_DECISION] No Sproom document ID — cannot send ApplicationResponse', {
+      receivedInvoiceId: receivedInvoice.id,
+      invoiceNumber: receivedInvoice.invoiceNumber,
+      decision,
+    });
+    return;
+  }
+
+  // ── Resolve childCompanyId from tenant ──
+  const company = await db.company.findUnique({
+    where: { id: receivedInvoice.companyId },
+    select: { sproomChildCompanyId: true, name: true },
+  });
+
+  if (!company?.sproomChildCompanyId) {
+    logger.warn('[SPROOM_DECISION] Tenant has no sproomChildCompanyId — cannot send ApplicationResponse', {
+      receivedInvoiceId: receivedInvoice.id,
+      companyId: receivedInvoice.companyId,
+      companyName: company?.name,
+    });
+    return;
+  }
+
+  // ── Call Sproom setDocumentState ──
+  // Approve → state='TransmissionCompleted' (positive ApplicationResponse)
+  // Reject  → state='ApplicationReponseBusinessReject' (negative ApplicationResponse)
+  //
+  // Note: Sproom's API uses the misspelled 'ApplicationReponseBusinessReject'
+  // (missing the 's' in Response) — this is their official enum value.
+  const state =
+    decision === 'approve'
+      ? 'TransmissionCompleted'
+      : 'ApplicationReponseBusinessReject';
+
+  const result = await sproomClient.setDocumentState(
+    documentId,
+    {
+      state,
+      reason: decision === 'reject' ? (reason || 'Rejected by recipient') : undefined,
+    },
+    { childCompanyId: company.sproomChildCompanyId },
+  );
+
+  logger.info('[SPROOM_DECISION] ApplicationResponse sent to Sproom', {
+    receivedInvoiceId: receivedInvoice.id,
+    invoiceNumber: receivedInvoice.invoiceNumber,
+    supplierName: receivedInvoice.supplierName,
+    decision,
+    sproomDocumentId: documentId,
+    sproomState: state,
+    childCompanyId: company.sproomChildCompanyId,
+    result,
+  });
+}
+
 // ─── PUT /api/invoices/received/[id] ────────────────────────────
 // Actions: approve, reject, post
 
@@ -100,6 +212,29 @@ export const PUT = withGuard(
           companyId
         );
 
+        // ── Send ApplicationResponse to Sproom (GAP I-7 fix) ──
+        //
+        // When the recipient approves a received e-invoice, we MUST notify
+        // the sender through the NemHandel/Peppol network by calling
+        // Sproom's setDocumentState() with state='TransmissionCompleted'.
+        //
+        // Sproom then auto-sends an ApplicationResponse XML back to the
+        // sender's Access Point, which triggers a DocumentStatusChanged
+        // webhook at the sender's AlphaFlow tenant with status='Approved'.
+        // The sender's tracker will then upgrade the sending to ACCEPTED
+        // + fire a real-time toast.
+        //
+        // Non-fatal: if Sproom is unreachable or not configured, the local
+        // APPROVED status is still committed (the user's intent is recorded).
+        // The Sproom notification can be retried via the debug-state endpoint.
+        await notifySproomOfDecision(existing, 'approve', null).catch((err) => {
+          logger.warn('[RECEIVED_INVOICE_APPROVE] Sproom notification failed (non-fatal)', {
+            receivedInvoiceId: id,
+            sproomDocumentId: existing.sproomDocumentId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+
         notifyDataChange({ scope: 'received-invoices', companyId, action: 'update' }).catch(() => {});
 
         return NextResponse.json({ receivedInvoice: updated });
@@ -130,6 +265,24 @@ export const PUT = withGuard(
           { action: 'reject' },
           companyId
         );
+
+        // ── Send ApplicationResponse (rejection) to Sproom (GAP I-7 fix) ──
+        //
+        // Same flow as approve, but with state='ApplicationReponseBusinessReject'.
+        // Sproom sends a negative ApplicationResponse to the sender, which
+        // triggers a DocumentStatusChanged webhook with status='Rejected'
+        // (or 'ApplicationReponseBusinessReject') at the sender's tenant.
+        // The sender's tracker maps it to REJECTED + fires a toast.
+        //
+        // The rejection reason is forwarded to Sproom (mandatory field for
+        // rejections per Sproom's API spec).
+        await notifySproomOfDecision(existing, 'reject', reason || 'Rejected by user').catch((err) => {
+          logger.warn('[RECEIVED_INVOICE_REJECT] Sproom notification failed (non-fatal)', {
+            receivedInvoiceId: id,
+            sproomDocumentId: existing.sproomDocumentId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
         notifyDataChange({ scope: 'received-invoices', companyId, action: 'update' }).catch(() => {});
 

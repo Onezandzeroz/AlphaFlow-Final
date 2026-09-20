@@ -1440,6 +1440,17 @@ model ReceivedInvoice {
   responseXml  String? // Application Response / Message Level Response XML
   responseType String? // "APPLICATION_RESPONSE" | "MESSAGE_LEVEL_RESPONSE" | "INVOICE_RESPONSE"
 
+  // ── Sproom document ID (GAP I-7 fix) ──
+  // The Sproom GUID identifying this document on the Sproom Access Point.
+  // Used to send ApplicationResponse back to the sender when the recipient
+  // approves/rejects the invoice (via sproomClient.setDocumentState()).
+  //
+  // For invoices received via the Sproom webhook, this is the `documentId`
+  // from the webhook payload. For manual XML uploads it's null (no Sproom
+  // tracking). Older rows (pre-this-field) have null — the approve/reject
+  // flow extracts the GUID from the notes string as a fallback.
+  sproomDocumentId String?
+
   // Validation
   validationErrors   String? // JSON array of errors from parsing
   validationWarnings String? // JSON array of warnings

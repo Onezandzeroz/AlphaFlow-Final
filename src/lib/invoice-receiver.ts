@@ -207,6 +207,10 @@ export async function storeReceivedInvoice(
       responseXml: responseXml ?? null,
       responseType: responseType ?? null,
 
+      // Sproom document ID (for sending ApplicationResponse back to sender
+      // when this invoice is approved/rejected — GAP I-7 fix)
+      sproomDocumentId: documentGuid ?? null,
+
       // Validation
       validationErrors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
       validationWarnings: result.warnings.length > 0 ? JSON.stringify(result.warnings) : null,
