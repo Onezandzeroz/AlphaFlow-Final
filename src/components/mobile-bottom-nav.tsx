@@ -10,7 +10,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 
-type View = 'dashboard' | 'transactions' | 'invoices' | 'reports' | 'settings' | 'exports' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight' | 'einvoice-inbox' | 'einvoice-tracking';
+type View = 'dashboard' | 'transactions' | 'invoices' | 'reports' | 'settings' | 'exports' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight' | 'einvoice-center';
 
 interface MobileBottomNavProps {
   currentView: string;

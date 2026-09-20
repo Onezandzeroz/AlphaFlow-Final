@@ -47,6 +47,7 @@ import {
   Search,
   CornerDownLeft,
   ArrowUpDown,
+  Inbox,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -74,7 +75,7 @@ type View =
   | 'settings'
   | 'settings-edelivery'
   | 'annual-report'
-  | 'einvoice-inbox';
+  | 'einvoice-center';
 
 export interface CommandPaletteProps {
   open: boolean;
@@ -109,6 +110,7 @@ const NAV_SECTIONS: NavSectionDef[] = [
       { id: 'dashboard', nameDa: 'Kontrolpanel', nameEn: 'Dashboard', icon: LayoutDashboard },
       { id: 'transactions', nameDa: 'Køb & Kvittering', nameEn: 'Purchases & Receipts', icon: Receipt },
       { id: 'invoices', nameDa: 'Salg & Faktura', nameEn: 'Sales & Invoice', icon: FileText },
+      { id: 'einvoice-center', nameDa: 'E-faktura', nameEn: 'E-Invoice', icon: Inbox },
       { id: 'contacts', nameDa: 'Kontakter', nameEn: 'Contacts', icon: Users },
       { id: 'projects', nameDa: 'Projekter', nameEn: 'Projects', icon: Briefcase },
     ],

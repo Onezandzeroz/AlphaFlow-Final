@@ -46,13 +46,11 @@ import { AnnualReportPage } from '@/components/annual-report/annual-report-page'
 import { ProjectsPage } from '@/components/projects/projects-page';
 import { HermesOversightPage } from '@/components/hermes/hermes-oversight-page';
 import { AuthMarketingNav } from '@/components/marketing/auth-marketing-nav';
-import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
-import { EInvoiceTrackingPage } from '@/components/invoices/einvoice-tracking-page';
-import { PageHeader } from '@/components/shared/page-header';
+import { EInvoiceCenterPage } from '@/components/invoices/einvoice-center-page';
 
-type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight' | 'einvoice-inbox' | 'einvoice-tracking';
+type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight' | 'einvoice-center';
 
-const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report', 'hermes-oversight', 'einvoice-inbox', 'einvoice-tracking'];
+const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report', 'hermes-oversight', 'einvoice-center'];
 
 // ─── SEO: Dynamic document.title per view ─────────────────────────
 const VIEW_TITLES_DA: Record<View, string> = {
@@ -60,7 +58,7 @@ const VIEW_TITLES_DA: Record<View, string> = {
   'transactions': 'Posteringer — Bogføring',
   'exports': 'Eksport — SAF-T, CSV & OIOUBL',
   'invoices': 'Salg & Faktura — E-faktura & Peppol',
-  'einvoice-tracking': 'E-faktura Sporing — NemHandel & Peppol',
+  'einvoice-center': 'E-faktura Center — Indbakke & Sporing',
   'backups': 'Sikkerhedskopier — Backup & Gendannelse',
   'audit-log': 'Revisionslog — Uforanderlig Audit Trail',
   'accounts': 'Kontoplan — FSR Standard Konti',
@@ -80,7 +78,6 @@ const VIEW_TITLES_DA: Record<View, string> = {
   'settings-edelivery': 'E-faktura Indstillinger — Peppol & Nemhandel',
   'annual-report': 'Årsafslutning — Resultatopgørelse & Balance',
   'hermes-oversight': 'Hermes AI — Oversigt & Konfiguration',
-  'einvoice-inbox': 'E-faktura Indbakke — NemHandel & Peppol',
 };
 
 const VIEW_TITLES_EN: Record<View, string> = {
@@ -107,8 +104,7 @@ const VIEW_TITLES_EN: Record<View, string> = {
   'settings-edelivery': 'E-invoicing Settings — Peppol & Nemhandel',
   'annual-report': 'Annual Report — Income Statement & Balance Sheet',
   'hermes-oversight': 'Hermes AI — Oversight & Configuration',
-  'einvoice-inbox': 'E-Invoice Inbox — NemHandel & Peppol',
-  'einvoice-tracking': 'E-Invoice Tracking — NemHandel & Peppol',
+  'einvoice-center': 'E-Invoice Center — Inbox & Tracking',
 };
 
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
@@ -457,7 +453,7 @@ function Home() {
         dashboard: 'AlphaFlow Dashboard — overblik over økonomi, posteringer, moms, fakturaer og likviditet i ét kontrolpanel.',
         transactions: 'Posteringer i AlphaFlow — dobbelt bogføring med automatisk moms, kategorisering og finansjournal.',
         invoices: 'Fakturering i AlphaFlow — opret, send og modtag e-fakturaer via Peppol OIOUBL BIS Billing 3.0.',
-        'einvoice-tracking': 'Spor alle dine e-faktura afsendelser i realtid — status, levering, accept, afvisning og betaling.',
+        'einvoice-center': 'E-faktura center — modtag indkommende e-fakturaer i indbakken og spor alle afsendelser i realtid (status, levering, accept, afvisning, betaling).',
         accounts: 'Kontoplan i AlphaFlow — FSR standard kontoplan med 38 konti, momsmapping og automatisk bogføringsforslag.',
         reports: 'Regnskabsrapporter i AlphaFlow — resultatopgørelse, balance, pengestrøm, SAF-T eksport og årsafslutning.',
         'bank-recon': 'Bankafstemning i AlphaFlow — Open Banking integration med automatisk match af posteringer.',
@@ -469,7 +465,7 @@ function Home() {
         dashboard: 'AlphaFlow Dashboard — overview of finances, transactions, VAT, invoices and liquidity.',
         transactions: 'Transactions in AlphaFlow — double-entry bookkeeping with automatic VAT and journal.',
         invoices: 'Invoicing in AlphaFlow — create, send and receive e-invoices via Peppol OIOUBL.',
-        'einvoice-tracking': 'Track all your e-invoice sendings in real-time — status, delivery, accept, rejection and payment.',
+        'einvoice-center': 'E-invoice center — receive incoming e-invoices in the inbox and track all sendings in real-time (status, delivery, accept, rejection, payment).',
         accounts: 'Chart of Accounts in AlphaFlow — FSR standard with 38 accounts and VAT mapping.',
         reports: 'Financial Reports in AlphaFlow — income statement, balance sheet, cash flow, SAF-T export.',
         'bank-recon': 'Bank Reconciliation in AlphaFlow — Open Banking with automatic transaction matching.',
@@ -953,21 +949,10 @@ function Home() {
         return <AnnualReportPage user={user} />;
       case 'hermes-oversight':
         return <HermesOversightPage user={user} />;
-      case 'einvoice-inbox':
+      case 'einvoice-center':
         return (
-          <div className="p-3 lg:p-6">
-            <PageHeader
-              title={language === 'da' ? 'E-faktura Indbakke' : 'E-Invoice Inbox'}
-              description={language === 'da'
-                ? 'Modtag og håndter indkommende e-fakturaer og e-kreditnotaer'
-                : 'Receive and manage incoming e-invoices and e-credit notes'}
-            />
-            <EInvoiceInbox user={user} />
-          </div>
-        );
-      case 'einvoice-tracking':
-        return (
-          <EInvoiceTrackingPage
+          <EInvoiceCenterPage
+            user={user}
             onInvoiceClick={(invoiceId) => navigateToView('invoices')}
           />
         );

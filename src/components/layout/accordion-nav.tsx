@@ -43,7 +43,6 @@ import {
   Settings,
   Inbox,
   Bot,
-  Activity,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -73,8 +72,7 @@ type View =
   | 'settings-edelivery'
   | 'annual-report'
   | 'hermes-oversight'
-  | 'einvoice-inbox'
-  | 'einvoice-tracking';
+  | 'einvoice-center';
 
 interface NavItemDef {
   id: View;
@@ -109,9 +107,8 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     items: [
       { id: 'dashboard', nameDa: 'Kontrolpanel', nameEn: 'Dashboard', icon: LayoutDashboard },
       { id: 'invoices', nameDa: 'Salg & Faktura', nameEn: 'Sales & Invoice', icon: FileText },
-      { id: 'einvoice-tracking', nameDa: 'E-faktura Sporing', nameEn: 'E-Invoice Tracking', icon: Activity },
       { id: 'transactions', nameDa: 'Køb & Kvittering', nameEn: 'Purchases & Receipts', icon: Receipt },
-      { id: 'einvoice-inbox', nameDa: 'E-faktura Indbakke', nameEn: 'E-Invoice Inbox', icon: Inbox },
+      { id: 'einvoice-center', nameDa: 'E-faktura', nameEn: 'E-Invoice', icon: Inbox },
       { id: 'contacts', nameDa: 'Kontakter', nameEn: 'Contacts', icon: Users },
       { id: 'projects', nameDa: 'Projekter', nameEn: 'Projects', icon: Briefcase },
     ],
@@ -417,7 +414,7 @@ export function AccordionNav({ currentView, onViewChange }: AccordionNavProps) {
                               )}
                             />
                             <span className="truncate sidebar-label">{itemName}</span>
-                            {item.id === 'einvoice-inbox' && unreadEInvoiceCount > 0 && (
+                            {item.id === 'einvoice-center' && unreadEInvoiceCount > 0 && (
                               <span className={cn(
                                 'ml-auto text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1.5',
                                 isItemActive
