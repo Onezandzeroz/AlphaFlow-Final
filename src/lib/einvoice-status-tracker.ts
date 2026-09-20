@@ -157,18 +157,52 @@ const STATUS_MAP: Record<SproomDocumentStatus, EInvoiceSendStatus> = {
 };
 
 /**
- * Map a Sproom DocumentStatusType to AlphaFlow's EInvoiceSendStatus.
+ * Convert a Sproom status string to PascalCase.
+ *
+ * Sproom's REST API (getDocumentState) returns status names in PascalCase
+ * (e.g. "TransmissionStarted", "Sent", "Approved"), BUT webhook payloads
+ * send them in camelCase (e.g. "transmissionStarted", "sent", "approved").
+ *
+ * The STATUS_MAP below uses PascalCase keys (matching the SproomDocumentStatus
+ * type). This helper normalises both formats so lookups succeed regardless of
+ * which Sproom surface the status came from.
+ *
+ * Examples:
+ *   "transmissionStarted"  → "TransmissionStarted"
+ *   "sent"                 → "Sent"
+ *   "TransmissionStarted"  → "TransmissionStarted" (unchanged)
+ *   "applicationReponseBusinessReject" → "ApplicationReponseBusinessReject"
+ */
+function toPascalCase(s: string): string {
+  if (!s || typeof s !== 'string') return s;
+  // Already starts uppercase → assume PascalCase, return as-is
+  if (s[0] === s[0].toUpperCase() && s[0] !== s[0].toLowerCase()) {
+    return s;
+  }
+  // camelCase → PascalCase (uppercase first letter only — the rest is
+  // already correct camelCase which matches our PascalCase keys).
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Map a Sproom document status to AlphaFlow's EInvoiceSendStatus.
+ *
+ * Accepts BOTH PascalCase (REST API) and camelCase (webhook payloads) —
+ * the toPascalCase helper normalises before lookup.
+ *
  * Returns 'SENT' as a safe default for unknown Sproom states (so we don't
  * accidentally downgrade a successfully-sent document to PENDING).
  */
 export function mapSproomStatus(
   sproomStatus: SproomDocumentStatus | string,
 ): EInvoiceSendStatus {
-  const mapped = STATUS_MAP[sproomStatus as SproomDocumentStatus];
+  const normalized = toPascalCase(sproomStatus);
+  const mapped = STATUS_MAP[normalized as SproomDocumentStatus];
   if (mapped) return mapped;
   // Unknown Sproom status — log + default to SENT (don't downgrade)
   logger.warn('[STATUS-TRACKER] Unknown Sproom status — defaulting to SENT', {
     sproomStatus,
+    normalized,
   });
   return 'SENT';
 }
@@ -327,9 +361,61 @@ export async function applyStatusTransition(
 
   const previousStatus = sending.status as EInvoiceSendStatus;
 
-  // ── Idempotency check 1: same status + same raw state = no-op ──
-  // Sproom sends DocumentStatusChanged webhooks for every state entry, so
-  // we may receive the same state twice. Don't create duplicate events.
+  // ── Idempotency check 1: dedupe by (sendingId, sproomRawState, sproomStatusCode, eventTimestamp) ──
+  //
+  // Both the webhook handler (push) AND the outbox poller (pull) can observe
+  // the SAME Sproom state-entry — they arrive within seconds of each other.
+  // Without this check, we'd create duplicate EInvoiceSendEvent rows for the
+  // exact same Sproom state transition.
+  //
+  // The composite key (sendingId + sproomRawState + sproomStatusCode + eventTimestamp)
+  // uniquely identifies a Sproom state-entry observation:
+  //   - sendingId: which sending it belongs to
+  //   - sproomRawState: the Sproom status name (e.g. 'transmissionStarted')
+  //   - sproomStatusCode: the numeric code (e.g. 301) — distinguishes states
+  //     with the same name but different codes (rare, but possible)
+  //   - eventTimestamp: the Sproom-reported dateTime — identical for the same
+  //     state-entry regardless of whether we observe it via webhook or poller
+  //
+  // If an event with the same composite key already exists, skip creation.
+  // The sending's current status may already be correct (if webhook processed
+  // first) or may need updating (if poller processed first and webhook arrives
+  // later with the same state — the regression guard below handles that).
+  const existingEvent = await db.eInvoiceSendEvent.findFirst({
+    where: {
+      sendingId,
+      sproomRawState: sproomState,
+      sproomStatusCode: sproomStatusCode ?? null,
+      eventTimestamp: ts,
+    },
+    select: { id: true, status: true, source: true },
+  });
+
+  if (existingEvent) {
+    // Already processed this exact Sproom state-entry — no-op (no duplicate event,
+    // no duplicate status update, no duplicate audit log, no duplicate toast).
+    logger.info('[STATUS-TRACKER] Duplicate state-entry ignored (already processed)', {
+      sendingId,
+      sproomState,
+      sproomStatusCode: sproomStatusCode ?? null,
+      eventTimestamp: ts.toISOString(),
+      existingEventId: existingEvent.id,
+      existingSource: existingEvent.source,
+    });
+    return {
+      sendingId,
+      previousStatus,
+      newStatus: previousStatus, // unchanged
+      changed: false,
+      eventCreated: false,
+      mappedStatus: newStatus,
+      sproomRawState: sproomState,
+    };
+  }
+
+  // ── Idempotency check 2: same status + same raw state on the sending = no-op ──
+  // (This catches the case where the sending was already updated to this exact
+  // status+rawState — e.g. via a different code path or manual update.)
   if (
     previousStatus === newStatus &&
     sending.sproomRawStatus === sproomState
@@ -345,7 +431,7 @@ export async function applyStatusTransition(
     };
   }
 
-  // ── Idempotency check 2: regression guard ──
+  // ── Idempotency check 3: regression guard ──
   // Don't downgrade a sending (e.g. ACCEPTED → DELIVERED if a late webhook
   // arrives). Terminal statuses (FAILED/REJECTED/CANCELLED/PAID) are final.
   if (!isForwardTransition(previousStatus, newStatus)) {
