@@ -149,15 +149,39 @@ export function EInvoiceEventNotifier() {
 
           // Outbound status transition.
           switch (data.status) {
+            case 'SENT':
+              toast.info(
+                isDa ? `${cap(docLabel)} afsendt` : `${cap(docLabel)} sent`,
+                { description, duration: 8000 },
+              );
+              break;
+            case 'IN_TRANSIT':
+              toast.info(
+                isDa ? `${cap(docLabel)} undervejs` : `${cap(docLabel)} in transit`,
+                { description, duration: 8000 },
+              );
+              break;
             case 'DELIVERED':
               toast.success(
                 isDa ? `${cap(docLabel)} leveret` : `${cap(docLabel)} delivered`,
                 { description, duration: 8000 },
               );
               break;
+            case 'PENDING_APPROVAL':
+              toast.info(
+                isDa ? `${cap(docLabel)} afventer godkendelse` : `${cap(docLabel)} pending approval`,
+                { description, duration: 8000 },
+              );
+              break;
             case 'ACCEPTED':
               toast.success(
                 isDa ? `${cap(docLabel)} accepteret` : `${cap(docLabel)} accepted`,
+                { description, duration: 8000 },
+              );
+              break;
+            case 'PAID':
+              toast.success(
+                isDa ? `${cap(docLabel)} betalt` : `${cap(docLabel)} paid`,
                 { description, duration: 8000 },
               );
               break;

@@ -47,11 +47,12 @@ import { ProjectsPage } from '@/components/projects/projects-page';
 import { HermesOversightPage } from '@/components/hermes/hermes-oversight-page';
 import { AuthMarketingNav } from '@/components/marketing/auth-marketing-nav';
 import { EInvoiceInbox } from '@/components/invoices/einvoice-inbox';
+import { EInvoiceTrackingPage } from '@/components/invoices/einvoice-tracking-page';
 import { PageHeader } from '@/components/shared/page-header';
 
-type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight' | 'einvoice-inbox';
+type View = 'dashboard' | 'transactions' | 'exports' | 'invoices' | 'backups' | 'audit-log' | 'accounts' | 'journal' | 'contacts' | 'periods' | 'ledger' | 'reports' | 'bank-recon' | 'aging' | 'cash-flow' | 'recurring' | 'budget' | 'projects' | 'settings' | 'settings-company' | 'settings-edelivery' | 'annual-report' | 'hermes-oversight' | 'einvoice-inbox' | 'einvoice-tracking';
 
-const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report', 'hermes-oversight', 'einvoice-inbox'];
+const VALID_VIEWS: View[] = ['dashboard', 'transactions', 'exports', 'invoices', 'backups', 'audit-log', 'accounts', 'journal', 'contacts', 'periods', 'ledger', 'reports', 'bank-recon', 'aging', 'cash-flow', 'recurring', 'budget', 'projects', 'settings', 'settings-company', 'settings-edelivery', 'annual-report', 'hermes-oversight', 'einvoice-inbox', 'einvoice-tracking'];
 
 // ─── SEO: Dynamic document.title per view ─────────────────────────
 const VIEW_TITLES_DA: Record<View, string> = {
@@ -59,6 +60,7 @@ const VIEW_TITLES_DA: Record<View, string> = {
   'transactions': 'Posteringer — Bogføring',
   'exports': 'Eksport — SAF-T, CSV & OIOUBL',
   'invoices': 'Salg & Faktura — E-faktura & Peppol',
+  'einvoice-tracking': 'E-faktura Sporing — NemHandel & Peppol',
   'backups': 'Sikkerhedskopier — Backup & Gendannelse',
   'audit-log': 'Revisionslog — Uforanderlig Audit Trail',
   'accounts': 'Kontoplan — FSR Standard Konti',
@@ -106,6 +108,7 @@ const VIEW_TITLES_EN: Record<View, string> = {
   'annual-report': 'Annual Report — Income Statement & Balance Sheet',
   'hermes-oversight': 'Hermes AI — Oversight & Configuration',
   'einvoice-inbox': 'E-Invoice Inbox — NemHandel & Peppol',
+  'einvoice-tracking': 'E-Invoice Tracking — NemHandel & Peppol',
 };
 
 // Get initial view from URL pathname (e.g. /transactions, /settings?tab=access)
@@ -454,6 +457,7 @@ function Home() {
         dashboard: 'AlphaFlow Dashboard — overblik over økonomi, posteringer, moms, fakturaer og likviditet i ét kontrolpanel.',
         transactions: 'Posteringer i AlphaFlow — dobbelt bogføring med automatisk moms, kategorisering og finansjournal.',
         invoices: 'Fakturering i AlphaFlow — opret, send og modtag e-fakturaer via Peppol OIOUBL BIS Billing 3.0.',
+        'einvoice-tracking': 'Spor alle dine e-faktura afsendelser i realtid — status, levering, accept, afvisning og betaling.',
         accounts: 'Kontoplan i AlphaFlow — FSR standard kontoplan med 38 konti, momsmapping og automatisk bogføringsforslag.',
         reports: 'Regnskabsrapporter i AlphaFlow — resultatopgørelse, balance, pengestrøm, SAF-T eksport og årsafslutning.',
         'bank-recon': 'Bankafstemning i AlphaFlow — Open Banking integration med automatisk match af posteringer.',
@@ -465,6 +469,7 @@ function Home() {
         dashboard: 'AlphaFlow Dashboard — overview of finances, transactions, VAT, invoices and liquidity.',
         transactions: 'Transactions in AlphaFlow — double-entry bookkeeping with automatic VAT and journal.',
         invoices: 'Invoicing in AlphaFlow — create, send and receive e-invoices via Peppol OIOUBL.',
+        'einvoice-tracking': 'Track all your e-invoice sendings in real-time — status, delivery, accept, rejection and payment.',
         accounts: 'Chart of Accounts in AlphaFlow — FSR standard with 38 accounts and VAT mapping.',
         reports: 'Financial Reports in AlphaFlow — income statement, balance sheet, cash flow, SAF-T export.',
         'bank-recon': 'Bank Reconciliation in AlphaFlow — Open Banking with automatic transaction matching.',
@@ -959,6 +964,12 @@ function Home() {
             />
             <EInvoiceInbox user={user} />
           </div>
+        );
+      case 'einvoice-tracking':
+        return (
+          <EInvoiceTrackingPage
+            onInvoiceClick={(invoiceId) => navigateToView('invoices')}
+          />
         );
       default:
         return <Dashboard user={user} onNavigate={(navView) => navigateToView(navView as View)} onboardingStepJustDone={onboardingStepJustDone} onOnboardingStepDoneConsumed={() => setOnboardingStepJustDone(0)} />;

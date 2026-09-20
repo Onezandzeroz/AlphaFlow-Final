@@ -160,13 +160,24 @@ enum EInvoiceSendChannel {
 }
 
 enum EInvoiceSendStatus {
-  PENDING // Queued for sending
-  QUEUED // Handed off to mini-service
-  SENDING // Actively being transmitted
-  DELIVERED // Successfully delivered to recipient
-  ACCEPTED // Recipient acknowledged (positive response)
-  FAILED // Transmission or delivery failed
-  REJECTED // Recipient rejected the invoice
+  // ── Pre-send (queued) ──
+  PENDING // Queued for sending (locally)
+  QUEUED // Handed off to mini-service (legacy — kept for backward compat)
+  SENDING // Actively being transmitted (Sproom upload in flight)
+
+  // ── Sproom accepted the document into its network ──
+  SENT // Sproom accepted the XML (201 Created) — document is in Sproom's pipeline
+
+  // ── In-network lifecycle (driven by Sproom DocumentStatusChanged webhooks) ──
+  IN_TRANSIT // Sproom is transmitting the document to the receiving Access Point (TransmissionStarted)
+  DELIVERED // Receiving Access Point has acknowledged receipt (TransmissionCompleted / Sent)
+  PENDING_APPROVAL // Recipient's AP has the document; awaiting explicit accept/reject by recipient
+  ACCEPTED // Recipient explicitly approved the invoice (positive ApplicationResponse)
+  REJECTED // Recipient explicitly rejected the invoice (negative ApplicationResponse)
+
+  // ── Out-of-band terminal states ──
+  PAID // Tenant marked the parent Invoice as PAID locally — synthesised onto the sending for end-to-end tracking
+  FAILED // Transmission or delivery failed (validation error, endpoint not found, send error, etc.)
   CANCELLED // Cancelled by user before sending
 }
 
@@ -1530,9 +1541,13 @@ model EInvoiceSending {
 
   // Status tracking
   status      EInvoiceSendStatus @default(PENDING)
-  sentAt      DateTime? // When the transmission started
-  deliveredAt DateTime? // When delivery confirmation received
-  acceptedAt  DateTime? // When recipient acknowledged
+  sentAt      DateTime? // When the transmission started (Sproom upload began)
+  inTransitAt DateTime? // When Sproom signalled transmission started to recipient AP
+  deliveredAt DateTime? // When the receiving AP acknowledged receipt
+  pendingApprovalAt DateTime? // When the document entered pending-approval state at the recipient
+  acceptedAt  DateTime? // When recipient explicitly acknowledged
+  rejectedAt  DateTime? // When recipient explicitly rejected
+  paidAt      DateTime? // When the parent Invoice was locally marked PAID (PAID-syntese)
 
   // Error handling
   errorCode    String? // Machine-readable error code
@@ -1549,6 +1564,14 @@ model EInvoiceSending {
   storecoveSubmissionId String? // Storecove submission ID (for status polling)
   storecoveStorecoveId  String? // Storecove internal ID (numeric, stored as string)
 
+  // ── Sproom raw status (GAP I-11) ──
+  // The raw Sproom DocumentStatusType string (e.g. 'EndpointNotFound',
+  // 'SchematronValidationError', 'DuplicateFileError') — preserved so the
+  // UI can show WHY a sending failed (vs. the collapsed 'FAILED' enum).
+  // Updated by einvoice-status-tracker whenever a webhook/poller observes a
+  // new state.
+  sproomRawStatus String?
+
   // Audit
   sentBy    String // userId who initiated the send
   createdAt DateTime @default(now())
@@ -1556,12 +1579,112 @@ model EInvoiceSending {
   companyId String
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  // ── Status history (GAP I-3) ──
+  // Append-only event log of every Sproom state transition observed for
+  // this sending (webhook + poller). Drives the timeline UI.
+  events EInvoiceSendEvent[]
+
   @@index([companyId, status])
   @@index([invoiceId])
   @@index([companyId, channel])
   @@index([companyId, createdAt])
   @@index([sentBy])
   @@index([nextRetryAt])
+  @@index([status, updatedAt])
+}
+
+// ─── E-INVOICE STATUS HISTORY (GAP I-3) ───────────────────────────────
+//
+// Append-only event log capturing every Sproom document state transition
+// observed for an EInvoiceSending — driven by:
+//   1. DocumentStatusChanged webhooks (push — primary)
+//   2. The outbox safety-net poller (pull — fallback when webhooks miss)
+//   3. Local transitions (e.g. PAID-syntese when Invoice is marked paid)
+//
+// This is the data source for the timeline UI in einvoice-send-status.tsx
+// and the global /api/einvoice-sends/[id] endpoint. Without this table,
+// Sproom's getDocumentState() data is fetched + discarded on each webhook
+// (the old behaviour — only the latest status was persisted).
+//
+// Multiple events per sending is normal — a typical happy-path is:
+//   SENT → IN_TRANSIT → DELIVERED → ACCEPTED → PAID
+//
+// Sproom's full DocumentStatusType enum has ~60 values; we preserve the
+// raw state string + statusCode + message + failedProperties so the UI
+// can show schematron validation errors, endpoint-not-found reasons, etc.
+
+model EInvoiceSendEvent {
+  id String @id @default(cuid())
+
+  // ── FK to the sending this event belongs to ──
+  sendingId String
+  sending   EInvoiceSending @relation(fields: [sendingId], references: [id], onDelete: Cascade)
+
+  // ── The mapped AlphaFlow status this event represents ──
+  // One of EInvoiceSendStatus (e.g. SENT, IN_TRANSIT, DELIVERED,
+  // PENDING_APPROVAL, ACCEPTED, REJECTED, PAID, FAILED, CANCELLED).
+  // This is what the UI badge renders — the user-facing bucket.
+  status EInvoiceSendStatus
+
+  // ── Raw Sproom state (GAP I-11) ──
+  // The exact Sproom DocumentStatusType string (e.g. 'TransmissionStarted',
+  // 'Sent', 'Approved', 'SchematronValidationError', 'EndpointNotFound').
+  // Preserved verbatim so the UI can show the precise reason for a failure
+  // or the exact sub-state of an in-transit document. Null for local
+  // events (e.g. PAID-syntese) that have no Sproom counterpart.
+  sproomRawState String?
+
+  // ── Sproom status code ──
+  // Numeric Sproom status code (e.g. 101=Created, 301=TransmissionStarted,
+  // 302=Sent, 303=Received, 304=TransmissionCompleted). Null for local events.
+  sproomStatusCode Int?
+
+  // ── Delivery type ──
+  // 'sproom' (NemHandel) or 'peppol'. Null for local events.
+  deliveryType String?
+
+  // ── Human-readable message ──
+  // From Sproom's state-entry message field, or synthesised locally.
+  // For failures, this is the error description. For accepts/rejects,
+  // it may carry the recipient's reason text.
+  message String?
+
+  // ── Schematron validation errors (failedProperties) ──
+  // When Sproom rejects a document due to schematron validation, the
+  // state-entry includes a `failedProperties` array with rule names +
+  // attempted values. Preserved as JSON so the UI can render them
+  // precisely (e.g. "BR-CL-10: Invoice number shall be unique").
+  failedProperties Json?
+
+  // ── Event source ──
+  // Where this event was observed:
+  //   'sproom_webhook' — DocumentStatusChanged webhook (push)
+  //   'sproom_poller'  — outbox safety-net poller (pull fallback)
+  //   'local_send'     — processEInvoiceSend succeeded (local)
+  //   'local_paid'     — PAID-syntese (Invoice marked PAID locally)
+  //   'local_retry'   — retry attempt logged (local)
+  //   'local_cancel'  — user cancelled the sending (local)
+  source String
+
+  // ── When the event occurred (Sproom timestamp) ──
+  // For Sproom-driven events: the dateTime from the state entry (high-precision
+  // ISO-8601 from Sproom). For local events: when the event was recorded.
+  eventTimestamp DateTime
+
+  // ── When AlphaFlow recorded this event ──
+  // createdAt is when we wrote the row — useful for debugging latency between
+  // Sproom observing the event and us persisting it.
+  createdAt DateTime @default(now())
+
+  // ── Optional metadata ──
+  // Free-form JSON for additional context (e.g. the full webhook payload
+  // for forensics, or the retry attempt number).
+  metadata Json?
+
+  @@index([sendingId, eventTimestamp])
+  @@index([sendingId, createdAt])
+  @@index([status, eventTimestamp])
+  @@index([source])
 }
 
 // ─── PROJECT ACCOUNTING ──────────────────────────────────────────

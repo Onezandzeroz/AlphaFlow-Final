@@ -50,6 +50,15 @@ const httpServer = createServer((req, res) => {
           return;
         }
 
+        // EINVOICE_EVENT — real-time toast for outbound e-invoice lifecycle
+        // transitions (DELIVERED / ACCEPTED / REJECTED / FAILED / SENT /
+        // IN_TRANSIT / PENDING_APPROVAL / PAID) and inbound received docs.
+        // Emitted by notifyEInvoiceEvent() from the Sproom webhook + poller.
+        if (data.type === 'EINVOICE_EVENT') {
+          handleEInvoiceEventBroadcast(data, res);
+          return;
+        }
+
         // Default / explicit READ_STATE_CHANGED — backward compatible:
         // a body with userId + readIds and no type is treated as read-state.
         handleReadStateBroadcast(data, res);
@@ -199,6 +208,67 @@ function handleDataChangedBroadcast(
 
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ ok: true, scope, recipients }));
+}
+
+/**
+ * Handle EINVOICE_EVENT broadcasts — emits 'einvoice-event' to all sockets
+ * in the company room. The frontend EInvoiceEventNotifier listens for this
+ * event and fires a sonner toast.
+ *
+ * Payload from notifyEInvoiceEvent() (sent by the Sproom webhook + poller):
+ *   {
+ *     type: 'EINVOICE_EVENT',
+ *     companyId, direction ('inbound'|'outbound'), status,
+ *     invoiceNumber, counterpartyName, documentType,
+ *     amount, currency, sendingId, receivedInvoiceId
+ *   }
+ */
+function handleEInvoiceEventBroadcast(
+  data: {
+    companyId?: string;
+    direction?: string;
+    status?: string;
+    invoiceNumber?: string | null;
+    counterpartyName?: string | null;
+    documentType?: string | null;
+    amount?: string | null;
+    currency?: string | null;
+    sendingId?: string | null;
+    receivedInvoiceId?: string | null;
+  },
+  res: any
+): void {
+  const { companyId } = data;
+
+  if (!companyId || typeof companyId !== 'string') {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Missing companyId for EINVOICE_EVENT' }));
+    return;
+  }
+
+  const payload = {
+    type: 'EINVOICE_EVENT',
+    companyId,
+    direction: data.direction,
+    status: data.status,
+    invoiceNumber: data.invoiceNumber ?? null,
+    counterpartyName: data.counterpartyName ?? null,
+    documentType: data.documentType ?? null,
+    amount: data.amount ?? null,
+    currency: data.currency ?? null,
+    sendingId: data.sendingId ?? null,
+    receivedInvoiceId: data.receivedInvoiceId ?? null,
+    timestamp: Date.now(),
+  };
+
+  const recipients = broadcastToCompany(companyId, payload);
+
+  console.log(
+    `[NotificationWS] EINVOICE_EVENT → company:${companyId} dir=${data.direction} status=${data.status} invoice=${data.invoiceNumber} (${recipients} socket(s))`
+  );
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ ok: true, recipients }));
 }
 
 // ─── Socket.IO Connection Handling ───────────────────────────────────

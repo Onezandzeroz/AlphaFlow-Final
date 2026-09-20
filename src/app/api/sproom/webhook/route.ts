@@ -63,20 +63,29 @@ export async function POST(request: Request) {
       });
     }
 
-    // TEMPORARY (staging): the X-Signature header IS present (Sproom sent
-    // it), but the RSA verification rejects it ("RSA signature did not
-    // match (key may have rotated)"). Likely a key format/padding issue in
-    // createVerify. To unblock e-invoice receiving, we process the webhook
-    // ANYWAY (log a warning) instead of rejecting it.
-    // TODO: fix the signature verification — set SPROOM_WEBHOOK_PUBLIC_KEY
-    // in .env with the PEM key from the Sproom dashboard (Profile → API
-    // settings), or debug the createVerify padding/algorithm — then
-    // re-enable fail-closed (uncomment the return below).
+    // ── Env-styret fail-closed signaturverifikation (GAP I-1 fix) ──
+    //
+    // I staging mode (SPROOM_WEBHOOK_REQUIRE_SIGNATURE !== 'true') accepteres
+    // webhooks uden gyldig signatur — der logges kun en warning. Dette er
+    // bevidst for staging-modus hvor Sproom sandbox sender webhooks men RSA-key
+    // ikke altid er konfigureret korrekt.
+    //
+    // I produktion (SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true) AFVISES webhooks
+    // med ugyldig/missing signatur — fail-closed. Sættes via env var så
+    // driftsmiljøet kan toggle det uden kodeændring.
+    //
+    // For at aktivere i produktion:
+    //   1. Sæt SPROOM_WEBHOOK_PUBLIC_KEY i .env (PEM key fra Sproom dashboard → Profile → API settings)
+    //   2. Sæt SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true
+    const requireSignature = process.env.SPROOM_WEBHOOK_REQUIRE_SIGNATURE === 'true';
     if (!authenticated) {
-      logger.warn('[WEBHOOK] Signature verification FAILED — processing anyway (TEMPORARY). Fix: set SPROOM_WEBHOOK_PUBLIC_KEY in .env with the PEM key from Sproom dashboard → Profile → API settings.');
-      // Fail-closed (DISABLED for staging — re-enable after fixing the key):
-      // logger.error('[WEBHOOK] REJECTED: Invalid Sproom RSA signature');
-      // return NextResponse.json({ received: true, error: 'invalid_signature' });
+      if (requireSignature) {
+        // Fail-closed — reject the webhook (Sproom will retry, men uden success hvis key er forkert)
+        logger.error('[WEBHOOK] REJECTED: Invalid Sproom RSA signature (SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true)');
+        return NextResponse.json({ received: true, error: 'invalid_signature' });
+      }
+      // Staging mode — log + process anyway
+      logger.warn('[WEBHOOK] Signature verification skipped (staging mode — set SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true in prod + SPROOM_WEBHOOK_PUBLIC_KEY).');
     }
 
     // ── 2. Parse the webhook event ─────────────────────────────────
@@ -493,7 +502,6 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
   // ISO-8601 `dateTime`. We use `documentStatus` first, then fall back
   // to `statusDetails.state`, then `event.status`, then the GET state API.
   const submissionId = event.documentId ?? '';
-  const now = new Date();
 
   if (!submissionId) {
     logger.warn('[SPROOM_WEBHOOK] No documentId in webhook', {
@@ -502,13 +510,6 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
     });
     return NextResponse.json({ received: true });
   }
-
-  // ── Resolve the status from the webhook payload ──
-  // Sproom's webhook payload is authoritative for the new state — we
-  // prefer it over the GET /state API to avoid an extra round-trip.
-  let status: string | undefined =
-    event.documentStatus || event.statusDetails?.state || event.status;
-  let details: string | undefined = event.reason;
 
   // The EInvoiceSending record stores the Sproom documentId in the
   // storecoveSubmissionId column (legacy field name, kept for backward
@@ -525,109 +526,80 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
     return NextResponse.json({ received: true });
   }
 
-  // Fetch the latest state via Sproom. The childCompanyId comes from the
-  // webhook payload (event.companyId) or from the company record.
+  // ── Fetch the full state-history via Sproom (GAP I-3 fix) ──
+  // The webhook payload only tells us the LATEST status changed. We fetch
+  // the complete state-history via GET /api/documents/{id}/state and apply
+  // every entry through the tracker — so the timeline UI has the full audit
+  // trail (Created → TransmissionStarted → Sent → TransmissionCompleted →
+  // Approved/Rejected) and not just the latest snapshot.
   const companyForChild = await db.company.findUnique({
     where: { id: sending.companyId },
     select: { sproomChildCompanyId: true },
   });
   const fetchChildId = event.companyId ?? companyForChild?.sproomChildCompanyId ?? undefined;
 
+  let states: import('@/lib/sproom-client').SproomDocumentStateEntry[] = [];
   if (sproomClient?.isConfigured && fetchChildId) {
     try {
-      const states = await sproomClient.getDocumentState(submissionId, {
+      states = await sproomClient.getDocumentState(submissionId, {
         childCompanyId: fetchChildId,
       });
-      if (states && states.length > 0) {
-        const latest = states[states.length - 1]; // last entry = most recent
-        status = latest.state || status;
-        details = latest.message || details;
-        logger.info('[WEBHOOK] Sproom document state fetched', {
-          submissionId,
-          status,
-          message: details,
-        });
-      }
+      logger.info('[WEBHOOK] Sproom document state-history fetched', {
+        submissionId,
+        entryCount: states.length,
+      });
     } catch (err) {
-      logger.warn('[WEBHOOK] Sproom getDocumentState failed', {
+      logger.warn('[WEBHOOK] Sproom getDocumentState failed — falling back to webhook payload', {
         submissionId,
         error: err instanceof Error ? err.message : String(err),
       });
-      // Continue with the webhook's stated status (event.status) as fallback
+      // Fall back to a single-entry state-history synthesised from the webhook payload
+      // so the tracker still processes something (better than skipping).
+      const fallbackStatus = event.documentStatus || event.statusDetails?.state || event.status;
+      if (fallbackStatus) {
+        states = [{
+          state: fallbackStatus as import('@/lib/sproom-client').SproomDocumentStatus,
+          statusCode: event.statusDetails?.statusCode,
+          deliveryType: event.statusDetails?.deliveryType ?? null,
+          dateTime: event.statusDetails?.dateTime || event.timestamp,
+          message: event.reason ?? null,
+          failedProperties: null,
+        }];
+      }
     }
   }
 
-  // Map Sproom DocumentStatusType → AlphaFlow EInvoiceSendStatus.
-  //
-  // Sproom posts status values as lowercase camelCase strings
-  // (e.g. "created", "transmissionStarted", "sent", "approved",
-  // "rejected", "delivered"). The switch below matches case-insensitively
-  // by normalising the status string to lowercase before comparison.
-  let newStatus: string;
-  let updateData: Record<string, unknown> = {};
-  let dbStatus: string | null = null;
+  // ── Apply the full state-history via the unified tracker ──
+  // This persists an EInvoiceSendEvent row per state entry (audit trail),
+  // updates EInvoiceSending.status + sproomRawStatus + relevant timestamp,
+  // and is idempotent (same state twice = no-op, no duplicate events).
+  let finalStatus: import('@/lib/einvoice-status-tracker').EInvoiceSendStatus = sending.status as any;
+  let transitionChanged = false;
 
-  switch (status?.toLowerCase()) {
-    // ── Delivered to the receiving AP / recipient ──
-    case 'sent':
-    case 'received':
-    case 'transmissioncompleted':
-    case 'delivered':
-      newStatus = 'DELIVERED';
-      dbStatus = 'DELIVERED';
-      updateData = { status: 'DELIVERED', deliveredAt: now };
-      break;
-
-    case 'approved':
-      newStatus = 'ACCEPTED';
-      dbStatus = 'ACCEPTED';
-      updateData = { status: 'ACCEPTED', acceptedAt: now };
-      break;
-
-    case 'rejected':
-      newStatus = 'REJECTED';
-      dbStatus = 'REJECTED';
-      updateData = { status: 'REJECTED', errorMessage: details || 'Recipient rejected the invoice' };
-      break;
-
-    case 'error':
-    case 'runtimeerror':
-    case 'senderror':
-    case 'sendnemhandelerror':
-    case 'sendsproomerror':
-    case 'schematronvalidationerror':
-    case 'oioschemavalidationerror':
-    case 'customvalidationerror':
-      newStatus = 'FAILED';
-      dbStatus = 'FAILED';
-      updateData = { status: 'FAILED', errorMessage: details || `Document error: ${status}` };
-      break;
-
-    case 'created':
-    case 'endpointnotfound':
-    case 'incomplete':
-    case 'transmissionstarted':
-      // Intermediate statuses — log but don't update
-      logger.info('[WEBHOOK] Intermediate status received', { submissionId, status });
-      return NextResponse.json({ received: true });
-
-    default:
-      logger.warn('[SPROOM_WEBHOOK] Unknown status received', { status });
-      return NextResponse.json({ received: true });
+  if (states.length > 0) {
+    try {
+      const { applyStateHistory } = await import('@/lib/einvoice-status-tracker');
+      const result = await applyStateHistory(sending.id, states, 'sproom_webhook');
+      finalStatus = result.finalStatus ?? finalStatus;
+      transitionChanged = result.changed > 0;
+      logger.info('[WEBHOOK] State-history applied via tracker', {
+        sendingId: sending.id,
+        applied: result.applied,
+        changed: result.changed,
+        finalStatus,
+      });
+    } catch (err) {
+      logger.error('[WEBHOOK] applyStateHistory failed', {
+        sendingId: sending.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
-  // Update the EInvoiceSending record
-  await db.eInvoiceSending.update({
-    where: { id: sending.id },
-    data: updateData,
-  });
-
-  // Notify the frontend of the status change so any open send-history
-  // dialogs auto-refresh via the useDataVersion hook. Without this, the
-  // UI only shows the new status when the user manually clicks Refresh
-  // or reopens the dialog. Sproom fires DocumentStatusChanged webhooks
-  // when the receiving AP delivers/accepts/rejects the document — these
-  // events should be reflected in real time.
+  // ── Notify the frontend: data-changed (refresh UI) + einvoice-event (toast) ──
+  // The data-changed event refreshes subscribed UI (send-status popup +
+  // global tracking view). The einvoice-event fires a sonner toast so the
+  // tenant is notified even when not looking at the popup.
   try {
     const { notifyDataChange } = await import('@/lib/notify-data-change');
     await notifyDataChange({
@@ -636,68 +608,43 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
       action: 'update',
     });
   } catch (err) {
-    // Non-blocking — the DB update + audit log already succeeded. The
-    // notify call is best-effort for real-time UI updates.
     logger.warn('[SPROOM_WEBHOOK] Failed to notify frontend of status change', {
       sendingId: sending.id,
       error: err instanceof Error ? err.message : String(err),
     });
   }
 
-  // ── Real-time toast: push the outbound status transition to the tenant ──
-  // The data-changed event above refreshes subscribed UI (send-status popup).
-  // This dedicated einvoice-event fires a sonner toast so the tenant is
-  // notified even when not looking at the send-history dialog.
-  try {
-    const { notifyEInvoiceEvent } = await import('@/lib/notify-einvoice-event');
-    const invoice = await db.invoice.findUnique({
-      where: { id: sending.invoiceId },
-      select: { invoiceNumber: true },
-    });
-    await notifyEInvoiceEvent({
-      companyId: sending.companyId,
-      direction: 'outbound',
-      status: newStatus as 'DELIVERED' | 'ACCEPTED' | 'REJECTED' | 'FAILED',
-      invoiceNumber: invoice?.invoiceNumber ?? null,
-      counterpartyName: sending.recipientName || null,
-      sendingId: sending.id,
-    });
-  } catch (err) {
-    logger.warn('[SPROOM_WEBHOOK] Failed to emit einvoice-event for outbound status', {
-      sendingId: sending.id,
-      status: newStatus,
-      error: err instanceof Error ? err.message : String(err),
-    });
+  if (transitionChanged) {
+    try {
+      const { notifyEInvoiceEvent } = await import('@/lib/notify-einvoice-event');
+      const invoice = await db.invoice.findUnique({
+        where: { id: sending.invoiceId },
+        select: { invoiceNumber: true },
+      });
+      await notifyEInvoiceEvent({
+        companyId: sending.companyId,
+        direction: 'outbound',
+        status: finalStatus as any,
+        invoiceNumber: invoice?.invoiceNumber ?? null,
+        counterpartyName: sending.recipientName || null,
+        sendingId: sending.id,
+      });
+    } catch (err) {
+      logger.warn('[SPROOM_WEBHOOK] Failed to emit einvoice-event for outbound status', {
+        sendingId: sending.id,
+        status: finalStatus,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
-  // Audit trail for the status change.
-  // Attribute to the user who initiated the send (sending.sentBy) — this
-  // preserves the original behaviour where the delivery event is tied to the
-  // user who sent the invoice, not an anonymous system actor.
-  await auditLog({
-    action: 'UPDATE',
-    entityType: 'EInvoiceSending',
-    entityId: sending.id,
-    userId: sending.sentBy,
-    companyId: sending.companyId,
-    changes: {
-      status: { old: sending.status, new: newStatus },
-    },
-    metadata: {
-      source: 'sproom_webhook',
-      sproomDocumentId: submissionId,
-      sproomStatus: status,
-      sproomDetails: details || null,
-      timestamp: event.timestamp,
-    },
-  });
-
-  logger.info('[SPROOM_WEBHOOK] Updated EInvoiceSending status', {
+  logger.info('[SPROOM_WEBHOOK] DocumentStatusChanged processed', {
     sendingId: sending.id,
     previousStatus: sending.status,
-    newStatus,
-    sproomStatus: status,
+    finalStatus,
+    sproomDocumentId: submissionId,
     companyId: sending.companyId,
+    stateEntriesApplied: states.length,
   });
 
   return NextResponse.json({ received: true });

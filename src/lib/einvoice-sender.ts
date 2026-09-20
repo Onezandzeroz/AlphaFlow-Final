@@ -834,16 +834,48 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
 
     // 6. Handle result
     if (result.success) {
-      // Successful delivery
-      await db.eInvoiceSending.update({
-        where: { id: sendingId },
-        data: {
-          status: EInvoiceSendStatus.DELIVERED,
-          deliveredAt: new Date(),
-          messageId: result.messageId || sending.messageId,
-          responseXml: result.responseXml || null,
-        },
-      });
+      // Successful upload to Sproom — set status to SENT (not DELIVERED).
+      //
+      // The old code set DELIVERED here, but that conflated two different
+      // states: "Sproom accepted the XML" vs. "recipient AP acknowledged
+      // receipt". Sproom accepting the XML means the document is now in
+      // Sproom's pipeline — but the recipient hasn't received it yet.
+      // Subsequent DocumentStatusChanged webhooks (Sent, Received,
+      // TransmissionCompleted) will upgrade the status to DELIVERED.
+      //
+      // The local_send event is recorded via the tracker (appends to the
+      // EInvoiceSendEvent timeline so the UI shows the full lifecycle).
+      try {
+        const { applyLocalTransition } = await import('@/lib/einvoice-status-tracker');
+        await applyLocalTransition({
+          sendingId,
+          status: 'SENT' as any,
+          message: 'Document accepted by Sproom Access Point',
+          source: 'local_send',
+          eventTimestamp: new Date(),
+          metadata: {
+            sproomDocumentId: result.messageId,
+            channel: sending.channel,
+          },
+        });
+      } catch (trackerErr) {
+        // Non-fatal: the tracker persisting the event failed, but the send
+        // itself succeeded. Fallback to the old direct update so the sending
+        // status is at least correct (the event just won't appear in timeline).
+        logger.warn('[EINVOICE_SEND] applyLocalTransition failed — falling back to direct update', {
+          sendingId,
+          error: trackerErr instanceof Error ? trackerErr.message : String(trackerErr),
+        });
+        await db.eInvoiceSending.update({
+          where: { id: sendingId },
+          data: {
+            status: EInvoiceSendStatus.SENT,
+            sentAt: new Date(),
+            messageId: result.messageId || sending.messageId,
+            responseXml: result.responseXml || null,
+          },
+        });
+      }
 
       // Also update the Invoice status to SENT if it was DRAFT
       const wasDraft = sending.invoice.status === 'DRAFT';
@@ -891,24 +923,17 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         }
       }
 
-      logger.info('[EINVOICE_SEND] E-invoice delivered successfully', {
+      logger.info('[EINVOICE_SEND] E-invoice submitted to Sproom successfully', {
         sendingId,
         messageId: result.messageId,
       });
 
-      // Audit trail
-      await auditLog({
-        action: 'UPDATE',
-        entityType: 'EInvoiceSending',
-        entityId: sendingId,
-        userId: sending.sentBy,
-        companyId: sending.companyId,
-        changes: {
-          status: { old: 'PENDING', new: 'DELIVERED' },
-          deliveredAt: { old: null, new: new Date().toISOString() },
-          messageId: { old: sending.messageId, new: result.messageId },
-        },
-      });
+      // NOTE: The detailed audit trail (status transition PENDING/SENDING → SENT
+      // + event-log entry) is now handled by the einvoice-status-tracker via
+      // applyLocalTransition() above. The old auditLog call here duplicated
+      // that work and referenced the wrong status values ('PENDING' → 'DELIVERED').
+      // The tracker's applyLocalTransition writes both an EInvoiceSendEvent row
+      // AND an auditLog entry with correct metadata (source='local_send', etc.).
     } else {
       // Failed delivery
       const nextRetryAt =

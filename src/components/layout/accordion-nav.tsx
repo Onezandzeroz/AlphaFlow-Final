@@ -43,6 +43,7 @@ import {
   Settings,
   Inbox,
   Bot,
+  Activity,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -72,7 +73,8 @@ type View =
   | 'settings-edelivery'
   | 'annual-report'
   | 'hermes-oversight'
-  | 'einvoice-inbox';
+  | 'einvoice-inbox'
+  | 'einvoice-tracking';
 
 interface NavItemDef {
   id: View;
@@ -107,6 +109,7 @@ export const NAV_SECTIONS: NavSectionDef[] = [
     items: [
       { id: 'dashboard', nameDa: 'Kontrolpanel', nameEn: 'Dashboard', icon: LayoutDashboard },
       { id: 'invoices', nameDa: 'Salg & Faktura', nameEn: 'Sales & Invoice', icon: FileText },
+      { id: 'einvoice-tracking', nameDa: 'E-faktura Sporing', nameEn: 'E-Invoice Tracking', icon: Activity },
       { id: 'transactions', nameDa: 'Køb & Kvittering', nameEn: 'Purchases & Receipts', icon: Receipt },
       { id: 'einvoice-inbox', nameDa: 'E-faktura Indbakke', nameEn: 'E-Invoice Inbox', icon: Inbox },
       { id: 'contacts', nameDa: 'Kontakter', nameEn: 'Contacts', icon: Users },

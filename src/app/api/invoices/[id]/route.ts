@@ -670,6 +670,44 @@ export const PUT = withGuard(
         // Do NOT cancel accrual — invoice is still sent/outstanding
       }
 
+      // ─── PAID-syntese: upgrade EInvoiceSendings for this invoice ─────
+      // When the Invoice is marked PAID locally, propagate that to all
+      // e-invoice sendings for this invoice that are in an eligible state
+      // (ACCEPTED / DELIVERED / PENDING_APPROVAL). This closes the loop in
+      // the timeline: SENT → DELIVERED → ACCEPTED → PAID, so the tenant
+      // sees the full lifecycle end-to-end. Sproom itself doesn't know
+      // about payments — this is a local-only synthesis.
+      //
+      // Run after the cash receipt JE creation so the timeline reflects
+      // the actual booking date. Non-fatal: failures are logged (the JE
+      // + Invoice status already succeeded).
+      if (newStatus === 'PAID' && previousStatus !== 'PAID') {
+        try {
+          const { applyPaidSyntese } = await import('@/lib/einvoice-status-tracker');
+          const paymentDate = paidDate ?? new Date();
+          const result = await applyPaidSyntese(
+            id,
+            paymentDate,
+            ctx.id,
+          );
+          if (result.upgraded > 0) {
+            logger.info(`[Invoice PAID] E-invoice PAID-syntese: ${result.upgraded} sendings upgraded`, {
+              invoiceId: id,
+              invoiceNumber: existing.invoiceNumber,
+            });
+            // Notify frontend: einvoice-sends scope so the tracking UI
+            // + send-status popup refresh in real time.
+            notifyDataChanges([
+              { scope: 'invoices', companyId: ctx.activeCompanyId!, action: 'update' },
+              { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
+              { scope: 'einvoice-sends', companyId: ctx.activeCompanyId!, action: 'update' },
+            ]).catch(() => {});
+          }
+        } catch (err) {
+          logger.warn(`[Invoice PAID] E-invoice PAID-syntese failed (non-fatal — invoice status already committed):`, err);
+        }
+      }
+
       // ─── STATUS TRANSITION: PAID → DRAFT / CANCELLED ────────────────
       // Cancel BOTH the cash receipt entry AND the accrual entry
       if (previousStatus === 'PAID' && newStatus && newStatus !== 'PAID' && newStatus !== 'SENT') {

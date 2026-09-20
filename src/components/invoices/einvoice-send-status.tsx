@@ -44,15 +44,40 @@ interface EInvoiceSendingRecord {
   recipientName: string;
   recipientCvr: string | null;
   status: string;
+  sproomRawStatus?: string | null;
   sentAt: string | null;
+  inTransitAt?: string | null;
   deliveredAt: string | null;
+  pendingApprovalAt?: string | null;
   acceptedAt: string | null;
+  rejectedAt?: string | null;
+  paidAt?: string | null;
   errorCode: string | null;
   errorMessage: string | null;
   retryCount: number;
   maxRetries: number;
   nextRetryAt: string | null;
   messageId: string | null;
+  createdAt: string;
+  // ── NEW: event timeline (returned by /api/invoices/[id]/einvoice-sends) ──
+  events?: EInvoiceSendEventRecord[];
+}
+
+// ── NEW: Event timeline entry (one row per Sproom state transition) ──
+interface EInvoiceSendEventRecord {
+  id: string;
+  status: string;
+  sproomRawState?: string | null;
+  sproomStatusCode?: number | null;
+  deliveryType?: string | null;
+  message?: string | null;
+  failedProperties?: Array<{
+    name?: string | null;
+    attemptedValue?: string | null;
+    validationRules?: Array<{ rule?: string | null }>;
+  }> | null;
+  source: string;
+  eventTimestamp: string;
   createdAt: string;
 }
 
@@ -100,15 +125,39 @@ function getStatusConfig(status: string, isDa: boolean) {
       colorClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/40',
       icon: <Send className="h-3 w-3" />,
     },
+    // ── NEW: SENT — Sproom accepted the XML (201 Created) ──
+    SENT: {
+      label: isDa ? 'Afsendt' : 'Sent',
+      colorClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/40',
+      icon: <Send className="h-3 w-3" />,
+    },
+    // ── NEW: IN_TRANSIT — Sproom is transmitting to recipient AP ──
+    IN_TRANSIT: {
+      label: isDa ? 'Undervejs' : 'In transit',
+      colorClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/40',
+      icon: <Globe className="h-3 w-3" />,
+    },
     DELIVERED: {
       label: isDa ? 'Leveret' : 'Delivered',
       colorClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40',
       icon: <CheckCircle2 className="h-3 w-3" />,
     },
+    // ── NEW: PENDING_APPROVAL — recipient has the doc, awaiting accept/reject ──
+    PENDING_APPROVAL: {
+      label: isDa ? 'Afventer godk.' : 'Pending approval',
+      colorClass: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40',
+      icon: <Clock className="h-3 w-3" />,
+    },
     ACCEPTED: {
       label: isDa ? 'Accepteret' : 'Accepted',
       colorClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40',
       icon: <CheckCircle2 className="h-3 w-3" />,
+    },
+    // ── NEW: PAID — synthesised when Invoice marked PAID locally ──
+    PAID: {
+      label: isDa ? 'Betalt' : 'Paid',
+      colorClass: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40',
+      icon: <ShieldCheck className="h-3 w-3" />,
     },
     FAILED: {
       label: isDa ? 'Fejlet' : 'Failed',
@@ -140,6 +189,12 @@ function getStatusConfig(status: string, isDa: boolean) {
       label: isDa ? 'Bogført' : 'Posted',
       colorClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40',
       icon: <CheckCircle2 className="h-3 w-3" />,
+    },
+    // ── NEW: SETTLED — was missing in the old config (showed as PENDING default) ──
+    SETTLED: {
+      label: isDa ? 'Afregnet' : 'Settled',
+      colorClass: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40',
+      icon: <ShieldCheck className="h-3 w-3" />,
     },
   };
   return configs[status] || configs.PENDING;
@@ -574,6 +629,90 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
                       {isDa ? 'Accepteret' : 'Accepted'}:{' '}
                       {format(new Date(record.acceptedAt), 'dd.MM.yyyy HH:mm', { locale })}
                     </span>
+                  </div>
+                )}
+
+                {/* ── NEW: Event timeline (GAP I-5 fix) ── */}
+                {record.events && record.events.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-gray-200 dark:border-white/5">
+                    <div className="flex items-center gap-1.5 mb-2 text-muted-foreground font-medium">
+                      <Globe className="h-3.5 w-3.5" />
+                      <span>{isDa ? 'Tidslinje (Sproom status-historik)' : 'Timeline (Sproom status history)'}</span>
+                    </div>
+                    <div className="relative pl-4 space-y-2">
+                      {/* Vertical line */}
+                      <div className="absolute left-[5px] top-1 bottom-1 w-px bg-gray-200 dark:bg-white/10" />
+                      {record.events.map((evt, idx) => {
+                        const evtConfig = getStatusConfig(evt.status, isDa);
+                        const isLast = idx === record.events!.length - 1;
+                        return (
+                          <div key={evt.id} className="relative flex items-start gap-2">
+                            {/* Timeline dot */}
+                            <div className={`absolute -left-4 top-1 h-2.5 w-2.5 rounded-full ring-2 ring-white dark:ring-gray-900 ${evtConfig.colorClass.split(' ')[0]}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge className={`${evtConfig.colorClass} text-[10px] font-medium gap-1 border`}>
+                                  {evtConfig.icon}
+                                  {evtConfig.label}
+                                </Badge>
+                                {evt.sproomRawState && (
+                                  <code className="text-[10px] text-muted-foreground font-mono">
+                                    {evt.sproomRawState}
+                                  </code>
+                                )}
+                                {evt.sproomStatusCode != null && (
+                                  <span className="text-[10px] text-muted-foreground">
+                                    #{evt.sproomStatusCode}
+                                  </span>
+                                )}
+                                {evt.deliveryType && (
+                                  <span className="text-[10px] text-muted-foreground uppercase">
+                                    {evt.deliveryType}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground mt-0.5">
+                                {format(new Date(evt.eventTimestamp), 'dd.MM.yyyy HH:mm:ss', { locale })}
+                                {!isLast && (
+                                  <span className="ml-2 opacity-50">→</span>
+                                )}
+                              </div>
+                              {evt.message && (
+                                <div className="text-[11px] text-muted-foreground mt-0.5 break-words">
+                                  {evt.message}
+                                </div>
+                              )}
+                              {/* Schematron validation errors — show as list */}
+                              {evt.failedProperties && evt.failedProperties.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {evt.failedProperties.map((fp, fpIdx) => (
+                                    <div key={fpIdx} className="text-[10px] text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded px-2 py-1">
+                                      <span className="font-mono font-medium">
+                                        {fp.validationRules?.[0]?.rule || fp.name || 'Validation error'}
+                                      </span>
+                                      {fp.attemptedValue && (
+                                        <span className="ml-2 opacity-70">
+                                          ({isDa ? 'værdi' : 'value'}: <code>{fp.attemptedValue}</code>)
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {/* Source badge */}
+                              <div className="text-[9px] text-muted-foreground/70 mt-0.5 uppercase tracking-wide">
+                                {evt.source === 'sproom_webhook' && (isDa ? 'Webhook' : 'Webhook')}
+                                {evt.source === 'sproom_poller' && (isDa ? 'Poller' : 'Poller')}
+                                {evt.source === 'local_send' && (isDa ? 'Lokal afsendelse' : 'Local send')}
+                                {evt.source === 'local_paid' && (isDa ? 'Lokal betaling' : 'Local paid')}
+                                {evt.source === 'local_retry' && (isDa ? 'Lokalt forsøg' : 'Local retry')}
+                                {evt.source === 'local_cancel' && (isDa ? 'Lokal annullering' : 'Local cancel')}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 

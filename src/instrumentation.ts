@@ -67,6 +67,12 @@ export async function register(): Promise<void> {
     // the webhook may have missed, and fires a real-time einvoice-event toast
     // for new ones — mirroring the webhook path.
     const { startSproomInboxScheduler } = await import('@/lib/sproom-inbox-scheduler');
+    // Safety-net poller for OUTBOUND DocumentStatusChanged events (GAP I-4 fix).
+    // Polls each non-terminal sending's state-history every 10 min via
+    // getDocumentState() — catches missed webhooks so a sending doesn't stay
+    // "DELIVERED" forever when the recipient has actually rejected it.
+    // Also auto-retries FAILED sendings whose nextRetryAt has elapsed.
+    const { startSproomOutboxScheduler } = await import('@/lib/sproom-outbox-scheduler');
 
     logger.info('[INSTRUMENTATION] Node.js runtime — initializing background services');
     startBackupScheduler();
@@ -74,6 +80,7 @@ export async function register(): Promise<void> {
     startBillingScheduler();
     startLogMonitorScheduler();
     startSproomInboxScheduler();
+    startSproomOutboxScheduler();
     logger.info('[INSTRUMENTATION] Background services initialized successfully');
   } catch (error) {
     // Never let instrumentation failure crash the server boot. Background
@@ -95,6 +102,7 @@ export async function unregister(): Promise<void> {
     const { stopBillingScheduler } = await import('@/lib/billing-scheduler');
     const { stopLogMonitorScheduler } = await import('@/lib/log-monitor-scheduler');
     const { stopSproomInboxScheduler } = await import('@/lib/sproom-inbox-scheduler');
+    const { stopSproomOutboxScheduler } = await import('@/lib/sproom-outbox-scheduler');
 
     logger.info('[INSTRUMENTATION] Server shutting down — stopping background services');
     stopBackupScheduler();
@@ -102,6 +110,7 @@ export async function unregister(): Promise<void> {
     stopBillingScheduler();
     stopLogMonitorScheduler();
     stopSproomInboxScheduler();
+    stopSproomOutboxScheduler();
   } catch (error) {
     // Best-effort cleanup — never let unregister throw during shutdown.
     console.error('[INSTRUMENTATION] Error during unregister:', error);

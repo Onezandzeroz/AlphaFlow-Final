@@ -33,9 +33,13 @@ export type EInvoiceEventDirection = 'inbound' | 'outbound';
  */
 export type EInvoiceEventStatus =
   | 'RECEIVED' // inbound: a document arrived
+  | 'SENT' // outbound: Sproom accepted the XML (201 Created)
+  | 'IN_TRANSIT' // outbound: Sproom is transmitting to recipient AP
   | 'DELIVERED' // outbound: delivered to the receiving AP / recipient
+  | 'PENDING_APPROVAL' // outbound: recipient has the doc, awaiting accept/reject
   | 'ACCEPTED' // outbound: recipient acknowledged
   | 'REJECTED' // outbound: recipient rejected
+  | 'PAID' // outbound: tenant marked the invoice PAID locally (PAID-syntese)
   | 'FAILED' // outbound: transmission / validation error
   | 'CANCELLED';
 

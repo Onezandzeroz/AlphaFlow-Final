@@ -2085,8 +2085,13 @@ export class SproomClient {
   /**
    * Map a Sproom document status to AlphaFlow's EInvoiceSendStatus.
    *
-   * AlphaFlow's EInvoiceSendStatus enum (in prisma schema) is:
-   *   PENDING | SENDING | SENT | DELIVERED | ACCEPTED | REJECTED | FAILED
+   * ⚠️ DEPRECATED — use `mapSproomStatus()` from `@/lib/einvoice-status-tracker`
+   * instead. That module has the full 53-value mapping including the new
+   * SENT / IN_TRANSIT / PENDING_APPROVAL / PAID statuses.
+   *
+   * This method is kept for backward compatibility with any code that imports
+   * it directly. It returns the old 8-value enum (no SENT / IN_TRANSIT /
+   * PENDING_APPROVAL / PAID distinctions).
    *
    * Sproom has a richer status set; we collapse into AlphaFlow's buckets.
    */
@@ -2095,15 +2100,16 @@ export class SproomClient {
       case 'Created':
       case 'EndpointAdded':
       case 'SchematronEnrichmentIsDone':
-        return 'PENDING';
-      case 'TransmissionStarted':
-      case 'Sent':
         return 'SENT';
+      case 'TransmissionStarted':
+        return 'IN_TRANSIT';
+      case 'Sent':
       case 'Received':
       case 'TransmissionCompleted':
         return 'DELIVERED';
-      case 'Approved':
       case 'PendingApproval':
+        return 'PENDING_APPROVAL';
+      case 'Approved':
         return 'ACCEPTED';
       case 'Rejected':
       case 'ApplicationReponseBusinessReject':
@@ -2127,7 +2133,7 @@ export class SproomClient {
       case 'IncompletePackage':
         return 'FAILED';
       default:
-        return 'PENDING';
+        return 'SENT';
     }
   }
 

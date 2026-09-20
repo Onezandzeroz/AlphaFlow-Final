@@ -50,7 +50,36 @@ export const GET = withGuard(
           : Promise.resolve([]),
       ]);
 
-      return NextResponse.json({ einvoiceSends, receivedInvoices });
+      // ── Fetch event-timeline for each sending (in parallel) ──
+      // Returns an array of EInvoiceSendEvent rows per sending, sorted
+      // chronologically. The popup uses this to render the timeline UI
+      // without an extra round-trip per sending.
+      const sendsWithEvents = await Promise.all(
+        (einvoiceSends as any[]).map(async (sending) => {
+          const events = await db.eInvoiceSendEvent.findMany({
+            where: { sendingId: sending.id },
+            orderBy: { eventTimestamp: 'asc' },
+            select: {
+              id: true,
+              status: true,
+              sproomRawState: true,
+              sproomStatusCode: true,
+              deliveryType: true,
+              message: true,
+              failedProperties: true,
+              source: true,
+              eventTimestamp: true,
+              createdAt: true,
+            },
+          });
+          return { ...sending, events };
+        }),
+      );
+
+      return NextResponse.json({
+        einvoiceSends: sendsWithEvents,
+        receivedInvoices,
+      });
     } catch (error) {
       logger.error('[EINVOICE_SENDS_API] Failed to fetch e-invoice send/receive history:', error);
       return NextResponse.json(
