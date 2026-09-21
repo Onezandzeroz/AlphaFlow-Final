@@ -764,24 +764,37 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
 
                           {/* Entity ID (hidden on small screens) */}
                           <TableCell className="hidden md:table-cell">
-                            {log.entityId ? (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <code className="text-xs bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-400 font-mono max-w-[120px] truncate inline-block">
-                                      {log.entityId.length > 12
-                                        ? `${log.entityId.slice(0, 8)}...${log.entityId.slice(-4)}`
-                                        : log.entityId}
-                                    </code>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className="font-mono text-xs">{log.entityId}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            ) : (
-                              <span className="text-xs text-gray-400">—</span>
-                            )}
+                            <div className="flex flex-col gap-1">
+                              {log.entityId ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <code className="text-xs bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded text-gray-600 dark:text-gray-400 font-mono max-w-[120px] truncate inline-block w-fit">
+                                        {log.entityId.length > 12
+                                          ? `${log.entityId.slice(0, 8)}...${log.entityId.slice(-4)}`
+                                          : log.entityId}
+                                      </code>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="font-mono text-xs">{log.entityId}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                              {/* Subtil bilagsnummer-indikator for JournalEntry audit-poster (GAP V-5 audit visibility) */}
+                              {log.entityType === 'JournalEntry' &&
+                                log.changes?.voucherNumber &&
+                                log.changes.voucherNumber !== null && (
+                                  <span
+                                    className="text-[10px] text-gray-400 dark:text-gray-500 lowercase"
+                                    title={isDanish ? 'Bilagsnummer' : 'Voucher number'}
+                                  >
+                                    {isDanish ? 'bilag' : 'voucher'} {String(log.changes.voucherNumber)}
+                                  </span>
+                                )}
+                            </div>
                           </TableCell>
 
                           {/* Changes summary (hidden on medium screens) */}

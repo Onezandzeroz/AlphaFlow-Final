@@ -1014,20 +1014,6 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           </Badge>
                         )}
 
-                        {/* Bilagsnummer (fortløbende, internt — tildeles ved POSTED) — GAP V-6 fix */}
-                        {entry.voucherNumber && (
-                          <Badge
-                            variant="outline"
-                            className={`text-xs font-mono shrink-0 ${isDimmed
-                              ? 'bg-gray-100 dark:bg-gray-800/50 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700'
-                              : 'bg-[#0d9488]/10 dark:bg-[#2dd4bf]/10 text-[#0d9488] dark:text-[#2dd4bf] border-[#0d9488]/20 dark:border-[#2dd4bf]/20'
-                            }`}
-                            title={isDanish ? 'Fortløbende bilagsnummer (tildeles automatisk ved bogføring)' : 'Sequential voucher number (auto-assigned on posting)'}
-                          >
-                            {entry.voucherNumber}
-                          </Badge>
-                        )}
-
                         {/* Description */}
                         <span className={`text-sm flex-1 truncate min-w-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'}`}>
                           {entry.description}
@@ -1168,8 +1154,8 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                       {isExpanded && (
                         <div className="px-4 pb-4 sm:px-14 journal-entry-expand">
                           <div className="rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                            {/* Table Header */}
-                            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/50 dark:bg-white/5 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                            {/* Table Header — inkluderer subtilt bilagsnummer i højre hjørne (hvor pilen peger på screenshot) */}
+                            <div className="relative grid grid-cols-12 gap-2 px-3 py-2 bg-gray-50/50 dark:bg-white/5 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                               <div className="col-span-4 sm:col-span-5">
                                 {isDanish ? 'Konto' : 'Account'}
                               </div>
@@ -1182,6 +1168,16 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                               <div className="col-span-2 sm:col-span-3 hidden sm:block">
                                 {isDanish ? 'Beskrivelse' : 'Description'}
                               </div>
+                              {/* Subtilt bilagsnummer i tabellens header-højre-hjørne — kun for POSTED entries.
+                                  Ikke en Badge (for subtilt, som brugeren ønskede), bare en lille grå tekst. */}
+                              {entry.voucherNumber && entry.status === 'POSTED' && (
+                                <span
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 dark:text-gray-500 normal-case tracking-normal font-normal lowercase"
+                                  title={isDanish ? 'Fortløbende bilagsnummer' : 'Sequential voucher number'}
+                                >
+                                  {isDanish ? 'bilag' : 'voucher'} {entry.voucherNumber}
+                                </span>
+                              )}
                             </div>
 
                             {/* Foreign currency info banner */}
@@ -1427,22 +1423,20 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                   </p>
                 </div>
 
-                {/* Næste bilagsnummer preview (GAP V-7 fix) — readonly visning af hvad bilaget får ved bogføring */}
+                {/* Næste bilagsnummer preview (GAP V-7 fix) — subtil readonly visning af hvad bilaget får ved bogføring */}
                 {nextVoucherPreview && !editingEntry && (
                   <div className="space-y-1.5">
                     <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {isDanish ? 'Næste bilagsnr. (preview)' : 'Next voucher no. (preview)'}
+                      {isDanish ? 'Næste bilagsnr.' : 'Next voucher no.'}
                     </Label>
-                    <div className="px-3 py-2 rounded-md bg-[#0d9488]/5 dark:bg-[#2dd4bf]/5 border border-[#0d9488]/20 dark:border-[#2dd4bf]/20">
-                      <code className="text-sm font-mono text-[#0d9488] dark:text-[#2dd4bf] font-medium">
+                    <div className="px-3 py-2 rounded-md bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/5">
+                      <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
                         {nextVoucherPreview}
-                      </code>
+                      </span>
+                      <span className="ml-2 text-[10px] text-gray-400 dark:text-gray-500">
+                        {isDanish ? '(tildeles automatisk ved bogføring)' : '(auto-assigned on posting)'}
+                      </span>
                     </div>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
-                      {isDanish
-                        ? 'Tildeles automatisk når bilaget bogføres. Andre brugere kan nå at tage nummeret først.'
-                        : 'Auto-assigned when the entry is posted. Other users may claim the number first under concurrent load.'}
-                    </p>
                   </div>
                 )}
 

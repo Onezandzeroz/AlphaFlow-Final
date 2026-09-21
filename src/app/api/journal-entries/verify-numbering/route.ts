@@ -101,19 +101,38 @@ interface NumberingReport {
 }
 
 /**
- * Parse a voucher number "BIL-2026-0042" into (prefix, year, seq).
- * Returns null if the format doesn't match.
+ * Parse a voucher number into (year, seq).
+ *
+ * Supports TWO formats:
+ *   1. Legacy: "BIL-2026-0042" → { year: 2026, seq: 42 }
+ *   2. New:    "42"             → { year: <booking year from entry.date>, seq: 42 }
+ *
+ * For the new plain-numeric format, the year is derived from the entry's
+ * booking date (passed as the `fallbackYear` parameter) since the number
+ * itself doesn't carry year information.
+ *
+ * Returns null if the format doesn't match either pattern.
  */
 function parseVoucherNumber(
   voucherNumber: string,
-): { prefix: string; year: number; seq: number } | null {
-  const match = voucherNumber.match(/^(.+)-(\d{4})-(\d+)$/);
-  if (!match) return null;
-  return {
-    prefix: match[1],
-    year: parseInt(match[2], 10),
-    seq: parseInt(match[3], 10),
-  };
+  fallbackYear?: number,
+): { year: number; seq: number } | null {
+  // Try legacy format first: "PREFIX-YYYY-NNNN"
+  const legacyMatch = voucherNumber.match(/^(.+)-(\d{4})-(\d+)$/);
+  if (legacyMatch) {
+    return {
+      year: parseInt(legacyMatch[2], 10),
+      seq: parseInt(legacyMatch[3], 10),
+    };
+  }
+  // New format: just a number "42"
+  if (/^\d+$/.test(voucherNumber)) {
+    return {
+      year: fallbackYear ?? new Date().getFullYear(),
+      seq: parseInt(voucherNumber, 10),
+    };
+  }
+  return null;
 }
 
 /**
@@ -199,7 +218,9 @@ export const GET = withGuard(
 
       let unparseableCount = 0;
       for (const entry of entries) {
-        const parsed = parseVoucherNumber(entry.voucherNumber!);
+        // For new plain-numeric format, derive year from entry.date
+        const fallbackYear = entry.date ? new Date(entry.date).getFullYear() : undefined;
+        const parsed = parseVoucherNumber(entry.voucherNumber!, fallbackYear);
         if (!parsed) {
           unparseableCount++;
           logger.warn('[VERIFY-NUMBERING] Unparseable voucherNumber', {

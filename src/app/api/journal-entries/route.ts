@@ -221,11 +221,31 @@ export const POST = withGuard(
         return je;
       });
 
+      // Re-fetch the entry to get the voucherNumber assigned by
+      // assignVoucherNumberIfPosted (which runs a separate UPDATE inside
+      // the transaction). The `je` returned by create() doesn't have it.
+      const entryWithVoucher = await db.journalEntry.findUnique({
+        where: { id: entry.id },
+        select: { voucherNumber: true },
+      });
+
       await auditCreate(
         ctx.id,
         'JournalEntry',
         entry.id,
-        { date, description, reference, status: entryStatus, lineCount: lines.length, totalDebit, totalCredit },
+        {
+          date,
+          description,
+          reference,
+          // Inkluder voucherNumber i audit (GAP V-5 audit visibility fix) —
+          // hentes fra DB efter assignVoucherNumberIfPosted har kørt, så vi
+          // får det endelige tildelte nummer med i audit-loggen.
+          voucherNumber: entryWithVoucher?.voucherNumber ?? null,
+          status: entryStatus,
+          lineCount: lines.length,
+          totalDebit,
+          totalCredit,
+        },
         requestMetadata(request),
         ctx.activeCompanyId
       );

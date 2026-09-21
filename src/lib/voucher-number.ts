@@ -1,12 +1,10 @@
 /**
  * Voucher Number Generator — Fortløbende Bilagsnummer
  *
- * Generates sequential, human-readable voucher numbers for journal entries
- * as required by the Danish Bookkeeping Act (Bogføringsloven §14 + BEK 97
- * Bilag 2, række 11).
+ * Generates sequential voucher numbers for journal entries as required by
+ * the Danish Bookkeeping Act (Bogføringsloven §14 + BEK 97 Bilag 2, række 11).
  *
- * Format: {journalPrefix}-{year}-{seq:04d}
- * Example: BIL-2026-0001, BIL-2026-0002, ...
+ * Format: just the sequence number as a string ("1", "2", "3", ..., "42", "100", ...)
  *
  * The voucher number is assigned atomically within a database transaction
  * to guarantee sequential ordering without gaps (no race conditions).
@@ -20,7 +18,11 @@
  * sequence resets to 1 and currentYear is updated. This mirrors the
  * year-rollover logic already used for invoices (invoices/route.ts:159).
  *
- * Example: tenant created in 2026, first voucher in 2027 → BIL-2027-0001
+ * ─── Why no prefix/year in the number? ────────────────────────────────
+ * The user explicitly requested the voucher number to be a plain sequence
+ * (1, 2, 3, ...) without prefix or year — simpler for users + auditors.
+ * The year and prefix are still tracked on the Company record for
+ * reference, but the voucherNumber column itself just holds the integer.
  */
 
 import { db } from '@/lib/db';
@@ -35,7 +37,7 @@ type PrismaTransactionClient = Parameters<Parameters<typeof db.$transaction>[0]>
  *
  * @param tx - Prisma transaction client (from db.$transaction callback)
  * @param companyId - The company ID to generate a voucher number for
- * @returns The generated voucher number (e.g., "BIL-2026-0001")
+ * @returns The generated voucher number as a string (e.g. "1", "42", "100")
  * @throws Error if company not found
  */
 export async function generateVoucherNumber(
@@ -49,7 +51,6 @@ export async function generateVoucherNumber(
 
   if (!company) throw new Error('Company not found');
 
-  const prefix = company.journalPrefix || 'BIL';
   const actualYear = new Date().getFullYear();
 
   // ── Year-rollover check (GAP V-2 fix) ──
@@ -67,7 +68,10 @@ export async function generateVoucherNumber(
   const yearRolled = company.currentYear !== actualYear;
   const year = yearRolled ? actualYear : (company.currentYear || actualYear);
   const seq = yearRolled ? 1 : company.nextJournalSequence;
-  const voucherNumber = `${prefix}-${year}-${String(seq).padStart(4, '0')}`;
+  // Plain sequence as a string — no prefix, no year, no zero-padding.
+  // The number is purely sequential within the tenant's lifetime (reset
+  // on year rollover). Format: "1", "2", "3", ..., "100", ...
+  const voucherNumber = String(seq);
 
   // Atomic update — increments sequence + syncs currentYear in one shot.
   // If yearRolled, the sequence resets to 1 → next call gets seq=2.
@@ -94,17 +98,16 @@ export async function generateVoucherNumber(
 /**
  * Preview the next voucher number WITHOUT consuming it.
  *
- * Used by the UI to show "Next voucher number: BIL-2026-0042" in the
- * journal entry form, so the user knows what number their entry will get
- * when posted. Pure read — does NOT increment the sequence.
+ * Used by the UI to show "Next voucher: 42" in the journal entry form,
+ * so the user knows what number their entry will get when posted. Pure
+ * read — does NOT increment the sequence.
  *
  * Note: the returned number is a PREDICTION. Under concurrent load, two
- * users may both see "BIL-2026-0042" — only the first to commit will
- * actually get it. The second will get 0043. This is acceptable for
- * preview purposes.
+ * users may both see "42" — only the first to commit will actually get
+ * it. The second will get 43. This is acceptable for preview purposes.
  *
  * @param companyId - The company ID to preview the next voucher for
- * @returns The predicted voucher number (e.g., "BIL-2026-0001")
+ * @returns The predicted voucher number as a string (e.g. "1", "42")
  */
 export async function previewNextVoucherNumber(
   companyId: string
@@ -118,14 +121,12 @@ export async function previewNextVoucherNumber(
     return '—';
   }
 
-  const prefix = company.journalPrefix || 'BIL';
   const actualYear = new Date().getFullYear();
   // Apply same year-rollover logic as generateVoucherNumber for consistency
   const yearRolled = company.currentYear !== actualYear;
-  const year = yearRolled ? actualYear : (company.currentYear || actualYear);
   const seq = yearRolled ? 1 : company.nextJournalSequence;
 
-  return `${prefix}-${year}-${String(seq).padStart(4, '0')}`;
+  return String(seq);
 }
 
 /**
