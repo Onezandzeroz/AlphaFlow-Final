@@ -1665,10 +1665,34 @@ async function createInvoiceAccrualJournalEntry(
     issueDate: Date;
     lineItems: unknown;
     projectId?: string | null;
+    documentType?: string | null;
   },
   companyId: string,
   userId: string,
 ): Promise<void> {
+  // ── Kreditnota-detection ────────────────────────────────────────
+  //
+  // En kreditnota REDUCERER et tilgodehavende (credit på 1200) — den er
+  // IKKE et tilgodehavende i sig selv. Derfor skal beskrivelsen afspejle
+  // at det er en kreditnota, ikke en faktura.
+  //
+  // Detektion (spejler createAccrualJournalEntry i invoices/[id]/route.ts):
+  //   1. documentType === 'CREDIT_NOTE' (canonical source)
+  //   2. Fallback: invoiceNumber starter med creditNotePrefix (f.eks. "KRE-")
+  //      — fanger gamle kreditnotaer hvor documentType defaultede til INVOICE.
+  //
+  // For kreditnotaer bruges beskrivelsen:
+  //   "Kreditnota – KRE-2026-0002 – Virksomhed F"
+  // i stedet for "Tilgodehavende – Faktura KRE-2026-0002 – Virksomhed F".
+  const companyForPrefix = await db.company.findFirst({
+    where: { id: companyId },
+    select: { creditNotePrefix: true },
+  });
+  const creditNotePrefix = companyForPrefix?.creditNotePrefix;
+  const isCreditNote =
+    invoice.documentType === 'CREDIT_NOTE' ||
+    (!!creditNotePrefix && invoice.invoiceNumber.startsWith(creditNotePrefix + '-'));
+
   const lineItems = (Array.isArray(invoice.lineItems) ? invoice.lineItems : []) as Array<{
     description: string;
     quantity: number;
@@ -1732,7 +1756,9 @@ async function createInvoiceAccrualJournalEntry(
 
   if (totalGross <= 0) return;
 
-  // Debit Tilgodehavende (receivables)
+  // Debit Tilgodehavende (receivables) — for fakturaer.
+  // For kreditnotaer spejles debit↔credit længere nede (så Tilgodehavende
+  // bliver credit = reducerer tilgodehavende, ikke debit = forøger).
   jeLines.unshift({
     accountId: receivablesAccount.id,
     debit: totalGross,
@@ -1740,7 +1766,8 @@ async function createInvoiceAccrualJournalEntry(
     description: `${invoice.invoiceNumber} – ${invoice.customerName}`,
   });
 
-  // Credit Udgående moms 25%
+  // Credit Udgående moms 25% — kun labels'et "Udgående moms" for fakturaer.
+  // For kreditnotaer bliver det en momskreditering (spejlet længere nede).
   if (vatByRate[25] && outputVat25Account) {
     jeLines.push({
       accountId: outputVat25Account.id,
@@ -1762,6 +1789,18 @@ async function createInvoiceAccrualJournalEntry(
     });
   }
 
+  // Kreditnota: spejl debit↔credit på alle linjer så posteringen reducerer
+  // Tilgodehavende (credit 1200) i stedet for at forøge det (debit 1200).
+  // Moms og omsætning spejles også (debit i stedet for credit) — præcis
+  // modsat af en almindelig faktura.
+  if (isCreditNote) {
+    for (const l of jeLines) {
+      const d = l.debit;
+      l.debit = l.credit;
+      l.credit = d;
+    }
+  }
+
   // Validate balanced (debit = credit)
   const totalDebit = jeLines.reduce((s, l) => s + l.debit, 0);
   const totalCredit = jeLines.reduce((s, l) => s + l.credit, 0);
@@ -1776,12 +1815,23 @@ async function createInvoiceAccrualJournalEntry(
     return;
   }
 
-  // Create the journal entry in a transaction + assign voucher number
+  // Create the journal entry in a transaction + assign voucher number.
+  //
+  // Description er forskellig for fakturaer vs kreditnotaer:
+  //   Faktura:    "Tilgodehavende – INV-2026-0005 – Virksomhed F"
+  //   Kreditnota: "Kreditnota – KRE-2026-0002 – Virksomhed F"
+  //
+  // Rationale: en kreditnota REDUCERER et tilgodehavende (credit på 1200)
+  // — den er ikke selv et tilgodehavende. At kalde den "Tilgodehavende"
+  // ville give brugere en forkert fornemmelse af hvad posteringen gør.
+  // Label "Kreditnota" alene (uden "Faktura" præfix) er mere præcist.
   await db.$transaction(async (tx) => {
     const je = await tx.journalEntry.create({
       data: {
         date: invoice.issueDate,
-        description: `Tilgodehavende – Faktura ${invoice.invoiceNumber} – ${invoice.customerName}`,
+        description: isCreditNote
+          ? `Kreditnota – ${invoice.invoiceNumber} – ${invoice.customerName}`
+          : `Tilgodehavende – Faktura ${invoice.invoiceNumber} – ${invoice.customerName}`,
         reference: invoice.invoiceNumber,
         status: 'POSTED',
         userId,

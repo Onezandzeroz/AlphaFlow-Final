@@ -666,6 +666,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
     const kind = getTransactionKind(tx);
     const style = getKindStyle(kind);
     return {
+      kind, // exposed so the rendering can override color for specific kinds (e.g. PURCHASE → green)
       label: getKindLabel(kind, language),
       amountClass: style.textClass,
       badgeClass: style.badgeClass,
@@ -891,9 +892,19 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                                 {language === 'da' ? 'Annulleret' : 'Cancelled'}
                               </Badge>
                             )}
-                            {/* Unified kind badge — green (money in) / red (money out) */}
-                            <Badge className={cn("text-[10px] px-1.5 py-0 border-0 gap-1", typeInfo.badgeClass)}>
-                              <TypeIcon className="h-2.5 w-2.5" />
+                            {/* Unified kind badge — green (money in) / red (money out).
+                                Override for PURCHASE: rendered green (received document),
+                                not red (even though it represents money out). */}
+                            <Badge className={cn(
+                              "text-[10px] px-1.5 py-0 border-0 gap-1",
+                              typeInfo.kind === 'PURCHASE'
+                                ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                                : typeInfo.badgeClass
+                            )}>
+                              <TypeIcon className={cn(
+                                "h-2.5 w-2.5",
+                                typeInfo.kind === 'PURCHASE' && "text-green-600 dark:text-green-400"
+                              )} />
                               {typeInfo.label}
                             </Badge>
                             {transaction.bankReconciled === true && (
@@ -1177,9 +1188,19 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                             {language === 'da' ? 'Annulleret' : 'Cancelled'}
                           </Badge>
                         ) : (
-                          // Unified kind badge — green (money in) / red (money out)
-                          <Badge className={cn("gap-1", typeInfo.badgeClass)}>
-                            <TypeIcon className="h-3 w-3" />
+                          // Unified kind badge — green (money in) / red (money out).
+                          // Override for PURCHASE: rendered green (received document),
+                          // not red (even though it represents money out).
+                          <Badge className={cn(
+                            "gap-1",
+                            typeInfo.kind === 'PURCHASE'
+                              ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                              : typeInfo.badgeClass
+                          )}>
+                            <TypeIcon className={cn(
+                              "h-3 w-3",
+                              typeInfo.kind === 'PURCHASE' && "text-green-600 dark:text-green-400"
+                            )} />
                             {typeInfo.label}
                           </Badge>
                         )}
