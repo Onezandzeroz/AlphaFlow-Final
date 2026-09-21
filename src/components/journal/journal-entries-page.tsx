@@ -105,6 +105,7 @@ interface JournalEntry {
   date: string;
   description: string;
   reference: string | null;
+  voucherNumber?: string | null; // Fortløbende bilagsnummer (f.eks. BIL-2026-0001) — tildeles ved POSTED
   status: 'DRAFT' | 'POSTED' | 'CANCELLED';
   cancelled: boolean;
   cancelReason: string | null;
@@ -230,6 +231,35 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
   const [formReference, setFormReference] = useState('');
   const [formLines, setFormLines] = useState<JournalLineInput[]>([createEmptyLine()]);
   const [formProjectId, setFormProjectId] = useState<string | null>(null);
+
+  // ── Preview af næste bilagsnummer (GAP V-7 fix) ──
+  // Vises readonly i formen så brugeren ved hvilket nummer deres bilag får
+  // når det bogføres. Opdateres når dialogen åbnes (eller når user skifter).
+  // Bemærk: dette er en PREDICTION — under concurrent load kan to brugere
+  // se samme nummer, men kun den første commit får det.
+  const [nextVoucherPreview, setNextVoucherPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!dialogOpen || !user?.activeCompanyId) {
+      setNextVoucherPreview(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/company/next-voucher');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setNextVoucherPreview(data.voucherNumber ?? null);
+        }
+      } catch {
+        // Non-blocking — preview bare ikke vist
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dialogOpen, user?.activeCompanyId]);
 
   // ── Project Mode (FASE 4) ──
   // Defence-in-depth: force the journal entry's project to the active project
@@ -977,10 +1007,24 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           {formatDateStr(entry.date, language)}
                         </span>
 
-                        {/* Reference */}
+                        {/* Reference (eksternt bilagsnr / leverandørfaktura-nr) */}
                         {entry.reference && (
                           <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}>
                             {entry.reference}
+                          </Badge>
+                        )}
+
+                        {/* Bilagsnummer (fortløbende, internt — tildeles ved POSTED) — GAP V-6 fix */}
+                        {entry.voucherNumber && (
+                          <Badge
+                            variant="outline"
+                            className={`text-xs font-mono shrink-0 ${isDimmed
+                              ? 'bg-gray-100 dark:bg-gray-800/50 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700'
+                              : 'bg-[#0d9488]/10 dark:bg-[#2dd4bf]/10 text-[#0d9488] dark:text-[#2dd4bf] border-[#0d9488]/20 dark:border-[#2dd4bf]/20'
+                            }`}
+                            title={isDanish ? 'Fortløbende bilagsnummer (tildeles automatisk ved bogføring)' : 'Sequential voucher number (auto-assigned on posting)'}
+                          >
+                            {entry.voucherNumber}
                           </Badge>
                         )}
 
@@ -1364,19 +1408,43 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                   />
                 </div>
 
-                {/* Reference */}
+                {/* Reference / eksternt bilagsnr. (GAP V-5 fix — label var før "Bilagsnummer" hvilket forvirrede brugere) */}
                 <div className="space-y-1.5">
                   <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {isDanish ? 'Bilagsnummer' : 'Reference'}
+                    {isDanish ? 'Eksternt bilagsnr.' : 'External ref.'}
                     <span className="text-gray-400 dark:text-gray-500 ml-1">({isDanish ? 'valgfrit' : 'optional'})</span>
                   </Label>
                   <Input
                     value={formReference}
                     onChange={(e) => setFormReference(e.target.value)}
-                    placeholder={isDanish ? 'f.eks. KE-001' : 'e.g. KE-001'}
+                    placeholder={isDanish ? 'f.eks. KE-001, leverandørfaktura-nr.' : 'e.g. KE-001, supplier invoice no.'}
                     className="bg-gray-50 dark:bg-white/5"
                   />
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                    {isDanish
+                      ? 'Din egen reference (f.eks. leverandørfaktura-nummer). Det fortløbende bilagsnummer tildeles automatisk ved bogføring.'
+                      : 'Your own reference (e.g. supplier invoice number). The sequential voucher number is auto-assigned on posting.'}
+                  </p>
                 </div>
+
+                {/* Næste bilagsnummer preview (GAP V-7 fix) — readonly visning af hvad bilaget får ved bogføring */}
+                {nextVoucherPreview && !editingEntry && (
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {isDanish ? 'Næste bilagsnr. (preview)' : 'Next voucher no. (preview)'}
+                    </Label>
+                    <div className="px-3 py-2 rounded-md bg-[#0d9488]/5 dark:bg-[#2dd4bf]/5 border border-[#0d9488]/20 dark:border-[#2dd4bf]/20">
+                      <code className="text-sm font-mono text-[#0d9488] dark:text-[#2dd4bf] font-medium">
+                        {nextVoucherPreview}
+                      </code>
+                    </div>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
+                      {isDanish
+                        ? 'Tildeles automatisk når bilaget bogføres. Andre brugere kan nå at tage nummeret først.'
+                        : 'Auto-assigned when the entry is posted. Other users may claim the number first under concurrent load.'}
+                    </p>
+                  </div>
+                )}
 
                 {/* Description */}
                 <div className="space-y-1.5 sm:col-span-1">

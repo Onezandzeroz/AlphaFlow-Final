@@ -563,6 +563,43 @@ export const POST = withGuard(
         ctx.activeCompanyId
       );
 
+      // ── Year-rollover: advance Company.currentYear after closing (GAP V-8 fix) ──
+      //
+      // When a tenant closes year X and the actual calendar year is now X+1,
+      // update Company.currentYear to X+1. This ensures the NEXT voucher
+      // number generated (via generateVoucherNumber) will be in the new
+      // year's sequence — e.g. BIL-2027-0001 — AND the sequence resets to 1.
+      //
+      // Note: we only advance if the closed year matches Company.currentYear.
+      // If the tenant is closing an OLD year (back-closing year X-2 while
+      // currentYear is already X), we DON'T touch currentYear — the tenant
+      // may still be actively booking in year X.
+      //
+      // We do NOT reset nextJournalSequence directly here — generateVoucherNumber()
+      // detects the currentYear mismatch and resets it atomically on the next
+      // call. This avoids a race where two year-end-closing requests would
+      // both reset the sequence.
+      const tenantCompany = await db.company.findUnique({
+        where: { id: ctx.activeCompanyId! },
+        select: { currentYear: true, nextJournalSequence: true },
+      });
+
+      if (tenantCompany && tenantCompany.currentYear === year) {
+        const nextYear = year + 1;
+        await db.company.update({
+          where: { id: ctx.activeCompanyId! },
+          data: { currentYear: nextYear },
+        });
+        logger.info(
+          `[YEAR-END-CLOSING] Advanced currentYear ${year} → ${nextYear} after closing year ${year}. Next voucher will be BIL-${nextYear}-0001 (sequence auto-resets in generateVoucherNumber).`,
+          {
+            companyId: ctx.activeCompanyId,
+            closedYear: year,
+            previousSequence: tenantCompany.nextJournalSequence,
+          }
+        );
+      }
+
       return NextResponse.json(
         {
           journalEntry: closingEntry,

@@ -845,6 +845,11 @@ model JournalEntry {
   @@index([companyId, status, hashedAt])
   @@index([userId, date])
   @@index([companyId, voucherNumber])
+  // Partial unique constraint — kun voucherNumber der ikke er NULL skal være
+  // unik pr. tenant (Bogføringsloven §14 + BEK 97 Bilag 2, række 11).
+  // DRAFT entries har voucherNumber = NULL og er ikke underlagt kravet.
+  // PostgreSQL implementerer dette via en partial unique index med WHERE-klausul.
+  @@unique([companyId, voucherNumber])
 }
 
 model JournalEntryLine {
