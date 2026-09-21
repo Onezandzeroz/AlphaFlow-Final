@@ -1054,14 +1054,14 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                                 {isDanish ? 'Betalt' : 'Paid'}
                               </Badge>
                             ) : (
-                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
+                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border-amber-500/20 gap-1">
                                 {isDanish ? 'Ubetalt' : 'Unpaid'}
                               </Badge>
                             );
                           }
                           if (entry.status === 'DRAFT') {
                             return (
-                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 border-orange-500/20 gap-1">
+                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border-amber-500/20 gap-1">
                                 {isDanish ? 'Uafstemt' : 'Unmatched'}
                               </Badge>
                             );

@@ -147,7 +147,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                               {isDa ? 'Betalt' : 'Paid'}
                             </Badge>
                           ) : (
-                            <Badge className="bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 text-[10px] gap-1 border-orange-500/20">
+                            <Badge className="bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 text-[10px] gap-1 border-amber-500/20">
                               {isDa ? 'Ubetalt' : 'Unpaid'}
                             </Badge>
                           )}
@@ -202,7 +202,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                             {isDa ? 'Betalt' : 'Paid'}
                           </Badge>
                         ) : (
-                          <Badge className="bg-orange-500/10 text-orange-600 dark:bg-orange-500/20 dark:text-orange-400 text-[10px] gap-1 border-orange-500/20">
+                          <Badge className="bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 text-[10px] gap-1 border-amber-500/20">
                             {isDa ? 'Ubetalt' : 'Unpaid'}
                           </Badge>
                         )}

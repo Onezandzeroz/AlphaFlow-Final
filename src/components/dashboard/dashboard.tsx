@@ -2681,12 +2681,12 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
           {isWidgetVisible('vat-input') && (
           <div data-widget-id="vat-input">
               <Card className="stat-card card-hover-lift overflow-hidden">
-                {/* Header with total */}
-                <div className="bg-gradient-to-r from-red-500/8 to-transparent dark:from-red-500/15 px-4 sm:px-5 pt-4 pb-3">
+                {/* Header with total — gylden orange tema for Indgående moms */}
+                <div className="bg-gradient-to-r from-amber-500/8 to-transparent dark:from-amber-500/15 px-4 sm:px-5 pt-4 pb-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-8 w-8 rounded-lg bg-red-500/10 flex items-center justify-center">
-                        <ArrowDownCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                      <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                        <ArrowDownCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -2699,7 +2699,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
                       {purchasesThisMonth.length} {language === 'da' ? 'køb' : 'purchases'}
                     </Badge>
                   </div>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400 mt-1.5 tabular-nums">
+                  <p className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1.5 tabular-nums">
                     {tc(inputVAT)}
                   </p>
                 </div>
