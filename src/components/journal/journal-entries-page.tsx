@@ -111,6 +111,10 @@ interface JournalEntry {
   cancelReason: string | null;
   currency?: string | null;
   exchangeRate?: number | string | null;
+  // True hvis denne faktura er fuldt dækket af kreditnotaer (eller denne
+  // kreditnota fuldt dækker dens oprindelige faktura). Sættes af backenden
+  // via checkCreditNoteSettlement() — når true vises "Udlignet" badge.
+  isSettledByCreditNote?: boolean;
   lines: JournalLine[];
 }
 
@@ -1043,11 +1047,24 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           {getStatusLabel(entry.status, isDanish)}
                         </Badge>
 
-                        {/* Payment Status Badge — Ubetalt / Betalt / Uafstemt */}
+                        {/* Payment Status Badge — Udlignet / Betalt / Ubetalt / Uafstemt */}
                         {(() => {
                           const isReconciled = entry.lines.some(
                             (line) => line.bankMatches && line.bankMatches.length > 0
                           );
+                          // Credit note settlement: hvis fakturaen er fuldt dækket af
+                          // kreditnotaer (eller denne kreditnota fuldt dækker dens
+                          // oprindelige faktura), vises "Udlignet" badge — det er en
+                          // særlig form for "Betalt" hvor tilgodehavende er neutraliseret
+                          // af en kreditnota i stedet for en bankbetaling.
+                          if (entry.isSettledByCreditNote && entry.status === 'POSTED' && !isEntryCancelled) {
+                            return (
+                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400 border-purple-500/20 gap-1" title={isDanish ? 'Udlignet af kreditnota' : 'Settled by credit note'}>
+                                <CheckCircle2 className="h-3 w-3" />
+                                {isDanish ? 'Udlignet' : 'Settled'}
+                              </Badge>
+                            );
+                          }
                           if (entry.status === 'POSTED' && !isEntryCancelled) {
                             return isReconciled ? (
                               <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-[#0d9488]/10 text-[#0d9488] dark:bg-[#2dd4bf]/10 dark:text-[#2dd4bf] border-[#0d9488]/20 gap-1">

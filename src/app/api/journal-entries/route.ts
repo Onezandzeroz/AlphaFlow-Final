@@ -9,6 +9,7 @@ import { ensureInitialBackup } from '@/lib/backup-scheduler';
 import { assignVoucherNumberIfPosted } from '@/lib/voucher-number';
 import { notifyDataChanges } from '@/lib/notify-data-change';
 import { sealJournalEntry, findClosedFiscalPeriod } from '@/lib/journal-hash-chain';
+import { checkCreditNoteSettlement } from '@/lib/credit-note-settlement';
 
 // GET - List journal entries for the authenticated user
 export const GET = withGuard(
@@ -61,7 +62,31 @@ export const GET = withGuard(
         },
       });
 
-      return NextResponse.json({ journalEntries: entries });
+      // ── Credit note settlement check ──────────────────────────────
+      // For each JE whose `reference` matches an invoice number, determine
+      // whether that invoice is fully covered by credit notes. If so, both
+      // the invoice JE and the credit note JE get isSettledByCreditNote=true
+      // so the Finansjournal UI can show "Udlignet" (settled) instead of
+      // "Ubetalt" (unpaid).
+      //
+      // This is a read-only annotation — no DB writes. The settlement
+      // detection runs in a single batched query (not N+1).
+      const companyId = ctx.activeCompanyId!;
+      const settlementMap = await checkCreditNoteSettlement(
+        entries.map((e) => ({ id: e.id, reference: e.reference })),
+        companyId,
+      );
+
+      // Attach isSettledByCreditNote to each entry before returning
+      const entriesWithSettlement = entries.map((entry) => {
+        const settlement = settlementMap.get(entry.id);
+        return {
+          ...entry,
+          isSettledByCreditNote: settlement?.isSettledByCreditNote ?? false,
+        };
+      });
+
+      return NextResponse.json({ journalEntries: entriesWithSettlement });
     } catch (error) {
       logger.error('List journal entries error:', error);
       return NextResponse.json(
