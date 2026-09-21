@@ -1059,7 +1059,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                           // af en kreditnota i stedet for en bankbetaling.
                           if (entry.isSettledByCreditNote && entry.status === 'POSTED' && !isEntryCancelled) {
                             return (
-                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400 border-purple-500/20 gap-1" title={isDanish ? 'Udlignet af kreditnota' : 'Settled by credit note'}>
+                              <Badge variant="outline" className="text-[10px] sm:text-xs font-medium shrink-0 bg-green-500/10 text-green-600 dark:bg-green-500/20 dark:text-green-400 border-green-500/20 gap-1" title={isDanish ? 'Udlignet af kreditnota' : 'Settled by credit note'}>
                                 <CheckCircle2 className="h-3 w-3" />
                                 {isDanish ? 'Udlignet' : 'Settled'}
                               </Badge>
