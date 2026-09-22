@@ -115,8 +115,10 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                             <ArrowUpCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                           </div>
                         ) : (
-                          <div className="h-8 w-8 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center justify-center">
-                            <ArrowDownCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                          // Købsfaktura (received) — pile-ikonet er grønt (received = positivt signal).
+                          // Beløb/text forbliver rød (styret af amount-klassen længere nede).
+                          <div className="h-8 w-8 rounded-lg bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
+                            <ArrowDownCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
                           </div>
                         )}
                       </TableCell>
