@@ -86,7 +86,7 @@ export const KEYWORDS_EN: readonly string[] = [
 export const META = {
   /** Primary Danish description (~280 chars, optimized for SERP display) */
   description:
-    "AlphaFlow er et intelligent dansk regnskabsprogram med automatisk momsafregning, Peppol e-fakturering (OIOUBL), OCR bilagsscanning, SAF-T eksport og overholdelse af dansk bogføringslov. Gratis så længe din omsætning er under 50.000 kr. — intet kreditkort påkrævet. Prøv gratis i dag.",
+    "AlphaFlow er et intelligent dansk regnskabsprogram med automatisk momsafregning, Peppol e-fakturering (OIOUBL 2.1), OCR bilagsscanning, SAF-T eksport og overholdelse af dansk bogføringslov. Gratis så længe din omsætning er under 50.000 kr. — intet kreditkort påkrævet. Prøv gratis i dag.",
 
   /** Shorter Danish description for Open Graph social cards */
   ogDescription:
@@ -98,7 +98,7 @@ export const META = {
 
   /** English alternate description */
   descriptionEN:
-    "AlphaFlow is an intelligent Danish accounting platform with automatic VAT reporting, Peppol e-invoicing (OIOUBL), OCR receipt scanning, SAF-T export, and full Danish Bookkeeping Act compliance. Free as long as your revenue is below 50,000 DKK — no credit card required.",
+    "AlphaFlow is an intelligent Danish accounting platform with automatic VAT reporting, Peppol e-invoicing (OIOUBL 2.1), OCR receipt scanning, SAF-T export, and full Danish Bookkeeping Act compliance. Free as long as your revenue is below 50,000 DKK — no credit card required.",
 } as const;
 
 // ─── Open Graph Defaults ─────────────────────────────────────────
@@ -195,9 +195,9 @@ export const FAQ_DA: readonly {
 export const FEATURES_DA: readonly string[] = [
   "Dobbelt bogføring med automatisk finansjournal",
   "Automatisk momsafregning med alle 10 danske momskoder",
-  "Peppol e-fakturering (OIOUBL BIS Billing 3.0)",
+  "Peppol e-fakturering (OIOUBL 2.1 & BIS Billing 3.0)",
   "Intelligent scanning af bilag (OCR)",
-  "SAF-T eksport (Dansk Finansskema v1.0)",
+  "SAF-T eksport (Dansk Finansskema v2.1)",
   "FSR standard kontoplan, der tilpasses din virksomhedstype",
   "Flere virksomheder og roller i én konto",
   "AI-baseret bankafstemning",

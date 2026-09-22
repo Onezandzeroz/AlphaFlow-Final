@@ -258,8 +258,8 @@ export default function LandingPage() {
                   Send e-fakturaer via Peppol-netværket
                 </h2>
                 <p className="mt-5 text-[15px] sm:text-[17px] text-teal-50/90 leading-relaxed">
-                  OIOUBL BIS Billing 3.0 understøttelse. Send og modtag
-                  e-fakturaer direkte i systemet med automatisk
+                  OIOUBL 2.1 & Peppol BIS Billing 3.0 understøttelse. Send og
+                  modtag e-fakturaer direkte i systemet med automatisk
                   afsendelsesstatus via Sproom adgangspunkt.
                 </p>
                 <CTAButton href="/features" variant="primary-light" showArrow className="mt-7 px-7">

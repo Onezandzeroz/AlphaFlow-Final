@@ -264,7 +264,7 @@ function LocalBusinessSchema() {
                 "@type": "Service",
                 name: "Peppol E-fakturering",
                 description:
-                  "Send og modtag e-fakturaer via Peppol-netværket med OIOUBL BIS Billing 3.0 standard.",
+                  "Send og modtag e-fakturaer via Peppol-netværket med OIOUBL 2.1 (NemHandel) og Peppol BIS Billing 3.0.",
               },
             },
             {
@@ -273,7 +273,7 @@ function LocalBusinessSchema() {
                 "@type": "Service",
                 name: "SAF-T Eksport",
                 description:
-                  "Eksporter regnskabsdata i Dansk Finansskema v1.0 format til Skattestyrelsen.",
+                  "Eksporter regnskabsdata i Dansk Finansskema v2.1 format til Skattestyrelsen.",
               },
             },
           ],

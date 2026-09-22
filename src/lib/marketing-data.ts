@@ -114,10 +114,10 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Momsrapport til Skattestyrelsen",
         description:
-          "Momsrapporten viser købs- og salgsmoms og er klar til indberetning til Skattestyrelsen via TastSelv.",
+          "Momsrapporten viser købs- og salgsmoms pr. periode og kan indsendes digitalt til Skattestyrelsen direkte fra systemet — eller eksporteres som CSV.",
       },
       {
-        title: "SAF-T eksport (Dansk Finansskema v1.0)",
+        title: "SAF-T eksport (Dansk Finansskema v2.1)",
         description:
           "Eksportér hele regnskabet i Skattestyrelsens SAF-T-format — fx hvis Skattestyrelsen beder om det ved en revision.",
       },
@@ -135,9 +135,9 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
     icon: FileText,
     features: [
       {
-        title: "Peppol e-fakturering (OIOUBL BIS Billing 3.0)",
+        title: "Peppol e-fakturering (OIOUBL 2.1 & BIS Billing 3.0)",
         description:
-          "Send og modtag e-fakturaer via Peppol-netværket. Registrér dit virksomhedsnummer én gang, og følg status på hver enkelt afsendelse.",
+          "Send og modtag e-fakturaer i begge standarder — OIOUBL 2.1 til dansk-til-dansk handel via NemHandel og Peppol BIS Billing 3.0 til grænseoverskridende handel. Registrér dit virksomhedsnummer én gang, og følg status på hver enkelt afsendelse.",
       },
       {
         title: "Auto e-faktura (Peppol / NemHandel)",
@@ -170,7 +170,7 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Automatisk konto-kategorisering",
         description:
-          "AI'en foreslår den rette konto ud fra din kontoplan og dine tidligere valg — du godkender med ét klik.",
+          "AI'en foreslår den rette konto ud fra din kontoplan og bilagets indhold — du godkender med ét klik.",
       },
       {
         title: "Kamera-scanning via PWA",
@@ -203,12 +203,12 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Aldersopdelt debitor/creditor-rapport",
         description:
-          "Se hvem der skylder dig penge — og hvem du skylder — opdelt i aldersgrupper (30/60/90+ dage).",
+          "Se hvem der skylder dig penge — og hvem du skylder — opdelt i aldersgrupper (30, 60, 90 og 120+ dage).",
       },
       {
         title: "Projektregnskab med under-budgets",
         description:
-          "Følg lønsomheden pr. projekt med egne budgetter, timeregistrering og projektspecifikke rapporter.",
+          "Følg lønsomheden pr. projekt med egne budgetter og projektspecifikke rapporter.",
       },
     ],
   },
@@ -221,7 +221,7 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "AI-baseret bankafstemning",
         description:
-          "Banktransaktioner matches automatisk med dine posteringer — og afstemningen bliver smartere, jo mere du bruger den.",
+          "Banktransaktioner matches automatisk med dine posteringer — fra eksakte beløb og datoer til AI-forslag. Sikre matches bogføres automatisk; resten godkender du med ét klik.",
       },
       {
         title: "Open Banking integration",
@@ -231,7 +231,7 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Valutahåndtering med automatisk kursopdatering",
         description:
-          "Bogfør i flere valutaer med dagligt opdaterede kurser — kursgevinst og -tab beregnes automatisk.",
+          "Bogfør i flere valutaer med dagligt opdaterede kurser fra Den Europæiske Centralbank.",
       },
     ],
   },

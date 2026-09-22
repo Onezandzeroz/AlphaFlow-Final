@@ -452,7 +452,7 @@ function Home() {
       da: {
         dashboard: 'AlphaFlow Dashboard — overblik over økonomi, posteringer, moms, fakturaer og likviditet i ét kontrolpanel.',
         transactions: 'Posteringer i AlphaFlow — dobbelt bogføring med automatisk moms, kategorisering og finansjournal.',
-        invoices: 'Fakturering i AlphaFlow — opret, send og modtag e-fakturaer via Peppol OIOUBL BIS Billing 3.0.',
+        invoices: 'Fakturering i AlphaFlow — opret, send og modtag e-fakturaer via Peppol (OIOUBL 2.1 & BIS Billing 3.0).',
         'einvoice-center': 'E-faktura center — modtag indkommende e-fakturaer i indbakken og spor alle afsendelser i realtid (status, levering, accept, afvisning, betaling).',
         accounts: 'Kontoplan i AlphaFlow — FSR standard kontoplan, der automatisk tilpasses din virksomhedstype, med momsmapping og automatisk bogføringsforslag.',
         reports: 'Regnskabsrapporter i AlphaFlow — resultatopgørelse, balance, pengestrøm, SAF-T eksport og årsafslutning.',
@@ -464,7 +464,7 @@ function Home() {
       en: {
         dashboard: 'AlphaFlow Dashboard — overview of finances, transactions, VAT, invoices and liquidity.',
         transactions: 'Transactions in AlphaFlow — double-entry bookkeeping with automatic VAT and journal.',
-        invoices: 'Invoicing in AlphaFlow — create, send and receive e-invoices via Peppol OIOUBL.',
+        invoices: 'Invoicing in AlphaFlow — create, send and receive e-invoices via Peppol (OIOUBL 2.1 & BIS Billing 3.0).',
         'einvoice-center': 'E-invoice center — receive incoming e-invoices in the inbox and track all sendings in real-time (status, delivery, accept, rejection, payment).',
         accounts: 'Chart of Accounts in AlphaFlow — FSR standard chart of accounts that automatically adapts to your company type, with VAT mapping.',
         reports: 'Financial Reports in AlphaFlow — income statement, balance sheet, cash flow, SAF-T export.',

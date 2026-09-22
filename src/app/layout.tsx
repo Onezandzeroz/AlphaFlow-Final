@@ -252,21 +252,21 @@ export default function RootLayout({
               AlphaFlow er et cloud-baseret regnskabsprogram udviklet specifikt
               til danske virksomheder. Det tilbyder dobbelt bogføring,
               automatisk momsafregning med alle 10 danske momskoder, Peppol
-              e-fakturering (OIOUBL BIS Billing 3.0), OCR bilagsscanning med
-              Tesseract.js og OpenCV, SAF-T eksport (Dansk Finansskema v1.0),
-              projektregnskab, budgetstyring, likviditetsprognose og fuld
-              compliance med dansk bogføringslov.
+              e-fakturering (OIOUBL 2.1 & BIS Billing 3.0), intelligent OCR
+              bilagsscanning, SAF-T eksport (Dansk Finansskema v2.1),
+              projektregnskab, budgetstyring, likviditetsprognose og bygget til
+              dansk bogføringslovs krav.
             </p>
             <h2 style={{ fontSize: "1.25rem", fontWeight: 600, margin: "1.5rem 0 0.75rem" }}>
               Nøglefunktioner
             </h2>
             <ul style={{ paddingLeft: "1.5rem" }}>
               <li>Automatisk momsafregning med alle 10 danske momskoder</li>
-              <li>Peppol e-fakturering (OIOUBL BIS Billing 3.0)</li>
-              <li>OCR bilagsscanning med Tesseract.js og OpenCV</li>
-              <li>SAF-T eksport (Dansk Finansskema v1.0)</li>
+              <li>Peppol e-fakturering (OIOUBL 2.1 & BIS Billing 3.0)</li>
+              <li>Intelligent OCR bilagsscanning</li>
+              <li>SAF-T eksport (Dansk Finansskema v2.1)</li>
               <li>FSR standard kontoplan, der tilpasses din virksomhedstype</li>
-              <li>Multi-virksomhed med rollebaseret adgangskontrol (RBAC)</li>
+              <li>Multi-virksomhed med rollebaseret adgang</li>
               <li>AI-baseret bankafstemning</li>
               <li>Finansielle rapporter (resultatopgørelse, balance, pengestrøm)</li>
               <li>Projektregnskab med under-budgets</li>
@@ -281,11 +281,12 @@ export default function RootLayout({
                 Compliance & Sikkerhed
               </h2>
               <p>
-                AlphaFlow opfylder kravene i dansk bogføringslov (§10-12) med
-                uforanderlig revisionslog, soft-delete med bevarelse, lukkede
-                regnskabsperioder, og SHA-256 checksum-beskyttede backupper med op
-                til 60 måneders retention. Alle dataoverførsler krypteres via
-                HTTPS med HTTP-only session cookies.
+                AlphaFlow er bygget til kravene i dansk bogføringslov (§10-12)
+                med uforanderlig revisionslog, soft-delete med bevarelse,
+                lukkede regnskabsperioder, og SHA-256 checksum-beskyttede
+                backupper med op til 60 måneders retention. Alle
+                dataoverførsler krypteres via HTTPS med HTTP-only session
+                cookies.
               </p>
               <h2 style={{ fontSize: "1.25rem", fontWeight: 600, margin: "1.5rem 0 0.75rem" }}>
                 Om AlphaFlow
