@@ -172,7 +172,7 @@ export const FAQ_DA: readonly {
   {
     question: "Hvilke virksomhedstyper understøttes?",
     answer:
-      "AlphaFlow understøtter alle almindelige danske virksomhedstyper: enkeltmandsvirksomhed, ApS, A/S, IVS og holdingselskaber. Kontoplanen tilpasses automatisk din virksomhedstype og følger FSR-standarden med 38 konti.",
+      "AlphaFlow understøtter alle almindelige danske virksomhedstyper: enkeltmandsvirksomhed, ApS, A/S, IVS og holdingselskaber. Kontoplanen tilpasses automatisk din virksomhedstype og bygger på FSR-standarden — som enkeltmandsvirksomhed får du automatisk konti til egenkapital, indskud, hævninger og private udgifter, og som holdingselskab får du konti til kapitalandele og udbytter.",
   },
   {
     question: "Kan jeg bruge AlphaFlow på min telefon?",
@@ -198,7 +198,7 @@ export const FEATURES_DA: readonly string[] = [
   "Peppol e-fakturering (OIOUBL BIS Billing 3.0)",
   "Intelligent scanning af bilag (OCR)",
   "SAF-T eksport (Dansk Finansskema v1.0)",
-  "FSR standard kontoplan med 38 konti",
+  "FSR standard kontoplan, der tilpasses din virksomhedstype",
   "Flere virksomheder og roller i én konto",
   "AI-baseret bankafstemning",
   "Finansielle rapporter (resultatopgørelse, balance, pengestrømsanalyse)",

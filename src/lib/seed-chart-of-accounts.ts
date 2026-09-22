@@ -9,6 +9,16 @@
  *   3xxx = Equity (Egenkapital)
  *   4xxx-5xxx = Revenue (Indtægter)
  *   6xxx-9xxx = Expenses (Omkostninger)
+ *
+ * The chart is automatically tailored to the company's type (Company.companyType):
+ *   - Enkeltmandsvirksomhed: owner's equity accounts (Egenkapital pr. 1/1,
+ *     Egenkapitalindskud, Egenkapitalshævning) plus Private udgifter —
+ *     Aktiekapital/Overkurs are removed
+ *   - ApS: the equity account is named Selskabskapital
+ *   - IVS: the equity account is named Tegnet IVS-kapital
+ *   - Holdingselskab: accounts for kapitalandele, udbytter and
+ *     kursgevinst/-tab on investments are added
+ *   - A/S, Andet or unknown: the standard chart with Aktiekapital
  */
 
 import { db } from '@/lib/db'
@@ -478,13 +488,193 @@ const DANISH_CHART_OF_ACCOUNTS: SeedAccount[] = [
   },
 ]
 
+// ─── Company type customisations ─────────────────────────────────────────
+
+/** Equity movements for sole proprietorships (enkeltmandsvirksomheder). */
+const ENK_EQUITY_MOVEMENTS: SeedAccount[] = [
+  {
+    number: '3010',
+    name: 'Egenkapitalindskud',
+    nameEn: 'Owner Deposits',
+    type: 'EQUITY',
+    group: 'SHARE_CAPITAL',
+    description: 'Indskud fra ejeren i løbet af regnskabsåret',
+  },
+  {
+    number: '3020',
+    name: 'Egenkapitalshævning',
+    nameEn: 'Owner Withdrawals',
+    type: 'EQUITY',
+    group: 'SHARE_CAPITAL',
+    description: 'Hævninger foretaget af ejeren i løbet af regnskabsåret',
+  },
+]
+
+/** Private expenses account for sole proprietorships. */
+const ENK_PRIVATE_EXPENSES: SeedAccount[] = [
+  {
+    number: '8950',
+    name: 'Private udgifter',
+    nameEn: 'Private Expenses',
+    type: 'EXPENSE',
+    group: 'OTHER_OPERATING',
+    description: 'Ejerens private udgifter betalt af virksomheden (overføres til egenkapitalen ved årsafslutning)',
+  },
+]
+
+/** Investment accounts for holding companies (holdingselskaber). */
+const HOLDING_INVESTMENTS: SeedAccount[] = [
+  {
+    number: '1910',
+    name: 'Kapitalandele i datterselskaber',
+    nameEn: 'Shares in Subsidiaries',
+    type: 'ASSET',
+    group: 'FIXED_ASSETS',
+    description: 'Kapitalandele i datterselskaber (koncernvirksomhed)',
+  },
+  {
+    number: '1920',
+    name: 'Kapitalandele i øvrige selskaber',
+    nameEn: 'Shares in Other Companies',
+    type: 'ASSET',
+    group: 'FIXED_ASSETS',
+    description: 'Kapitalandele i øvrige selskaber (f.eks. koncernforbundne)',
+  },
+]
+
+/** Dividend income accounts for holding companies. */
+const HOLDING_DIVIDENDS: SeedAccount[] = [
+  {
+    number: '4910',
+    name: 'Udbytte fra datterselskaber',
+    nameEn: 'Dividends from Subsidiaries',
+    type: 'REVENUE',
+    group: 'OTHER_REVENUE',
+    description: 'Modtagne udbytter fra datterselskaber',
+  },
+  {
+    number: '4920',
+    name: 'Udbytter fra øvrige selskaber',
+    nameEn: 'Dividends from Other Companies',
+    type: 'REVENUE',
+    group: 'OTHER_REVENUE',
+    description: 'Modtagne udbytter fra øvrige selskaber',
+  },
+]
+
+/** Realised gains/losses on investments for holding companies. */
+const HOLDING_GAINS_LOSSES: SeedAccount[] = [
+  {
+    number: '9210',
+    name: 'Kursgevinst på kapitalandele',
+    nameEn: 'Capital Gains on Investments',
+    type: 'REVENUE',
+    group: 'FINANCIAL_INCOME',
+    description: 'Realiserede kursgevinster på kapitalandele',
+  },
+  {
+    number: '9220',
+    name: 'Kurstab på kapitalandele',
+    nameEn: 'Capital Losses on Investments',
+    type: 'EXPENSE',
+    group: 'FINANCIAL_EXPENSE',
+    description: 'Realiserede kurstab på kapitalandele',
+  },
+]
+
+/** Inserts `additions` right after the account with `afterNumber` (falls back to appending at the end). */
+function insertAfter(chart: SeedAccount[], afterNumber: string, additions: SeedAccount[]): SeedAccount[] {
+  const out: SeedAccount[] = []
+  let anchorFound = false
+  for (const account of chart) {
+    out.push(account)
+    if (account.number === afterNumber) {
+      out.push(...additions)
+      anchorFound = true
+    }
+  }
+  if (!anchorFound) out.push(...additions)
+  return out
+}
+
+/**
+ * Builds the standard Danish chart of accounts tailored to the company type.
+ *
+ * @param companyType - The company's type ('ApS', 'A/S', 'IVS',
+ *   'Enkeltmandsvirksomhed', 'Holdingselskab', 'Andet' or null)
+ * @returns The customized chart of accounts
+ */
+export function buildChartForCompanyType(companyType: string | null | undefined): SeedAccount[] {
+  let chart: SeedAccount[] = DANISH_CHART_OF_ACCOUNTS.map((account) => ({ ...account }))
+
+  switch (companyType ?? undefined) {
+    case 'Enkeltmandsvirksomhed':
+      chart = chart
+        // Overkurs findes ikke i en enkeltmandsvirksomhed
+        .filter((account) => account.number !== '3100')
+        .map((account) =>
+          account.number === '3000'
+            ? {
+                ...account,
+                name: 'Egenkapital, pr. 1/1',
+                nameEn: "Opening Owner's Equity",
+                description: 'Ejerens egenkapital pr. 1. januar (åbningssaldo)',
+              }
+            : account
+        )
+      chart = insertAfter(chart, '3000', ENK_EQUITY_MOVEMENTS)
+      chart = insertAfter(chart, '8900', ENK_PRIVATE_EXPENSES)
+      break
+
+    case 'ApS':
+      chart = chart.map((account) =>
+        account.number === '3000'
+          ? {
+              ...account,
+              name: 'Selskabskapital',
+              nameEn: 'Company Capital',
+              description: 'Selskabets tegnede selskabskapital',
+            }
+            : account
+      )
+      break
+
+    case 'IVS':
+      chart = chart.map((account) =>
+        account.number === '3000'
+          ? {
+              ...account,
+              name: 'Tegnet IVS-kapital',
+              nameEn: 'Subscribed IVS Capital',
+              description: 'Selskabets tegnede ivs-kapital',
+            }
+            : account
+      )
+      break
+
+    case 'Holdingselskab':
+      chart = insertAfter(chart, '1900', HOLDING_INVESTMENTS)
+      chart = insertAfter(chart, '4300', HOLDING_DIVIDENDS)
+      chart = insertAfter(chart, '9400', HOLDING_GAINS_LOSSES)
+      break
+
+    default:
+      // 'A/S', 'Andet' eller ukendt type: standardskabelonen med Aktiekapital
+      break
+  }
+
+  return chart
+}
+
 /**
  * Seeds the standard Danish chart of accounts for a given user.
  *
- * This function is idempotent — if the user already has accounts
- * it will not create duplicates.
+ * The chart is automatically tailored to the company's type (see
+ * buildChartForCompanyType). This function is idempotent — if the user
+ * already has accounts it will not create duplicates.
  *
  * @param userId - The ID of the user to seed accounts for
+ * @param companyId - The ID of the company whose type drives the customization
  * @returns The number of accounts created
  */
 export async function seedChartOfAccounts(userId: string, companyId: string): Promise<number> {
@@ -497,9 +687,17 @@ export async function seedChartOfAccounts(userId: string, companyId: string): Pr
     return 0
   }
 
+  // Look up the company type so the chart can be tailored automatically
+  const company = await db.company.findUnique({
+    where: { id: companyId },
+    select: { companyType: true },
+  })
+
+  const chart = buildChartForCompanyType(company?.companyType)
+
   // Create all accounts in a single transaction for atomicity
   const result = await db.account.createMany({
-    data: DANISH_CHART_OF_ACCOUNTS.map((account) => ({
+    data: chart.map((account) => ({
       number: account.number,
       name: account.name,
       nameEn: account.nameEn,

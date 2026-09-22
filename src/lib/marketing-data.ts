@@ -84,9 +84,9 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
           "Hver postering bogføres automatisk på begge sider af regnskabet — korrekt dobbelt bogføring uden manuelt tastearbejde.",
       },
       {
-        title: "FSR standard kontoplan med 38 konti",
+        title: "FSR standard kontoplan, tilpasset din virksomhedstype",
         description:
-          "Kontoplanen bygger på FSR's danske standard og tilpasses automatisk din virksomhedstype — enkeltmandsvirksomhed, ApS, A/S, IVS eller holding.",
+          "Kontoplanen bygger på FSR's danske standard og sammensættes automatisk ud fra din virksomhedstype — som enkeltmandsvirksomhed får du konti til egenkapital, indskud, hævninger og private udgifter, og som holdingselskab får du konti til kapitalandele og udbytter.",
       },
       {
         title: "Finansjournal & hovedbog",
@@ -345,7 +345,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     features: [
       "Alle grundlæggende regnskabsfunktioner",
       "Dobbelt bogføring & finansjournal",
-      "FSR standard kontoplan (38 konti)",
+      "FSR standard kontoplan (fra 55 konti)",
       "E-fakturering (manuel fil-eksport)",
       "Bankintegration (demo-tilstand)",
       "1 bruger (kun ejer)",

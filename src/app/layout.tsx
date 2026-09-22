@@ -265,7 +265,7 @@ export default function RootLayout({
               <li>Peppol e-fakturering (OIOUBL BIS Billing 3.0)</li>
               <li>OCR bilagsscanning med Tesseract.js og OpenCV</li>
               <li>SAF-T eksport (Dansk Finansskema v1.0)</li>
-              <li>FSR standard kontoplan med 38 konti</li>
+              <li>FSR standard kontoplan, der tilpasses din virksomhedstype</li>
               <li>Multi-virksomhed med rollebaseret adgangskontrol (RBAC)</li>
               <li>AI-baseret bankafstemning</li>
               <li>Finansielle rapporter (resultatopgørelse, balance, pengestrøm)</li>

@@ -429,7 +429,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
       }
       await fetchAccounts();
       toast.success(isDanish ? 'Kontoplan oprettet!' : 'Chart of accounts created!', {
-        description: isDanish ? 'Standard dansk kontoplan er nu klar.' : 'Standard Danish chart of accounts is ready.',
+        description: isDanish ? 'Standard dansk kontoplan, tilpasset din virksomhedstype, er nu klar.' : 'Standard Danish chart of accounts, tailored to your company type, is ready.',
       });
       // Return to dashboard (onboarding scene) after a short delay
       setTimeout(() => onNavigate?.('dashboard'), 800);
@@ -921,8 +921,8 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
             </h2>
             <p className="text-gray-500 dark:text-gray-400 mb-2 max-w-md mx-auto">
               {isDanish
-                ? 'Opret en standard dansk kontoplan med 42 FSR-standardkonti for hurtigt at komme i gang med dit regnskab.'
-                : 'Set up a standard Danish chart of accounts with 42 FSR standard accounts to quickly get started with your bookkeeping.'}
+                ? 'Opret en standard dansk kontoplan, der automatisk tilpasses din virksomhedstype (55–61 FSR-konti) — så du kommer hurtigt i gang med dit regnskab.'
+                : 'Set up a standard Danish chart of accounts that automatically adapts to your company type (55–61 FSR accounts) to quickly get started with your bookkeeping.'}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-6">
               <Button

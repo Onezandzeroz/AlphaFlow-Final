@@ -226,7 +226,7 @@ export default function PricingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {[
               "Dobbelt bogføring med finansjournal",
-              "FSR standard kontoplan (38 konti)",
+              "FSR standard kontoplan (fra 55 konti)",
               "Automatisk momsafregning (10 koder)",
               "Lukkede regnskabsperioder",
               "Uforanderlig revisionslog",
