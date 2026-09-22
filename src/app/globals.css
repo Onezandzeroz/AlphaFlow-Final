@@ -596,6 +596,23 @@ html:has(.light-forced) {
   color: #ffffff !important;
 }
 
+/* FAQ accordion — question & answer text must ALWAYS be readable on
+   light-forced pages, regardless of any current or future unlayered
+   dark-mode rule. Hardcoded hex values (no var()) so they can never
+   resolve to a dark-theme token. Open/hover states keep the teal accent. */
+.light-forced [data-slot="accordion-trigger"] {
+  color: #1a1d1c !important;
+}
+
+.light-forced [data-slot="accordion-trigger"]:hover,
+.light-forced [data-slot="accordion-trigger"][data-state="open"] {
+  color: #0d9488 !important;
+}
+
+.light-forced [data-slot="accordion-content"] {
+  color: #374151 !important;
+}
+
 /* ========================================
    SCROLLBAR — Refined, minimal
    ======================================== */
@@ -682,18 +699,25 @@ select:focus {
 
 /* ========================================
    MODALS & DIALOGS — Consistent dark mode
+
+   :not(:has(.light-forced)) — dark-mode styles must NEVER apply on pages
+   that force the light theme (marketing + login). Radix portals render at
+   <body> level, OUTSIDE the .light-forced wrapper, so scoping the rescue
+   rules alone is not enough — the .dark rules themselves are guarded here.
+   Without this guard, e.g. the FAQ accordion questions render #e2e8e6
+   (light gray) on the white card = invisible text for dark-mode users.
    ======================================== */
 
-.dark [data-slot="sheet-content"],
-.dark [data-slot="dialog-content"],
-.dark [role="dialog"] {
+.dark:not(:has(.light-forced)) [data-slot="sheet-content"],
+.dark:not(:has(.light-forced)) [data-slot="dialog-content"],
+.dark:not(:has(.light-forced)) [role="dialog"] {
   background: #1a1f1e;
   border: 1px solid #2a3330;
 }
 
-.dark [data-slot="dropdown-menu-content"],
-.dark [role="menu"],
-.dark [data-slot="select-content"] {
+.dark:not(:has(.light-forced)) [data-slot="dropdown-menu-content"],
+.dark:not(:has(.light-forced)) [role="menu"],
+.dark:not(:has(.light-forced)) [data-slot="select-content"] {
   background: #1a1f1e;
   border: 1px solid #2a3330;
   color: #e2e8e6;
@@ -701,15 +725,22 @@ select:focus {
 
 /* ========================================
    BUTTON OUTLINE — Consistent dark mode
+
+   CRITICAL: [class*="outline"] is a SUBSTRING match — it also hits every
+   element whose class merely contains "outline-none" (all shadcn Buttons,
+   AccordionTrigger, etc.). On light-forced pages (marketing + login) this
+   rule made the FAQ question text and CTA buttons invisible by painting
+   them #e2e8e6 on white. The :not(:has(.light-forced)) guard keeps the
+   rule for the dark-mode app UI only.
    ======================================== */
 
-.dark button[class*="outline"] {
+.dark:not(:has(.light-forced)) button[class*="outline"] {
   border-color: #2a3330;
   background: transparent;
   color: #e2e8e6;
 }
 
-.dark button[class*="outline"]:hover {
+.dark:not(:has(.light-forced)) button[class*="outline"]:hover {
   background: #1e2a28;
   border-color: #3a4842;
   color: #e2e8e6;
@@ -784,10 +815,17 @@ select:focus {
 
 /* ========================================
    COMPREHENSIVE DARK MODE OVERRIDES
+
+   All overlay rules below are guarded with :not(:has(.light-forced)):
+   Radix portals (Sheet/Dialog/Select/Dropdown) mount at <body> level,
+   outside the .light-forced wrapper — so on marketing/login pages their
+   CSS variables resolve to dark values and hardcoded colors would paint
+   light text on light backgrounds. The guard keeps these rules active
+   ONLY on pages that don't force the light theme.
    ======================================== */
 
 /* Dialog / Sheet / Alert Dialog — dark mode defaults */
-.dark [data-slot="dialog-content"] {
+.dark:not(:has(.light-forced)) [data-slot="dialog-content"] {
   background: var(--card) !important;
   border-color: var(--border) !important;
 }
@@ -802,77 +840,77 @@ select:focus {
   }
 }
 
-.dark [data-slot="sheet-content"] {
+.dark:not(:has(.light-forced)) [data-slot="sheet-content"] {
   background: var(--card) !important;
   border-color: var(--border) !important;
 }
 
-.dark [data-slot="alert-dialog-content"] {
+.dark:not(:has(.light-forced)) [data-slot="alert-dialog-content"] {
   background: var(--card) !important;
   border-color: var(--border) !important;
 }
 
 /* Text colors always apply (both desktop and mobile) */
-.dark [data-slot="dialog-content"],
-.dark [data-slot="sheet-content"],
-.dark [data-slot="alert-dialog-content"] {
+.dark:not(:has(.light-forced)) [data-slot="dialog-content"],
+.dark:not(:has(.light-forced)) [data-slot="sheet-content"],
+.dark:not(:has(.light-forced)) [data-slot="alert-dialog-content"] {
   color: var(--card-foreground) !important;
 }
 
-.dark [data-slot="dialog-header"] {
+.dark:not(:has(.light-forced)) [data-slot="dialog-header"] {
   color: var(--card-foreground) !important;
 }
 
-.dark [data-slot="dialog-title"] {
+.dark:not(:has(.light-forced)) [data-slot="dialog-title"] {
   color: var(--card-foreground) !important;
 }
 
-.dark [data-slot="dialog-description"] {
+.dark:not(:has(.light-forced)) [data-slot="dialog-description"] {
   color: var(--muted-foreground) !important;
 }
 
-.dark [data-slot="alert-dialog-title"] {
+.dark:not(:has(.light-forced)) [data-slot="alert-dialog-title"] {
   color: var(--card-foreground) !important;
 }
 
-.dark [data-slot="alert-dialog-description"] {
+.dark:not(:has(.light-forced)) [data-slot="alert-dialog-description"] {
   color: var(--muted-foreground) !important;
 }
 
 /* Select / Dropdown / Popover */
-.dark [data-slot="select-content"] {
+.dark:not(:has(.light-forced)) [data-slot="select-content"] {
   background: var(--popover) !important;
   border-color: var(--border) !important;
 }
 
-.dark [data-slot="dropdown-menu-content"] {
+.dark:not(:has(.light-forced)) [data-slot="dropdown-menu-content"] {
   background: var(--popover) !important;
   border-color: var(--border) !important;
 }
 
-.dark [data-slot="popover-content"] {
+.dark:not(:has(.light-forced)) [data-slot="popover-content"] {
   background: var(--popover) !important;
   border-color: var(--border) !important;
 }
 
 /* Text colors always apply (both desktop and mobile) */
-.dark [data-slot="select-content"] {
+.dark:not(:has(.light-forced)) [data-slot="select-content"] {
   color: var(--popover-foreground) !important;
 }
 
-.dark [data-slot="select-item"] {
+.dark:not(:has(.light-forced)) [data-slot="select-item"] {
   color: var(--popover-foreground) !important;
 }
 
-.dark [data-slot="dropdown-menu-content"] {
+.dark:not(:has(.light-forced)) [data-slot="dropdown-menu-content"] {
   color: var(--popover-foreground) !important;
 }
 
-.dark [data-slot="dropdown-menu-item"] {
+.dark:not(:has(.light-forced)) [data-slot="dropdown-menu-item"] {
   color: var(--popover-foreground) !important;
 }
 
-.dark [data-slot="popover-content"] {
+.dark:not(:has(.light-forced)) [data-slot="popover-content"] {
   color: var(--popover-foreground) !important;
 }
 
