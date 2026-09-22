@@ -198,11 +198,11 @@ export default function FeaturesPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10">
             <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-              Bygget til dansk compliance
+              Bygget til dansk bogføringslov
             </h2>
             <p className="mt-3 text-[14px] text-teal-100/70 max-w-xl mx-auto">
-              AlphaFlow opfylder bogføringsloven og understøtter alle danske
-              standarder
+              Revisionslog, momskoder, SAF-T og e-faktura — alt er bygget til
+              danske regler og standarder
             </p>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
@@ -256,7 +256,7 @@ export default function FeaturesPage() {
             </span>
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="h-4 w-4 text-teal-300" />
-              Bogføringslov compliant
+              Overholder bogføringsloven
             </span>
           </div>
         </div>

@@ -17,7 +17,7 @@ export const SITE = {
   language: "da",
   languageAlt: "en",
   tagline:
-    "Intelligent regnskabsprogram for danske virksomheder — automatisk moms, Peppol e-faktura, OCR bilagsscanning & fuld bogføringslov compliance.",
+    "Intelligent regnskabsprogram til danske virksomheder — automatisk moms, e-faktura og bilagsscanning, bygget til bogføringslovens krav.",
 } as const;
 
 // ─── Danish Keywords (Primary Market) ────────────────────────────
@@ -86,11 +86,11 @@ export const KEYWORDS_EN: readonly string[] = [
 export const META = {
   /** Primary Danish description (~280 chars, optimized for SERP display) */
   description:
-    "AlphaFlow er et intelligent dansk regnskabsprogram med automatisk momsafregning, Peppol e-fakturering (OIOUBL), OCR bilagsscanning, SAF-T eksport og fuld compliance med dansk bogføringslov. Gratis så længe din omsætning er under 50.000 kr. — intet kreditkort påkrævet. Prøv gratis i dag.",
+    "AlphaFlow er et intelligent dansk regnskabsprogram med automatisk momsafregning, Peppol e-fakturering (OIOUBL), OCR bilagsscanning, SAF-T eksport og overholdelse af dansk bogføringslov. Gratis så længe din omsætning er under 50.000 kr. — intet kreditkort påkrævet. Prøv gratis i dag.",
 
   /** Shorter Danish description for Open Graph social cards */
   ogDescription:
-    "Intelligent regnskabsprogram for danske virksomheder — moms, e-faktura, OCR & bogføringslov compliance.",
+    "Intelligent regnskabsprogram til danske virksomheder — moms, e-faktura, OCR og bogføringslovens krav indbygget fra start.",
 
   /** Danish description for Twitter/X cards */
   twitterDescription:
@@ -132,62 +132,62 @@ export const FAQ_DA: readonly {
   {
     question: "Hvad er AlphaFlow?",
     answer:
-      "AlphaFlow er et cloud-baseret regnskabsprogram udviklet specifikt til danske virksomheder. Det tilbyder dobbelt bogføring, automatisk momsafregning med alle 10 danske momskoder, Peppol e-fakturering, OCR bilagsscanning, projektregnskab, budgetstyring og fuld compliance med dansk bogføringslov.",
+      "AlphaFlow er et netbaseret regnskabsprogram, der er udviklet specifikt til danske virksomheder. Du får dobbelt bogføring, automatisk momsafregning med alle 10 danske momskoder, e-fakturering via Peppol, scanning af bilag med kameraet samt projektregnskab og budgetstyring — bygget til bogføringslovens krav.",
   },
   {
     question: "Er AlphaFlow gratis?",
     answer:
-      "Ja, AlphaFlow er gratis så længe din virksomheds omsætning er under 50.000 kr. om året. Du får fuld adgang til alle grundlæggende funktioner uden kreditkort. Når omsætningen overstiger 50.000 kr., tilbydes fleksible abonnementer.",
+      "Ja — AlphaFlow er gratis, så længe din virksomheds omsætning er under 50.000 kr. om året. Du får fuld adgang til alle grundlæggende funktioner, og du skal ikke oplyse kortoplysninger. Når omsætningen overstiger 50.000 kr., kan du vælge et af vores fleksible abonnementer.",
   },
   {
     question: "Hvordan fungerer momsafregning i AlphaFlow?",
     answer:
-      "AlphaFlow understøtter alle 10 danske momskoder (salgsmoms, købsmoms, EU-indkøb, EU-salg, reverse charge mv.). Systemet beregner automatisk momsbalancen for hver afregningsperiode og genererer klar momsrapporter til Skattestyrelsen.",
+      "AlphaFlow understøtter alle 10 danske momskoder — fra salgs- og købsmoms til EU-handel og udenlandske ydelser. Systemet beregner automatisk momsbalancen for hver afregningsperiode og genererer en momsrapport, der er klar til indberetning til Skattestyrelsen.",
   },
   {
     question: "Kan jeg sende e-fakturaer med AlphaFlow?",
     answer:
-      "Ja, AlphaFlow understøtter Peppol-netværket via OIOUBL BIS Billing 3.0-standarden. Du kan registrere dit virksomhedsnummer, sende og modtage e-fakturaer direkte i systemet, og spore afsendelsesstatus. Integration med Sproom for nem tilmelding.",
+      "Ja. AlphaFlow er tilsluttet Peppol-netværket, så du kan sende og modtage e-fakturaer direkte fra systemet og følge status på hver afsendelse. Tilmeldingen til Peppol sker nemt via vores samarbejdspartner Sproom.",
   },
   {
-    question: "Er AlphaFlow compliant med dansk bogføringslov?",
+    question: "Lever AlphaFlow op til bogføringsloven?",
     answer:
-      "Ja. AlphaFlow opfylder kravene i bogføringslovens §10-12 med uforanderlig revisionslog (audit trail), §4-8 med soft-delete (sletning med bevarelse), lukkede regnskabsperioder, og SHA-256 checksum-beskyttede backupper med op til 60 måneders retention.",
+      "Ja. AlphaFlow er bygget til bogføringslovens krav: en revisionslog, der ikke kan ændres (§ 10-12), sletning med fuld bevarelse af historikken (§ 4-8), mulighed for at låse regnskabsperioder samt krypterede sikkerhedskopier, der opbevares i op til 60 måneder — mere end lovens 5-årskrav.",
   },
   {
     question: "Hvad er SAF-T eksport?",
     answer:
-      "SAF-T (Standard Audit File for Tax) er et internationalt standardformat for finansielle data. AlphaFlow eksporterer i Dansk Finansskema v1.0-formatet, som Skattestyrelsen anvender. Eksporten inkluderer hovedbogsposter, saldi og transaktioner.",
+      "SAF-T er et standardformat, som Skattestyrelsen bruger til at læse regnskabsdata elektronisk. AlphaFlow kan eksportere hele regnskabet i det danske SAF-T-format — fx hvis Skattestyrelsen beder om det i forbindelse med en revision.",
   },
   {
     question: "Kan flere brugere bruge AlphaFlow sammen?",
     answer:
-      "Ja, AlphaFlow er et multi-tenant system med rollebaseret adgangskontrol (RBAC). Tilgængelige roller: Ejer, Administrator, Bogholder, Læser og Revisor. Invitation af teammedlemmer sker via e-mail.",
+      "Ja. Du kan invitere teammedlemmer via e-mail og give dem præcis den adgang, de skal bruge: Ejer, Administrator, Bogholder, Læser eller Revisor. Det gør det nemt at samarbejde med en ekstern bogholder eller revisor.",
   },
   {
-    question: "Hvordan fungerer OCR scanning af bilag?",
+    question: "Hvordan fungerer scanning af bilag?",
     answer:
-      "AlphaFlow bruger Tesseract.js og OpenCV til at analysere uploadede kvitteringer og fakturaer. Systemet udtrækker automatisk beløb, datoer, momssatser og CVR-numre, og foreslår konto-kategorisering baseret på dansk kontoplan-standard.",
+      "Du fotograferer eller uploader bilaget, hvorefter systemet automatisk læser beløb, dato, momssats og CVR-nummer. Derefter foreslår AI'en den rette konto ud fra din kontoplan og dine tidligere bogføringer — du skal blot godkende.",
   },
   {
     question: "Hvilke virksomhedstyper understøttes?",
     answer:
-      "AlphaFlow understøtter alle danske virksomhedstyper: Enkeltmandsvirksomhed, ApS, A/S, IVS, og Holdingselskaber. Kontoplanen tilpasses automatisk baseret på virksomhedstype med FSR-standard kontoplan (38 standardkonti).",
+      "AlphaFlow understøtter alle almindelige danske virksomhedstyper: enkeltmandsvirksomhed, ApS, A/S, IVS og holdingselskaber. Kontoplanen tilpasses automatisk din virksomhedstype og følger FSR-standarden med 38 konti.",
   },
   {
     question: "Kan jeg bruge AlphaFlow på min telefon?",
     answer:
-      "Ja, AlphaFlow er en PWA (Progressive Web App) med offline-support, kamera-baseret bilagsscanning, og fuld mobiloptimeret brugerflade. Appen kan installeres direkte fra browseren på iOS og Android.",
+      "Ja. AlphaFlow virker på mobil og tablet og kan installeres direkte fra browseren — uden app-store. Du kan scanne bilag med kameraet, og appen virker endda offline; ændringerne synkroniseres automatisk, når du er online igen.",
   },
   {
     question: "Hvordan sikres mine data i AlphaFlow?",
     answer:
-      "Alle dataoverførsler krypteres via HTTPS. Adgangskoder hashes med bcrypt. Sessioner håndteres via HTTP-only cookies. Backupper beskyttes med SHA-256 checksum. Der foretages aldrig fysisk sletning af regnskabsdata — kun soft-delete med bevarelse til revision.",
+      "Al trafik mellem dig og systemet er krypteret, og adgangskoder opbevares kun i krypteret form. Dine regnskabsdata slettes aldrig fysisk — posteringer kan altid findes frem igen til revision — og sikkerhedskopierne kontrolleres automatisk og opbevares i op til 5 år.",
   },
   {
     question: "Hvilke eksportformater understøttes?",
     answer:
-      "AlphaFlow understøtter CSV-eksport af posteringer og rapporter, SAF-T XML til Skattestyrelsen, OIOUBL/Peppol e-faktura, ZIP-backupper med komplet data, og inter-instance dataoverførsel for migrering mellem installationer.",
+      "Du kan eksportere posteringer og rapporter som CSV eller PDF, e-fakturaer i Peppol-format samt hele regnskabet som SAF-T eller komplet backup. Dine data er altid dine og kan tages med, når som helst.",
   },
 ] as const;
 
@@ -196,18 +196,18 @@ export const FEATURES_DA: readonly string[] = [
   "Dobbelt bogføring med automatisk finansjournal",
   "Automatisk momsafregning med alle 10 danske momskoder",
   "Peppol e-fakturering (OIOUBL BIS Billing 3.0)",
-  "OCR bilagsscanning med Tesseract.js og OpenCV",
+  "Intelligent scanning af bilag (OCR)",
   "SAF-T eksport (Dansk Finansskema v1.0)",
   "FSR standard kontoplan med 38 konti",
-  "Multi-virksomhed med rollebaseret adgangskontrol (RBAC)",
+  "Flere virksomheder og roller i én konto",
   "AI-baseret bankafstemning",
   "Finansielle rapporter (resultatopgørelse, balance, pengestrømsanalyse)",
   "Lukkede regnskabsperioder",
   "Budgetstyring med afvigelsesanalyse",
   "Tilbagevendende posteringer",
   "Uforanderlig revisionslog (audit trail)",
-  "60 måneders backup retention med SHA-256 checksum",
-  "PWA med offline-support og kamera-scanning",
+  "Sikkerhedskopier i 60 måneder",
+  "App til mobil og tablet — virker offline",
   "Open Banking integration (Danske Bank, Nordea, Jyske Bank)",
   "Projektregnskab med under-budgets",
   "Likviditetsprognose",

@@ -22,7 +22,7 @@ export function MarketingFooter() {
             <div className="flex items-center gap-2 mb-3">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-br from-[#0d9488]/10 to-[#2dd4bf]/10 border border-[#0d9488]/10 text-[11px] font-medium text-[#0d9488]">
                 <ShieldCheck className="h-3 w-3" />
-                Bogføringslov compliant
+                Overholder bogføringsloven
               </span>
             </div>
             <h3 className="text-sm font-semibold text-gray-900 mb-1">
@@ -127,11 +127,11 @@ export function MarketingFooter() {
 
         {/* Bottom bar */}
         <div className="mt-10 pt-6 border-t border-[#e2e8e6]/60 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-[11px] text-gray-400 text-center sm:text-left">
+          <p className="text-[11px] text-gray-500 text-center sm:text-left">
             © {year} {COMPANY_FACTS.name} — CVR {COMPANY_FACTS.cvr}. Alle
             rettigheder forbeholdes.
           </p>
-          <p className="text-[11px] text-gray-300 text-center sm:text-right">
+          <p className="text-[11px] text-gray-500 text-center sm:text-right">
             {COMPANY_FACTS.name} er fuldt ejet af {COMPANY_FACTS.parent}
           </p>
         </div>

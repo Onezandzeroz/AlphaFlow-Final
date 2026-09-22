@@ -15,7 +15,7 @@ import { FAQ_DA, SITE } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "FAQ — Ofte stillede spørgsmål om AlphaFlow",
   description:
-    "Svar på de mest almindelige spørgsmål om AlphaFlow: gratis under 50.000 kr. omsætning, momsafregning, Peppol e-fakturering, bogføringslov compliance, OCR scanning, sikkerhed og mere.",
+    "Svar på de mest almindelige spørgsmål om AlphaFlow: gratis under 50.000 kr. omsætning, momsafregning, Peppol e-fakturering, bogføringsloven, scanning af bilag, sikkerhed og mere.",
   alternates: { canonical: "/faq" },
   openGraph: {
     title: "FAQ — AlphaFlow Regnskabsprogram",
@@ -91,10 +91,10 @@ export default function FaqPage() {
                 value={`item-${index}`}
                 className="border-b border-[#e2e8e6]/60 last:border-b-0 px-4 sm:px-6"
               >
-                <AccordionTrigger className="text-left text-[15px] sm:text-[17px] font-semibold text-gray-900 hover:text-[#0d9488] hover:no-underline py-6 transition-colors">
+                <AccordionTrigger className="text-left text-[15px] sm:text-[17px] font-semibold text-gray-900 hover:text-[#0d9488] hover:no-underline py-6 transition-colors [&>svg]:text-[#0d9488] [&>svg]:size-5">
                   {item.question}
                 </AccordionTrigger>
-                <AccordionContent className="text-[14px] sm:text-[15px] text-gray-600 leading-relaxed pb-6">
+                <AccordionContent className="text-[14px] sm:text-[15px] text-gray-700 leading-relaxed pb-6">
                   {item.answer}
                 </AccordionContent>
               </AccordionItem>
@@ -171,7 +171,7 @@ export default function FaqPage() {
             Stadig spørgsmål?
           </h2>
           <p className="mt-5 text-[16px] text-teal-50/90 max-w-lg mx-auto">
-            Vores support-team sidder klar hverdage 09:00–17:00. Skriv til
+            Vores supportteam sidder klar alle hverdage 09:00–17:00. Skriv til
             os, så hjælper vi dig i gang.
           </p>
           <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">

@@ -79,7 +79,7 @@ export function MobileNav() {
                     className="flex items-center justify-between px-4 py-3 rounded-xl text-[15px] font-medium text-gray-700 hover:text-[#0d9488] hover:bg-[#f0fdf9] transition-all duration-150"
                   >
                     {link.label}
-                    <ArrowRight className="h-4 w-4 text-gray-300" />
+                    <ArrowRight className="h-4 w-4 text-gray-400" />
                   </Link>
                 </li>
               ))}
@@ -93,7 +93,7 @@ export function MobileNav() {
                 Log ind
               </Link>
             </Button>
-            <p className="text-center text-[11px] text-gray-400 mt-3">
+            <p className="text-center text-[11px] text-gray-500 mt-3">
               Ingen kreditkort · {SITE.company}
             </p>
           </div>

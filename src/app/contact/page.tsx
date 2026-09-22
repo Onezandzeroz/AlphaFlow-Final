@@ -191,7 +191,7 @@ export default function ContactPage() {
             {/* Quick links */}
             <div className="rounded-3xl bg-white border border-[#e2e8e6]/80 shadow-sm p-6">
               <h3 className="text-[15px] font-semibold text-gray-900 mb-4">
-                Måske kan du finde svar her
+                Måske finder du svaret her
               </h3>
               <ul className="space-y-1">
                 <li>

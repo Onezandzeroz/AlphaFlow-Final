@@ -11,7 +11,7 @@ import { SITE } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "Priser — Transparente abonnementer fra 0 kr./md.",
   description:
-    "AlphaFlow priser: Gratis plan (0 kr. så længe omsætning < 50.000 kr.), Månedlig (199 kr./md.), Pro (169 kr./md.), Business (149 kr./md.) og Business Extended (145 kr./md.). Ingen kreditkort, fuld bogføringslov compliance.",
+    "AlphaFlow priser: Gratis plan (0 kr. så længe omsætning < 50.000 kr.), Månedlig (199 kr./md.), Pro (169 kr./md.), Business (149 kr./md.) og Business Extended (145 kr./md.). Ingen kreditkort — bygget til dansk bogføringslov.",
   alternates: { canonical: "/pricing" },
   openGraph: {
     title: "Priser — AlphaFlow Regnskabsprogram",
@@ -142,7 +142,7 @@ export default function PricingPage() {
                 </div>
                 <p
                   className={`mt-1 text-[11px] leading-snug ${
-                    plan.highlighted ? "text-teal-100/60" : "text-gray-400"
+                    plan.highlighted ? "text-teal-100/80" : "text-gray-500"
                   }`}
                 >
                   {plan.pricePeriod}
@@ -229,10 +229,10 @@ export default function PricingPage() {
               "FSR standard kontoplan (38 konti)",
               "Automatisk momsafregning (10 koder)",
               "Lukkede regnskabsperioder",
-              "Uforanderlig revisionslog (audit trail)",
-              "PWA med offline-support",
+              "Uforanderlig revisionslog",
+              "App til mobil og tablet (virker offline)",
               "Multi-sprog (dansk/engelsk)",
-              "Soft-delete med bevarelse",
+              "Sletning med fuld historik",
             ].map((item) => (
               <div
                 key={item}
@@ -256,8 +256,8 @@ export default function PricingPage() {
               Trygt og sikkert
             </h2>
             <p className="mt-3 text-[14px] text-teal-100/70 max-w-xl mx-auto">
-              AlphaFlow opfylder bogføringsloven og understøtter alle danske
-              standarder
+              Revisionslog, momskoder, SAF-T og e-faktura — alt er bygget til
+              danske regler og standarder
             </p>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">

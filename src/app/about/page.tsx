@@ -14,12 +14,12 @@ import { SITE } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "Om os — AlphaAi Consult ApS",
   description:
-    "AlphaFlow udvikles af AlphaAi Consult ApS i Aarhus. Læs om vores mission: at gøre dansk bogføring intelligent, tilgængeligt og compliance-sikret for små og mellemstore virksomheder.",
+    "AlphaFlow udvikles af AlphaAi Consult ApS i Aarhus. Læs om vores mission: at gøre dansk bogføring intelligent, tilgængelig og tryg for små virksomheder og deres bogholdere.",
   alternates: { canonical: "/about" },
   openGraph: {
     title: "Om os — AlphaAi Consult ApS",
     description:
-      "AlphaFlow udvikles af AlphaAi Consult ApS i Aarhus. Mission: intelligent, tilgængelig og compliance-sikret bogføring for danske SMV'er.",
+      "AlphaFlow udvikles af AlphaAi Consult ApS i Aarhus. Mission: intelligent og tilgængelig bogføring for danske småvirksomheder.",
     url: "/about",
   },
 };
@@ -59,9 +59,10 @@ export default function AboutPage() {
           </h1>
           <p className="mt-6 text-lg sm:text-xl text-teal-50/90 leading-relaxed max-w-2xl mx-auto">
             AlphaFlow er udviklet af {COMPANY_FACTS.name} — et dansk
-            tech-selskab baseret i Aarhus. Vores mission er at give små og
-            mellemstore virksomheder et regnskabsprogram, der er bygget til
-            dansk bogføringslov fra bunden, uden at koste en formue.
+            teknologiselskab i Aarhus. Vores mission er at give små
+            virksomheder og deres bogholdere et regnskabsprogram, der er
+            bygget til dansk bogføringslov fra bunden — uden at koste en
+            formue.
           </p>
         </div>
         <div className="relative">
@@ -138,26 +139,26 @@ export default function AboutPage() {
           <div className="space-y-5 text-[15px] sm:text-[16px] text-gray-600 leading-relaxed">
             <p>
               For mange danske småvirksomheder er bogføring en byrde —
-              komplekse regler, dyre konsulenter og software der enten er
-              for simpelt eller for kompliceret. Vi så et behov for et
-              regnskabsprogram, der tager dansk compliance alvorligt uden
-              at kræve en kandidat i regnskab for at bruge det.
+              reglerne er komplekse, hjælpen er dyr, og softwaren er enten
+              for enkel eller alt for indviklet. Derfor byggede vi et system,
+              der tager dansk bogføringslov alvorligt, uden at kræve et
+              regnskabsstudium for at bruge det.
             </p>
             <p>
-              AlphaFlow er bygget omkring tre principser:{" "}
-              <strong className="text-gray-900">compliance først</strong> — vi
-              implementerer bogføringslovens krav som fundament, ikke som
-              eftertanke;{" "}
-              <strong className="text-gray-900">automatisering</strong> — vi
-              bruger AI og OCR til at fjerne manuelt arbejde; og{" "}
-              <strong className="text-gray-900">fair priser</strong> —
+              AlphaFlow er bygget omkring tre principper:{" "}
+              <strong className="text-gray-900">reglerne først</strong> —
+              bogføringslovens krav er fundamentet, ikke en eftertanke;{" "}
+              <strong className="text-gray-900">automatisering</strong> — AI
+              og scanning overtager det slidsomme, manuelle arbejde; og{" "}
+              <strong className="text-gray-900">fair priser</strong> — godt
               regnskabssoftware behøver ikke at koste tusindvis af kroner om
               måneden.
             </p>
             <p>
-              Vi er stolt danskudviklede: dansk kontoplan, danske momskoder,
-              Peppol e-fakturering, SAF-T eksport og support på dansk. Alt
-              bygget i Danmark, for danske virksomheder.
+              Vi er stolte over at være danskudviklede: dansk kontoplan,
+              danske momskoder, Peppol e-fakturering, SAF-T eksport og
+              support på dansk. Alt bygget i Danmark — til danske
+              virksomheder.
             </p>
           </div>
         </div>

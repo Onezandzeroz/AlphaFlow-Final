@@ -81,22 +81,22 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Dobbelt bogføring med automatisk finansjournal",
         description:
-          "Hver postering opretter automatisk de korresponderende debit/kredit-poster i finansjournalen. Fulld dobbelt bogføring uden manuelt arbejde.",
+          "Hver postering bogføres automatisk på begge sider af regnskabet — korrekt dobbelt bogføring uden manuelt tastearbejde.",
       },
       {
         title: "FSR standard kontoplan med 38 konti",
         description:
-          "Kontoplanen følger FSR's danske standard og tilpasses automatisk din virksomhedstype (Enkeltmandsvirksomhed, ApS, A/S, IVS eller Holding).",
+          "Kontoplanen bygger på FSR's danske standard og tilpasses automatisk din virksomhedstype — enkeltmandsvirksomhed, ApS, A/S, IVS eller holding.",
       },
       {
         title: "Finansjournal & hovedbog",
         description:
-          "Komplet hovedbog med løbende saldo, kontokort og journaloversigt. Søg og filtrér på dato, konto, beløb og tekst.",
+          "Du får det fulde overblik med løbende saldo og kontokort — og kan søge og filtrere på dato, konto, beløb og tekst.",
       },
       {
         title: "Tilbagevendende posteringer",
         description:
-          "Opret gentagende posteringer (husleje, forsikringer, abonnementer) der automatisk bogføres på de valgte datoer.",
+          "Opret faste posteringer som husleje og abonnementer én gang — derefter bliver de automatisk bogført på de aftalte datoer.",
       },
     ],
   },
@@ -109,22 +109,22 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Automatisk momsafregning — alle 10 momskoder",
         description:
-          "Understøtter salgsmoms (25%, 12%, 0%), købsmoms, EU-indkøb, EU-salg, reverse charge og udenlandske ydelser. Systemet beregner automatisk momsbalancen pr. afregningsperiode.",
+          "Fra salgs- og købsmoms til EU-handel og udenlandske ydelser — alle 10 danske momskoder er dækket. Momsbalancen beregnes automatisk for hver afregningsperiode.",
       },
       {
         title: "Momsrapport til Skattestyrelsen",
         description:
-          "Generer klar momsrapport med indkøbs- og salgsmoms, der kan indberettes direkte til Skattestyrelsen via TastSelv.",
+          "Momsrapporten viser købs- og salgsmoms og er klar til indberetning til Skattestyrelsen via TastSelv.",
       },
       {
         title: "SAF-T eksport (Dansk Finansskema v1.0)",
         description:
-          "Eksportér komplette finansielle data i Skattestyrelsens SAF-T-format. Kræves ved skattemæssig revision.",
+          "Eksportér hele regnskabet i Skattestyrelsens SAF-T-format — fx hvis Skattestyrelsen beder om det ved en revision.",
       },
       {
         title: "Årsafslutning & årsrapport (iXBRL)",
         description:
-          "Automatisk resultatopgørelse og balance ved årsafslutning. Eksportér i iXBRL-format til Erhvervsstyrelsen.",
+          "Resultatopgørelse og balance samles automatisk ved årsafslutning — klar til indsendelse til Erhvervsstyrelsen.",
       },
     ],
   },
@@ -137,22 +137,22 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Peppol e-fakturering (OIOUBL BIS Billing 3.0)",
         description:
-          "Send og modtag e-fakturaer via Peppol-netværket med OIOUBL-standarden. Registrer dit virksomhedsnummer og spore afsendelsesstatus.",
+          "Send og modtag e-fakturaer via Peppol-netværket. Registrér dit virksomhedsnummer én gang, og følg status på hver enkelt afsendelse.",
       },
       {
         title: "Auto e-faktura (Peppol / NemHandel)",
         description:
-          "Business-plan og opefter sender e-fakturaer automatisk via Sproom adgangspunkt — ingen manuelt upload af XML-filer.",
+          "Med Business-planen og derover sendes e-fakturaer automatisk via Peppol — helt uden manuel filhåndtering.",
       },
       {
         title: "Kreditnota-håndtering",
         description:
-          "Opret kreditnoter linket til originale fakturaer med automatisk momsjustering og fuld sporbarehed.",
+          "Opret kreditnotaer direkte på originalfakturaen — momsbeløbet justeres automatisk, og hele forløbet er sporbart.",
       },
       {
         title: "CVR-opslag direkte i systemet",
         description:
-          "Indtast et CVR-nummer og hent automatisk virksomhedsnavn, adresse og type fra Det Centrale Virksomhedsregister.",
+          "Indtast et CVR-nummer, så hentes virksomhedens navn, adresse og type automatisk — uden manuel tastning.",
       },
     ],
   },
@@ -163,19 +163,19 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
     icon: ScanLine,
     features: [
       {
-        title: "OCR bilagsscanning med Tesseract.js og OpenCV",
+        title: "Intelligent scanning af bilag (OCR)",
         description:
-          "Upload et billede eller PDF af en kvittering — systemet udtrækker automatisk beløb, datoer, momssatser og CVR-numre.",
+          "Tag et billede eller upload en PDF — beløb, dato, momssats og CVR-nummer læses automatisk og er klar til bogføring.",
       },
       {
         title: "Automatisk konto-kategorisering",
         description:
-          "AI foreslår den korrekte konto baseret på dansk kontoplan-standard og dine tidligere bogføringer. Du godkender med ét klik.",
+          "AI'en foreslår den rette konto ud fra din kontoplan og dine tidligere valg — du godkender med ét klik.",
       },
       {
         title: "Kamera-scanning via PWA",
         description:
-          "Brug din mobilkamera til at fotografere bilag direkte i appen. Billedet OCR-scannes og kategoriseres automatisk.",
+          "Fotografér bilagene direkte med mobilkameraet — billedet scannes og kategoriseres automatisk.",
       },
     ],
   },
@@ -188,17 +188,17 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Resultatopgørelse, balance & pengestrømsanalyse",
         description:
-          "Generer finansielle nøgletal på ethvert tidspunkt. Sammenlign perioder og se udvikling over tid.",
+          "Få dine nøgletal på ethvert tidspunkt — og sammenlign perioder, så du kan følge udviklingen i virksomheden.",
       },
       {
         title: "Budgetstyring med afvigelsesanalyse",
         description:
-          "Opret budgetter pr. konto eller afdeling og følg automatisk afvigelser mellem budget og realiserede tal.",
+          "Opret budgetter pr. konto eller afdeling, og se automatisk, hvor de realiserede tal afviger fra planen.",
       },
       {
         title: "Likviditetsprognose",
         description:
-          "Forudsig din likviditet baseret på åbne fakturaer, tilbagevendende posteringer og historiske mønstre.",
+          "Få et billede af den fremtidige likviditet — beregnet ud fra åbne fakturaer, faste posteringer og historik.",
       },
       {
         title: "Aldersopdelt debitor/creditor-rapport",
@@ -208,7 +208,7 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Projektregnskab med under-budgets",
         description:
-          "Følg lønsomhed pr. projekt med separate budgetter, timeregistrering og projekt specifikke rapporter.",
+          "Følg lønsomheden pr. projekt med egne budgetter, timeregistrering og projektspecifikke rapporter.",
       },
     ],
   },
@@ -221,17 +221,17 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "AI-baseret bankafstemning",
         description:
-          "Systemet matcher automatisk banktransaktioner med dine bogførte posteringer ved hjælp af fuzzy matching og maskinlæring.",
+          "Banktransaktioner matches automatisk med dine posteringer — og afstemningen bliver smartere, jo mere du bruger den.",
       },
       {
         title: "Open Banking integration",
         description:
-          "Direkte integration med Danske Bank, Nordea og Jyske Bank via PSD2/Open Banking. Hent transaktioner automatisk.",
+          "Hent transaktioner automatisk fra Danske Bank, Nordea og Jyske Bank via Open Banking.",
       },
       {
         title: "Valutahåndtering med automatisk kursopdatering",
         description:
-          "Bogfør i flere valutaer med dagopdaterede valutakurser. Gevinst/tab beregnes automatisk.",
+          "Bogfør i flere valutaer med dagligt opdaterede kurser — kursgevinst og -tab beregnes automatisk.",
       },
     ],
   },
@@ -244,12 +244,12 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Hermes AI-rådgivning",
         description:
-          "Spørg Hermes om din likviditet, momsbalance, største udgifter eller bogføringsregler. Få svar på dansk baseret på dine egne data.",
+          "Spørg Hermes om likviditet, momsbalance eller de største udgifter — og få svaret på dansk, bygget på dine egne tal.",
       },
       {
-        title: "Naturlig sprog-håndtering",
+        title: "Svar på almindelig dansk",
         description:
-          "Hermes forstår dansk bogføringsterminologi og kan forklare komplekse regler i plain language.",
+          "Hermes forstår dansk bogføringsterminologi og forklarer selv komplekse regler i klart sprog.",
       },
     ],
   },
@@ -262,22 +262,22 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Uforanderlig revisionslog (audit trail)",
         description:
-          "Hver ændring logges i en uforanderlig audit trail der opfylder bogføringslovens §10-12. Kan ikke ændres eller slettes.",
+          "Hver ændring registreres i en log, der hverken kan ændres eller slettes — præcis som bogføringslovens § 10-12 kræver.",
       },
       {
         title: "Lukkede regnskabsperioder",
         description:
-          "Luk en periode når den er bogført færdig. Lukkede perioder kan ikke ændres — kun via korrektionsposteringer.",
+          "Når en periode er færdigbogført, kan du låse den. Fejl rettes kun med synlige korrektionsposteringer — aldrig ved at ændre historikken.",
       },
       {
-        title: "60 måneders backup retention med SHA-256",
+        title: "Sikkerhedskopier i 60 måneder",
         description:
-          "Alle backupper beskyttes med SHA-256 checksum og opbevares i op til 60 måneder — langt over bogføringslovens 5-års krav.",
+          "Alle sikkerhedskopier krypteres og kontrolleres automatisk og opbevares i op til 60 måneder — langt over bogføringslovens 5-årskrav.",
       },
       {
-        title: "Soft-delete med bevarelse",
+        title: "Sletning med fuld historik",
         description:
-          "Ingen fysisk sletning af regnskabsdata — kun soft-delete med fuld bevarelse til revision, som bogføringsloven kræver.",
+          "Regnskabsdata slettes aldrig fysisk — slettede poster kan altid findes frem igen til revision, som bogføringsloven kræver.",
       },
     ],
   },
@@ -288,24 +288,24 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
     icon: Users,
     features: [
       {
-        title: "Multi-virksomhed med rollebaseret adgang (RBAC)",
+        title: "Flere virksomheder og roller i én konto",
         description:
-          "Administrer flere virksomheder i én konto. Roller: Ejer, Administrator, Bogholder, Læser og Revisor.",
+          "Administrér alle dine virksomheder fra én konto, og giv bogholder, revisor og medarbejdere præcis den adgang, de skal bruge: Ejer, Administrator, Bogholder, Læser eller Revisor.",
       },
       {
-        title: "PWA med offline-support",
+        title: "App til mobil og tablet — virker offline",
         description:
-          "Installer appen direkte fra browseren på iOS og Android. Arbejd offline — ændringer synkroniseres når du er online igen.",
+          "Installér appen direkte fra browseren på mobil og tablet. Bogfør endda offline — ændringerne synkroniseres, når du er online igen.",
       },
       {
         title: "Multi-sprog (dansk/engelsk)",
         description:
-          "Skift mellem dansk og engelsk brugerflade. Regnskabsdata forbliver altid på dansk for compliance.",
+          "Skift mellem dansk og engelsk brugerflade — regnskabsdata forbliver altid på dansk, som reglerne kræver.",
       },
       {
         title: "Eksport af alle data (CSV, PDF, ZIP)",
         description:
-          "Eksportér posteringer, rapporter og komplette backupper. Du ejer altid dine data — ingen vendor lock-in.",
+          "Eksportér posteringer, rapporter eller hele regnskabet, når det passer dig. Dine data er altid dine — ingen leverandørlåsning.",
       },
     ],
   },
@@ -346,7 +346,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
       "Alle grundlæggende regnskabsfunktioner",
       "Dobbelt bogføring & finansjournal",
       "FSR standard kontoplan (38 konti)",
-      "E-fakturering (manuel XML-download)",
+      "E-fakturering (manuel fil-eksport)",
       "Bankintegration (demo-tilstand)",
       "1 bruger (kun ejer)",
     ],
@@ -362,10 +362,10 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     features: [
       "Alt fra Gratis",
       "Ubegrænset omsætning",
-      "Avancerede rapporter (cash flow, aldersopdeling, budget vs. actual)",
+      "Avancerede rapporter (pengestrøm, aldersopdeling, budget vs. realiseret)",
       "Eksport af alle data (CSV, PDF, ZIP)",
       "Moms & årsregnskab (iXBRL for Erhvervsstyrelsen)",
-      "Egte bankintegration (Danske Bank, Nordea, Jyske Bank)",
+      "Ægte bankintegration (Danske Bank, Nordea, Jyske Bank)",
       "Op til 3 teammedlemmer",
     ],
   },
@@ -408,7 +408,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     name: "Business Extended",
     priceMonthly: "145 kr.",
     pricePeriod: "pr. måned — 5.220 kr./36 md.",
-    description: "Fuld pakke med maksimal rabat",
+    description: "Fuld pakke med størst mulig rabat",
     binding: "36 måneders binding",
     savings: "Spar 1.944 kr.",
     cta: "Vælg Business Extended",
@@ -434,7 +434,7 @@ export const MARKETING_STATS: readonly StatItem[] = [
   { value: "0 kr.", label: "Gratis under 50.000 kr. omsætning" },
   { value: "5 min", label: "Opsætning af din virksomhed" },
   { value: "24/7", label: "Adgang når det passer dig" },
-  { value: "5 ÅR", label: "Sikker backup retention", icon: ShieldCheck },
+  { value: "5 ÅR", label: "Opbevaring af sikkerhedskopier", icon: ShieldCheck },
 ] as const;
 
 // ─── Trust badges (for /pricing and /about) ──────────────────────────
@@ -448,8 +448,8 @@ export interface TrustBadge {
 export const TRUST_BADGES: readonly TrustBadge[] = [
   {
     icon: ShieldCheck,
-    title: "Bogføringslov §10-12",
-    description: "Uforanderlig revisionslog og soft-delete med bevarelse",
+    title: "Bogføringslov § 10-12",
+    description: "Uforanderlig revisionslog og sletning med fuld historik",
   },
   {
     icon: FileCheck2,
@@ -458,13 +458,13 @@ export const TRUST_BADGES: readonly TrustBadge[] = [
   },
   {
     icon: DatabaseBackup,
-    title: "SHA-256 backupper",
-    description: "Krypterede backupper med checksum-verificering",
+    title: "Krypterede sikkerhedskopier",
+    description: "Krypterede sikkerhedskopier, der kontrolleres automatisk",
   },
   {
     icon: Globe,
     title: "Peppol / OIOUBL",
-    description: "EU-standard e-fakturering via Sproom adgangspunkt",
+    description: "E-fakturering via Peppol-netværket",
   },
 ] as const;
 
@@ -496,25 +496,25 @@ export const COMPANY_TIMELINE: readonly TimelineItem[] = [
     year: "2024",
     title: "AlphaFlow stiftes",
     description:
-      "AlphaAi Consult ApS grundlægges med missionen om at gøre dansk bogføring tilgængeligt, intelligent og compliance-sikret for små og mellemstore virksomheder.",
+      "AlphaAi Consult ApS grundlægges med mission om at gøre dansk bogføring tilgængelig og intelligent — for små virksomheder og deres bogholdere.",
   },
   {
     year: "2024",
     title: "Første version lanceres",
     description:
-      "Dobbelt bogføring, FSR kontoplan, momsafregning og Peppol e-fakturering gøres tilgængeligt i en PWA-first platform.",
+      "Dobbelt bogføring, FSR-kontoplan, momsafregning og Peppol e-fakturering samles i én platform, der virker på computer, mobil og tablet.",
   },
   {
     year: "2025",
     title: "Hermes AI integreres",
     description:
-      "AI-assistenten Hermes tilføjes, så brugere kan stille regnskabsspørgsmål på dansk og få svar baseret på deres egne finansielle data.",
+      "AI-assistenten Hermes tilføjes, så du kan stille regnskabsspørgsmål på dansk og få svar bygget på dine egne tal.",
   },
   {
     year: "2025",
     title: "Open Banking & OCR",
     description:
-      "Integration med Danske Bank, Nordea og Jyske Bank via PSD2, samt OCR-scanning af bilag med Tesseract.js og OpenCV.",
+      "Bankintegration med Danske Bank, Nordea og Jyske Bank — og intelligent scanning af bilag direkte fra kameraet.",
   },
 ] as const;
 
@@ -529,21 +529,21 @@ export interface ValueProp {
 export const COMPANY_VALUES: readonly ValueProp[] = [
   {
     icon: ShieldCheck,
-    title: "Compliance først",
+    title: "Reglerne først",
     description:
-      "Vi bygger AlphaFlow til dansk bogføringslov fra bunden — ikke som en eftertanke. Revisionslog, lukkede perioder og SHA-256 backupper er indbygget fra dag ét.",
+      "Vi bygger AlphaFlow til dansk bogføringslov fra bunden — ikke som en eftertanke. Revisionslog, låste perioder og krypterede sikkerhedskopier er med fra dag ét.",
   },
   {
     icon: TrendingUp,
     title: "Automatisering",
     description:
-      "Manuel bogføring hører fortiden til. Vi automatiserer momsafregning, bankafstemning og bilagsscanning så du kan fokusere på din virksomhed.",
+      "Manuel bogføring hører fortiden til. Vi automatiserer momsafregning, bankafstemning og bilagsscanning, så du kan bruge tiden på din virksomhed.",
   },
   {
     icon: Wallet,
     title: "Fair priser",
     description:
-      "Regnskabssoftware behøver ikke at koste en formue. Vores priser starter ved 0 kr. og maksimerer ved 199 kr./md. — ingen skjulte gebyrer.",
+      "Godt regnskabssoftware behøver ikke at koste en formue. Vores priser starter ved 0 kr. og går aldrig over 199 kr./md. — ingen skjulte gebyrer.",
   },
   {
     icon: Users,
@@ -555,13 +555,13 @@ export const COMPANY_VALUES: readonly ValueProp[] = [
     icon: RefreshCw,
     title: "Du ejer dine data",
     description:
-      "Eksportér alle data når som helst — CSV, PDF, SAF-T XML eller komplet ZIP-backup. Ingen vendor lock-in, ingen data tagging.",
+      "Eksportér dine data, når det passer dig — som CSV, PDF, SAF-T eller komplet backup. Ingen leverandørlåsning og ingen skjulte betingelser.",
   },
   {
     icon: Target,
-    title: "Til SMV'er",
+    title: "Til små virksomheder",
     description:
-      "Vi fokuserer på små og mellemstore virksomheder: enkeltmandsvirksomheder, ApS, A/S og holdingselskaber. Ikke for koncerne — for dig.",
+      "Vi fokuserer på danske småvirksomheder: enkeltmandsvirksomheder, ApS, A/S og holdingselskaber. Ikke bygget til koncerner — men til dig og din virksomhed.",
   },
 ] as const;
 

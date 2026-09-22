@@ -257,7 +257,7 @@ export function ContactForm() {
 
       {/* Submit */}
       <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <p className="text-[12px] text-gray-400 text-center sm:text-left">
+        <p className="text-[12px] text-gray-500 text-center sm:text-left">
           Vi behandler dine oplysninger fortroligt og svarer inden for én
           hverdag.
         </p>
