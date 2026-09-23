@@ -727,8 +727,8 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
   // project content instead.
   const isEmptyState = !isLoading && !hasDoubleEntryData && !onboardingDismissed && !user.isProjectMode;
 
-  // Check if the tenant has the auto e-invoice feature (Business+).
-  // Månedlig and Pro only have manual OIOUBL/Peppol download — they
+  // Check if the tenant has the auto e-invoice feature (paid plans —
+  // Månedlig and up). Gratis only has manual OIOUBL/Peppol download — they
   // don't need the eDelivery onboarding step (step 3).
   const hasAutoEinvoice = user.availableFeatures?.includes('AUTO_EINVOICE') ?? false;
 
@@ -770,8 +770,8 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
       },
     ];
 
-    // Step 3 (eDelivery / auto e-invoice) is only for Business+ tiers
-    // that have the AUTO_EINVOICE feature. Månedlig and Pro only have
+    // Step 3 (eDelivery / auto e-invoice) is only for paid tiers
+    // that have the AUTO_EINVOICE feature. Gratis only has
     // manual OIOUBL/Peppol download, so they don't need this step.
     if (hasAutoEinvoice) {
       steps.push({

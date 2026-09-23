@@ -227,6 +227,12 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   const isDanish = language === 'da';
   const { guardWriteAccess } = useWriteAccessGuard(user);
 
+  // Auto e-invoice via Sproom requires a paid plan (AUTO_EINVOICE feature —
+  // Månedlig and up). Gratis only has manual OIOUBL download — matches the
+  // pricing page's "Automatisk e-faktura via Peppol (Sproom)" row (—/✓/✓/✓/✓);
+  // the monthly e-invoice quota keeps the platform's Sproom volume in check.
+  const hasAutoEinvoice = user.availableFeatures?.includes('AUTO_EINVOICE') ?? false;
+
   // State
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
@@ -1819,12 +1825,14 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                       <DropdownMenuLabel className="text-xs text-muted-foreground">
                         {language === 'da' ? 'E-faktura' : 'E-invoice'}
                       </DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => setSendEInvoiceInvoice(previewInvoice)}>
-                        <FileSpreadsheet className="h-4 w-4 mr-2" />
-                        {previewInvoice.documentType === 'CREDIT_NOTE'
-                          ? (language === 'da' ? 'Send e-Kreditnota' : 'Send e-Credit Note')
-                          : (language === 'da' ? 'Send E-faktura' : 'Send E-invoice')}
-                      </DropdownMenuItem>
+                      {hasAutoEinvoice && (
+                        <DropdownMenuItem onClick={() => setSendEInvoiceInvoice(previewInvoice)}>
+                          <FileSpreadsheet className="h-4 w-4 mr-2" />
+                          {previewInvoice.documentType === 'CREDIT_NOTE'
+                            ? (language === 'da' ? 'Send e-Kreditnota' : 'Send e-Credit Note')
+                            : (language === 'da' ? 'Send E-faktura' : 'Send E-invoice')}
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem onClick={() => setShowEInvoiceSendStatus(previewInvoice.id)}>
                         <Inbox className="h-4 w-4 mr-2" />
                         {language === 'da' ? 'Send-historik' : 'Send history'}
@@ -1863,10 +1871,12 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               {/* E-faktura section */}
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-muted/30">
                 <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{language === 'da' ? 'E-faktura' : 'E-invoice'}</span>
-                <Button variant="ghost" size="sm" onClick={() => setSendEInvoiceInvoice(previewInvoice)} className="gap-1.5 h-7 px-2 text-xs hover:bg-muted">
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  <span className="hidden lg:inline">{previewInvoice.documentType === 'CREDIT_NOTE' ? (language === 'da' ? 'Send e-Kreditnota' : 'Send e-Credit Note') : (language === 'da' ? 'Send E-faktura' : 'Send E-invoice')}</span>
-                </Button>
+                {hasAutoEinvoice && (
+                  <Button variant="ghost" size="sm" onClick={() => setSendEInvoiceInvoice(previewInvoice)} className="gap-1.5 h-7 px-2 text-xs hover:bg-muted">
+                    <FileSpreadsheet className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline">{previewInvoice.documentType === 'CREDIT_NOTE' ? (language === 'da' ? 'Send e-Kreditnota' : 'Send e-Credit Note') : (language === 'da' ? 'Send E-faktura' : 'Send E-invoice')}</span>
+                  </Button>
+                )}
                 <Button variant="ghost" size="sm" onClick={() => setShowEInvoiceSendStatus(previewInvoice.id)} className="gap-1.5 h-7 px-2 text-xs hover:bg-muted">
                   <Inbox className="h-3.5 w-3.5" />
                   <span className="hidden lg:inline">{language === 'da' ? 'Send-historik' : 'Send history'}</span>

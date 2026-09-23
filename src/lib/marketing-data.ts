@@ -142,7 +142,7 @@ export const FEATURE_CATEGORIES: readonly FeatureCategory[] = [
       {
         title: "Auto e-faktura (Peppol / NemHandel)",
         description:
-          "Med Business-planen og derover sendes e-fakturaer automatisk via Peppol — helt uden manuel filhåndtering.",
+          "Med alle betalende planer sendes e-fakturaer automatisk via Peppol — helt uden manuel filhåndtering.",
       },
       {
         title: "Kreditnota-håndtering",
@@ -362,6 +362,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     features: [
       "Alt fra Gratis",
       "Ubegrænset omsætning",
+      "Auto e-faktura via Peppol (50 e-fakturaer/md.)",
       "Avancerede rapporter (pengestrøm, aldersopdeling, budget vs. realiseret)",
       "Eksport af alle data (CSV, PDF, ZIP)",
       "Moms & årsregnskab (iXBRL for Erhvervsstyrelsen)",
@@ -382,6 +383,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     features: [
       "Alt fra Månedlig",
       "Hermes AI-rådgivning (200 beskeder/md.)",
+      "Auto e-faktura via Peppol (100 e-fakturaer/md.)",
       "Prioriteret support",
       "Stabil pris i 12 måneder",
       "Op til 5 teammedlemmer",
@@ -414,7 +416,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     cta: "Vælg Business Extended",
     features: [
       "Alt fra Business",
-      "Største forbrugsgrænser: Hermes 1.000 beskeder + 300 e-fakturaer/md.",
+      "Største forbrugsgrænser: Hermes 1.000 beskeder + 190 e-fakturaer/md.",
       "Projektregnskab med under-budgets",
       "Højeste prioritet på support",
       "Nye funktioner først",
@@ -487,7 +489,8 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
       },
       {
         label: "Automatisk e-faktura via Peppol (Sproom)",
-        values: ["—", "—", "—", "✓", "✓"],
+        values: ["—", "✓", "✓", "✓", "✓"],
+        note: "Alle betalende planer; Gratis har manuel OIOUBL-eksport",
       },
       {
         label: "Modtagelse af e-fakturaer & kreditnotaer",
@@ -495,8 +498,8 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
       },
       {
         label: "E-faktura-forbrug pr. måned (send + modtag)",
-        values: ["10", "25", "50", "150", "300"],
-        note: "Samlet antal afsendte og modtagne e-fakturaer/kreditnotaer pr. kalendermåned. Tilkøb af ekstra forbrug er nemt og hurtigt — skriv til os.",
+        values: ["10", "50", "100", "150", "190"],
+        note: "Samlet send og modtaget pr. kalendermåned.",
         addon: true,
       },
     ],
@@ -511,7 +514,7 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
       {
         label: "Hermes-beskeder pr. måned",
         values: ["—", "—", "200", "500", "1.000"],
-        note: "Rullende 30 dage. Tilkøb af ekstra beskeder er nemt og hurtigt — skriv til os.",
+        note: "Rullende 30 dage.",
         addon: true,
       },
       {
@@ -579,6 +582,27 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
       },
     ],
   },
+] as const;
+
+// ─── Tilkøbspakker for e-faktura-forbrug (tilkøbs-banner på /pricing) ──
+//
+// Spejler EINVOICE_ADDON_PACKAGES + EINVOICE_ADDON_PRICE_DKK i
+// src/lib/usage-quotas.ts (oversight-ruten foreslår de samme pakker) —
+// hold de to steder synkroniserede ved pakke-/prisændringer.
+// Pakkeprisen er transaktioner × 1 kr. pr. transaktion.
+
+export interface EinvoiceAddonPackage {
+  /** Antal ekstra e-faktura-transaktioner (send + modtag) i pakken. */
+  transactions: number;
+  /** Pakkepris i kr. */
+  priceDkk: number;
+}
+
+export const EINVOICE_ADDON_PACKAGES_MARKETING: readonly EinvoiceAddonPackage[] = [
+  { transactions: 200, priceDkk: 200 },
+  { transactions: 500, priceDkk: 500 },
+  { transactions: 1000, priceDkk: 1000 },
+  { transactions: 2000, priceDkk: 2000 },
 ] as const;
 
 // ─── Stats (for /about and /features) ────────────────────────────────

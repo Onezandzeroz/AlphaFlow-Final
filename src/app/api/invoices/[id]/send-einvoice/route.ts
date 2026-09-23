@@ -3,8 +3,8 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { queueEInvoiceSend, processEInvoiceSend } from '@/lib/einvoice-sender';
 import { EInvoiceSendChannel } from '@prisma/client';
 import { logger } from '@/lib/logger';
-import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 import { notifyDataChange } from '@/lib/notify-data-change';
 import { db } from '@/lib/db';
 import { getEInvoiceUsage } from '@/lib/usage-quotas';
@@ -17,6 +17,15 @@ import { getEInvoiceUsage } from '@/lib/usage-quotas';
 const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoiceSendChannel.PEPPOL_BIS, EInvoiceSendChannel.STORECOVE];
 
 // POST /api/invoices/[id]/send-einvoice — Send an e-invoice via OIOUBL, Peppol, or Sproom
+//
+// PLAN-GATING: The guard comes from routeConfig and requires the
+// AUTO_EINVOICE feature (paid plans — Månedlig/annual/twoyear/threeyear).
+// Gratis only has manual OIOUBL download (/api/invoices/[id]/oioubl) —
+// matches the pricing page's "Automatisk e-faktura via Peppol (Sproom)"
+// row (—/✓/✓/✓/✓). The monthly e-invoice quota (lib/usage-quotas.ts)
+// keeps each tenant's Sproom volume within the plan's share of the
+// platform's 500 included transactions (0.8 DKK per extra transaction;
+// add-ons are sold at 1.0 DKK per transaction).
 //
 // This route does TWO things synchronously:
 //   1. queueEInvoiceSend() — creates a PENDING EInvoiceSending row
@@ -31,7 +40,7 @@ const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoice
 // If processEInvoiceSend() fails, we still return the sending row
 // (with status FAILED) so the UI can show the error and offer a retry.
 export const POST = withGuard(
-  { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
+  routeConfig['/api/invoices/[id]/send-einvoice'].POST!,
   async (request, ctx, context) => {
     try {
       // Rate limit: 5 sends per minute per IP

@@ -106,6 +106,7 @@ const PLANS: Plan[] = [
     includesLabelEn: 'In addition to Free',
     features: [
       { da: 'Ubegrænset omsætning', en: 'Unlimited revenue' },
+      { da: 'Auto e-faktura (Peppol / NemHandel)', en: 'Auto e-invoice (Peppol / NemHandel)' },
       { da: 'Avancerede rapporter (cash flow, aldersopdeling, budget vs. actual)', en: 'Advanced reports (cash flow, aging, budget vs. actual)' },
       { da: 'Eksport af alle data (CSV, PDF)', en: 'Export all data (CSV, PDF)' },
       { da: 'Moms & årsregnskab (iXBRL for Erhvervsstyrelsen)', en: 'VAT & annual report (iXBRL for the Danish Business Authority)' },
@@ -152,8 +153,8 @@ const PLANS: Plan[] = [
     includesLabelDa: 'Udover Pro',
     includesLabelEn: 'In addition to Pro',
     features: [
-      { da: 'Auto e-faktura (Peppol / NemHandel)', en: 'Auto e-invoice (Peppol / NemHandel)' },
       { da: 'Ubegrænsede teammedlemmer', en: 'Unlimited team members' },
+      { da: 'Større forbrugsgrænser (e-faktura & Hermes)', en: 'Larger usage quotas (e-invoicing & Hermes)' },
     ],
     bindDa: '24 måneders binding',
     bindEn: '24-month commitment',

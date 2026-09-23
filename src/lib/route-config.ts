@@ -190,7 +190,7 @@ export const routeConfig: RouteConfigMap = {
     GET: { auth: true, requireCompany: true, permissions: [Permission.DATA_READ] },
   },
   '/api/invoices/[id]/einvoice-sends/[sendingId]/retry': {
-    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT], requireFeature: Feature.AutoEinvoice },
   },
   '/api/invoices/receive': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, permissions: [Permission.DATA_CREATE] },

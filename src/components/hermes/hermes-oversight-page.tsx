@@ -57,6 +57,12 @@ interface TenantRow {
   companyName: string;
   companyType: string | null;
   hermesEnabled: boolean;
+  /** Plan-baseret månedskvote (uden tilkøb) — fra lib/usage-quotas.ts. */
+  planMonthQuota: number;
+  /** Tilkiøbt ekstra månedskvote (oversight add-on). */
+  addonHermesQuota: number;
+  /** true = manuel override vinder over plan-kvoten. */
+  rateLimitCustom: boolean;
   rateLimits: RateLimits;
 }
 
@@ -167,9 +173,17 @@ export function HermesOversightPage({ user }: HermesOversightPageProps) {
   }, [fetchTenants, fetchUsage]);
 
   // ── Open edit dialog ──
+  // Prefill 'Måned' with the EFFECTIVE quota (plan + add-on, or the manual
+  // override) — not the raw rateLimitMonth default (2.000) — so a manual
+  // edit starts from the value that is actually enforced today.
   const openEdit = useCallback((tenant: TenantRow) => {
     setEditTarget(tenant);
-    setEditForm({ ...tenant.rateLimits });
+    setEditForm({
+      ...tenant.rateLimits,
+      month: tenant.rateLimitCustom
+        ? tenant.rateLimits.month
+        : tenant.planMonthQuota + tenant.addonHermesQuota,
+    });
   }, []);
 
   // ── Save rate limits ──
@@ -335,6 +349,11 @@ export function HermesOversightPage({ user }: HermesOversightPageProps) {
                   {tenants.map((tenant) => {
                     const u = getUsage(tenant.companyId);
                     const rl = tenant.rateLimits;
+                    // Effektiv månedskvote: manuel override vinder — ellers
+                    // plan-kvoten + evt. tilkøb (som rate-limiteren håndhæver).
+                    const effectiveMonth = tenant.rateLimitCustom
+                      ? rl.month
+                      : tenant.planMonthQuota + tenant.addonHermesQuota;
                     const dayUsed = u?.usage.day.used ?? 0;
                     const dayPct = usagePercent(dayUsed, rl.day);
                     return (
@@ -391,10 +410,18 @@ export function HermesOversightPage({ user }: HermesOversightPageProps) {
                         {/* Month */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center gap-0.5">
-                            <span className={`text-sm font-mono ${u ? usageColor(u.usage.month.used, rl.month) : ''}`}>
-                              {u ? `${u.usage.month.used}/${rl.month}` : `${rl.month}`}
+                            <span className={`text-sm font-mono ${u ? usageColor(u.usage.month.used, effectiveMonth) : ''}`}>
+                              {u ? `${u.usage.month.used}/${effectiveMonth}` : `${effectiveMonth}`}
                             </span>
                             <span className="text-[10px] text-muted-foreground">/md</span>
+                            {tenant.rateLimitCustom && (
+                              <span
+                                className="text-[9px] font-medium text-amber-600 dark:text-amber-400"
+                                title="Manuel override vinder over plan-kvoten"
+                              >
+                                override
+                              </span>
+                            )}
                           </div>
                         </TableCell>
 
@@ -541,9 +568,10 @@ export function HermesOversightPage({ user }: HermesOversightPageProps) {
 
               <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
                 <p className="font-medium text-foreground mb-1">Anbefalede standarder</p>
-                Burst: 10/min · Time: 40 · Dag: 120 · Måned: 2.000
+                Burst: 10/min · Time: 40 · Dag: 120.
                 <br />
-                Se &quot;Hermes AI Modelanbefalinger&quot; PDF §8.4 for begrundelse.
+                Månedskvoten følger som standard virksomhedens plan + tilkøb (0/200/500/1.000
+                beskeder) — en manuel værdi her vinder over plan-kvoten.
               </div>
             </div>
           )}

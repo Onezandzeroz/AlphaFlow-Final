@@ -2,12 +2,16 @@ import { NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { retryEInvoiceSend } from '@/lib/einvoice-sender';
 import { logger } from '@/lib/logger';
-import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { routeConfig } from '@/lib/route-config';
 
 // POST /api/invoices/[id]/einvoice-sends/[sendingId]/retry — Retry a failed e-invoice send
+//
+// PLAN-GATING: requires AUTO_EINVOICE (paid plans — Månedlig and up) via
+// routeConfig — a retry re-transmits to Sproom and consumes a platform Sproom
+// transaction, so the same plan gate as the initial send applies.
 export const POST = withGuard(
-  { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_EDIT] },
+  routeConfig['/api/invoices/[id]/einvoice-sends/[sendingId]/retry'].POST!,
   async (request, ctx, context) => {
     try {
       // Rate limit: 3 retries per minute per IP

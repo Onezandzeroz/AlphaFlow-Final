@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { CTAButton } from "@/components/marketing/cta-button";
-import { PRICING_PLANS, TRUST_BADGES, PLAN_COMPARISON } from "@/lib/marketing-data";
+import { PRICING_PLANS, TRUST_BADGES, PLAN_COMPARISON, EINVOICE_ADDON_PACKAGES_MARKETING } from "@/lib/marketing-data";
 import { SITE } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -317,7 +317,10 @@ export default function PricingPage() {
           </div>
         </div>
 
-        {/* Tilkøb af ekstra forbrug — Hermes + e-faktura/kreditnota */}
+        {/* Tilkøb af ekstra forbrug — Hermes + e-faktura/kreditnota.
+            Pakkerne spejler EINVOICE_ADDON_PACKAGES_MARKETING i
+            marketing-data.ts (kilde: usage-quotas.ts) — 1 kr. pr.
+            transaktion. */}
         <div className="mt-8 rounded-3xl bg-gradient-to-br from-[#134e4a] to-[#0d9488] p-7 sm:p-10 shadow-lg">
           <div className="flex flex-col sm:flex-row items-start gap-5">
             <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-white/15 border border-white/20 flex-shrink-0">
@@ -330,10 +333,28 @@ export default function PricingPage() {
               <p className="mt-3 text-[14px] leading-relaxed text-teal-50/90 max-w-3xl">
                 Hermes AI og afsendelse/modtagelse af e-faktura og kreditnotaer
                 er inkluderet frem til en månedlig grænse, der passer til din
-                plan. Behøver du mere, kan du tilkøbe ekstra forbrug, der passer
-                din virksomheds behov — tilkøb er nemt og hurtigt: skriv til os,
-                og vi udvider dit forbrug med det samme.
+                plan. Ekstra e-faktura-forbrug tilkøbes i faste pakker, og
+                Hermes-beskeder tilkøbes efter aftale — skriv til os, og vi
+                udvider dit forbrug med det samme.
               </p>
+              <p className="mt-6 text-[11px] font-bold uppercase tracking-wider text-teal-200">
+                Faste tilkøbspakker · 1 kr. pr. transaktion
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2.5">
+                {EINVOICE_ADDON_PACKAGES_MARKETING.map((pkg) => (
+                  <div
+                    key={pkg.transactions}
+                    className="rounded-xl bg-white/10 border border-white/20 px-4 py-2.5"
+                  >
+                    <span className="block text-[13px] font-semibold text-white">
+                      {pkg.transactions.toLocaleString("da-DK")} transaktioner
+                    </span>
+                    <span className="block text-[11px] text-teal-100/80">
+                      {pkg.priceDkk.toLocaleString("da-DK")} kr.
+                    </span>
+                  </div>
+                ))}
+              </div>
               <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <CTAButton href="/contact" variant="primary-light">
                   Tilkøb ekstra forbrug

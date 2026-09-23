@@ -35,6 +35,7 @@ import { db } from '@/lib/db';
 import { sproomClient } from '@/lib/sproom-client';
 import { applyStateHistory } from '@/lib/einvoice-status-tracker';
 import { notifyEInvoiceEvent } from '@/lib/notify-einvoice-event';
+import { PlanTier, tierHasFeature, Feature } from '@/lib/plan-features';
 
 // ─── State ────────────────────────────────────────────────────────────────
 
@@ -185,11 +186,35 @@ async function autoRetryFailedSendings(): Promise<{ retried: number }> {
     return { retried: 0 };
   }
 
+  // ── Plan-gate: Sproom-afsendelse kræver en betalende plan (AUTO_EINVOICE) ──
+  // Auto-retry genafsender via Sproom og er en platformstransaktion — så
+  // tenants UDEN AUTO_EINVOICE i deres plan (Gratis) springes over (samme
+  // model som send/retry-ruterne, som håndhæver Feature.AutoEinvoice via
+  // routeConfig). Bemærk: scheduleren har ingen session-kontekst, så
+  // planTier er det bedste signal her — .tbkey-proof-holdere (alle
+  // features) kan stadig genafsende manuelt via retry-RUTEN, som går
+  // gennem guard'en.
+  const companyIds = [...new Set(eligible.map((s) => s.companyId))];
+  const companies = await db.company.findMany({
+    where: { id: { in: companyIds } },
+    select: { id: true, planTier: true },
+  });
+  const planByCompany = new Map(
+    companies.map((c) => [c.id, (c.planTier as PlanTier | null) ?? PlanTier.Free])
+  );
+  const gated = eligible.filter((s) => {
+    const tier = planByCompany.get(s.companyId) ?? PlanTier.Free;
+    return tierHasFeature(tier, Feature.AutoEinvoice);
+  });
+  if (gated.length === 0) {
+    return { retried: 0 };
+  }
+
   // Dynamic import to avoid circular dependency at module load time
   const { retryEInvoiceSend } = await import('@/lib/einvoice-sender');
 
   let retried = 0;
-  for (const sending of eligible) {
+  for (const sending of gated) {
     try {
       await retryEInvoiceSend(sending.id);
       retried++;

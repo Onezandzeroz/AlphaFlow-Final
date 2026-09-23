@@ -8,9 +8,10 @@ import { notifyDataChange } from '@/lib/notify-data-change';
 import {
   getEInvoiceUsage,
   HERMES_MONTHLY_QUOTA,
-  EINVOICE_MONTHLY_QUOTA,
   EINVOICE_ADDON_PACKAGES,
+  EINVOICE_ADDON_PRICE_DKK,
   HERMES_ADDON_PACKAGES,
+  SPROOM_PLATFORM_COST,
 } from '@/lib/usage-quotas';
 import { PlanTier } from '@/lib/plan-features';
 
@@ -24,11 +25,12 @@ import { PlanTier } from '@/lib/plan-features';
  *
  * Forretningsmodel (jf. prissiden): Hermes-brug og afsendelse/modtagelse af
  * e-faktura/kreditnota er begrænset til et månedligt forbrug pr. plan.
- * Kunden kan tilkøbe ekstra forbrug, der passer virksomhedens behov —
- * tilkøb er nemt og hurtigt: kunden skriver til os (kontaktsiden), og
- * App Owner aktiverer pakken her i oversight (minutter). Indtil et selv-
- * betjenings-flow (Flatpay) er bygget, faktureres tilkøb uden for appen
- * efter aftale med kunden.
+ * Kunden kan tilkøbe ekstra forbrug: e-faktura i FASTE pakker (200/500/
+ * 1.000/2.000 transaktioner) til 1,0 kr. pr. transaktion — Hermes efter
+ * aftale. Tilkøb er nemt og hurtigt: kunden skriver til os (kontaktsiden),
+ * og App Owner aktiverer pakken her i oversight (minutter). Indtil et
+ * selvbetjenings-flow (Flatpay) er bygget, faktureres tilkøb uden for
+ * appen efter aftale med kunden.
  *
  * Add-on-kvoten lægges oveni planens grundkvote og gælder løbende
  * (framework: month-quota = plan + add-on; se lib/usage-quotas.ts).
@@ -99,11 +101,41 @@ export const GET = withGuard(routeConfig['/api/oversight/usage-addons'].GET!, as
       })
     );
 
+    // ── Platformens samlede Sproom-forbrug denne kalendermåned ──
+    // Sproom-abonnementet (platformsejer) inkluderer 500 transaktioner/md.
+    // på tværs af ALLE tenants; forbrug derover koster 0,8 kr./transaktion.
+    // Summeret over tenants' e-faktura-forbrug (send + modtag) giver App
+    // Owner direkte synlighed i omkostningseksponeringen.
+    const platformEinvoiceUsed = tenants.reduce(
+      (sum, t) => sum + (t.einvoice.usedThisMonth ?? 0),
+      0
+    );
+    const sproomIncluded = SPROOM_PLATFORM_COST.includedTransactions;
+    const sproomOverageTransactions = Math.max(0, platformEinvoiceUsed - sproomIncluded);
+    // Afrund til 2 decimaler (0,8 kr. × heltal giver max 1 decimal — men vær
+    // robust hvis prisen ændres til fx 0,85).
+    const sproomOverageCostDkk =
+      Math.round(sproomOverageTransactions * SPROOM_PLATFORM_COST.overageDkkPerTransaction * 100) / 100;
+
     return NextResponse.json({
       tenants,
       addonPackages: {
         einvoice: EINVOICE_ADDON_PACKAGES,
+        // Salgspris pr. tilkøbt e-faktura-transaktion (Sproom-merpris:
+        // 0,8 kr. — hver tilkøbt transaktion dækker omkostningen med
+        // 0,2 kr. i margin; se EINVOICE_ADDON_PRICE_DKK).
+        einvoicePricePerTransactionDkk: EINVOICE_ADDON_PRICE_DKK,
         hermes: HERMES_ADDON_PACKAGES,
+      },
+      platformSproom: {
+        monthlyFeeDkk: SPROOM_PLATFORM_COST.monthlyFeeDkk,
+        includedTransactions: sproomIncluded,
+        usedThisMonth: platformEinvoiceUsed,
+        includedTransactionsRemaining: Math.max(0, sproomIncluded - platformEinvoiceUsed),
+        overageTransactions: sproomOverageTransactions,
+        estimatedOverageCostDkk: sproomOverageCostDkk,
+        estimatedTotalCostDkk:
+          Math.round((SPROOM_PLATFORM_COST.monthlyFeeDkk + sproomOverageCostDkk) * 100) / 100,
       },
     });
   } catch (error) {

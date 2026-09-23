@@ -76,7 +76,7 @@ export enum Feature {
   DataExport = 'DATA_EXPORT',
   /** Hermes AI advisory. Pro+. */
   Hermes = 'HERMES',
-  /** Auto e-invoice via Peppol/NemHandel (Sproom). Business+. */
+  /** Auto e-invoice via Peppol/NemHandel (Sproom). Månedlig+ (alle betalende planer). */
   AutoEinvoice = 'AUTO_EINVOICE',
   /** Annual report iXBRL for Erhvervsstyrelsen. Månedlig+. */
   AnnualReportIxbnl = 'ANNUAL_REPORT_IXBRL',
@@ -102,6 +102,7 @@ const TIER_FEATURES: Record<PlanTier, Feature[]> = {
     Feature.RealBankIntegration,
     Feature.AdvancedReports,
     Feature.DataExport,
+    Feature.AutoEinvoice,
     Feature.AnnualReportIxbnl,
   ],
   [PlanTier.Annual]: [
@@ -109,8 +110,9 @@ const TIER_FEATURES: Record<PlanTier, Feature[]> = {
     Feature.RealBankIntegration,
     Feature.AdvancedReports,
     Feature.DataExport,
-    Feature.AnnualReportIxbnl,
+    Feature.AutoEinvoice,
     Feature.Hermes,
+    Feature.AnnualReportIxbnl,
   ],
   [PlanTier.TwoYear]: [
     Feature.ManualEinvoice,
@@ -285,8 +287,10 @@ export function isProjectsAvailable(ctx: AuthContext | null): boolean {
 }
 
 /**
- * Auto e-invoice availability: plan tier >= Business (twoyear) AND
- * Sproom is connected. The storecoveConnected flag is a legacy technical
+ * Auto e-invoice availability: ANY paid plan tier (Månedlig/annual/
+ * twoyear/threeyear all include Feature.AutoEinvoice) AND Sproom is
+ * connected. Gratis only has manual OIOUBL download. The
+ * storecoveConnected flag is a legacy technical
  * config flag kept for backward compat (Sproom connection is now tracked
  * via sproomChildCompanyId), but auto-send still requires the company to
  * be connected to Sproom.
@@ -336,11 +340,11 @@ export function getMinimumTierForFeature(feature: Feature): PlanTier {
     case Feature.RealBankIntegration:
     case Feature.AdvancedReports:
     case Feature.DataExport:
+    case Feature.AutoEinvoice:
     case Feature.AnnualReportIxbnl:
       return PlanTier.Monthly;
     case Feature.Hermes:
       return PlanTier.Annual;
-    case Feature.AutoEinvoice:
     case Feature.UnlimitedSeats:
       return PlanTier.TwoYear;
     case Feature.ProjectAccounting:
