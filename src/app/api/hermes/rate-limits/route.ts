@@ -72,6 +72,7 @@ export const GET = withGuard(routeConfig['/api/hermes/rate-limits'].GET!, async 
             rateLimitHour: true,
             rateLimitDay: true,
             rateLimitMonth: true,
+            rateLimitCustom: true,
           },
         },
       },

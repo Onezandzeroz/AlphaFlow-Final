@@ -53,8 +53,15 @@ export const GET = withGuard(routeConfig['/api/oversight/usage-addons'].GET!, as
         planTier: true,
         addonHermesQuota: true,
         addonEinvoiceQuota: true,
-        hermesAgent: { select: { enabled: true, rateLimitCustom: true, rateLimitMonth: true } },
-        usageRecord: { select: { monthCount: true } },
+        hermesAgent: {
+          select: {
+            enabled: true,
+            rateLimitCustom: true,
+            rateLimitMonth: true,
+            // Persisted rolling 30-day month counter (survives service restarts)
+            usageRecord: { select: { monthCount: true } },
+          },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -76,7 +83,7 @@ export const GET = withGuard(routeConfig['/api/oversight/usage-addons'].GET!, as
               ? company.hermesAgent.rateLimitMonth
               : (HERMES_MONTHLY_QUOTA[planTier] ?? 0) + company.addonHermesQuota,
             manualOverride: company.hermesAgent?.rateLimitCustom ?? false,
-            usedThisMonth: company.usageRecord?.monthCount ?? 0,
+            usedThisMonth: company.hermesAgent?.usageRecord?.monthCount ?? 0,
           },
           einvoice: {
             planQuota: einvoice.planQuota,
