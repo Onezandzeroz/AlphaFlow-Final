@@ -72,6 +72,20 @@ export const DEFAULT_RATE_LIMIT_CONFIG: RateLimitConfig = {
   month: 2000,
 }
 
+// Plan-based monthly quotas (usage limits). MUST mirror
+// src/lib/usage-quotas.ts HERMES_MONTHLY_QUOTA — the mini-service cannot
+// import from the main app's src/lib, so the table is duplicated here.
+// Applies unless the App Owner has set a manual per-tenant override
+// (HermesAgent.rateLimitCustom=true via the oversight rate-limits page).
+// 0 = no access (free/monthly don't have the Hermes feature anyway).
+const HERMES_PLAN_MONTHLY: Record<string, number> = {
+  free: 0,
+  monthly: 0,
+  annual: 200,
+  twoyear: 500,
+  threeyear: 1000,
+}
+
 // Window durations in milliseconds
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
@@ -175,23 +189,62 @@ export class TenantRateLimiter {
   private async readConfigFromDb(tenantId: string): Promise<RateLimitConfig> {
     try {
       const db = getPrismaClient()
-      const agent = await db.hermesAgent.findUnique({
-        where: { companyId: tenantId },
-        select: {
-          rateLimitEnabled: true,
-          rateLimitBurst: true,
-          rateLimitHour: true,
-          rateLimitDay: true,
-          rateLimitMonth: true,
-        },
-      })
-      if (!agent) return { ...DEFAULT_RATE_LIMIT_CONFIG }
+      // Fetch the tenant's rate-limit config AND its plan tier + usage
+      // add-on in parallel — the monthly quota is plan-based unless the
+      // App Owner has set a manual override (rateLimitCustom).
+      const [agent, company] = await Promise.all([
+        db.hermesAgent.findUnique({
+          where: { companyId: tenantId },
+          select: {
+            rateLimitEnabled: true,
+            rateLimitBurst: true,
+            rateLimitHour: true,
+            rateLimitDay: true,
+            rateLimitMonth: true,
+            rateLimitCustom: true,
+          },
+        }),
+        db.company.findUnique({
+          where: { id: tenantId },
+          select: { planTier: true, addonHermesQuota: true },
+        }),
+      ])
+
+      // Plan quota + purchased add-on (mirrors src/lib/usage-quotas.ts).
+      const planMonth = company
+        ? (HERMES_PLAN_MONTHLY[company.planTier] ?? DEFAULT_RATE_LIMIT_CONFIG.month) +
+          Math.max(0, company.addonHermesQuota)
+        : DEFAULT_RATE_LIMIT_CONFIG.month
+
+      // No agent record yet → plan-based month, standard anti-flood windows.
+      if (!agent) {
+        return {
+          enabled: DEFAULT_RATE_LIMIT_CONFIG.enabled,
+          burst: DEFAULT_RATE_LIMIT_CONFIG.burst,
+          hour: DEFAULT_RATE_LIMIT_CONFIG.hour,
+          day: DEFAULT_RATE_LIMIT_CONFIG.day,
+          month: planMonth,
+        }
+      }
+
+      // Manual App Owner override wins over the plan quota.
+      if (agent.rateLimitCustom) {
+        return {
+          enabled: agent.rateLimitEnabled,
+          burst: agent.rateLimitBurst,
+          hour: agent.rateLimitHour,
+          day: agent.rateLimitDay,
+          month: agent.rateLimitMonth,
+        }
+      }
+
+      // Plan-based month; keep the agent's anti-flood windows + enabled flag.
       return {
         enabled: agent.rateLimitEnabled,
         burst: agent.rateLimitBurst,
         hour: agent.rateLimitHour,
         day: agent.rateLimitDay,
-        month: agent.rateLimitMonth,
+        month: planMonth,
       }
     } catch (err: any) {
       console.error(`[RateLimiter] Failed to read config for ${tenantId}:`, err.message || err)
