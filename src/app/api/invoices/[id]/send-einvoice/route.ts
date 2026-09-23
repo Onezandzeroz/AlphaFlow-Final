@@ -7,6 +7,7 @@ import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { notifyDataChange } from '@/lib/notify-data-change';
 import { db } from '@/lib/db';
+import { getEInvoiceUsage } from '@/lib/usage-quotas';
 
 // NOTE: The Prisma `EInvoiceSendChannel` enum still includes `STORECOVE`
 // for backward-compat with existing DB rows — renaming it would require
@@ -55,6 +56,36 @@ export const POST = withGuard(
         return NextResponse.json(
           { error: `Ugyldig kanal. Gyldige værdier: ${VALID_CHANNELS.join(', ')}` },
           { status: 400 }
+        );
+      }
+
+      // ── Månedlig forbrugskvote (e-faktura: afsendelser + modtagelser) ──
+      // Planens grundkvote + evt. tilkøbt ekstra forbrug (oversight).
+      // Blokerer nye AFSSENDELSER når grænsen er nået. Automatisk Sproom-
+      // modtagelse opretter altid ReceivedInvoice (data går aldrig tabt),
+      // men tæller med i forbruget her.
+      const usage = await getEInvoiceUsage(ctx.activeCompanyId!);
+      if (usage.remaining <= 0) {
+        logger.warn('[EINVOICE_SEND_API] Monthly e-invoice quota exceeded', {
+          companyId: ctx.activeCompanyId,
+          used: usage.used,
+          totalQuota: usage.totalQuota,
+        });
+        return NextResponse.json(
+          {
+            error:
+              'Månedligt forbrug af e-faktura er nået for din plan. ' +
+              'Tilkøb ekstra forbrug, der passer din virksomhed — det er nemt og hurtigt: skriv til os via kontaktsiden, og vi udvider dit forbrug.',
+            code: 'EINVOICE_QUOTA_EXCEEDED',
+            usage: {
+              used: usage.used,
+              planQuota: usage.planQuota,
+              addonQuota: usage.addonQuota,
+              totalQuota: usage.totalQuota,
+              resetsAt: usage.resetsAt,
+            },
+          },
+          { status: 429 }
         );
       }
 

@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
-import { Check, Star, Clock, FileText } from "lucide-react";
+import { Check, Star, Clock, FileText, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { CTAButton } from "@/components/marketing/cta-button";
-import { PRICING_PLANS, TRUST_BADGES } from "@/lib/marketing-data";
+import { PRICING_PLANS, TRUST_BADGES, PLAN_COMPARISON } from "@/lib/marketing-data";
 import { SITE } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -207,6 +215,135 @@ export default function PricingPage() {
               )}
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* DETAILED COMPARISON TABLE — hvad får du i hver prispakke?
+          Data: PLAN_COMPARISON (src/lib/marketing-data.ts) — alle rækker
+          verificeret mod plan-features.ts + usage-quotas.ts.
+          Pro-kolonnen fremhæves — "Mest populær" i kortene ovenfor. */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+        <div className="text-center mb-8 sm:mb-10">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+            Hvad får du i de forskellige prispakker?
+          </h2>
+          <p className="mt-3 text-[15px] text-gray-600 max-w-2xl mx-auto">
+            Detaljeret sammenligning af alle planer — inklusive det månedlige
+            forbrug af Hermes AI og e-faktura, der følger din valgte plan.
+          </p>
+        </div>
+
+        <div className="rounded-3xl bg-white border border-[#e2e8e6]/80 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table className="w-full min-w-[820px] border-collapse">
+              <TableHeader>
+                <TableRow className="bg-[#134e4a] hover:bg-[#134e4a] border-none">
+                  <TableHead className="text-left text-teal-50 font-semibold text-[13px] py-4 px-5">
+                    Funktion
+                  </TableHead>
+                  {[
+                    { name: "Gratis", price: "0 kr." },
+                    { name: "Månedlig", price: "199 kr." },
+                    { name: "Pro", price: "169 kr.", popular: true },
+                    { name: "Business", price: "149 kr." },
+                    { name: "Business Extended", price: "145 kr." },
+                  ].map((col) => (
+                    <TableHead
+                      key={col.name}
+                      className={`text-center font-semibold text-[13px] py-4 px-4 whitespace-nowrap ${
+                        col.popular ? "bg-[#0d9488]/60" : ""
+                      }`}
+                    >
+                      <span className="block text-white">{col.name}</span>
+                      <span className="block text-[11px] font-normal text-teal-100/70">
+                        {col.price}
+                        {col.popular ? " · Mest populær" : ""}
+                      </span>
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+
+              {PLAN_COMPARISON.map((section) => (
+                <TableBody key={section.title}>
+                  <TableRow className="bg-[#f0fdf9] hover:bg-[#f0fdf9]">
+                    <TableCell
+                      colSpan={6}
+                      className="py-2.5 px-5 text-[11px] font-bold uppercase tracking-wider text-[#0f766e] border-b border-[#ccfbef]/60"
+                    >
+                      {section.title}
+                    </TableCell>
+                  </TableRow>
+                  {section.rows.map((row) => (
+                    <TableRow key={row.label} className="hover:bg-[#f8faf9]">
+                      <TableCell className="py-3 px-5 align-top border-b border-[#e2e8e6]/60">
+                        <span className="text-[13px] font-medium text-gray-900">
+                          {row.label}
+                        </span>
+                        {row.note && (
+                          <span className="block mt-0.5 text-[11px] leading-snug text-gray-500 max-w-[320px]">
+                            {row.note}
+                          </span>
+                        )}
+                      </TableCell>
+                      {row.values.map((value, i) => (
+                        <TableCell
+                          key={i}
+                          className={`py-3 px-4 text-center align-top border-b border-[#e2e8e6]/60 ${
+                            i === 2 ? "bg-[#f0fdf9]/60" : ""
+                          }`}
+                        >
+                          {value === "✓" ? (
+                            <Check className="h-4 w-4 mx-auto text-[#0d9488]" aria-label="Inkluderet" />
+                          ) : value === "—" ? (
+                            <span className="text-gray-300" aria-label="Ikke inkluderet">—</span>
+                          ) : (
+                            <span className="text-[13px] font-semibold text-gray-900">
+                              {value}
+                              {row.addon && value !== "—" && (
+                                <span className="block mt-0.5 text-[10px] font-normal text-[#0d9488]">
+                                  + tilkøb muligt
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              ))}
+            </Table>
+          </div>
+        </div>
+
+        {/* Tilkøb af ekstra forbrug — Hermes + e-faktura/kreditnota */}
+        <div className="mt-8 rounded-3xl bg-gradient-to-br from-[#134e4a] to-[#0d9488] p-7 sm:p-10 shadow-lg">
+          <div className="flex flex-col sm:flex-row items-start gap-5">
+            <div className="flex items-center justify-center h-12 w-12 rounded-2xl bg-white/15 border border-white/20 flex-shrink-0">
+              <Sparkles className="h-6 w-6 text-teal-200" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl sm:text-2xl font-bold text-white">
+                Bruger du mere end din plans forbrug?
+              </h3>
+              <p className="mt-3 text-[14px] leading-relaxed text-teal-50/90 max-w-3xl">
+                Hermes AI og afsendelse/modtagelse af e-faktura og kreditnotaer
+                er inkluderet frem til en månedlig grænse, der passer til din
+                plan. Behøver du mere, kan du tilkøbe ekstra forbrug, der passer
+                din virksomheds behov — tilkøb er nemt og hurtigt: skriv til os,
+                og vi udvider dit forbrug med det samme.
+              </p>
+              <div className="mt-6 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                <CTAButton href="/contact" variant="primary-light">
+                  Tilkøb ekstra forbrug
+                </CTAButton>
+                <CTAButton href="/faq" variant="outline-light">
+                  Læs mere om forbrugsgrænser
+                </CTAButton>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

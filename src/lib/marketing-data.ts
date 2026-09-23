@@ -381,7 +381,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     highlighted: true,
     features: [
       "Alt fra Månedlig",
-      "Hermes AI-rådgivning",
+      "Hermes AI-rådgivning (200 beskeder/md.)",
       "Prioriteret support",
       "Stabil pris i 12 måneder",
       "Op til 5 teammedlemmer",
@@ -398,7 +398,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     cta: "Vælg Business",
     features: [
       "Alt fra Pro",
-      "Auto e-faktura (Peppol / NemHandel)",
+      "Auto e-faktura via Peppol (150 e-fakturaer/md.)",
       "Sproom Peppol-adgangspunkt inkluderet",
       "Ubegrænsede teammedlemmer",
     ],
@@ -414,9 +414,169 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     cta: "Vælg Business Extended",
     features: [
       "Alt fra Business",
+      "Største forbrugsgrænser: Hermes 1.000 beskeder + 300 e-fakturaer/md.",
       "Projektregnskab med under-budgets",
       "Højeste prioritet på support",
       "Nye funktioner først",
+    ],
+  },
+] as const;
+
+// ─── Detaljeret plan-sammenligning (tabel på /pricing) ───────────────
+//
+// Alle rækker er verificeret mod koden:
+//   - Feature-gating: src/lib/plan-features.ts (TIER_FEATURES + getSeatCap)
+//   - Forbrugskvoter: src/lib/usage-quotas.ts (HERMES_MONTHLY_QUOTA +
+//     EINVOICE_MONTHLY_QUOTA — håndhæves af hermes-agent/rate-limiter.ts
+//     og kvote-tjek i send-einvoice/receive-ruterne)
+//   - SAF-T/momsindberetning: ikke plan-gatede (alle planer)
+//
+// Kolonner: [Gratis, Månedlig, Pro, Business, Business Extended]
+
+export interface ComparisonRow {
+  label: string;
+  values: [string, string, string, string, string];
+  /** Lille note under label (f.eks. forbrugskvote-forklaring) */
+  note?: string;
+  /** true = forbrugskvote-række: celler viser "+ tilkøb"-hint */
+  addon?: boolean;
+}
+
+export interface ComparisonSection {
+  title: string;
+  rows: ComparisonRow[];
+}
+
+export const PLAN_COMPARISON: readonly ComparisonSection[] = [
+  {
+    title: "Bogføring & regnskab",
+    rows: [
+      {
+        label: "Dobbelt bogføring med finansjournal",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "FSR-kontoplan tilpasset din virksomhedstype",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+        note: "55–61 konti afhængigt af virksomhedstype",
+      },
+      {
+        label: "Momskoder (10) og momsafregning",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Lukkede regnskabsperioder & revisionslog",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Mobil- og tablet-app (virker offline)",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+    ],
+  },
+  {
+    title: "Fakturering & e-faktura",
+    rows: [
+      {
+        label: "Fakturaer & kreditnotaer (PDF + e-mail)",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Manuel e-faktura-eksport (OIOUBL 2.1 / BIS 3.0)",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Automatisk e-faktura via Peppol (Sproom)",
+        values: ["—", "—", "—", "✓", "✓"],
+      },
+      {
+        label: "Modtagelse af e-fakturaer & kreditnotaer",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "E-faktura-forbrug pr. måned (send + modtag)",
+        values: ["10", "25", "50", "150", "300"],
+        note: "Samlet antal afsendte og modtagne e-fakturaer/kreditnotaer pr. kalendermåned. Tilkøb af ekstra forbrug er nemt og hurtigt — skriv til os.",
+        addon: true,
+      },
+    ],
+  },
+  {
+    title: "AI & automatisering",
+    rows: [
+      {
+        label: "Hermes AI-rådgivning",
+        values: ["—", "—", "✓", "✓", "✓"],
+      },
+      {
+        label: "Hermes-beskeder pr. måned",
+        values: ["—", "—", "200", "500", "1.000"],
+        note: "Rullende 30 dage. Tilkøb af ekstra beskeder er nemt og hurtigt — skriv til os.",
+        addon: true,
+      },
+      {
+        label: "AI-kategorisering af bilag (OCR + CVR-opslag)",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Tilbagevendende posteringer (automatisk bogføring)",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+    ],
+  },
+  {
+    title: "Bank & data",
+    rows: [
+      {
+        label: "Bankintegration (Danske Bank, Nordea, Jyske Bank)",
+        values: ["Demo", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Eksport af alle data (CSV, PDF, ZIP)",
+        values: ["—", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "SAF-T-eksport (Dansk Finansskema v2.1)",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+    ],
+  },
+  {
+    title: "Rapporter & myndigheder",
+    rows: [
+      {
+        label: "Basisrapporter (resultatopgørelse, hovedbog m.m.)",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Avancerede rapporter (pengestrøm, aldersopdeling, budget)",
+        values: ["—", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Årsrapport i XBRL (til Erhvervsstyrelsen)",
+        values: ["—", "✓", "✓", "✓", "✓"],
+      },
+      {
+        label: "Digital momsindberetning (Skattestyrelsen)",
+        values: ["✓", "✓", "✓", "✓", "✓"],
+      },
+    ],
+  },
+  {
+    title: "Team & vilkår",
+    rows: [
+      {
+        label: "Teammedlemmer",
+        values: ["1", "3", "5", "Ubegrænset", "Ubegrænset"],
+      },
+      {
+        label: "Projektregnskab med under-budgets",
+        values: ["—", "—", "—", "—", "✓"],
+      },
+      {
+        label: "Binding",
+        values: ["Ingen", "Ingen", "12 md.", "24 md.", "36 md."],
+      },
     ],
   },
 ] as const;

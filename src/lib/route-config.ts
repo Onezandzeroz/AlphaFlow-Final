@@ -466,6 +466,10 @@ export const routeConfig: RouteConfigMap = {
     POST: { auth: true, requireSuperDev: true },
     GET: { auth: true, requireSuperDev: true },
   },
+  '/api/oversight/usage-addons': {
+    GET: { auth: true, requireSuperDev: true },
+    PUT: { auth: true, requireSuperDev: true },
+  },
   '/api/oversight/test-emails': {
     POST: { auth: true, requireSuperDev: true },
   },

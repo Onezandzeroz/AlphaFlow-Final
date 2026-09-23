@@ -5,6 +5,8 @@ import { routeConfig } from '@/lib/route-config';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import { notifyDataChange } from '@/lib/notify-data-change';
+import { HERMES_MONTHLY_QUOTA } from '@/lib/usage-quotas';
+import { PlanTier } from '@/lib/plan-features';
 
 /**
  * Hermes per-tenant rate limit configuration.
@@ -81,6 +83,11 @@ export const GET = withGuard(routeConfig['/api/hermes/rate-limits'].GET!, async 
       companyName: company.name,
       companyType: company.companyType ?? null,
       hermesEnabled: company.hermesAgent?.enabled ?? false,
+      // Plan-based baseline quota (without add-on) for the oversight UI —
+      // mirrors what the rate-limiter enforces when rateLimitCustom=false.
+      planMonthQuota: HERMES_MONTHLY_QUOTA[(company.planTier as PlanTier) ?? PlanTier.Free] ?? 0,
+      addonHermesQuota: company.addonHermesQuota ?? 0,
+      rateLimitCustom: company.hermesAgent?.rateLimitCustom ?? false,
       rateLimits: {
         enabled: company.hermesAgent?.rateLimitEnabled ?? DEFAULTS.enabled,
         burst: company.hermesAgent?.rateLimitBurst ?? DEFAULTS.burst,
@@ -124,6 +131,7 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
       select: {
         id: true,
         name: true,
+        planTier: true,
         hermesAgent: {
           select: {
             id: true,
@@ -132,6 +140,7 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
             rateLimitHour: true,
             rateLimitDay: true,
             rateLimitMonth: true,
+            rateLimitCustom: true,
           },
         },
       },
@@ -148,10 +157,13 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
           hour: company.hermesAgent.rateLimitHour,
           day: company.hermesAgent.rateLimitDay,
           month: company.hermesAgent.rateLimitMonth,
+          custom: company.hermesAgent.rateLimitCustom,
         }
-      : { ...DEFAULTS };
+      : { ...DEFAULTS, custom: false };
 
-    // Upsert the HermesAgent record with the new rate-limit config
+    // Upsert the HermesAgent record with the new rate-limit config.
+    // rateLimitCustom=true marks this as a MANUAL App Owner override that
+    // wins over the plan-based monthly quota (lib/usage-quotas.ts).
     const updated = await db.hermesAgent.upsert({
       where: { companyId },
       create: {
@@ -161,6 +173,7 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
         rateLimitHour: config.hour,
         rateLimitDay: config.day,
         rateLimitMonth: config.month,
+        rateLimitCustom: true,
       },
       update: {
         rateLimitEnabled: config.enabled,
@@ -168,6 +181,7 @@ export const PUT = withGuard(routeConfig['/api/hermes/rate-limits'].PUT!, async 
         rateLimitHour: config.hour,
         rateLimitDay: config.day,
         rateLimitMonth: config.month,
+        rateLimitCustom: true,
       },
       select: {
         id: true,

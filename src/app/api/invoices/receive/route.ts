@@ -4,6 +4,7 @@ import { Permission } from '@/lib/rbac';
 import { storeReceivedInvoice } from '@/lib/invoice-receiver';
 import { logger } from '@/lib/logger';
 import { withGuard } from '@/lib/route-guard';
+import { getEInvoiceUsage } from '@/lib/usage-quotas';
 
 // POST /api/invoices/receive — Receive and store an e-invoice (manual upload)
 //
@@ -22,6 +23,35 @@ export const POST = withGuard(
         return NextResponse.json(
           { error: 'Missing required field: xml (string)' },
           { status: 400 }
+        );
+      }
+
+      // ── Månedlig forbrugskvote (e-faktura: afsendelser + modtagelser) ──
+      // Manuel upload blokeres når grænsen er nået. Automatisk Sproom-
+      // modtagelse (webhook) opretter ALTID ReceivedInvoice — data fra
+      // leverandører går aldrig tabt — men tæller med i forbruget.
+      const usage = await getEInvoiceUsage(ctx.activeCompanyId!);
+      if (usage.remaining <= 0) {
+        logger.warn('[EINVOICE_RECEIVE] Monthly e-invoice quota exceeded', {
+          companyId: ctx.activeCompanyId,
+          used: usage.used,
+          totalQuota: usage.totalQuota,
+        });
+        return NextResponse.json(
+          {
+            error:
+              'Månedligt forbrug af e-faktura er nået for din plan. ' +
+              'Tilkøb ekstra forbrug, der passer din virksomhed — det er nemt og hurtigt: skriv til os via kontaktsiden, og vi udvider dit forbrug.',
+            code: 'EINVOICE_QUOTA_EXCEEDED',
+            usage: {
+              used: usage.used,
+              planQuota: usage.planQuota,
+              addonQuota: usage.addonQuota,
+              totalQuota: usage.totalQuota,
+              resetsAt: usage.resetsAt,
+            },
+          },
+          { status: 429 }
         );
       }
 

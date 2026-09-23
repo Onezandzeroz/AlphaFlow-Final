@@ -189,6 +189,11 @@ export const FAQ_DA: readonly {
     answer:
       "Du kan eksportere posteringer og rapporter som CSV eller PDF, e-fakturaer i Peppol-format samt hele regnskabet som SAF-T eller komplet backup. Dine data er altid dine og kan tages med, når som helst.",
   },
+  {
+    question: "Hvad sker der, hvis jeg når min månedlige grænse for Hermes eller e-faktura?",
+    answer:
+      "Brug af Hermes AI og afsendelse/modtagelse af e-fakturaer og kreditnotaer er inkluderet frem til et månedligt forbrug, der passer til din plan (fx 50 e-fakturaer og 200 Hermes-beskeder på Pro). Når grænsen er nået, kan du tilkøbe ekstra forbrug, der passer din virksomheds behov — tilkøb er nemt og hurtigt: skriv til os via kontaktsiden, og vi udvider dit forbrug med det samme. E-faktura-grænsen gælder det samlede antal afsendte og modtagne e-fakturaer pr. kalendermåned og fornyes automatisk den 1. i den følgende måned.",
+  },
 ] as const;
 
 // ─── Feature List (for SoftwareApplication schema) ───────────────
@@ -219,6 +224,7 @@ export const FEATURES_DA: readonly string[] = [
   "Hermes AI-assistent til regnskabsspørgsmål",
   "Sproom Peppol-adgangspunkt integration",
   "Kreditnota-håndtering",
+  "Plan-baserede forbrugsgrænser for AI og e-faktura med nemt tilkøb af ekstra forbrug",
 ] as const;
 
 // ─── Schema.org Application Categories ────────────────────────────

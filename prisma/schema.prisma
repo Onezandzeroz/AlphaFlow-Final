@@ -350,6 +350,15 @@ model Company {
   planActivatedBy String? // userId of the App Owner who set the paid plan (audit trail)
   planNotes       String? // SuperDev free-text note (e.g. "granted as courtesy")
 
+  // ── Forbrugstilkøb (usage add-ons) ──
+  // Ekstra månedligt forbrug oveni planens grundkvote (se lib/usage-quotas.ts).
+  // Aktiveres af App Owner via /api/oversight/usage-addons efter kunde-
+  // henvendelse — derved er tilkøb nemt og hurtigt (minutter). Indtil et
+  // selvbetjenings-flow (Flatpay) er bygget, faktureres tilkøb uden for
+  // appen efter aftale med kunden.
+  addonHermesQuota   Int @default(0) // ekstra Hermes-beskeder/md. oveni planens kvote
+  addonEinvoiceQuota Int @default(0) // ekstra e-fakturaer/md. (send+modtag) oveni planens kvote
+
   // ── Subscription lifecycle (FASE 6 — billing compliance) ──
   // planStatus tracks whether the subscription is active, cancelled (running
   // out the binding period), expired, or past_due. Decoupled from planTier so
@@ -1191,6 +1200,10 @@ model HermesAgent {
   rateLimitHour    Int     @default(40) // max requests per hour
   rateLimitDay     Int     @default(120) // max requests per day (fair-use quota)
   rateLimitMonth   Int     @default(2000) // max requests per month (cost predictability)
+  // true = App Owner har manuelt overskrevet rate limits via oversight-siden
+  // (manuelle værdier vinder over plan-kvoten fra lib/usage-quotas.ts).
+  // false (default) = månedskvoten følger virksomhedens planTier.
+  rateLimitCustom  Boolean @default(false)
 
   company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   reminders AgentReminder[]
