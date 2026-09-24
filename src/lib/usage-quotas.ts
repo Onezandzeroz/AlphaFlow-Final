@@ -94,24 +94,24 @@ export const HERMES_MONTHLY_QUOTA: Record<PlanTier, number> = {
  * E-fakturaer/kreditnotaer (send + modtaget) pr. kalendermåned pr. plan.
  *
  * Fordelingen afspejler platformens Sproom-abonnement: de 500 INKLUDEREDE
- * transaktioner (SPROOM_PLATFORM_COST.includedTransactions) fordeles mellem
- * planerne — flest til Business Extended — så én kunde pr. plan ved fuldt
- * forbrug rammer præcis den inkluderede pulje (10+50+100+150+190 = 500).
- * Med flere aktive kunder kan det samlede forbrug overstige puljen; App
- * Owner følger omkostningseksponeringen løbende i oversight-ruten
+ * transaktioner (SPROOM_PLATFORM_COST.includedTransactions) dækker planerne
+ * med god margin — én kunde pr. plan ved fuldt forbrug bruger 340 af de 500
+ * inkluderede (10+30+50+100+150 = 340), hvilket efterlader 160 transaktioner
+ * til ekstra kunder, FØR merforbrug hos Sproom (0,8 kr./transaktion) slår
+ * ind. App Owner følger omkostningseksponeringen løbende i oversight-ruten
  * (/api/oversight/usage-addons → platformSproom), og overskridelser hos den
  * enkelte kunde dækkes af tilkøbspakker (1,0 kr./transaktion vs. Sprooms
- * 0,8 kr.). Hold summen = includedTransactions ved ændringer.
+ * 0,8 kr.). Summen (340) holdes bevidst under includedTransactions (500).
  *
  * Gratis (10) dækker MODTAGELSE + manuel XML-upload — afsendelse via Sproom
  * kræver en betalende plan (Feature.AutoEinvoice, se plan-features.ts).
  */
 export const EINVOICE_MONTHLY_QUOTA: Record<PlanTier, number> = {
   [PlanTier.Free]: 10,       // ┐
-  [PlanTier.Monthly]: 50,    // │ Tilsammen præcis de 500 inkluderede
-  [PlanTier.Annual]: 100,    // │ Sproom-transaktioner pr. måned — hold
-  [PlanTier.TwoYear]: 150,   // │ summen synkroniseret med
-  [PlanTier.ThreeYear]: 190, // ┘ SPROOM_PLATFORM_COST.includedTransactions
+  [PlanTier.Monthly]: 30,    // │ Tilsammen 340 — bevidst under de 500
+  [PlanTier.Annual]: 50,     // │ inkluderede Sproom-transaktioner
+  [PlanTier.TwoYear]: 100,   // │ pr. måned (160 til ekstra kunder) —
+  [PlanTier.ThreeYear]: 150, // ┘ se SPROOM_PLATFORM_COST ovenfor
 };
 
 // ─── Tilkøbspakker (add-on packages) ────────────────────────────────

@@ -157,8 +157,37 @@ const retryExtension = Prisma.defineExtension({
   },
 })
 
+/**
+ * Sandbox-/miljø-guard: DATABASE_URL-fallback til lokal embedded Postgres.
+ *
+ * Sandbox-miljøet nulstiller .env ved genstart til en SQLite-default
+ * (`file:/home/z/my-project/db/custom.db`), som er inkompatibel med dette
+ * PostgreSQL-skema (prisma:error "URL must start with postgresql://").
+ * Når det sker, falder vi tilbage på den LOKALE embedded PostgreSQL, som
+ * mini-services/pg-service holder kørende på 127.0.0.1:5432 (pg-service
+ * retter .env kort efter — denne guard dækker vinduet imellem).
+ *
+ * I produktion (Neon) står DATABASE_URL korrekt i .env og bliver IKKE rørt.
+ * En ægte Neon-URL overskrives aldrig — kun file:-defaults/manglende
+ * værdier erstattes.
+ */
+function resolveDatabaseUrl(): string | undefined {
+  const url = process.env.DATABASE_URL
+  if (!url || url.startsWith('file:')) {
+    const fallback = 'postgresql://alphaflow:alphaflow@127.0.0.1:5432/alphaflow'
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(
+        `[db] DATABASE_URL ${url ? `'${url.slice(0, 24)}…' (SQLite-default)` : 'mangler'} → bruger lokal embedded Postgres (pg-service)`,
+      )
+    }
+    return fallback
+  }
+  return url
+}
+
 function createDbClient() {
   return new PrismaClient({
+    datasourceUrl: resolveDatabaseUrl(),
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   })
     .$extends(decimalExtension)

@@ -192,7 +192,7 @@ export const FAQ_DA: readonly {
   {
     question: "Hvad sker der, hvis jeg når min månedlige grænse for Hermes eller e-faktura?",
     answer:
-      "Brug af Hermes AI og afsendelse/modtagelse af e-fakturaer og kreditnotaer er inkluderet frem til et månedligt forbrug, der passer til din plan (fx 100 e-fakturaer og 200 Hermes-beskeder på Pro). Når grænsen er nået, kan du tilkøbe ekstra e-faktura-forbrug i faste pakker à 200, 500, 1.000 eller 2.000 transaktioner til 1 kr. pr. transaktion — skriv til os via kontaktsiden, og vi udvider dit forbrug med det samme. E-faktura-grænsen gælder det samlede antal afsendte og modtagne e-fakturaer pr. kalendermåned og fornyes automatisk den 1. i den følgende måned.",
+      "Brug af Hermes AI og afsendelse/modtagelse af e-fakturaer og kreditnotaer er inkluderet frem til et månedligt forbrug, der passer til din plan (fx 50 e-fakturaer og 200 Hermes-beskeder på Pro). Når grænsen er nået, kan du tilkøbe ekstra e-faktura-forbrug i faste pakker à 200, 500, 1.000 eller 2.000 transaktioner til 1 kr. pr. transaktion — skriv til os via kontaktsiden, og vi udvider dit forbrug med det samme. E-faktura-grænsen gælder det samlede antal afsendte og modtagne e-fakturaer pr. kalendermåned og fornyes automatisk den 1. i den følgende måned.",
   },
 ] as const;
 

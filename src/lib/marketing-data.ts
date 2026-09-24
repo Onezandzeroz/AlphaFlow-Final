@@ -362,7 +362,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     features: [
       "Alt fra Gratis",
       "Ubegrænset omsætning",
-      "Auto e-faktura via Peppol (50 e-fakturaer/md.)",
+      "Auto e-faktura via Peppol (30 e-fakturaer/md.)",
       "Avancerede rapporter (pengestrøm, aldersopdeling, budget vs. realiseret)",
       "Eksport af alle data (CSV, PDF, ZIP)",
       "Moms & årsregnskab (iXBRL for Erhvervsstyrelsen)",
@@ -383,7 +383,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     features: [
       "Alt fra Månedlig",
       "Hermes AI-rådgivning (200 beskeder/md.)",
-      "Auto e-faktura via Peppol (100 e-fakturaer/md.)",
+      "Auto e-faktura via Peppol (50 e-fakturaer/md.)",
       "Prioriteret support",
       "Stabil pris i 12 måneder",
       "Op til 5 teammedlemmer",
@@ -400,7 +400,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     cta: "Vælg Business",
     features: [
       "Alt fra Pro",
-      "Auto e-faktura via Peppol (150 e-fakturaer/md.)",
+      "Auto e-faktura via Peppol (100 e-fakturaer/md.)",
       "Sproom Peppol-adgangspunkt inkluderet",
       "Ubegrænsede teammedlemmer",
     ],
@@ -416,7 +416,7 @@ export const PRICING_PLANS: readonly PricingPlan[] = [
     cta: "Vælg Business Extended",
     features: [
       "Alt fra Business",
-      "Største forbrugsgrænser: Hermes 1.000 beskeder + 190 e-fakturaer/md.",
+      "Største forbrugsgrænser: Hermes 1.000 beskeder + 150 e-fakturaer/md.",
       "Projektregnskab med under-budgets",
       "Højeste prioritet på support",
       "Nye funktioner først",
@@ -498,7 +498,7 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
       },
       {
         label: "E-faktura-forbrug pr. måned (send + modtag)",
-        values: ["10", "50", "100", "150", "190"],
+        values: ["10", "30", "50", "100", "150"],
         note: "Samlet send og modtaget pr. kalendermåned.",
         addon: true,
       },

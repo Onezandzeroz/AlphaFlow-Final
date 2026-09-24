@@ -1,0 +1,14 @@
+{
+  "name": "pg-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lokal embedded PostgreSQL 17 + pgvector til AlphaFlow sandbox-miljøet",
+  "scripts": {
+    "dev": "bun --hot index.ts",
+    "start": "bun index.ts"
+  },
+  "dependencies": {
+    "embedded-postgres": "17.9.0-beta.17",
+    "pg": "^8.13.1"
+  }
+}
