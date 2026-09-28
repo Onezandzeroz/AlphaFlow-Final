@@ -117,17 +117,18 @@ interface SproomConnectionStatus {
   //   'staging'    — staging.sproom.net (sandbox, AcceptButton sign)
   //   'custom'     — SPROOM_API_URL points to something else
   //   'simulation' — no SPROOM_API_TOKEN configured (synthetic responses)
-  // Used to gate the DevMode CVR-bypass toggle (shown only when env
-  // !== 'production'), so the toggle appears in sandbox/test setups
-  // regardless of whether Next.js itself runs in dev or prod mode.
+  // Shown as an informational badge in the SuperDev CVR-verification
+  // toggle card so the SuperDev can see which environment they're
+  // affecting.
   sproomEnvironment?: 'production' | 'staging' | 'custom' | 'simulation';
   sproomBaseUrl?: string;
-  // Platform-wide DevMode CVR-bypass flag (SuperDev-controlled via
-  // /api/sproom/dev-bypass-cvr). When true, ALL tenants on the platform
+  // SuperDev-controlled platform-wide CVR-verification flag (set via
+  // /api/sproom/dev-bypass-cvr). When false, ALL tenants on the platform
   // skip the cvrVerifiedAt gate when creating a Sproom child company —
-  // not just this tenant. Inert when Sproom is in production.
-  cvrBypassEnabled?: boolean;
-  cvrBypassLastChangedAt?: string | null;
+  // not just this tenant. The dev-bypass-cvr route refuses to set this
+  // to false when Sproom is in production.
+  cvrVerificationRequired?: boolean;
+  cvrVerificationLastChangedAt?: string | null;
 }
 
 interface PeppolParticipantResult {
@@ -187,40 +188,44 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   } | null>(null);
   const [isPeppolVerifying, setIsPeppolVerifying] = useState(false);
 
-  // ── DevMode CVR-bypass toggle (SuperDev-only, platform-wide) ───────
-  // Lets a SuperDev toggle a PLATFORM-WIDE flag that, when ON, makes the
-  // Sproom child-company creation route skip the cvrVerifiedAt gate for
-  // ALL tenants on the platform — not just this one. Backed by
-  // /api/sproom/dev-bypass-cvr (POST/DELETE/GET).
+  // ── SuperDev CVR-verification toggle (platform-wide) ───────────────
+  // SuperDev-only toggle that controls a PLATFORM-WIDE flag. When the
+  // toggle is OFF (cvrVerificationRequired === false), ALL tenants on
+  // the platform skip the cvrVerifiedAt gate when creating a Sproom
+  // child company — not just this one. When ON (default), every tenant
+  // must verify their CVR normally.
+  //
+  // Backed by /api/sproom/dev-bypass-cvr:
+  //   POST   → re-enable CVR verification (default)
+  //   DELETE → disable CVR verification (skip the gate for all tenants)
   //
   // Gating:
-  //   1. Sproom must be in a non-production environment (staging / custom /
-  //      simulation). The toggle is meaningless against real Sproom prod.
-  //   2. The signed-in user must be a SuperDev (user.isSuperDev === true).
-  //      This prevents regular tenants from seeing or using the bypass —
-  //      it's a platform-admin tool, not a tenant feature.
+  //   - The toggle is visible ONLY when the signed-in user is a SuperDev
+  //     (user.isSuperDev === true). Regular tenants never see it.
+  //   - The Sproom environment is NOT a visibility gate — the SuperDev
+  //     can see the toggle regardless of whether Sproom is in staging or
+  //     production. The backend route refuses to disable verification
+  //     when Sproom is in production, but the toggle itself is always
+  //     visible so the SuperDev can see the current state and re-enable
+  //     verification if needed.
   //
   // State source:
-  //   The CURRENT state of the platform-wide flag comes from
-  //   /api/sproom/status (cvrBypassEnabled field) — already fetched for
-  //   the Sproom card. No separate GET call needed on mount. The toggle
-  //   just reflects that state, and POST/DELETE updates it.
+  //   The current state comes from /api/sproom/status
+  //   (cvrVerificationRequired field) — already fetched for the Sproom
+  //   card. No separate GET call needed on mount.
   //
   // Server-side enforcement:
   //   The /api/sproom/dev-bypass-cvr route uses the SUPERDEV_ON_TENANT
-  //   guard config (SuperDev + requireCompany) AND refuses when Sproom
-  //   is pointed at production. So even if a regular tenant figured out
-  //   the API URL and POSTed directly, they'd get 403 from withGuard
-  //   before the handler runs.
+  //   guard config (SuperDev + requireCompany) AND refuses to disable
+  //   verification when Sproom is pointed at production. So even if a
+  //   regular tenant figured out the API URL and POSTed directly,
+  //   they'd get 403 from withGuard before the handler runs.
   const sproomEnv = sproomStatus?.sproomEnvironment;
-  const isSandboxSproom = sproomEnv === 'staging' || sproomEnv === 'custom' || sproomEnv === 'simulation';
   const isSuperDev = !!user?.isSuperDev;
-  const isDevMode = isSandboxSproom && isSuperDev;
-  // The toggle's checked state is the platform-wide flag from the status
-  // response — NOT local state. We use useState only for the loading
-  // spinner during the POST/DELETE round-trip.
-  const devBypassActive = !!sproomStatus?.cvrBypassEnabled;
-  const [isTogglingDevBypass, setIsTogglingDevBypass] = useState(false);
+  // The toggle's checked state is "CVR verification required" — ON means
+  // verification is required (the safe default), OFF means skipped.
+  const cvrVerificationRequired = sproomStatus?.cvrVerificationRequired !== false;
+  const [isTogglingCvrVerification, setIsTogglingCvrVerification] = useState(false);
   const [peppolDialogOpen, setPeppolDialogOpen] = useState(false);
   const [peppolDialogData, setPeppolDialogData] = useState<{ message?: string; state?: string | null; registered?: boolean } | null>(null);
 
@@ -304,44 +309,46 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     fetchSproomStatus();
   }, [fetchSettings, fetchCompanyCvr, fetchSproomStatus]);
 
-  // ── DevMode CVR-bypass toggle handler ──
-  // POST   /api/sproom/dev-bypass-cvr → enable platform-wide bypass
-  // DELETE /api/sproom/dev-bypass-cvr → disable platform-wide bypass
+  // ── SuperDev CVR-verification toggle handler ──
+  // POST   /api/sproom/dev-bypass-cvr → re-enable CVR verification (toggle ON)
+  // DELETE /api/sproom/dev-bypass-cvr → disable CVR verification (toggle OFF)
   // The route uses the SUPERDEV_ON_TENANT guard (SuperDev-only + requireCompany)
-  // AND refuses when Sproom is pointed at production (sproomClient.environment
-  // === 'production'). After toggling, we re-fetch /api/sproom/status to
-  // reflect the new state — the toggle is bound to
-  // sproomStatus.cvrBypassEnabled, which is the platform-wide file flag.
-  const handleToggleDevBypass = useCallback(
-    async (enable: boolean) => {
-      setIsTogglingDevBypass(true);
+  // AND refuses to disable verification when Sproom is pointed at production
+  // (sproomClient.environment === 'production'). After toggling, we re-fetch
+  // /api/sproom/status to reflect the new state — the toggle is bound to
+  // sproomStatus.cvrVerificationRequired, which is the platform-wide flag.
+  const handleToggleCvrVerification = useCallback(
+    async (requireVerification: boolean) => {
+      setIsTogglingCvrVerification(true);
       try {
         const res = await fetch('/api/sproom/dev-bypass-cvr', {
-          method: enable ? 'POST' : 'DELETE',
+          // POST = re-enable verification (toggle ON)
+          // DELETE = disable verification (toggle OFF)
+          method: requireVerification ? 'POST' : 'DELETE',
         });
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
-          toast.error(data?.error || (isDa ? 'Kunne ikke ændre DevMode-bypass' : 'Failed to toggle DevMode bypass'));
+          toast.error(data?.error || (isDa ? 'Kunne ikke ændre CVR-verifikation' : 'Failed to toggle CVR verification'));
           return;
         }
         // Re-fetch the Sproom status so the toggle reflects the new
         // platform-wide state. We don't update local state directly —
-        // the toggle is bound to sproomStatus.cvrBypassEnabled, which
-        // comes from the server (the file is the source of truth).
+        // the toggle is bound to sproomStatus.cvrVerificationRequired,
+        // which comes from the server (the file is the source of truth).
         await fetchSproomStatus();
         toast.success(
-          enable
+          requireVerification
             ? (isDa
-                ? 'DevMode-bypass aktiveret for ALLE tenants — CVR-verifikation sprænges på hele platformen'
-                : 'DevMode bypass enabled for ALL tenants — CVR verification skipped platform-wide')
+                ? 'CVR-verifikation aktiveret — alle tenants skal verificere CVR igen'
+                : 'CVR verification enabled — all tenants must verify CVR again')
             : (isDa
-                ? 'DevMode-bypass deaktiveret — alle tenants skal verificere CVR igen'
-                : 'DevMode bypass disabled — all tenants must verify CVR again'),
+                ? 'CVR-verifikation deaktiveret for ALLE tenants på platformen'
+                : 'CVR verification disabled for ALL tenants on the platform'),
         );
       } catch {
         toast.error(isDa ? 'Netværksfejl under toggle' : 'Network error during toggle');
       } finally {
-        setIsTogglingDevBypass(false);
+        setIsTogglingCvrVerification(false);
       }
     },
     [isDa, fetchSproomStatus],
@@ -354,14 +361,15 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   const handleCreateSproomChild = useCallback(async () => {
     // CVR gate (frontend): the user can proceed if EITHER
     //   (a) this tenant's CVR is verified (the normal path), OR
-    //   (b) the SuperDev has enabled the platform-wide DevMode CVR
-    //       bypass flag (sproomStatus.cvrBypassEnabled === true). The
-    //       backend re-checks this flag on every request, so the
+    //   (b) the SuperDev has disabled the platform-wide CVR-verification
+    //       requirement (sproomStatus.cvrVerificationRequired === false).
+    //       The backend re-checks the flag on every request, so the
     //       frontend check is just a UX guard — it doesn't bypass
     //       anything on its own.
-    // When bypass is ON, the user can create a Sproom child company
-    // without first verifying their CVR (e.g. in a staging sandbox test).
-    if (!cvrVerified && !sproomStatus?.cvrBypassEnabled) {
+    // When verification is disabled, the user can create a Sproom child
+    // company without first verifying their CVR (e.g. for testing the
+    // Sproom integration without real CVR data).
+    if (!cvrVerified && sproomStatus?.cvrVerificationRequired !== false) {
       toast.error(isDa
         ? 'Bekræft dit CVR-nummer i Virksomhedsindstillinger først.'
         : 'Verify your CVR number in Company settings first.');
@@ -1351,68 +1359,68 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
               </div>
             </div>
 
-            {/* ── DevMode CVR-bypass toggle (SuperDev-only, platform-wide, shown when Sproom is in a non-production environment) ──
-                Lets a SuperDev toggle a PLATFORM-WIDE flag that, when ON,
-                skips the CVR-verification gate for ALL tenants on the
-                platform — not just this one. Hidden from regular tenants
-                (only visible when user.isSuperDev === true) AND only shown
-                when Sproom is in staging/custom/simulation environment.
-                The server route (POST/DELETE /api/sproom/dev-bypass-cvr)
-                refuses ONLY when Sproom is pointed at production
-                (sproomClient.environment === 'production'). */}
-            {isDevMode && !sproomStatus?.connected && (
+            {/* ── SuperDev CVR-verification toggle (SuperDev-only, platform-wide) ──
+                Lets a SuperDev toggle a PLATFORM-WIDE flag. When the toggle
+                is OFF (cvrVerificationRequired === false), the
+                create-child-company route skips the cvrVerifiedAt gate for
+                ALL tenants on the platform — not just this one. When ON
+                (default), every tenant must verify their CVR normally.
+                Hidden from regular tenants — only visible when
+                user.isSuperDev === true. The server route refuses to
+                disable verification when Sproom is in production. */}
+            {isSuperDev && !sproomStatus?.connected && (
               <div className="rounded-lg bg-amber-50 dark:bg-amber-900/15 border border-amber-300 dark:border-amber-700/50 p-3 space-y-3">
                 <div className="flex items-start gap-2">
                   <Beaker className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-                        {isDa ? 'DevMode: Spring CVR-verifikation over (platform-bred)' : 'DevMode: Skip CVR verification (platform-wide)'}
+                        {isDa ? 'SuperDev: CVR-verifikation (platform-bred)' : 'SuperDev: CVR verification (platform-wide)'}
                       </p>
                       {sproomEnv && (
                         <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20">
                           Sproom: {sproomEnv}
                         </Badge>
                       )}
-                      {devBypassActive && (
+                      {!cvrVerificationRequired && (
                         <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-amber-500 dark:border-amber-600 text-amber-800 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30">
-                          {isDa ? 'Aktiv for alle tenants' : 'Active for all tenants'}
+                          {isDa ? 'Deaktiveret for alle tenants' : 'Disabled for all tenants'}
                         </Badge>
                       )}
                     </div>
                     <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-snug">
                       {isDa
-                        ? 'Når aktiv, sprænges CVR-verifikationskravet for ALLE tenants på platformen — ikke kun denne tenant. Det gør det muligt at teste Sproom staging sandbox uden et ægte CVR-nummer. Deaktivér for at kræve reel CVR-verifikation igen for alle tenants.'
-                        : 'When active, the CVR-verification requirement is skipped for ALL tenants on the platform — not just this one. Lets you test the Sproom staging sandbox without a real CVR number. Disable to require real CVR verification again for all tenants.'}
+                        ? 'Når toggle er SLÅET FRA, sprænges CVR-verifikationskravet for ALLE tenants på platformen — ikke kun denne tenant. Det gør det muligt at teste Sproom-integrationen uden et ægte CVR-nummer. Slå tilbage for at kræve reel CVR-verifikation igen for alle tenants.'
+                        : 'When the toggle is OFF, the CVR-verification requirement is skipped for ALL tenants on the platform — not just this one. Lets you test the Sproom integration without a real CVR number. Toggle back ON to require real CVR verification again for all tenants.'}
                     </p>
                     {sproomStatus?.sproomBaseUrl && (
                       <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-1 font-mono break-all">
                         {sproomStatus.sproomBaseUrl}
                       </p>
                     )}
-                    {sproomStatus?.cvrBypassLastChangedAt && (
+                    {sproomStatus?.cvrVerificationLastChangedAt && (
                       <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-1">
                         {isDa
-                          ? `Sidst ændret: ${new Date(sproomStatus.cvrBypassLastChangedAt).toLocaleString('da-DK')}`
-                          : `Last changed: ${new Date(sproomStatus.cvrBypassLastChangedAt).toLocaleString()}`}
+                          ? `Sidst ændret: ${new Date(sproomStatus.cvrVerificationLastChangedAt).toLocaleString('da-DK')}`
+                          : `Last changed: ${new Date(sproomStatus.cvrVerificationLastChangedAt).toLocaleString()}`}
                       </p>
                     )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-3 pl-6">
                   <span className="text-[11px] text-amber-700 dark:text-amber-400">
-                    {devBypassActive
-                      ? (isDa ? 'Bypass aktiv — CVR sprænges for alle tenants' : 'Bypass active — CVR skipped for all tenants')
-                      : (isDa ? 'Bypass inaktiv — CVR-verifikation kræves for alle tenants' : 'Bypass inactive — CVR verification required for all tenants')}
+                    {cvrVerificationRequired
+                      ? (isDa ? 'CVR-verifikation kræves (normal)' : 'CVR verification required (normal)')
+                      : (isDa ? 'CVR-verifikation sprænges for alle tenants' : 'CVR verification skipped for all tenants')}
                   </span>
                   <ResponsiveSwitch
-                    checked={devBypassActive}
-                    disabled={isTogglingDevBypass}
-                    onCheckedChange={(checked) => handleToggleDevBypass(checked)}
-                    aria-label={isDa ? 'DevMode CVR-bypass (platform-bred)' : 'DevMode CVR bypass (platform-wide)'}
+                    checked={cvrVerificationRequired}
+                    disabled={isTogglingCvrVerification}
+                    onCheckedChange={(checked) => handleToggleCvrVerification(checked)}
+                    aria-label={isDa ? 'SuperDev CVR-verifikation (platform-bred)' : 'SuperDev CVR verification (platform-wide)'}
                   />
                 </div>
-                {isTogglingDevBypass && (
+                {isTogglingCvrVerification && (
                   <div className="flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-400 pl-6">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     {isDa ? 'Opdaterer...' : 'Updating...'}
@@ -1452,12 +1460,12 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 )}
                 {/* CVR gate (UX): show the "Create child company" button when
                     EITHER the tenant's CVR is verified, OR the SuperDev has
-                    enabled the platform-wide DevMode CVR bypass flag
-                    (sproomStatus.cvrBypassEnabled === true). The backend
-                    re-checks the bypass flag on every actual request, so
+                    disabled the platform-wide CVR-verification requirement
+                    (sproomStatus.cvrVerificationRequired === false). The
+                    backend re-checks the flag on every actual request, so
                     this is just a UX gate — it doesn't grant anything on
                     its own. */}
-                {(cvrVerified || sproomStatus?.cvrBypassEnabled) ? (
+                {(cvrVerified || sproomStatus?.cvrVerificationRequired === false) ? (
                   <>
                     {cvrVerified ? (
                       <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
@@ -1473,8 +1481,8 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                         <Beaker className="h-4 w-4 shrink-0 mt-0.5" />
                         <span>
                           {isDa
-                            ? 'Dit CVR er ikke verificeret, men DevMode CVR-bypass er aktiveret for hele platformen af en SuperDev. Du kan oprette en child company i Sproom staging sandbox uden CVR-verifikation.'
-                            : 'Your CVR is not verified, but the DevMode CVR bypass is enabled platform-wide by a SuperDev. You can create a child company in the Sproom staging sandbox without CVR verification.'}
+                            ? 'Dit CVR er ikke verificeret, men CVR-verifikation er deaktiveret for hele platformen af en SuperDev. Du kan oprette en child company i Sproom uden CVR-verifikation.'
+                            : 'Your CVR is not verified, but CVR verification is disabled platform-wide by a SuperDev. You can create a child company in Sproom without CVR verification.'}
                         </span>
                       </div>
                     )}

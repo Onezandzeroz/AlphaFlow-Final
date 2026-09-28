@@ -2217,8 +2217,8 @@ export class SproomClient {
    *   - whatever SPROOM_API_URL points at
    *
    * Exposed so /api/sproom/status can surface the active environment to the
-   * frontend (e.g. for the DevMode CVR-bypass toggle, which should appear
-   * whenever Sproom is pointed at staging — regardless of NODE_ENV).
+   * frontend (e.g. for the SuperDev CVR-verification toggle's informational
+   * badge, which shows which Sproom environment the SuperDev is affecting).
    */
   get baseUrlValue(): string {
     return this.baseUrl;

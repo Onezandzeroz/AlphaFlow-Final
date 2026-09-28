@@ -50,9 +50,9 @@ export const GET = withGuard(
         return NextResponse.json({ error: 'Company not found' }, { status: 404 });
       }
 
-      // Fetch platform-wide settings (DevMode CVR-bypass flag etc.) so
-      // the frontend can display the toggle's current state without a
-      // separate authenticated call to /api/sproom/dev-bypass-cvr.
+      // Fetch platform-wide settings (SuperDev-controlled CVR-verification
+      // flag etc.) so the frontend can display the toggle's current state
+      // without a separate authenticated call to /api/sproom/dev-bypass-cvr.
       // (Read-only, harmless, no audit log needed.)
       const platformSettings = await getPlatformSettings();
 
@@ -148,16 +148,18 @@ export const GET = withGuard(
             //   'staging'    — staging.sproom.net (sandbox, AcceptButton)
             //   'custom'     — SPROOM_API_URL points to something else
             //   'simulation' — no SPROOM_API_TOKEN configured (synthetic)
-            // Frontend uses this to decide whether to show the DevMode
-            // CVR-bypass toggle (only for non-production environments).
+            // Frontend uses this to show the Sproom env badge in the
+            // SuperDev CVR-verification toggle card.
             sproomEnvironment: sproomClient.environment,
             sproomBaseUrl: sproomClient.baseUrlValue,
-            // Platform-wide DevMode CVR-bypass flag (SuperDev-controlled).
-            // When true, the create-child-company route skips the
+            // SuperDev-controlled platform-wide CVR-verification flag.
+            // When false, the create-child-company route skips the
             // cvrVerifiedAt gate for ALL tenants on the platform (not
-            // just the active one). Inert when Sproom is in production.
-            cvrBypassEnabled: platformSettings.cvrBypassEnabled,
-            cvrBypassLastChangedAt: platformSettings.cvrBypassLastChangedAt,
+            // just the active one). Inert when Sproom is in production
+            // (the dev-bypass-cvr route refuses to disable verification
+            // in that case).
+            cvrVerificationRequired: platformSettings.cvrVerificationRequired !== false,
+            cvrVerificationLastChangedAt: platformSettings.cvrVerificationLastChangedAt,
             reconciled: true,
           });
         }
@@ -256,10 +258,10 @@ export const GET = withGuard(
         // Sproom environment — see above for the four possible values.
         sproomEnvironment: sproomClient.environment,
         sproomBaseUrl: sproomClient.baseUrlValue,
-        // Platform-wide DevMode CVR-bypass flag (SuperDev-controlled).
+        // SuperDev-controlled platform-wide CVR-verification flag.
         // See above for the full explanation.
-        cvrBypassEnabled: platformSettings.cvrBypassEnabled,
-        cvrBypassLastChangedAt: platformSettings.cvrBypassLastChangedAt,
+        cvrVerificationRequired: platformSettings.cvrVerificationRequired !== false,
+        cvrVerificationLastChangedAt: platformSettings.cvrVerificationLastChangedAt,
         reconciled,
       });
     } catch (error) {

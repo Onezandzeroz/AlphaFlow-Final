@@ -6,7 +6,7 @@ import { logger } from '@/lib/logger';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
-import { isCvrBypassEnabled } from '@/lib/platform-settings';
+import { isCvrVerificationRequired } from '@/lib/platform-settings';
 
 /**
  * POST /api/sproom/create-child-company
@@ -77,16 +77,17 @@ export const POST = withGuard(
         return NextResponse.json({ error: 'Company not found' }, { status: 404 });
       }
 
-      // CVR gate — required unless the SuperDev has enabled the
-      // platform-wide DevMode CVR-bypass flag (set via
-      // /api/sproom/dev-bypass-cvr). The bypass is itself only effective
-      // when Sproom is in a non-production environment (the dev-bypass-cvr
-      // route refuses to set it when sproomClient.environment === 'production').
-      // So this gate has two modes:
-      //   - bypass flag ON + Sproom sandbox → gate passes for ALL tenants
-      //   - bypass flag OFF (or Sproom in prod) → per-tenant cvrVerifiedAt required
-      const cvrBypassEnabled = await isCvrBypassEnabled();
-      if (!cvrBypassEnabled && !company.cvrVerifiedAt) {
+      // CVR gate — required by default, but the SuperDev can disable it
+      // platform-wide via the /api/sproom/dev-bypass-cvr route (writes
+      // {cvrVerificationRequired: false} to data/platform-settings.json).
+      // When verification is disabled, the gate is skipped for ALL tenants
+      // on the platform — not just this one. The dev-bypass-cvr route
+      // refuses to disable verification when Sproom is pointed at
+      // production (sproomClient.environment === 'production'), so this
+      // bypass is inert against real Sproom prod regardless of what the
+      // settings file says.
+      const cvrVerificationRequired = await isCvrVerificationRequired();
+      if (cvrVerificationRequired && !company.cvrVerifiedAt) {
         return NextResponse.json(
           {
             error: 'Dit CVR-nummer er ikke blevet verificeret. Bekræft dit CVR-nummer i Virksomhedsindstillinger før du opretter en child company i Sproom.',
@@ -95,8 +96,8 @@ export const POST = withGuard(
           { status: 403 }
         );
       }
-      if (cvrBypassEnabled) {
-        logger.info('[SPROOM_CREATE_CHILD] CVR gate bypassed (platform-wide DevMode bypass is ON)', {
+      if (!cvrVerificationRequired) {
+        logger.info('[SPROOM_CREATE_CHILD] CVR gate skipped (platform-wide CVR verification is disabled by SuperDev)', {
           companyId: ctx.activeCompanyId,
           cvr: company.cvrNumber ?? '(none)',
         });
