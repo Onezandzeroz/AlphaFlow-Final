@@ -42,6 +42,25 @@ export const POST = withGuard(
     permissions: [Permission.DATA_EDIT],
   },
   async (request, ctx) => {
+    // Declare company/cvr/gln OUTSIDE the try block so they're accessible
+    // in the catch block below (for the payloadSent debug output). They're
+    // assigned inside the try block via `await`, so TypeScript can't prove
+    // they're definitely assigned — we initialize to undefined and use
+    // optional chaining + fallbacks in the catch block.
+    let company: {
+      id: string;
+      name: string;
+      cvrNumber: string;
+      cvrVerifiedAt: Date | null;
+      address: string | null;
+      email: string | null;
+      phone: string | null;
+      einvoiceGLN: string | null;
+      sproomChildCompanyId: string | null;
+    } | null = null;
+    let cvr: string | undefined = undefined;
+    let gln: string | undefined = undefined;
+
     try {
       // Rate limit: 3 attempts per minute per IP
       const clientIp = getClientIp(request);
@@ -58,7 +77,7 @@ export const POST = withGuard(
       }
 
       // ── 1. Fetch + validate company ──────────────────────────────
-      const company = await db.company.findUnique({
+      company = await db.company.findUnique({
         where: { id: ctx.activeCompanyId! },
         select: {
           id: true,
@@ -103,7 +122,7 @@ export const POST = withGuard(
         });
       }
 
-      const cvr = company.cvrNumber.trim();
+      cvr = company.cvrNumber.trim();
       if (!/^\d{8}$/.test(cvr)) {
         return NextResponse.json(
           {
@@ -123,7 +142,7 @@ export const POST = withGuard(
       // company-owned (assigned by GS1 Denmark). Only a valid 13-digit GLN
       // is forwarded; a malformed one is skipped so it doesn't break creation.
       const rawGln = company.einvoiceGLN?.trim() || '';
-      const gln = /^\d{13}$/.test(rawGln) ? rawGln : undefined;
+      gln = /^\d{13}$/.test(rawGln) ? rawGln : undefined;
       if (rawGln && !gln) {
         logger.warn('[SPROOM_CREATE_CHILD] Skipping malformed GLN (not 13 digits)', {
           companyId: ctx.activeCompanyId,
@@ -527,9 +546,17 @@ export const POST = withGuard(
         // that the company name and CVR are actually what they expected.
         // The CVR is sensitive business data but NOT personally
         // identifiable, so it's safe to include in the error message.
+        //
+        // NOTE: `company`, `cvr`, and `gln` are all defined in the outer
+        // try block above. If the error happened BEFORE those were
+        // assigned (e.g. company.findUnique threw), they may be
+        // undefined here — so we use optional chaining + fallbacks to
+        // avoid "Cannot find name" / "used before assigned" TypeScript
+        // errors. The fallbacks are safe defaults (empty string) that
+        // clearly signal "this field wasn't set" in the error output.
         const payloadSent = {
-          companyName: company.name,
-          cvr,
+          companyName: company?.name ?? '(ikke udfyldt)',
+          cvr: cvr ?? '(ikke udfyldt)',
           schemeId: 'DK:CVR',
           gln: gln ?? null,
         };
