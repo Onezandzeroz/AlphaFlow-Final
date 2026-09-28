@@ -462,19 +462,25 @@ export const POST = withGuard(
       //
       // Sproom returns HTTP 400 with a generic message ("The request is invalid")
       // when ASP.NET model validation fails, but the per-field details are
-      // buried in the `errors` array inside the response body. The
+      // usually buried in the `errors` array inside the response body. The
       // SproomApiRequestError class preserves that body in its `details`
       // field — we extract the human-readable validation messages here so
       // the user sees *what* Sproom rejected, not just *that* it rejected.
+      //
+      // If Sproom returns a body without an `errors` array (just a plain
+      // `{ message: "The request is invalid." }`), we fall back to showing
+      // the raw body, the payload we sent, and response headers so the user
+      // (and we) can diagnose the issue.
       if (error instanceof SproomApiRequestError) {
         logger.error('[SPROOM_CREATE_CHILD] Sproom API error:', {
           status: error.status,
           errorCode: error.errorCode,
           details: error.details,
+          responseHeaders: error.responseHeaders,
         });
 
         // Extract the per-field validation messages from the ASP.NET
-        // model state error array. Sproom's 400 body looks like:
+        // model state error array. Sproom's 400 body can look like:
         //   {
         //     "message": "The request is invalid.",
         //     "errors": [
@@ -517,11 +523,65 @@ export const POST = withGuard(
           }
         }
 
+        // The payload we sent to Sproom — useful for the user to verify
+        // that the company name and CVR are actually what they expected.
+        // The CVR is sensitive business data but NOT personally
+        // identifiable, so it's safe to include in the error message.
+        const payloadSent = {
+          companyName: company.name,
+          cvr,
+          schemeId: 'DK:CVR',
+          gln: gln ?? null,
+        };
+
+        // Build a detailed error message that includes:
+        //   1. The base error message (HTTP status + Sproom's message)
+        //   2. Per-field validation details (if any)
+        //   3. The payload we sent (so the user can spot missing fields)
+        //   4. Sproom's raw response body (for cases where there's no
+        //      `errors` array — the user can see exactly what Sproom sent)
         const baseMsg = error.message;
-        const fullMsg =
-          validationDetails.length > 0
-            ? `${baseMsg}\n\nSproom valideringsfejl:\n${validationDetails.map((d) => `• ${d}`).join('\n')}`
-            : baseMsg;
+        const sections: string[] = [];
+
+        if (validationDetails.length > 0) {
+          sections.push(
+            `Sproom valideringsfejl:\n${validationDetails.map((d) => `• ${d}`).join('\n')}`
+          );
+        }
+
+        // Always include the payload — it helps the user verify what we
+        // sent and spot obvious issues (empty name, malformed CVR, etc.).
+        sections.push(
+          `Payload sendt til Sproom:\n${JSON.stringify(payloadSent, null, 2)}`
+        );
+
+        // Always include Sproom's raw response body — even if it's just
+        // `{ message: "The request is invalid." }`, seeing the actual
+        // body is more useful than seeing nothing. Truncate to 2 KB so
+        // the toast doesn't become unreadable for large error bodies.
+        const rawBodyStr = (() => {
+          if (error.details === undefined) return '(intet body)';
+          if (typeof error.details === 'string') return error.details.slice(0, 2000);
+          try {
+            return JSON.stringify(error.details, null, 2).slice(0, 2000);
+          } catch {
+            return String(error.details).slice(0, 2000);
+          }
+        })();
+        sections.push(`Sproom rå respons (body):\n${rawBodyStr}`);
+
+        // Include response headers if any — Sproom sometimes puts a
+        // correlation ID in X-* headers that's useful for support tickets.
+        if (error.responseHeaders && Object.keys(error.responseHeaders).length > 0) {
+          const interestingHeaders = Object.entries(error.responseHeaders)
+            .filter(([k]) => k.toLowerCase().startsWith('x-') || k.toLowerCase() === 'correlation-id' || k.toLowerCase() === 'request-id')
+            .map(([k, v]) => `${k}: ${v}`);
+          if (interestingHeaders.length > 0) {
+            sections.push(`Sproom response headers:\n${interestingHeaders.join('\n')}`);
+          }
+        }
+
+        const fullMsg = `${baseMsg}\n\n${sections.join('\n\n')}`;
 
         return NextResponse.json(
           {
@@ -530,6 +590,9 @@ export const POST = withGuard(
             sproomStatus: error.status,
             sproomErrorCode: error.errorCode,
             validationDetails: validationDetails.length > 0 ? validationDetails : undefined,
+            payloadSent,
+            rawResponseBody: rawBodyStr,
+            responseHeaders: error.responseHeaders,
           },
           { status: error.status === 400 ? 400 : 502 }
         );

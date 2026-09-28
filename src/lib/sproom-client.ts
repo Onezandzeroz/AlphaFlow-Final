@@ -376,16 +376,24 @@ export class SproomApiRequestError extends Error {
   readonly errorCode: string | undefined;
   /** Full parsed error body, including the `errors` array with validation details. */
   readonly details: unknown;
+  /** Response headers from Sproom — may include diagnostic info (correlation IDs etc.). */
+  readonly responseHeaders: Record<string, string> | undefined;
 
   constructor(
     message: string,
-    opts: { status: number; errorCode?: string; details?: unknown },
+    opts: {
+      status: number;
+      errorCode?: string;
+      details?: unknown;
+      responseHeaders?: Record<string, string>;
+    },
   ) {
     super(message);
     this.name = 'SproomApiRequestError';
     this.status = opts.status;
     this.errorCode = opts.errorCode;
     this.details = opts.details;
+    this.responseHeaders = opts.responseHeaders;
   }
 }
 
@@ -513,6 +521,8 @@ interface SproomApiError {
   errorCode?: string;
   message?: string;
   details?: unknown;
+  /** Response headers — Sproom sometimes puts diagnostic info in X-* headers. */
+  responseHeaders?: Record<string, string>;
 }
 
 // ─── CONSTANTS ────────────────────────────────────────────────────
@@ -781,6 +791,7 @@ export class SproomClient {
           status: response.status,
           errorCode: error.errorCode,
           details: error.details,
+          responseHeaders: error.responseHeaders,
         },
       );
     }
@@ -2380,34 +2391,98 @@ export class SproomClient {
    *   - { reason: "..." }                            (bad request)
    */
   private async parseError(response: Response): Promise<SproomApiError> {
+    let body: unknown = undefined;
+    let bodyParseFailed = false;
     try {
-      const body = await response.json();
-      if (Array.isArray(body.errors) && body.errors.length > 0) {
-        const first = body.errors[0];
-        const detail = first.text || first.details || first.message || JSON.stringify(first);
+      body = await response.json();
+    } catch {
+      // Body wasn't JSON (could be empty, HTML, or text). Capture the
+      // raw text so the caller can see what Sproom actually returned —
+      // this is critical for debugging 400 "The request is invalid"
+      // responses that have no JSON body.
+      bodyParseFailed = true;
+      try {
+        const rawText = await response.text();
+        body = rawText;
+      } catch {
+        body = '(unreadable body)';
+      }
+    }
+
+    // Capture useful response headers — Sproom sometimes puts diagnostic
+    // info in X-* headers (e.g. X-Correlation-Id, X-Request-Id).
+    const responseHeaders: Record<string, string> = {};
+    try {
+      response.headers.forEach((value, key) => {
+        responseHeaders[key] = value;
+      });
+    } catch {
+      // ignore
+    }
+
+    // Common fields Sproom might return in any of the validation shapes.
+    if (body && typeof body === 'object') {
+      const obj = body as Record<string, unknown>;
+      // ASP.NET model state error array — most common 400 shape.
+      if (Array.isArray(obj.errors) && obj.errors.length > 0) {
+        const first = obj.errors[0];
+        const firstDetail =
+          (first && typeof first === 'object' &&
+            ((first as Record<string, unknown>).text ||
+             (first as Record<string, unknown>).details ||
+             (first as Record<string, unknown>).message)) ||
+          (typeof first === 'string' ? first : JSON.stringify(first));
         return {
-          errorCode: body.errorCode || `SPROOM_${response.status}`,
-          message: body.message ? `${body.message}: ${detail}` : detail,
+          errorCode: (obj.errorCode as string) || `SPROOM_${response.status}`,
+          message: obj.message ? `${obj.message}: ${firstDetail}` : String(firstDetail),
+          // ALWAYS preserve the full body so callers can extract
+          // per-field validation messages even if our extraction above
+          // missed a shape.
           details: body,
+          responseHeaders,
         };
       }
-      if (body.message || body.errorCode) {
-        return body as SproomApiError;
+      // Simple { message, errorCode } body — common for 401/403/500.
+      if (obj.message || obj.errorCode) {
+        return {
+          errorCode: (obj.errorCode as string) || `SPROOM_${response.status}`,
+          message: (obj.message as string) || `Sproom API error: ${response.status}`,
+          // ALWAYS preserve the full body — even if there's no `errors`
+          // array, the body itself may contain useful context (e.g. the
+          // exact field that failed validation, a reason string, etc.).
+          details: body,
+          responseHeaders,
+        };
       }
-      if (body.reason) {
-        return { errorCode: `SPROOM_${response.status}`, message: body.reason, details: body };
+      // { reason: "..." } body — another Sproom convention.
+      if (obj.reason) {
+        return {
+          errorCode: `SPROOM_${response.status}`,
+          message: String(obj.reason),
+          details: body,
+          responseHeaders,
+        };
       }
+      // Unknown JSON shape — dump the whole body so the caller can see
+      // what Sproom actually returned.
       return {
         errorCode: `HTTP_${response.status}`,
-        message: JSON.stringify(body),
+        message: `Sproom API error (HTTP ${response.status}): ${JSON.stringify(body)}`,
         details: body,
-      };
-    } catch {
-      return {
-        errorCode: `HTTP_${response.status}`,
-        message: `Sproom API error: ${response.status} ${response.statusText}`,
+        responseHeaders,
       };
     }
+
+    // Non-JSON body (text/HTML/empty) — surface it so the caller isn't
+    // left guessing what Sproom sent back.
+    return {
+      errorCode: `HTTP_${response.status}`,
+      message: bodyParseFailed
+        ? `Sproom API error (HTTP ${response.status}, non-JSON body): ${String(body).slice(0, 500)}`
+        : `Sproom API error: ${response.status} ${response.statusText}`,
+      details: body,
+      responseHeaders,
+    };
   }
 
   // ─── SIMULATION HELPERS ───────────────────────────────────────────

@@ -383,6 +383,29 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
       });
 
       if (!res.ok) {
+        // For Sproom API errors (HTTP 400/502 with code 'SPROOM_API_ERROR'),
+        // the response body contains a detailed multiline error message
+        // (HTTP status + Sproom message + valideringsfejl + payload +
+        // raw response body + headers). Show it in a longer-duration
+        // toast with the description field so the user can read it all.
+        // For access-denial errors (TokenPay), fall through to
+        // handleMutationError which shows the upgrade modal.
+        let body: Record<string, unknown> = {};
+        try { body = await res.json(); } catch { /* not JSON */ }
+
+        if (body?.code === 'SPROOM_API_ERROR') {
+          // Sproom API error — show the detailed multiline message.
+          const errTitle = isDa ? 'Sproom oprettelse fejlede' : 'Sproom creation failed';
+          const errMsg = (body.error as string) || `HTTP ${res.status}`;
+          toast.error(errTitle, {
+            description: errMsg,
+            duration: 30000, // 30 seconds — long enough to read + copy
+          });
+          return;
+        }
+
+        // Other error types — let handleMutationError handle them
+        // (TokenPay upgrade modal, translated status-based messages, etc.).
         const isAccess = await handleMutationError(
           res,
           isDa ? 'Opret Sproom child company' : 'Create Sproom child company',
