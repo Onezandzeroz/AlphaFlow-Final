@@ -2171,6 +2171,47 @@ export class SproomClient {
     return !this.simulationMode && !!this.apiToken;
   }
 
+  /**
+   * The Sproom API base URL the client is talking to.
+   *
+   * Either:
+   *   - https://staging.sproom.net  (default — sandbox / test)
+   *   - https://sproom.net          (production)
+   *   - whatever SPROOM_API_URL points at
+   *
+   * Exposed so /api/sproom/status can surface the active environment to the
+   * frontend (e.g. for the DevMode CVR-bypass toggle, which should appear
+   * whenever Sproom is pointed at staging — regardless of NODE_ENV).
+   */
+  get baseUrlValue(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * Coarse classification of the Sproom environment based on baseUrl:
+   *
+   *   - 'production' — baseUrl host is sproom.net (NOT staging.*)
+   *   - 'staging'    — baseUrl host is staging.sproom.net (default sandbox)
+   *   - 'custom'     — any other baseUrl (SPROOM_API_URL set to something
+   *                    else — usually also non-production)
+   *   - 'simulation' — no apiToken configured; client returns synthetic
+   *                    responses and never makes real HTTP calls.
+   *
+   * Use this to gate dev-only features (like the CVR bypass toggle) on
+   * whether Sproom is connected to a non-production environment.
+   */
+  get environment(): 'production' | 'staging' | 'custom' | 'simulation' {
+    if (this.simulationMode) return 'simulation';
+    try {
+      const host = new URL(this.baseUrl).hostname.toLowerCase();
+      if (host === 'sproom.net' || host === 'www.sproom.net') return 'production';
+      if (host === 'staging.sproom.net') return 'staging';
+      return 'custom';
+    } catch {
+      return 'custom';
+    }
+  }
+
   // ─── PRIVATE: HTTP REQUESTS ───────────────────────────────────────
 
   /**

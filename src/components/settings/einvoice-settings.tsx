@@ -112,6 +112,16 @@ interface SproomConnectionStatus {
   // True when the status route detected the Sproom child company was
   // deleted externally and auto-cleared the connection fields.
   reconciled?: boolean;
+  // Sproom environment classification — one of:
+  //   'production' — sproom.net (real MitID, real NemHandel)
+  //   'staging'    — staging.sproom.net (sandbox, AcceptButton sign)
+  //   'custom'     — SPROOM_API_URL points to something else
+  //   'simulation' — no SPROOM_API_TOKEN configured (synthetic responses)
+  // Used to gate the DevMode CVR-bypass toggle (shown only when env
+  // !== 'production'), so the toggle appears in sandbox/test setups
+  // regardless of whether Next.js itself runs in dev or prod mode.
+  sproomEnvironment?: 'production' | 'staging' | 'custom' | 'simulation';
+  sproomBaseUrl?: string;
 }
 
 interface PeppolParticipantResult {
@@ -171,10 +181,27 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   } | null>(null);
   const [isPeppolVerifying, setIsPeppolVerifying] = useState(false);
 
-  // ── DevMode CVR-bypass toggle (only rendered when NODE_ENV !== 'production') ──
-  // Lets a developer skip the CVR-verification gate for Sproom staging sandbox
-  // testing without a real Danish CVR number. Backed by /api/sproom/dev-bypass-cvr.
-  const isDevMode = process.env.NODE_ENV !== 'production';
+  // ── DevMode CVR-bypass toggle ──────────────────────────────────────
+  // Lets a developer skip the CVR-verification gate for Sproom staging
+  // sandbox testing without a real Danish CVR number. Backed by
+  // /api/sproom/dev-bypass-cvr.
+  //
+  // IMPORTANT — the toggle is gated on the SPROOM ENVIRONMENT, not on
+  // Next.js NODE_ENV. This means the toggle appears whenever Sproom is
+  // pointed at a non-production environment (staging / custom / simulation),
+  // regardless of whether the Next.js app itself runs in dev or prod mode.
+  // This is the correct signal: a prod build pointed at staging.sproom.net
+  // is still a test setup, and the user may need the bypass. Conversely,
+  // a dev build pointed at sproom.net (production) would NOT show the
+  // toggle, which is correct — bypassing KYC against real Sproom prod
+  // is never appropriate.
+  //
+  // The server route (POST/DELETE /api/sproom/dev-bypass-cvr) independently
+  // checks NODE_ENV !== 'production' as a defence-in-depth, so even if
+  // this UI condition somehow became stale, the server would still refuse.
+  const sproomEnv = sproomStatus?.sproomEnvironment;
+  const isSandboxSproom = sproomEnv === 'staging' || sproomEnv === 'custom' || sproomEnv === 'simulation';
+  const isDevMode = isSandboxSproom;
   const [devBypassActive, setDevBypassActive] = useState(false);
   const [isTogglingDevBypass, setIsTogglingDevBypass] = useState(false);
   const [peppolDialogOpen, setPeppolDialogOpen] = useState(false);
@@ -1290,24 +1317,37 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
               </div>
             </div>
 
-            {/* ── DevMode CVR-bypass toggle (dev builds only) ──
+            {/* ── DevMode CVR-bypass toggle (shown when Sproom is in a non-production environment) ──
                 Lets a developer skip the CVR-verification gate for Sproom
                 staging sandbox testing. The server route (POST/DELETE
-                /api/sproom/dev-bypass-cvr) hard-refuses in production, so
-                this UI is informational only when running in a prod build. */}
+                /api/sproom/dev-bypass-cvr) hard-refuses in production
+                (NODE_ENV === 'production'), so even if this UI leaked
+                into a prod build it would be inert. */}
             {isDevMode && !sproomStatus?.connected && (
               <div className="rounded-lg bg-amber-50 dark:bg-amber-900/15 border border-amber-300 dark:border-amber-700/50 p-3 space-y-3">
                 <div className="flex items-start gap-2">
                   <Beaker className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
-                      {isDa ? 'DevMode: Spring CVR-verifikation over' : 'DevMode: Skip CVR verification'}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                        {isDa ? 'DevMode: Spring CVR-verifikation over' : 'DevMode: Skip CVR verification'}
+                      </p>
+                      {sproomEnv && (
+                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-amber-400 dark:border-amber-700 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20">
+                          Sproom: {sproomEnv}
+                        </Badge>
+                      )}
+                    </div>
                     <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-snug">
                       {isDa
                         ? 'Aktivér for at teste Sproom staging sandbox uden et ægte CVR-nummer. Sætter cvrVerifiedAt = nu, så KYC-gaten passeres. Deaktivér for at kræve reel CVR-verifikation igen.'
                         : 'Enable to test the Sproom staging sandbox without a real CVR number. Sets cvrVerifiedAt = now so the KYC gate passes. Disable to require real CVR verification again.'}
                     </p>
+                    {sproomStatus?.sproomBaseUrl && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-500 mt-1 font-mono break-all">
+                        {sproomStatus.sproomBaseUrl}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between gap-3 pl-6">

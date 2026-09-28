@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { sproomClient } from '@/lib/sproom-client';
 
 /**
  * DevMode CVR-verification bypass for Sproom staging sandbox.
@@ -17,12 +18,14 @@ import { withGuard } from '@/lib/route-guard';
  * CVR register. This route lets them flip `cvrVerifiedAt` on/off
  * for the active tenant so the gate passes.
  *
- * ── PRODUCTION SAFETY ─────────────────────────────────────────────
- * Both handlers hard-check `process.env.NODE_ENV !== 'production'`
- * and return 403 in production. The check is on the SERVER side
- * so it can't be bypassed by a client. Even if the route were
- * accidentally deployed to production, it would refuse to do
- * anything.
+ * ── WHEN IT'S ALLOWED (defence-in-depth — both must hold) ─────────
+ * 1. Sproom must NOT be pointed at production — i.e.
+ *    sproomClient.environment ∈ {'staging', 'custom', 'simulation'}.
+ *    This is the PRIMARY signal: it catches both prod-build-pointed-at-staging
+ *    AND dev-build-pointed-at-staging, and refuses prod-build-pointed-at-prod.
+ * 2. NODE_ENV must not be 'production' — defence-in-depth: even if the
+ *    environment detection somehow misclassified sproom.net as non-prod,
+ *    a production Next.js build still refuses.
  *
  * ── WHAT IT DOES ──────────────────────────────────────────────────
  * POST   → set company.cvrVerifiedAt = new Date()  (gate now passes)
@@ -38,18 +41,36 @@ import { withGuard } from '@/lib/route-guard';
  *   intentional — this route is for dev/test only.
  */
 
-// Hard gate: refuse in production regardless of caller.
-function refuseInProduction() {
-  if (process.env.NODE_ENV === 'production') {
+// Hard gate: refuse when either defence-in-depth condition fails.
+// Returns null if allowed, or a 403 NextResponse if refused.
+function refuseIfDisallowed(): NextResponse | null {
+  // Defence-in-depth check 1: Sproom must not be in production.
+  const sproomEnv = sproomClient.environment;
+  if (sproomEnv === 'production') {
     return NextResponse.json(
       {
         error:
-          'DevMode CVR bypass is not available in production. This route is for development/testing against the Sproom staging sandbox only.',
-        code: 'DEV_BYPASS_NOT_ALLOWED_IN_PRODUCTION',
+          'DevMode CVR bypass is not allowed when Sproom is pointed at production (sproom.net). Point SPROOM_API_URL at https://staging.sproom.net or remove SPROOM_API_TOKEN to use simulation mode.',
+        code: 'DEV_BYPASS_NOT_ALLOWED_FOR_SPROOM_PRODUCTION',
+        sproomEnvironment: sproomEnv,
       },
       { status: 403 }
     );
   }
+
+  // Defence-in-depth check 2: NODE_ENV must not be production.
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      {
+        error:
+          'DevMode CVR bypass is not available in a production Next.js build. This route is for development/testing against the Sproom staging sandbox only.',
+        code: 'DEV_BYPASS_NOT_ALLOWED_IN_PRODUCTION',
+        sproomEnvironment: sproomEnv,
+      },
+      { status: 403 }
+    );
+  }
+
   return null;
 }
 
@@ -63,7 +84,7 @@ export const POST = withGuard(
   },
   async (request, ctx) => {
     // Production guard
-    const prod = refuseInProduction();
+    const prod = refuseIfDisallowed();
     if (prod) return prod;
 
     try {
@@ -135,7 +156,7 @@ export const DELETE = withGuard(
   },
   async (request, ctx) => {
     // Production guard
-    const prod = refuseInProduction();
+    const prod = refuseIfDisallowed();
     if (prod) return prod;
 
     try {

@@ -136,6 +136,15 @@ export const GET = withGuard(
             // company has been created, as long as EINVOICE_ACCESS_POINT=sproom).
             activeAccessPoint: getActiveAccessPoint(),
             sproomConfigured: sproomClient.isConfigured,
+            // Sproom environment the platform is currently pointed at:
+            //   'production' — sproom.net (real MitID, real NemHandel)
+            //   'staging'    — staging.sproom.net (sandbox, AcceptButton)
+            //   'custom'     — SPROOM_API_URL points to something else
+            //   'simulation' — no SPROOM_API_TOKEN configured (synthetic)
+            // Frontend uses this to decide whether to show the DevMode
+            // CVR-bypass toggle (only for non-production environments).
+            sproomEnvironment: sproomClient.environment,
+            sproomBaseUrl: sproomClient.baseUrlValue,
             reconciled: true,
           });
         }
@@ -231,6 +240,9 @@ export const GET = withGuard(
         // company has been created, as long as EINVOICE_ACCESS_POINT=sproom).
         activeAccessPoint: getActiveAccessPoint(),
         sproomConfigured: sproomClient.isConfigured,
+        // Sproom environment — see above for the four possible values.
+        sproomEnvironment: sproomClient.environment,
+        sproomBaseUrl: sproomClient.baseUrlValue,
         reconciled,
       });
     } catch (error) {
