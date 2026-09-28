@@ -1,57 +1,70 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
-import { auditCreate, requestMetadata } from '@/lib/audit';
+import { auditLog, requestMetadata } from '@/lib/audit';
 import { withGuard, SUPERDEV_ONLY } from '@/lib/route-guard';
 import { sproomClient } from '@/lib/sproom-client';
+import { getPlatformSettings, setCvrBypassEnabled } from '@/lib/platform-settings';
 
 /**
- * DevMode CVR-verification bypass for Sproom staging sandbox.
+ * DevMode CVR-verification bypass — platform-wide toggle.
  *
- * ── WHY THIS EXISTS ───────────────────────────────────────────────
- * The Sproom create-child-company route (src/app/api/sproom/
- * create-child-company/route.ts) gates on `company.cvrVerifiedAt`
- * to enforce KYC. In DevMode, a developer may want to test the
- * Sproom staging sandbox (https://staging.sproom.net) without
- * having a real Danish CVR number to verify against the official
- * CVR register. This route lets them flip `cvrVerifiedAt` on/off
- * for the active tenant so the gate passes.
+ * ── WHAT THIS DOES ─────────────────────────────────────────────────
+ * SuperDev-only endpoint. Toggles a platform-wide flag that, when ON,
+ * makes the Sproom child-company creation route
+ * (/api/sproom/create-child-company) skip the cvrVerifiedAt gate for
+ * ALL tenants on the platform — not just the active tenant.
  *
- * ── WHEN IT'S ALLOWED ─────────────────────────────────────────────
- * The ONLY gate is the Sproom environment:
- *   sproomClient.environment ∈ {'staging', 'custom', 'simulation'}.
+ * POST   → enable bypass (all tenants skip CVR verification)
+ * DELETE → disable bypass (all tenants must verify CVR again)
+ * GET    → return current state + last-changed metadata
  *
- * We do NOT check NODE_ENV. The reason: a user may run a production
- * Next.js build (NODE_ENV='production') but still point Sproom at
- * the staging sandbox for testing — e.g. a clean production
- * deployment with only test tenants, where they want to exercise
- * the Sproom sandbox end-to-end without touching real CVR data.
- * NODE_ENV is the wrong signal for this; Sproom's actual
- * baseUrl is the right signal.
+ * ── WHEN IT'S ALLOWED ───────────────────────────────────────────────
+ * Two gates, both must hold:
  *
- * The real production guard is sproomClient.environment === 'production':
- * if Sproom is pointed at sproom.net (real MitID, real NemHandel),
- * the bypass is always refused, regardless of how the Next.js app
- * is built. This makes the feature safe to ship — it's inert against
- * real Sproom production.
+ *   1. Caller must be SuperDev — enforced by the SUPERDEV_ON_TENANT
+ *      guard config. A regular tenant gets 403 before the handler runs.
  *
- * ── WHAT IT DOES ──────────────────────────────────────────────────
- * POST   → set company.cvrVerifiedAt = new Date()  (gate now passes)
- * DELETE → set company.cvrVerifiedAt = null         (gate re-armed)
+ *   2. Sproom must NOT be pointed at production — i.e.
+ *      sproomClient.environment ∈ {'staging', 'custom', 'simulation'}.
+ *      Refuses with 403 if Sproom is at sproom.net, so the bypass is
+ *      inert against real Sproom prod regardless of what the file says.
+ *      We do NOT check NODE_ENV — see Task 18 commit for rationale
+ *      (a prod build pointed at staging is still a sandbox).
  *
- * Both operations write an audit-log entry so there's a record.
+ * ── WHERE THE FLAG LIVES ───────────────────────────────────────────
+ * A small JSON file at <process.cwd()>/data/platform-settings.json —
+ * see src/lib/platform-settings.ts. Survives server restarts, no DB
+ * migration required. Concurrent writes are serialized via a mutex.
  *
- * ── LIMITATIONS ──────────────────────────────────────────────────
- * - Only affects the active tenant (ctx.activeCompanyId)
- * - Doesn't touch `cvrNumber` itself — only the verification flag
- * - If the tenant has a *real* verified CVR and toggles bypass OFF,
- *   they'll lose the real verification and must re-verify. This is
- *   intentional — this route is for dev/test only.
+ * ── AUDIT TRAIL ────────────────────────────────────────────────────
+ * Every toggle writes an AuditLog entry (action: 'platform_cvr_bypass_enabled'
+ * or 'platform_cvr_bypass_disabled') AND records the changer's userId +
+ * timestamp in the settings file itself (cvrBypassLastChangedBy /
+ * cvrBypassLastChangedAt) so the audit info is visible without a DB query.
+ *
+ * ── EFFECT ON /api/sproom/create-child-company ─────────────────────
+ * That route reads the flag on every call via isCvrBypassEnabled().
+ * When the flag is ON, it logs "[SPROOM_CREATE_CHILD] CVR gate bypassed"
+ * and proceeds without checking company.cvrVerifiedAt. The tenant
+ * still needs a CVR number set on their company (Sproom requires one
+ * in the payload), but it doesn't need to be verified against the
+ * official CVR register.
  */
+
+// SuperDev-only AND requireCompany — SuperDev must be operating on a
+// specific tenant (active company selected) to toggle the bypass.
+// Without requireCompany, ctx.activeCompanyId would be null and we
+// couldn't audit which tenant context the SuperDev was in when they
+// flipped it (though the flag itself is global, the audit context is
+// per-tenant).
+const SUPERDEV_ON_TENANT = {
+  ...SUPERDEV_ONLY,
+  requireCompany: true,
+} as const;
 
 // Hard gate: refuse only when Sproom is pointed at production.
 // Returns null if allowed, or a 403 NextResponse if refused.
-function refuseIfDisallowed(): NextResponse | null {
+function refuseIfSproomProduction(): NextResponse | null {
   const sproomEnv = sproomClient.environment;
   if (sproomEnv === 'production') {
     return NextResponse.json(
@@ -67,72 +80,53 @@ function refuseIfDisallowed(): NextResponse | null {
   return null;
 }
 
-// ─── POST: Enable bypass (set cvrVerifiedAt = now) ─────────────────
-//
-// SuperDev-only AND requireCompany — SuperDev must be operating on a
-// specific tenant (active company selected) to toggle the bypass for
-// that tenant. Without requireCompany, ctx.activeCompanyId would be
-// null and the bypass would have no target. The SUPERDEV_ONLY spread
-// ensures a non-SuperDev caller gets 403 from withGuard before the
-// handler even runs. Combined with the frontend `user.isSuperDev`
-// gate, this makes the feature accessible only to platform
-// administrators operating on a specific tenant.
-
-const SUPERDEV_ON_TENANT = {
-  ...SUPERDEV_ONLY,
-  requireCompany: true,
-} as const;
+// ─── POST: Enable platform-wide bypass ─────────────────────────────
 
 export const POST = withGuard(
   SUPERDEV_ON_TENANT,
   async (request, ctx) => {
-    // Production guard
-    const prod = refuseIfDisallowed();
+    // Sproom environment gate
+    const prod = refuseIfSproomProduction();
     if (prod) return prod;
 
     try {
-      const company = await db.company.findUnique({
-        where: { id: ctx.activeCompanyId! },
-        select: { id: true, cvrNumber: true, cvrVerifiedAt: true },
-      });
-
-      if (!company) {
-        return NextResponse.json({ error: 'Company not found' }, { status: 404 });
-      }
-
-      // Idempotent: if already verified (real or via bypass), just return.
-      if (company.cvrVerifiedAt) {
+      const before = await getPlatformSettings();
+      if (before.cvrBypassEnabled) {
+        // Idempotent — already on, no change needed.
         return NextResponse.json({
           ok: true,
           already: true,
-          cvrVerifiedAt: company.cvrVerifiedAt.toISOString(),
-          message: 'CVR is already verified — no change needed.',
+          cvrBypassEnabled: true,
+          message: 'Platform-wide CVR bypass is already enabled.',
         });
       }
 
-      // Set the flag
-      const now = new Date();
-      await db.company.update({
-        where: { id: ctx.activeCompanyId! },
-        data: { cvrVerifiedAt: now },
-      });
+      const after = await setCvrBypassEnabled(true, ctx.id);
 
-      logger.info('[DEV_BYPASS_CVR] Bypass ENABLED', {
-        companyId: ctx.activeCompanyId,
+      logger.info('[DEV_BYPASS_CVR] Platform-wide bypass ENABLED', {
         userId: ctx.id,
-        cvr: company.cvrNumber ?? '(none)',
+        activeCompanyId: ctx.activeCompanyId,
+        previousChangedAt: before.cvrBypassLastChangedAt,
+        newChangedAt: after.cvrBypassLastChangedAt,
       });
 
-      await auditCreate(
+      // Audit-log the change. This is a platform-level action, so the
+      // audit entry is scoped to the active company context (which
+      // records which tenant the SuperDev was operating on when they
+      // flipped it). The settings file ALSO records the changer's
+      // userId + timestamp directly, so the audit trail survives even
+      // if the AuditLog is cleared.
+      await auditLog(
         ctx.id,
+        'platform_cvr_bypass_enabled',
         'Company',
         ctx.activeCompanyId!,
         {
-          action: 'dev_cvr_bypass_enabled',
-          previousCvrVerifiedAt: null,
-          newCvrVerifiedAt: now.toISOString(),
-          note:
-            'DevMode-only bypass for Sproom staging sandbox testing. Not a real CVR verification.',
+          action: 'platform_cvr_bypass_enabled',
+          scope: 'platform-wide',
+          note: 'SuperDev enabled platform-wide DevMode CVR bypass. All tenants can now create Sproom child companies without verifying their CVR. Only effective when Sproom is in a non-production environment.',
+          previousChangedAt: before.cvrBypassLastChangedAt,
+          newChangedAt: after.cvrBypassLastChangedAt,
         },
         requestMetadata(request),
         ctx.activeCompanyId
@@ -140,7 +134,9 @@ export const POST = withGuard(
 
       return NextResponse.json({
         ok: true,
-        cvrVerifiedAt: now.toISOString(),
+        cvrBypassEnabled: true,
+        cvrBypassLastChangedAt: after.cvrBypassLastChangedAt,
+        cvrBypassLastChangedBy: after.cvrBypassLastChangedBy,
       });
     } catch (error) {
       logger.error('[DEV_BYPASS_CVR] Enable failed:', error);
@@ -149,68 +145,87 @@ export const POST = withGuard(
   }
 );
 
-// ─── DELETE: Disable bypass (set cvrVerifiedAt = null) ─────────────
-//
-// Same guard as POST — SuperDev-only on a specific tenant.
+// ─── DELETE: Disable platform-wide bypass ───────────────────────────
 
 export const DELETE = withGuard(
   SUPERDEV_ON_TENANT,
   async (request, ctx) => {
-    // Production guard
-    const prod = refuseIfDisallowed();
+    // Sproom environment gate
+    const prod = refuseIfSproomProduction();
     if (prod) return prod;
 
     try {
-      const company = await db.company.findUnique({
-        where: { id: ctx.activeCompanyId! },
-        select: { id: true, cvrNumber: true, cvrVerifiedAt: true },
-      });
-
-      if (!company) {
-        return NextResponse.json({ error: 'Company not found' }, { status: 404 });
-      }
-
-      // Idempotent: if not verified, nothing to clear.
-      if (!company.cvrVerifiedAt) {
+      const before = await getPlatformSettings();
+      if (!before.cvrBypassEnabled) {
+        // Idempotent — already off, no change needed.
         return NextResponse.json({
           ok: true,
           already: true,
-          message: 'CVR is not currently verified — no change needed.',
+          cvrBypassEnabled: false,
+          message: 'Platform-wide CVR bypass is already disabled.',
         });
       }
 
-      const previousVerifiedAt = company.cvrVerifiedAt;
+      const previousChangedAt = before.cvrBypassLastChangedAt;
+      const after = await setCvrBypassEnabled(false, ctx.id);
 
-      await db.company.update({
-        where: { id: ctx.activeCompanyId! },
-        data: { cvrVerifiedAt: null },
-      });
-
-      logger.info('[DEV_BYPASS_CVR] Bypass DISABLED', {
-        companyId: ctx.activeCompanyId,
+      logger.info('[DEV_BYPASS_CVR] Platform-wide bypass DISABLED', {
         userId: ctx.id,
-        cvr: company.cvrNumber ?? '(none)',
-        previousCvrVerifiedAt: previousVerifiedAt.toISOString(),
+        activeCompanyId: ctx.activeCompanyId,
+        previousChangedAt,
+        newChangedAt: after.cvrBypassLastChangedAt,
       });
 
-      await auditCreate(
+      await auditLog(
         ctx.id,
+        'platform_cvr_bypass_disabled',
         'Company',
         ctx.activeCompanyId!,
         {
-          action: 'dev_cvr_bypass_disabled',
-          previousCvrVerifiedAt: previousVerifiedAt.toISOString(),
-          newCvrVerifiedAt: null,
-          note:
-            'DevMode bypass disabled. CVR must be re-verified via the normal CVR lookup flow before Sproom child company creation.',
+          action: 'platform_cvr_bypass_disabled',
+          scope: 'platform-wide',
+          note: 'SuperDev disabled platform-wide DevMode CVR bypass. All tenants must now verify their CVR via the normal CVR lookup flow before creating Sproom child companies.',
+          previousChangedAt,
+          newChangedAt: after.cvrBypassLastChangedAt,
         },
         requestMetadata(request),
         ctx.activeCompanyId
       );
 
-      return NextResponse.json({ ok: true, cvrVerifiedAt: null });
+      return NextResponse.json({
+        ok: true,
+        cvrBypassEnabled: false,
+        cvrBypassLastChangedAt: after.cvrBypassLastChangedAt,
+        cvrBypassLastChangedBy: after.cvrBypassLastChangedBy,
+      });
     } catch (error) {
       logger.error('[DEV_BYPASS_CVR] Disable failed:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
+  }
+);
+
+// ─── GET: Return current platform-wide bypass state ──────────────────
+//
+// Read-only — used by the frontend to render the toggle's current state.
+// No audit log needed (read is harmless). Still SuperDev-only so a
+// regular tenant can't probe the platform-wide flag (though it doesn't
+// leak much info beyond "is the platform in DevMode or not").
+
+export const GET = withGuard(
+  SUPERDEV_ON_TENANT,
+  async (_request, ctx) => {
+    try {
+      const settings = await getPlatformSettings();
+      return NextResponse.json({
+        cvrBypassEnabled: settings.cvrBypassEnabled,
+        cvrBypassLastChangedAt: settings.cvrBypassLastChangedAt,
+        cvrBypassLastChangedBy: settings.cvrBypassLastChangedBy,
+        sproomEnvironment: sproomClient.environment,
+        sproomBaseUrl: sproomClient.baseUrlValue,
+      });
+    } catch (error) {
+      logger.error('[DEV_BYPASS_CVR] GET failed:', error);
       return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
   }

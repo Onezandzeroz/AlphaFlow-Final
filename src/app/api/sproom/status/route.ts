@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { getActiveAccessPoint } from '@/lib/einvoice-sender';
+import { getPlatformSettings } from '@/lib/platform-settings';
 
 /**
  * GET /api/sproom/status
@@ -48,6 +49,12 @@ export const GET = withGuard(
       if (!company) {
         return NextResponse.json({ error: 'Company not found' }, { status: 404 });
       }
+
+      // Fetch platform-wide settings (DevMode CVR-bypass flag etc.) so
+      // the frontend can display the toggle's current state without a
+      // separate authenticated call to /api/sproom/dev-bypass-cvr.
+      // (Read-only, harmless, no audit log needed.)
+      const platformSettings = await getPlatformSettings();
 
       // Test Sproom connection health + verify the child company still exists.
       //
@@ -145,6 +152,12 @@ export const GET = withGuard(
             // CVR-bypass toggle (only for non-production environments).
             sproomEnvironment: sproomClient.environment,
             sproomBaseUrl: sproomClient.baseUrlValue,
+            // Platform-wide DevMode CVR-bypass flag (SuperDev-controlled).
+            // When true, the create-child-company route skips the
+            // cvrVerifiedAt gate for ALL tenants on the platform (not
+            // just the active one). Inert when Sproom is in production.
+            cvrBypassEnabled: platformSettings.cvrBypassEnabled,
+            cvrBypassLastChangedAt: platformSettings.cvrBypassLastChangedAt,
             reconciled: true,
           });
         }
@@ -243,6 +256,10 @@ export const GET = withGuard(
         // Sproom environment — see above for the four possible values.
         sproomEnvironment: sproomClient.environment,
         sproomBaseUrl: sproomClient.baseUrlValue,
+        // Platform-wide DevMode CVR-bypass flag (SuperDev-controlled).
+        // See above for the full explanation.
+        cvrBypassEnabled: platformSettings.cvrBypassEnabled,
+        cvrBypassLastChangedAt: platformSettings.cvrBypassLastChangedAt,
         reconciled,
       });
     } catch (error) {

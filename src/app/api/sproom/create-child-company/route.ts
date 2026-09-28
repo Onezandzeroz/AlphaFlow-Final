@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { isCvrBypassEnabled } from '@/lib/platform-settings';
 
 /**
  * POST /api/sproom/create-child-company
@@ -76,8 +77,16 @@ export const POST = withGuard(
         return NextResponse.json({ error: 'Company not found' }, { status: 404 });
       }
 
-      // CVR gate
-      if (!company.cvrVerifiedAt) {
+      // CVR gate — required unless the SuperDev has enabled the
+      // platform-wide DevMode CVR-bypass flag (set via
+      // /api/sproom/dev-bypass-cvr). The bypass is itself only effective
+      // when Sproom is in a non-production environment (the dev-bypass-cvr
+      // route refuses to set it when sproomClient.environment === 'production').
+      // So this gate has two modes:
+      //   - bypass flag ON + Sproom sandbox → gate passes for ALL tenants
+      //   - bypass flag OFF (or Sproom in prod) → per-tenant cvrVerifiedAt required
+      const cvrBypassEnabled = await isCvrBypassEnabled();
+      if (!cvrBypassEnabled && !company.cvrVerifiedAt) {
         return NextResponse.json(
           {
             error: 'Dit CVR-nummer er ikke blevet verificeret. Bekræft dit CVR-nummer i Virksomhedsindstillinger før du opretter en child company i Sproom.',
@@ -85,6 +94,12 @@ export const POST = withGuard(
           },
           { status: 403 }
         );
+      }
+      if (cvrBypassEnabled) {
+        logger.info('[SPROOM_CREATE_CHILD] CVR gate bypassed (platform-wide DevMode bypass is ON)', {
+          companyId: ctx.activeCompanyId,
+          cvr: company.cvrNumber ?? '(none)',
+        });
       }
 
       const cvr = company.cvrNumber.trim();
