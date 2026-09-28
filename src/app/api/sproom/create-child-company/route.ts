@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { sproomClient, SproomChildCompanyConflictError, type SproomChildCompany } from '@/lib/sproom-client';
+import { sproomClient, SproomChildCompanyConflictError, SproomApiRequestError, type SproomChildCompany } from '@/lib/sproom-client';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auditCreate, requestMetadata } from '@/lib/audit';
@@ -442,6 +442,83 @@ export const POST = withGuard(
         gln: childCompany.glnNumber ?? null,
       });
     } catch (error) {
+      // Surface Sproom validation details to the user.
+      //
+      // Sproom returns HTTP 400 with a generic message ("The request is invalid")
+      // when ASP.NET model validation fails, but the per-field details are
+      // buried in the `errors` array inside the response body. The
+      // SproomApiRequestError class preserves that body in its `details`
+      // field — we extract the human-readable validation messages here so
+      // the user sees *what* Sproom rejected, not just *that* it rejected.
+      if (error instanceof SproomApiRequestError) {
+        logger.error('[SPROOM_CREATE_CHILD] Sproom API error:', {
+          status: error.status,
+          errorCode: error.errorCode,
+          details: error.details,
+        });
+
+        // Extract the per-field validation messages from the ASP.NET
+        // model state error array. Sproom's 400 body looks like:
+        //   {
+        //     "message": "The request is invalid.",
+        //     "errors": [
+        //       { "text": "The companyName field is required." },
+        //       { "details": "CVR must be 8 digits." }
+        //     ]
+        //   }
+        // but `errors` can also be an object keyed by field name in
+        // some ASP.NET validation modes — we handle both shapes.
+        let validationDetails: string[] = [];
+        const details = error.details as
+          | { errors?: unknown; [k: string]: unknown }
+          | undefined;
+        if (details?.errors) {
+          const errs = details.errors;
+          if (Array.isArray(errs)) {
+            validationDetails = errs
+              .map((e: unknown) => {
+                if (typeof e === 'string') return e;
+                if (e && typeof e === 'object') {
+                  const obj = e as Record<string, unknown>;
+                  return (
+                    (typeof obj.text === 'string' && obj.text) ||
+                    (typeof obj.details === 'string' && obj.details) ||
+                    (typeof obj.message === 'string' && obj.message) ||
+                    JSON.stringify(obj)
+                  );
+                }
+                return String(e);
+              })
+              .filter(Boolean);
+          } else if (errs && typeof errs === 'object') {
+            // Object form: { fieldName: ['message1', 'message2'] }
+            validationDetails = Object.entries(errs).flatMap(([field, msgs]) => {
+              if (Array.isArray(msgs)) {
+                return msgs.map((m: unknown) => (typeof m === 'string' ? `${field}: ${m}` : String(m)));
+              }
+              return typeof msgs === 'string' ? [`${field}: ${msgs}`] : [];
+            });
+          }
+        }
+
+        const baseMsg = error.message;
+        const fullMsg =
+          validationDetails.length > 0
+            ? `${baseMsg}\n\nSproom valideringsfejl:\n${validationDetails.map((d) => `• ${d}`).join('\n')}`
+            : baseMsg;
+
+        return NextResponse.json(
+          {
+            error: fullMsg,
+            code: 'SPROOM_API_ERROR',
+            sproomStatus: error.status,
+            sproomErrorCode: error.errorCode,
+            validationDetails: validationDetails.length > 0 ? validationDetails : undefined,
+          },
+          { status: error.status === 400 ? 400 : 502 }
+        );
+      }
+
       logger.error('[SPROOM_CREATE_CHILD] Failed:', error);
       const message = error instanceof Error ? error.message : 'Failed to create child company';
       return NextResponse.json({ error: message }, { status: 500 });

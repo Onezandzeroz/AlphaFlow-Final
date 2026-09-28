@@ -181,27 +181,29 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   } | null>(null);
   const [isPeppolVerifying, setIsPeppolVerifying] = useState(false);
 
-  // ── DevMode CVR-bypass toggle ──────────────────────────────────────
-  // Lets a developer skip the CVR-verification gate for Sproom staging
+  // ── DevMode CVR-bypass toggle (SuperDev-only) ───────────────────────
+  // Lets a SuperDev skip the CVR-verification gate for Sproom staging
   // sandbox testing without a real Danish CVR number. Backed by
   // /api/sproom/dev-bypass-cvr.
   //
-  // IMPORTANT — the toggle is gated on the SPROOM ENVIRONMENT, not on
-  // Next.js NODE_ENV. This means the toggle appears whenever Sproom is
-  // pointed at a non-production environment (staging / custom / simulation),
-  // regardless of whether the Next.js app itself runs in dev or prod mode.
-  // This is the correct signal: a prod build pointed at staging.sproom.net
-  // is still a test setup, and the user may need the bypass. Conversely,
-  // a dev build pointed at sproom.net (production) would NOT show the
-  // toggle, which is correct — bypassing KYC against real Sproom prod
-  // is never appropriate.
+  // Gating:
+  //   1. Sproom must be in a non-production environment (staging / custom /
+  //      simulation). The toggle is meaningless against real Sproom prod.
+  //   2. The signed-in user must be a SuperDev (user.isSuperDev === true).
+  //      This prevents regular tenants from seeing or using the bypass —
+  //      it's a platform-admin tool, not a tenant feature. SuperDev can
+  //      toggle it for any tenant they're operating on.
   //
-  // The server route (POST/DELETE /api/sproom/dev-bypass-cvr) refuses
-  // ONLY based on sproomClient.environment === 'production'. It does
-  // NOT check NODE_ENV — see the route's header comment for the rationale.
+  // The server route (POST/DELETE /api/sproom/dev-bypass-cvr) independently
+  // refuses ONLY based on sproomClient.environment === 'production'. It
+  // does NOT check NODE_ENV — see the route header for rationale. The
+  // SuperDev-only gate is enforced on the frontend via `user.isSuperDev`
+  // AND on the server via `withGuard` + Permission.DATA_EDIT (which only
+  // SuperDev/company-admin roles have on a tenant they don't own).
   const sproomEnv = sproomStatus?.sproomEnvironment;
   const isSandboxSproom = sproomEnv === 'staging' || sproomEnv === 'custom' || sproomEnv === 'simulation';
-  const isDevMode = isSandboxSproom;
+  const isSuperDev = !!user?.isSuperDev;
+  const isDevMode = isSandboxSproom && isSuperDev;
   const [devBypassActive, setDevBypassActive] = useState(false);
   const [isTogglingDevBypass, setIsTogglingDevBypass] = useState(false);
   const [peppolDialogOpen, setPeppolDialogOpen] = useState(false);
@@ -1317,12 +1319,14 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
               </div>
             </div>
 
-            {/* ── DevMode CVR-bypass toggle (shown when Sproom is in a non-production environment) ──
-                Lets a developer skip the CVR-verification gate for Sproom
-                staging sandbox testing. The server route (POST/DELETE
-                /api/sproom/dev-bypass-cvr) refuses ONLY when Sproom is
-                pointed at production (sproomClient.environment === 'production').
-                It does NOT check NODE_ENV — see the route header for rationale. */}
+            {/* ── DevMode CVR-bypass toggle (SuperDev-only, shown when Sproom is in a non-production environment) ──
+                Lets a SuperDev skip the CVR-verification gate for Sproom
+                staging sandbox testing. Hidden from regular tenants — only
+                visible when user.isSuperDev === true AND Sproom is in
+                staging/custom/simulation environment.
+                The server route (POST/DELETE /api/sproom/dev-bypass-cvr)
+                refuses ONLY when Sproom is pointed at production
+                (sproomClient.environment === 'production'). */}
             {isDevMode && !sproomStatus?.connected && (
               <div className="rounded-lg bg-amber-50 dark:bg-amber-900/15 border border-amber-300 dark:border-amber-700/50 p-3 space-y-3">
                 <div className="flex items-start gap-2">

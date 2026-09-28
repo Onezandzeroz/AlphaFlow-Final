@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { auditCreate, requestMetadata } from '@/lib/audit';
-import { Permission } from '@/lib/rbac';
-import { withGuard } from '@/lib/route-guard';
+import { withGuard, SUPERDEV_ONLY } from '@/lib/route-guard';
 import { sproomClient } from '@/lib/sproom-client';
 
 /**
@@ -69,13 +68,23 @@ function refuseIfDisallowed(): NextResponse | null {
 }
 
 // ─── POST: Enable bypass (set cvrVerifiedAt = now) ─────────────────
+//
+// SuperDev-only AND requireCompany — SuperDev must be operating on a
+// specific tenant (active company selected) to toggle the bypass for
+// that tenant. Without requireCompany, ctx.activeCompanyId would be
+// null and the bypass would have no target. The SUPERDEV_ONLY spread
+// ensures a non-SuperDev caller gets 403 from withGuard before the
+// handler even runs. Combined with the frontend `user.isSuperDev`
+// gate, this makes the feature accessible only to platform
+// administrators operating on a specific tenant.
+
+const SUPERDEV_ON_TENANT = {
+  ...SUPERDEV_ONLY,
+  requireCompany: true,
+} as const;
 
 export const POST = withGuard(
-  {
-    auth: true,
-    requireCompany: true,
-    permissions: [Permission.DATA_EDIT],
-  },
+  SUPERDEV_ON_TENANT,
   async (request, ctx) => {
     // Production guard
     const prod = refuseIfDisallowed();
@@ -141,13 +150,11 @@ export const POST = withGuard(
 );
 
 // ─── DELETE: Disable bypass (set cvrVerifiedAt = null) ─────────────
+//
+// Same guard as POST — SuperDev-only on a specific tenant.
 
 export const DELETE = withGuard(
-  {
-    auth: true,
-    requireCompany: true,
-    permissions: [Permission.DATA_EDIT],
-  },
+  SUPERDEV_ON_TENANT,
   async (request, ctx) => {
     // Production guard
     const prod = refuseIfDisallowed();

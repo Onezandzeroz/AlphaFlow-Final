@@ -358,6 +358,38 @@ export class SproomChildCompanyConflictError extends Error {
 }
 
 /**
+ * Thrown by Sproom API methods when the server returns a non-OK status
+ * (other than the typed 409 conflict). Preserves the full SproomApiError
+ * — including the `errors` array with ASP.NET model-validation details —
+ * so the caller can surface the actual validation failure to the user
+ * instead of a generic "The request is invalid" message.
+ *
+ * Without this, `throw new Error(\`...${error.message}\`)` loses the
+ * structured `error.details` field, which is the only place Sproom
+ * puts the per-field validation messages (e.g. "The companyName field
+ * is required", "CVR must be 8 digits", etc.).
+ */
+export class SproomApiRequestError extends Error {
+  /** HTTP status code from Sproom (e.g. 400, 401, 403, 500). */
+  readonly status: number;
+  /** Sproom's errorCode (e.g. 'SPROOM_400' or a typed code). */
+  readonly errorCode: string | undefined;
+  /** Full parsed error body, including the `errors` array with validation details. */
+  readonly details: unknown;
+
+  constructor(
+    message: string,
+    opts: { status: number; errorCode?: string; details?: unknown },
+  ) {
+    super(message);
+    this.name = 'SproomApiRequestError';
+    this.status = opts.status;
+    this.errorCode = opts.errorCode;
+    this.details = opts.details;
+  }
+}
+
+/**
  * Error thrown when Sproom returns HTTP 410 from `GET /api/documents/{id}`.
  *
  * Per the Sproom swagger:
@@ -743,8 +775,13 @@ export class SproomClient {
 
     if (!response.ok) {
       const error = await this.parseError(response);
-      throw new Error(
+      throw new SproomApiRequestError(
         `Failed to create Sproom child company (HTTP ${response.status}): ${error.message || response.statusText}`,
+        {
+          status: response.status,
+          errorCode: error.errorCode,
+          details: error.details,
+        },
       );
     }
 
