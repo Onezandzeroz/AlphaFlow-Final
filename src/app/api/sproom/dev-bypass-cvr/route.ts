@@ -110,27 +110,30 @@ export const POST = withGuard(
         newChangedAt: after.cvrBypassLastChangedAt,
       });
 
-      // Audit-log the change. This is a platform-level action, so the
-      // audit entry is scoped to the active company context (which
-      // records which tenant the SuperDev was operating on when they
-      // flipped it). The settings file ALSO records the changer's
-      // userId + timestamp directly, so the audit trail survives even
-      // if the AuditLog is cleared.
-      await auditLog(
-        ctx.id,
-        'platform_cvr_bypass_enabled',
-        'Company',
-        ctx.activeCompanyId!,
-        {
-          action: 'platform_cvr_bypass_enabled',
+      // Audit-log the change. We use the existing 'OVERSIGHT' action
+      // (the standard for platform-admin / SuperDev actions) and put
+      // the specific event type in metadata.type — same pattern as
+      // /api/oversight/notify-nemhandel. The audit entry is scoped to
+      // the active company context (records which tenant the SuperDev
+      // was operating on when they flipped it). The settings file ALSO
+      // records the changer's userId + timestamp directly, so the
+      // audit trail survives even if the AuditLog is cleared.
+      await auditLog({
+        action: 'OVERSIGHT',
+        entityType: 'Company',
+        entityId: ctx.activeCompanyId!,
+        userId: ctx.id,
+        companyId: ctx.activeCompanyId,
+        performedByUserId: ctx.id,
+        metadata: {
+          ...requestMetadata(request),
+          type: 'platform_cvr_bypass_enabled',
           scope: 'platform-wide',
           note: 'SuperDev enabled platform-wide DevMode CVR bypass. All tenants can now create Sproom child companies without verifying their CVR. Only effective when Sproom is in a non-production environment.',
           previousChangedAt: before.cvrBypassLastChangedAt,
           newChangedAt: after.cvrBypassLastChangedAt,
         },
-        requestMetadata(request),
-        ctx.activeCompanyId
-      );
+      });
 
       return NextResponse.json({
         ok: true,
@@ -176,21 +179,22 @@ export const DELETE = withGuard(
         newChangedAt: after.cvrBypassLastChangedAt,
       });
 
-      await auditLog(
-        ctx.id,
-        'platform_cvr_bypass_disabled',
-        'Company',
-        ctx.activeCompanyId!,
-        {
-          action: 'platform_cvr_bypass_disabled',
+      await auditLog({
+        action: 'OVERSIGHT',
+        entityType: 'Company',
+        entityId: ctx.activeCompanyId!,
+        userId: ctx.id,
+        companyId: ctx.activeCompanyId,
+        performedByUserId: ctx.id,
+        metadata: {
+          ...requestMetadata(request),
+          type: 'platform_cvr_bypass_disabled',
           scope: 'platform-wide',
           note: 'SuperDev disabled platform-wide DevMode CVR bypass. All tenants must now verify their CVR via the normal CVR lookup flow before creating Sproom child companies.',
           previousChangedAt,
           newChangedAt: after.cvrBypassLastChangedAt,
         },
-        requestMetadata(request),
-        ctx.activeCompanyId
-      );
+      });
 
       return NextResponse.json({
         ok: true,
