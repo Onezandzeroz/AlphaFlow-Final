@@ -88,14 +88,33 @@ const STATUS_MAP: Record<SproomDocumentStatus, EInvoiceSendStatus> = {
   ReturnedToSchematronEnrichment: 'SENT',
 
   // ── In-network transmission ──
+  // Sproom flow: Created → TransmissionStarted → Sent → Received →
+  //             TransmissionCompleted → PendingApproval → Approved/Rejected
+  //
+  // VIGTIGT: 'Sent', 'Received', og 'TransmissionCompleted' betyder alle at
+  // dokumentet er **undervejs** eller **kommet frem til modtagerens indbakke** —
+  // IKKE at modtageren har godkendt det. Tidligere blev disse mappet til
+  // 'DELIVERED', hvilket gav misvisende "Leveret" status i UI'et FØR
+  // modtageren overhovedet havde set dokumentet.
+  //
+  // Korrekt mapping (Task 29 fix):
+  //   - 'Sent' = afsender AP har sendt → IN_TRANSIT (stadig undervejs)
+  //   - 'Received' = modtager AP har modtaget → IN_TRANSIT (stadig undervejs til indbakke)
+  //   - 'TransmissionCompleted' = dokument er i modtagerens indbakke, afventer
+  //     modtagerens handling → PENDING_APPROVAL (afventer godkendelse)
+  //
+  // 'DELIVERED' er RESERVERET til når modtageren faktisk har godkendt
+  // (Sproom 'Approved'). Dette matcher brugerens forventning: "leveret"
+  // bør først vises når modtageren har bekræftet modtagelsen.
   TransmissionStarted: 'IN_TRANSIT',
-  Sent: 'DELIVERED', // Sproom 'Sent' = dokument sendt til modtager AP
-  Received: 'DELIVERED', // Modtaget af modtager AP
-  TransmissionCompleted: 'DELIVERED', // Fuldført transmission
+  Sent: 'IN_TRANSIT', // Afsender AP har sendt — stadig undervejs
+  Received: 'IN_TRANSIT', // Modtager AP har modtaget — stadig undervejs til indbakke
+  TransmissionCompleted: 'PENDING_APPROVAL', // I modtagerens indbakke — afventer godkendelse
 
   // ── Recipient action ──
   PendingApproval: 'PENDING_APPROVAL',
-  Approved: 'ACCEPTED',
+  Approved: 'ACCEPTED', // Modtager godkendte → ACCEPTED (ikke DELIVERED —
+                        // ACCEPTED er den endelige "modtager har godkendt" status)
   Rejected: 'REJECTED',
   ApplicationReponseBusinessReject: 'REJECTED',
   ApplicationReponseProfileReject: 'REJECTED',

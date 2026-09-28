@@ -24,6 +24,8 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/auth-store';
 import { useDataSyncStore } from '@/lib/data-sync-store';
 import { useTranslation } from '@/lib/use-translation';
+import { FileText, Receipt, CheckCircle2, XCircle, AlertCircle, Loader2, Send, Clock, Banknote } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 const WS_PORT =
   typeof process !== 'undefined' && process.env?.NOTIFICATION_WS_PORT
@@ -135,74 +137,91 @@ export function EInvoiceEventNotifier() {
           const num = data.invoiceNumber ?? '';
           const amt =
             data.amount && data.currency ? `${data.amount} ${data.currency}` : '';
-          const description =
-            [party, num, amt].filter(Boolean).join(' · ') || undefined;
 
           if (data.direction === 'inbound') {
-            // Inbound = a document arrived in the tenant's inbox.
-            toast.info(isDa ? `Ny ${docLabel} modtaget` : `New ${docLabel} received`, {
+            // ── Inbound: a document arrived in the tenant's inbox. ──
+            // Modern, luftig toast that fades away after 3 seconds.
+            // Uses a custom CSS class `einvoice-inbound-toast` (defined in
+            // globals.css) for the airy, modern styling — a soft gradient
+            // background, rounded corners, generous padding, and a subtle
+            // drop shadow. The icon (FileText for invoice, Receipt for
+            // credit note) sits in a coloured circle on the left, with
+            // the counterparty name as the title and the invoice number
+            // + amount as the description.
+            const title = isDa
+              ? `Ny ${docLabel} modtaget`
+              : `New ${docLabel} received`;
+            // Description: counterparty · invoice number · amount (any subset)
+            const description =
+              [party, num, amt].filter(Boolean).join('  ·  ') || undefined;
+
+            toast(title, {
               description,
-              duration: 8000,
+              duration: 3000, // 3 seconds — short and unobtrusive
+              icon: (
+                <span
+                  className={`einvoice-inbound-icon ${isCreditNote ? 'is-credit-note' : 'is-invoice'}`}
+                  aria-hidden="true"
+                >
+                  {isCreditNote ? (
+                    <Receipt className="h-4 w-4" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                </span>
+              ),
+              classNames: {
+                toast: 'einvoice-inbound-toast',
+                title: 'einvoice-inbound-toast-title',
+                description: 'einvoice-inbound-toast-description',
+              },
             });
             return;
           }
 
-          // Outbound status transition.
-          switch (data.status) {
-            case 'SENT':
-              toast.info(
-                isDa ? `${cap(docLabel)} afsendt` : `${cap(docLabel)} sent`,
-                { description, duration: 8000 },
-              );
-              break;
-            case 'IN_TRANSIT':
-              toast.info(
-                isDa ? `${cap(docLabel)} undervejs` : `${cap(docLabel)} in transit`,
-                { description, duration: 8000 },
-              );
-              break;
-            case 'DELIVERED':
-              toast.success(
-                isDa ? `${cap(docLabel)} leveret` : `${cap(docLabel)} delivered`,
-                { description, duration: 8000 },
-              );
-              break;
-            case 'PENDING_APPROVAL':
-              toast.info(
-                isDa ? `${cap(docLabel)} afventer godkendelse` : `${cap(docLabel)} pending approval`,
-                { description, duration: 8000 },
-              );
-              break;
-            case 'ACCEPTED':
-              toast.success(
-                isDa ? `${cap(docLabel)} accepteret` : `${cap(docLabel)} accepted`,
-                { description, duration: 8000 },
-              );
-              break;
-            case 'PAID':
-              toast.success(
-                isDa ? `${cap(docLabel)} betalt` : `${cap(docLabel)} paid`,
-                { description, duration: 8000 },
-              );
-              break;
-            case 'REJECTED':
-              toast.error(
-                isDa ? `${cap(docLabel)} afvist` : `${cap(docLabel)} rejected`,
-                { description, duration: 10000 },
-              );
-              break;
-            case 'FAILED':
-              toast.error(
-                isDa ? `${cap(docLabel)} fejlet` : `${cap(docLabel)} failed`,
-                { description, duration: 10000 },
-              );
-              break;
-            default:
-              toast.info(`${cap(docLabel)}: ${data.status}`, {
-                description,
-                duration: 8000,
-              });
-          }
+          // ── Outbound status transition. ──
+          // Keep the existing simpler styling for outbound — the user's
+          // request was specifically about inbound (e-faktura modtaget).
+          // Outbound toasts stay at 8s (10s for errors) since they're
+          // status transitions the user may want to track longer.
+          const capDocLabel = cap(docLabel);
+          const outDescription =
+            [party, num, amt].filter(Boolean).join(' · ') || undefined;
+
+          // Pick icon + style based on status
+          const statusConfig: Record<string, { icon: LucideIcon; variant: 'info' | 'success' | 'error' }> = {
+            SENT: { icon: Send, variant: 'info' },
+            IN_TRANSIT: { icon: Loader2, variant: 'info' },
+            DELIVERED: { icon: CheckCircle2, variant: 'success' },
+            PENDING_APPROVAL: { icon: Clock, variant: 'info' },
+            ACCEPTED: { icon: CheckCircle2, variant: 'success' },
+            PAID: { icon: Banknote, variant: 'success' },
+            REJECTED: { icon: XCircle, variant: 'error' },
+            FAILED: { icon: AlertCircle, variant: 'error' },
+          };
+          const cfg = statusConfig[data.status] ?? { icon: FileText, variant: 'info' as const };
+          const StatusIcon = cfg.icon;
+          const statusTitles: Record<string, { da: string; en: string }> = {
+            SENT: { da: `${capDocLabel} afsendt`, en: `${capDocLabel} sent` },
+            IN_TRANSIT: { da: `${capDocLabel} undervejs`, en: `${capDocLabel} in transit` },
+            DELIVERED: { da: `${capDocLabel} leveret`, en: `${capDocLabel} delivered` },
+            PENDING_APPROVAL: { da: `${capDocLabel} afventer godkendelse`, en: `${capDocLabel} pending approval` },
+            ACCEPTED: { da: `${capDocLabel} accepteret`, en: `${capDocLabel} accepted` },
+            PAID: { da: `${capDocLabel} betalt`, en: `${capDocLabel} paid` },
+            REJECTED: { da: `${capDocLabel} afvist`, en: `${capDocLabel} rejected` },
+            FAILED: { da: `${capDocLabel} fejlet`, en: `${capDocLabel} failed` },
+          };
+          const outTitle = statusTitles[data.status]
+            ? (isDa ? statusTitles[data.status].da : statusTitles[data.status].en)
+            : `${capDocLabel}: ${data.status}`;
+
+          const outDuration = (data.status === 'REJECTED' || data.status === 'FAILED') ? 10000 : 8000;
+          const outMethod = cfg.variant === 'success' ? toast.success : cfg.variant === 'error' ? toast.error : toast.info;
+          outMethod(outTitle, {
+            description: outDescription,
+            duration: outDuration,
+            icon: <StatusIcon className="h-4 w-4" />,
+          });
         });
       })
       .catch((err) => {
