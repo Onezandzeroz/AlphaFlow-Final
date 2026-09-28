@@ -9,8 +9,8 @@
 | Felt | Indhold |
 |------|---------|
 | **Dokumenttype** | Databehandleraftale (DPA) jf. GDPR artikel 28 |
-| **Version** | 3.0 |
-| **Dato** | 08.06.2026 |
+| **Version** | 3.4 |
+| **Dato** | September 2026 |
 | **Gældende lov** | Europa-Parlamentets og Rådets forordning (EU) 2016/679 (GDPR); dansk databeskyttelseslovgivning (LBK nr. 775 af 25. juni 2021); Lov om bogføring (LOV nr. 700 af 24. maj 2022); BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen); BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen) |
 | **Parter** | **Dataansvarlig:** Kundens virksomhed (kunde hos AlphaFlow) — **Databehandler:** AlphaAi Consult ApS, CVR 46312058 |
 | **Sprog** | Dansk |
@@ -54,9 +54,9 @@ AlphaAi Consult ApS er indehaver og driftsansvarlig for AlphaFlow — en cloud-b
 AlphaAi Consult ApS behandler udelukkende personoplysninger og bogføringsdata på vegne af og i overensstemmelse med kundens skriftlige instrukser, som afgives gennem kundens brug af AlphaFlow-platformen. Behandlingen omfatter:
 
 - Dobbelt bogføring (JournalEntry + JournalEntryLine), FSR-baseret standardkontoplan, finansjournal, hovedbog.
-- Fakturering (salgsfakturaer, PDF-generering, e-mail-afsendelse, e-fakturering via Peppol/NemHandel/Storecove).
+- Fakturering (salgsfakturaer, PDF-generering, e-mail-afsendelse, e-fakturering via Peppol/NemHandel med Sproom som Access Point).
 - Momsrapportering og -indberetning til SKAT (momsangivelse).
-- Bank-forbindelser (scaffolding; ingen reelle PSD2-kald i produktion pr. dags dato).
+- Bank-forbindelser (Tink — reel OAuth2/Open Banking-implementering via Tink Link, aktiveres ved konfiguration af TINK_CLIENT_ID/SECRET; Nordea/Danske Bank/Jyske Bank er stubs; Demo-provider leverer syntetiske test-data).
 - AI-assistent (Hermes) med valgfri tenant-dataadgang (per-tenant opt-in).
 - Dokument-OCR/scanning (Tesseract + VLM via OpenRouter).
 - Multi-tenant adgangskontrol, audit-log, backup og gendannelse.
@@ -92,7 +92,7 @@ Behandlingen er begrænset til det i § 2.1 anførte. Behandlingen sker udelukke
 
 ## § 3 Kategorier af persondata der behandles
 
-Følgende datakategorier behandles i AlphaFlow-platformen. Kategorierne er baseret på den faktiske Prisma-datamodel (`prisma/schema.prisma`, 40 modeller).
+Følgende datakategorier behandles i AlphaFlow-platformen. Kategorierne er baseret på den faktiske Prisma-datamodel (`prisma/schema.prisma`, 45 modeller, 27 enums).
 
 ### 3.1 Identitetsdata
 
@@ -197,7 +197,7 @@ Underbehandlerne er grupperet efter funktion:
 
 | # | Underbehandler | Juridisk enhed | Lokation | Formål i AlphaFlow | Data sendt | Retsgrundlag | Tredjeland |
 |---|----------------|----------------|----------|---------------------|------------|--------------|------------|
-| 3 | **Storecove** | Storecove B.V. | Holland (EU) | Peppol Access Point — afsendelse/modtagelse af e-fakturaer (OIOUBL + Peppol BIS Billing 3.0, NemHandel eDelivery) | OIOUBL/Peppol XML: afsender-CVR, modtager-CVR/EAN, fakturanummer, dato, linjer (beskrivelse, antal, pris, momssats), total, betalingsbetingelser, IBAN. B2B — typisk kun firmanavne, CVR, beløb. Ingen CPR. | Art. 28(2) — DPA | Nej (Holland) |
+| 3 | **Sproom** | Sproom A/S | Danmark (EU) | E-faktura Access Point — afsendelse/modtagelse af e-fakturaer i BEGGE netværk: Peppol (BIS Billing 3.0/UBL 2.1) OG NemHandel (OIOUBL 2.1). Sproom håndterer som Access Point: NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering samt MLR/AR. Integrationen er live mod Sproom staging (https://staging.sproom.net); produktionsklar via miljøvariabel-skift (https://sproom.net). Arkitektur: parent-auth (OAuth2 password grant) → child company pr. tenant (pr. CVR) → korttidstoken (impersonation, cachelagret) → afsendelse som raw XML (POST /api/documents) → modtagelse via DocumentReceived-webhook med RSA-signaturverifikation. | E-faktura-indhold (faktura-XML, OIOUBL/BIS Billing 3.0) med kundeoplysninger: kundenavn, adresse, CVR, afsender-/modtager-identifikatorer (CVR/EAN), fakturanummer, dato, linjer (beskrivelse, antal, pris, momssats), total, betalingsbetingelser, IBAN. B2B — typisk kun firmanavne, CVR, beløb. Ingen CPR. | Art. 28(2) — DPA | Nej (Danmark) |
 | 4 | **Frisbii / Flatpay** | Billwerk+ Reepay Group / Frisbii GmbH | Tyskland (EU) | Hosted checkout til AlphaFlows egne abonnementsbetalinger (Månedlig/Pro/Business/Business Extended). **Ikke** betalingsprocessor for kundens fakturaer. | Brugerens e-mail, virksomhedsnavn (brugt som customer first/last name), beløb i DKK øre, betalings-status, callback-URL'er | Art. 28(2) — DPA | Nej (Tyskland) |
 
 #### 5.1.C — AI-underbehandler (USA — SCC påkrævet)
@@ -244,6 +244,7 @@ Følgende integrationer findes i koden, men er ikke aktive i produktion. De er i
 | # | Integration | Status | Begrundelse |
 |---|-------------|--------|-------------|
 | — | **Bank-API'er (Nordea, Danske Bank, Jyske Bank)** | Stub-only — ingen reelle API-kald. Tink er derimod en reel implementering (real OAuth2 via Tink Link); Demo-provider returnerer realistiske test-data. Bank-tokens krypteres dog alligevel med AES-256-GCM før lagring. | Nordea/Danske Bank/Jyske Bank implementeret som `createRealBankProvider()` factory, men consent-flow stubbes. `fetchTransactions` kaster "requires production configuration". Tink er fuldt implementeret (tink-client.ts) og aktiveres ved konfigurerede TINK_CLIENT_ID/SECRET. |
+| — | **E-faktura legacy (Storecove)** | Supersederet legacy — ikke aktiv. `src/lib/storecove-client.ts` og `/api/storecove/*`-ruterne findes stadig i kodebasen; DB-felter (`storecoveConnected`, `storecoveLegalEntityId`) bevares for bagudkompatibilitet. | Erstattet af Sproom som eneste e-faktura Access Point (Bilag A #3). Ingen data transmitteres via legacy-koden. |
 
 > **Note om AI-bankafstemning:** AI-bankafstemning er aktiv i produktion via OpenRouter i `src/lib/matching-engine.ts` (tre-niveau matching: regelbaseret, fuzzy, AI). AI-match ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 markeres AI_SUGGESTED (kræver manuel godkendelse); <0,80 ignoreres. Den tidligere `z-ai-web-dev-sdk`-integration er erstattet af `callOpenRouter()`. AI-data transmitteres via OpenRouter (Bilag A #5) — AI-bankafstemning udgør derfor ikke en selvstændig underbehandler. AI-output overstyrer aldrig automatisk bogførte posteringer uden brugergodkendelse.
 
@@ -255,7 +256,7 @@ Hvis disse integrationer aktiveres i fremtiden, vil de blive tilføjet til Bilag
 |----------------|-------------------|----------------|----------------|
 | Neon PostgreSQL | Nej (admin-adgang USA) | Ja (admin) | Begrænset |
 | IONOS VPS | Nej | Nej | Nej |
-| Storecove | Nej | Nej | Nej |
+| Sproom | Nej (Danmark/EU) | Nej | Nej |
 | Frisbii / Flatpay | Nej | Nej | Nej |
 | **OpenRouter** | **Ja** | **Ja** | **Ja** |
 | Simply / Brevo | Nej | Nej | Nej |
@@ -368,7 +369,7 @@ AlphaFlow implementerer følgende tekniske og organisatoriske sikkerhedsforansta
 |----------------|----------------|-------------|
 | **App-level rate-limiting** | In-memory sliding window: login 5/min, register 3/min, 2FA 5-10/min, forgot-password 1/5min | Nulstilles ved PM2-restart (kendt begrænsning) |
 | **Security headers** | HSTS, X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy | `next.config.ts` + `Caddyfile` |
-| **Webhook-signering** | HMAC-SHA256 (Storecove, Frisbii, TokenPay, Flatpay, Scanner). Fail-closed når secret mangler (U-6); `crypto.timingSafeEqual` i alle verifikationer (U-14). | `src/app/api/*/webhook/route.ts` |
+| **Webhook-signering** | HMAC-SHA256 (Frisbii, TokenPay, Flatpay, Scanner) og RSA-SHA256 for Sproom (SHA256withRSA i `X-Signature`-header; offentlig nøgle hentes fra GET /api/webhooks/key og cachelagres; verificering med `crypto.createVerify('RSA-SHA256')`). Fail-closed når secret/nøgle mangler — for Sproom gennem `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` i produktion (U-6); `crypto.timingSafeEqual` i alle HMAC-verifikationer (U-14). | `src/app/api/*/webhook/route.ts` |
 | **Fil-upload** | MIME-whitelist, 25 MB max, path-traversal guard, tenant-scoped serving, ClamAV antivirus-scanning (U-4) | ClamAV kræver installation på VPS |
 
 ### 7.6 Åbne / kendte sikkerhedsmangler
@@ -491,7 +492,7 @@ Neon, Inc. er en US-virksomhed, men alle data hostes i EU (Frankfurt + Amsterdam
 
 ### 9.4 Ingen andre tredjelande
 
-Ingen andre underbehandlere overfører data til tredjelande. Storecove (Holland), Frisbii (Tyskland), IONOS (Tyskland), Simply/Brevo (DK/FR) er alle EU-baserede.
+Ingen andre underbehandlere overfører data til tredjelande. Sproom (Danmark), Frisbii (Tyskland), IONOS (Tyskland), Simply/Brevo (DK/FR) er alle EU-baserede.
 
 ---
 
@@ -719,7 +720,7 @@ Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i
 |---|------|----------------|----------|---------------------|------------|-------|--------------------|------|------------|
 | 1 | Neon PostgreSQL | Neon, Inc. | USA HQ / EU DC (Frankfurt+Amsterdam) | Primær database | Alt (virksomhed, brugere, posteringer, fakturaer, moms, audit) | Databehandler | Nej (admin: ja) | Ja (admin) | Indgået |
 | 2 | IONOS VPS | IONOS SE | Tyskland (EU) | Applikationsserver + backup-lagring | AES-256-GCM-krypterede backup-ZIPs, runtime-data | Databehandler | Nej | Nej | Indgået |
-| 3 | Storecove | Storecove B.V. | Holland (EU) | Peppol Access Point — e-fakturering | OIOUBL/Peppol XML (CVR, faktura, linjer, IBAN) | Databehandler | Nej | Nej | Påkræret |
+| 3 | Sproom | Sproom A/S | Danmark (EU) | E-faktura Access Point — Peppol (BIS Billing 3.0/UBL 2.1) + NemHandel (OIOUBL 2.1) | E-faktura-indhold (faktura-XML) med kundeoplysninger (navn, adresse, CVR), afsender-/modtager-identifikatorer, fakturanummer, linjer, beløb, IBAN | Databehandler | Nej | Nej | Påkræret (Bilag 14) |
 | 4 | Frisbii / Flatpay | Billwerk+ Reepay Group | Tyskland (EU) | Abonnementsbetalinger | Bruger-email, virksomhedsnavn, beløb, callback-URL'er | Databehandler | Nej | Nej | Påkræret |
 | 5 | OpenRouter | OpenRouter, Inc. | USA | AI-databehandler — Hermes chat-LLM, knowledge-RAG embeddings og scanner VLM | Spørgsmål + system-prompt + (opt-in) tenant-kontekst; dokument-tekst chunks; base64-PNG-billeder | Databehandler | **Ja** | **Ja** (Modul 2) | Påkræret + TIA |
 | 6 | Simply / Brevo (SMTP) | Simply A/S / Brevo SAS | DK / FR (EU) | Transaktions-emails | Modtager-email, brugernavn, faktura-PDF, tokens | Databehandler | Nej | Nej | Påkræret |
@@ -730,17 +731,18 @@ Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i
 | 11 | notification-ws-service | AlphaAi Consult ApS (intern) | IONOS VPS (EU) | Real-time notifikationer | userId, readIds, companyId (in-memory) | Intern sub-system | Nej | Nej | N/A (intern) |
 | 12 | knowledge-service | AlphaAi Consult ApS (intern) | IONOS VPS (EU) | RAG knowledge base | Dokument-tekst, embeddings (pgvector) | Intern sub-system | Nej | Nej | N/A (intern) |
 | 13 | hermes-agent | AlphaAi Consult ApS (intern) | IONOS VPS (EU) | AI chat-assistent | Socket.IO-events, samtalehistorik | Intern sub-system | Nej | Nej | N/A (intern) |
-| 14 | NemHandel / Nets (Access Point) | Nets A/S | DK (EU) | NemHandel e-fakturering (OIOUBL) via direkte Nets Access Point-integration (reserveret; aktiveres kun hvis Storecove ikke anvendes som AP) | OIOUBL XML: afsender-CVR, modtager-CVR/EAN, fakturanummer, dato, linjer, total, IBAN (samme indhold som Storecove) | Databehandler (potentiel) | Nej (DK) | Nej | Ved aktivering — se Bilag 14 (Storecove) hvis Storecove anvendes som AP, ellers separat DPA med Nets |
+| 14 | NemHandel / Nets (Access Point) | Nets A/S | DK (EU) | Direkte Nets Access Point-integration (reserveret; aktiveres kun hvis Sproom ikke længere anvendes som AP — Sproom dækker i forvejen NemHandel/OIOUBL) | OIOUBL XML: afsender-CVR, modtager-CVR/EAN, fakturanummer, dato, linjer, total, IBAN (samme indhold som Sproom) | Databehandler (potentiel) | Nej (DK) | Nej | Ved aktivering — se Bilag 14 (Sproom) hvis Sproom anvendes som AP, ellers separat DPA med Nets |
 
 **Note vedr. OpenRouter's underbehandlere:** OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4). Disse model-udbydere er OpenRouter's underbehandlere — ikke AlphaAi Consult ApS' — og indgås derfor ikke separate DPA'er med AlphaAi. AlphaAi's DPA og SCC med OpenRouter (Bilag 14) dækker alle AI-funktioner i AlphaFlow: Hermes chat-LLM, knowledge-RAG embeddings og scanner VLM.
 
-**Note vedr. Peppol/NemHandel Access Point:** AlphaFlow anvender **Storecove B.V. (Holland)** som både Peppol og NemHandel Access Point (se Bilag 14 — separat DPA-PDF ved indsendelse) i den nuværende konfiguration. Miljøvariablerne `NEMHANDEL_API_KEY`, `NEMHANDEL_API_URL` (https://nemhandel.nets.dk/api/v2) og `PEPPOL_AP_URL` (jf. Bilag 13 — Bilag-13_TokenPay-TokenBay-guide.md) er reserveret til en fremtidig direkte Nets-integration, men er **ikke aktive i produktion**. Hvis direkte Nets-integration aktiveres i fremtiden, vil Nets blive tilføjet som selvstændig underbehandler med separat DPA (jf. § 14).
+**Note vedr. Peppol/NemHandel Access Point:** AlphaFlow anvender **Sproom A/S (Danmark)** som eneste e-faktura Access Point for både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) i den nuværende konfiguration (underbehandler-DPA: Bilag 14). Integrationen er live mod Sproom staging (https://staging.sproom.net) og er produktionsklar via miljøvariabel-skift (`SPROOM_API_URL` → https://sproom.net). Miljøvariabler: `SPROOM_API_URL` (default https://staging.sproom.net), `SPROOM_API_TOKEN`, `SPROOM_WEBHOOK_PUBLIC_KEY` og `SPROOM_WEBHOOK_REQUIRE_SIGNATURE` (sættes til `true` i produktion). Den tidligere Storecove-integration (`src/lib/storecove-client.ts` + `/api/storecove/*`) er **supersederet legacy** og bevares udelukkende for bagudkompatibilitet — der transmitteres ingen data via legacy-koden. Hvis en direkte Nets-integration aktiveres i fremtiden, vil Nets blive tilføjet som selvstændig underbehandler med separat DPA (jf. § 14).
 
 ### Bilag A.2 — Implementerede men IKKE aktive integrationer
 
 | Integration | Status | Begrundelse |
 |-------------|--------|-------------|
 | Bank-API'er (Nordea, Danske Bank, Jyske Bank) | Stub-only — ingen reelle API-kald i produktion. Tink er derimod en reel implementering (real OAuth2 via Tink Link). Demo-provider returnerer realistiske test-data. Bank-tokens krypteres dog alligevel med AES-256-GCM før lagring. | Implementeret men ikke produktionsaktiveret (Nordea/Danske/Jyske). Tink aktiv i produktion ved konfigurerede TINK_CLIENT_ID/SECRET. |
+| E-faktura legacy (Storecove) | Supersederet legacy — ikke aktiv. `src/lib/storecove-client.ts` (1.431 LOC) og `/api/storecove/*`-ruterne findes stadig i kodebasen; DB-felter (`storecoveConnected`, `storecoveLegalEntityId`) bevares for bagudkompatibilitet. | Erstattet af Sproom som eneste e-faktura Access Point (Bilag A #3). Ingen data transmitteres via legacy-koden. |
 
 > **Note om AI-bankafstemning:** AI-bankafstemning er aktiv i produktion via OpenRouter (`src/lib/matching-engine.ts`) og transmitterer AI-data via OpenRouter (Bilag A #5) — udgør ikke en selvstændig underbehandler. Den tidligere `z-ai-web-dev-sdk`-integration er erstattet af `callOpenRouter()`.
 
@@ -804,6 +806,7 @@ Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
 | 3.1 | 2026 (AI-konsolidering C1) | **AI-underbehandler-konsolidering:** OpenRouter, Inc. er nu AlphaFlows eneste AI-databehandler per AI-CONSOLIDATION-SPEC. OpenAI, Inc. og Anthropic PBC er fjernet som selvstændige underbehandlere (de er OpenRouter's underbehandlere per GDPR Art. 28(4), ikke AlphaAi Consult ApS'). Bilag A reduceret fra 16 til 14 rækker; §5.1.C reduceret fra 3 til 1 række; §5.2 SCC-status-tabel reduceret fra 3 til 1 AI-række; §9.1 USA-overførsler konsolideret; §6.2/§6.3 beskrivelser opdateret ("via OpenRouter"); §10.2 AI-specifikke forpligtelser gælder nu kun OpenRouter. |
 | 3.2 | 2026 | **Dokumentationsnøjaktighed:** Rettet RBAC permissions 18→23 i 7 kategorier (§7.3); tilføjet SuperDev oversight-nuance (admin endpoints `/api/oversight/subscription` og `/api/oversight/trial` forbliver kaldbare); opdateret §5.1.G og Bilag A.2 — Tink nu korrekt beskrevet som reel implementering, `z-ai-web-dev-sdk`-række erstattet af aktiv AI-bankafstemning via OpenRouter (`matching-engine.ts`); opdateret §6.1 Hermes-consent til toggle-baseret beskrivelse (enable/disable + `dataAccessEnabled` toggles, audit `action: UPDATE`); `FSR-38`-navngivning rettet til `FSR-baseret`. |
 | 3.3 | 2026 | **Bilagsstruktur-konsolidering:** Underbehandler-DPA'er (Bilag 14–18) samlet til ét bilagspunkt (Bilag 14). Tjeklisten renummereret fra Bilag 19 til Bilag 3. Alle krydsreferencer til specifikke DPA-bilag (Neon, IONOS, Storecove, Flatpay/Frisbii, OpenRouter, Simply/Brevo) opdateret til Bilag 14. |
+| 3.4 | September 2026 | **Sproom-migrering:** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som e-faktura Access Point (underbehandler) — Sproom dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Tekniske detaljer opdateret (raw XML POST /api/documents, RSA-webhook-signatur i X-Signature-header, child companies pr. tenant/CVR). Webhook-signatur for e-faktura-AP ændret fra HMAC (X-Storecove-Signature) til RSA-SHA256; env-vars ændret til SPROOM_API_URL/SPROOM_API_TOKEN/SPROOM_WEBHOOK_PUBLIC_KEY/SPROOM_WEBHOOK_REQUIRE_SIGNATURE. Legacy Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) markeret som supersederet (bevaret for bagudkompatibilitet — Bilag A.2). §1.3 bank-forbindelser rettet til Tink som reel implementering. Datamodel-reference 40→45 modeller (27 enums). |
 
 ---
 

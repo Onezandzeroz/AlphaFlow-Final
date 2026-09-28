@@ -4,7 +4,7 @@
 >
 > **Lovgrundlag:** Lov om bogføring (LOV nr. 700 af 24. maj 2022) §15; Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4 — krav D5 (tredjeparts IT-sikkerhed), D6 (aftale med 3. part opbevaring), N23 (formel aftalegrundlag); GDPR Art. 28 og 32.
 >
-> **Dokument-version:** 2.1 — revideret 2026
+> **Dokument-version:** 2.2 — revideret September 2026
 >
 > **Ansvarlig:** AlphaAi Consult ApS
 
@@ -157,6 +157,8 @@ IONOS VPS fungerer som AlphaFlows **applikationsserver** og **lokal backup-lagri
 - **Applikationsserver:** Next.js (port 3000) + 5 mini-services (hermes-agent 3004, knowledge-service 3006, notification-ws 3001, scanner-service 3005, tokenpay-access 3100) + Caddy (reverse proxy/TLS) + PM2 (proces-manager).
 - **Lokal backup-lagring:** `Tenant-Backup/{companyName}/` — AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant.
 - **Fil-uploads:** `uploads/receipts/{companyId}/` + `uploads/documents/{userId}/` — ukrypteret på disk (afhænger af disk-encryption + adgangskontrol — se afsnit 9).
+
+> Note: `mini-services/pg-service` (embedded PostgreSQL 17 + pgvector) er et lokalt sandbox-hjælpeværktøj til udvikling og indgår **ikke** i produktions-setuppet — produktionsdatabasen er Neon PostgreSQL (afsnit 3).
 
 ### 4.2 Lokation
 
@@ -406,8 +408,17 @@ Nedenstående tekst-diagram beskriver trafik-flowet i AlphaFlows produktionsmilj
 
   (OpenRouter videresender til model-udbydere Anthropic/Meta/OpenAI m.fl. per GDPR Art. 28(4) — disse er OpenRouter's underbehandlere, ikke AlphaAi Consult ApS'.)
 
+  Eksterne e-faktura-kald (HTTPS) fra IONOS VPS:
+    • Next.js (src/lib/sproom-client.ts) → Sproom API (Danmark — EU):
+      e-faktura-afsendelse (POST /api/documents — rå XML, OIOUBL/BIS 3),
+      status (GET /api/documents/{id}/state) og child-company-administrering.
+      Staging: https://staging.sproom.net · Produktion: https://sproom.net
+      (Sproom A/S — dansk e-faktura Access Point: Peppol + NemHandel)
+
   Indgående webhooks (HTTPS) → Caddy → Next.js API:
-    • Storecove (Peppol/NemHandel e-faktura status) — HMAC-SHA256
+    • Sproom (Peppol/NemHandel — DocumentReceived) — RSA-SHA256
+      (X-Signature-header; offentlig nøgle fra GET /api/webhooks/key;
+       SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true i produktion — fail-closed)
     • Frisbii/Flatpay (abonnementsbetaling status) — HMAC-SHA256
     • TokenPay (adgangs-status) — HMAC-SHA256
 ```
@@ -430,7 +441,8 @@ Nedenstående tekst-diagram beskriver trafik-flowet i AlphaFlows produktionsmilj
 | hermes-agent → OpenRouter | IONOS VPS → openrouter.ai | HTTPS | Chat-LLM (USA) |
 | knowledge-service → OpenRouter | IONOS VPS → openrouter.ai | HTTPS | Embeddings (USA) |
 | scanner-service → OpenRouter | IONOS VPS → openrouter.ai | HTTPS | VLM (USA) |
-| Storecove → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
+| Next.js → Sproom API | IONOS VPS → sproom.net (staging: staging.sproom.net) | HTTPS | E-faktura-afsendelse/modtagelse + status + child-company-administrering (Peppol + NemHandel, DK/EU) |
+| Sproom → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående — RSA-SHA256-signaturverifikation (X-Signature) |
 | Frisbii → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
 | TokenPay → Caddy | Internet → IONOS VPS:443 | TLS | Webhook-indgående |
 
@@ -561,4 +573,4 @@ Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinf
 
 ---
 
-*Dette dokument opdateres årligt eller ved væsentlige ændringer i AlphaFlows infrastruktur eller udbydernes servicevilkår. Seneste revision: 2026.*
+*Dette dokument opdateres årligt eller ved væsentlige ændringer i AlphaFlows infrastruktur eller udbydernes servicevilkår. Seneste revision: September 2026 (Sproom A/S har erstattet Storecove B.V. som e-faktura Access Point — udgående HTTPS-kald til Sproom samt DocumentReceived-webhook med RSA-SHA256-signaturverifikation, fail-closed i produktion; se afsnit 6).*

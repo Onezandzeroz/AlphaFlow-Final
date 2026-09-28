@@ -1,8 +1,8 @@
 # AlphaFlow — Udbedringsplan før indsendelse
 
 **AlphaAi Consult ApS** (CVR 46312058)
-**Dokumentversion:** 3.6
-**Dato:** 2026
+**Dokumentversion:** 3.7
+**Dato:** September 2026
 **Bilag 12 i anmeldelsespakken
 **Ansvarlig:** Jess Martin Christoffersen, Direktør
 
@@ -27,7 +27,7 @@ Tiltagene er inddelt i tre kategorier:
 |---|---|---|---|
 | U-2 | DPA + SCC + TIA for USA-dataoverførsel via OpenRouter | A | GDPR kapitel V; BEK 97 §8 stk. 4 (D3) |
 | U-8 | SKAT Moms-API credentials konfigureres | A | BEK 97 Bilag 4 pkt 7, b |
-| U-9 | NemHandel Access Point-aftale (Storecove) | A | BEK 97 Bilag 4 pkt 1, 8, 9 |
+| U-9 | NemHandel Access Point-aftale (Sproom) — aftale indgået; staging live | A (gennemført — rest: produktionsaktivering) | BEK 97 Bilag 4 pkt 1, 8, 9 |
 | U-10 | Caddy rate_limit plugin opsættes | B | BEK 97 §8 stk. 4 (D1) |
 | U-11 | Central Next.js middleware opsættes | B | BEK 97 §8 stk. 4 (D2) |
 | U-12 | Account-lockout ved gentagne fejlede login-forsøg | B | BEK 97 §8 stk. 4 (D2) |
@@ -69,16 +69,16 @@ AI-ydelser (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service V
 **Ansvarlig:** Jess Martin Christoffersen (Skattestyrelsen) + teknisk (konfiguration) · **Tidsramme:** 1 dag kode + Skattestyrelsen ventetid
 **Acceptkriterier:** `hasSkatCredentials()` returnerer true; test-momsangivelse successfuld.
 
-### U-9 — NemHandel Access Point-aftale (Storecove)
-`nemhandel-client.ts` simulerer uden reel AP-aftale.
-**Handling:**
-- Indgå Access Point-aftale med Storecove B.V. (Bilag 14) — fungerer som både Peppol og NemHandel AP.
-- Sæt `NEMHANDEL_SIMULATION_MODE=false` + `STORECOVE_API_KEY` i produktion.
-- Test e-faktura-afsendelse (OIOUBL type 380) til test-modtager.
-- Tilmeld AlphaFlow hos NemHandelsregisteret via Storecove.
+### U-9 — NemHandel Access Point-aftale (Sproom)
+**Status:** ✅ Aftalen er indgået. Sproom (dansk selskab — Sproom A/S, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker begge netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Integrationen er færdig og live mod Sproom staging (https://staging.sproom.net) via `src/lib/sproom-client.ts` (2.646 LOC) og `/api/sproom/*`-ruterne (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Som dansk selskab behandler Sproom data i Danmark/EU — ingen SCC påkrævet. (Den tidligere planlagte Storecove B.V.-aftale er supersederet; `src/lib/storecove-client.ts` + `/api/storecove/*` findes kun som legacy-kode.)
+
+**Resterende handling (produktionsaktivering — env-switch):**
+- Sæt `SPROOM_API_URL=https://sproom.net` + `SPROOM_API_TOKEN` i produktions-`.env` (default er staging: `https://staging.sproom.net`).
+- Sæt `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` (fail-closed RSA-signaturverifikation — Sproom signerer webhooks med SHA256withRSA i `X-Signature`-headeren; offentlig nøgle hentes automatisk fra GET /api/webhooks/key og cachelagres).
+- Verificér produktions-flowet: child company pr. tenant (pr. CVR) + registrering i begge netværk (POST /api/registrations/nemhandel + POST /api/registrations/peppol med participant verification), test-afsendelse (OIOUBL type 380 + kreditnota type 381) og leveringsbevis via GET /api/documents/{id}/state.
 - Opdater Bilag 6 afsnit 6.4 + 16.3.
-**Ansvarlig:** Jess Martin Christoffersen (Storecove) + teknisk (konfiguration) · **Tidsramme:** 1-3 dage + Storecove ventetid
-**Acceptkriterier:** Storecove-aftale underskrevet; test-e-faktura leveret; NemHandel-tilmelding bekræftet.
+**Ansvarlig:** Jess Martin Christoffersen (Sproom-aftale, indgået) + teknisk (env-switch) · **Tidsramme:** <1 dag (env-switch + verifikation — aftalen er indgået; ingen ekstern ventetid)
+**Acceptkriterier:** Sproom-aftale indgået (✅); produktions-e-faktura afsendt via https://sproom.net (HTTP 201 Created + dokument-ID i `X-Sproom-DocumentId`); leveringsbevis hentet; NemHandel- + Peppol-registrering bekræftet i produktion.
 
 ---
 
@@ -114,16 +114,16 @@ Følgende er bevidste arkitektoniske og produktmæssige valg med kompenserende f
 
 ## 6. Tidsplan før indsendelse
 
-Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført. Resterende tiltag afhænger af eksterne parter (U-2, U-8, U-9) og planlægges i Kategori B.
+Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført. U-9 (NemHandel Access Point-aftale — Sproom) er ligeledes reelt gennemført: aftalen er indgået, og integrationen er færdig og live mod Sproom staging — resterer kun produktionsaktivering (env-switch + verifikation, jf. §3). Resterende tiltag der afhænger af eksterne parter: U-2 (OpenRouter DPA) og U-8 (SKAT credentials).
 
 | Uge | Handlinger |
 |---|---|
 | **Uge 1-2** | U-2 (DPA/SCC/TIA — parallel jur. proces) |
-| **Uge 2-4** | U-8 (SKAT — afhænger af Skattestyrelsen), U-9 (Storecove — afhænger af Storecove) |
+| **Uge 2-4** | U-8 (SKAT — afhænger af Skattestyrelsen), U-9 (Sproom — produktionsaktivering via env-switch + verifikation; aftale indgået, staging allerede live) |
 | **Uge 4** | Verifikation af resterende Kategori A acceptkriterier |
 | **Uge 5** | Indsendelse via virk.dk |
 
-**Samlet tidsramme:** Resterende Kategori A-tiltag (U-2, U-8, U-9) afhænger af eksterne parter.
+**Samlet tidsramme:** U-9 kræver ingen ekstern ventetid længere (env-switch + verifikation, <1 dag). U-2 og U-8 afhænger af eksterne parter.
 
 ---
 
@@ -132,6 +132,7 @@ Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført. 
 Før indsendelse bekræftes at:
 
 - [x] Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført.
+- [x] U-9 (NemHandel Access Point-aftale — Sproom): aftale indgået; integrationen er færdig og live mod Sproom staging (Peppol BIS Billing 3.0 + NemHandel OIOUBL 2.1). Produktionsaktivering (env-switch + verifikation) udføres som del af produktionssætningen — jf. §3 U-9.
 - [x] Bilag 1 afsnit 8 (åbenhedsliste) opdateret — implementerede punkter beskrevet som features.
 - [x] Bilag 8 (Bilag-08_Risikovurdering-DPIA.md) §6 restrisiko-fordeling opdateret for implementerede risici.
 - [x] Berørte dokumenter (Bilag 4, 3, 6, 7, 9) opdateret hvor Kategori A-implementeringer ændrer beskrivelsen.
@@ -162,6 +163,7 @@ Før indsendelse bekræftes at:
 | 3.4 | 2026 | Fjernet implementerede tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) fra planen; dokumentet fokuserer nu på resterende tiltag. Reframet sprog. |
 | 3.5 | 2026 | Dokumentationsnøjagtighed: rettet permissions 18→23, kreditnota nu implementeret, AI-bankafstemning nu i produktion via OpenRouter, Hermes-consent beskrevet korrekt (toggle-baseret), webhook fail-closed reflekteret, CVR konsolideret til 46312058. |
 | 3.6 | 2026 | Bilagsstruktur-konsolidering: underbehandler-DPA’er samlet til Bilag 14; Tjekliste renummereret fra Bilag 19 til Bilag 3. Krydsreferencer opdateret. |
+| 3.7 | September 2026 | Sproom (DK) har erstattet Storecove (NL) som Peppol+NemHandel Access Point; U-9 opdateret (aftale indgået, staging aktiv, produktion via env-switch). |
 
 ---
 

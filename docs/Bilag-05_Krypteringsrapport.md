@@ -1,8 +1,9 @@
 # AlphaFlow — Krypteringsrapport
 
 **Dokumenttype:** Teknisk krypteringsrapport (data-at-rest, data-in-transit, key management)
-**Version:** 2.2
-**Dato:** 2026
+**Version:** 2.3
+**Dato:** September 2026
+**Versionshistorik:** 2.3 (september 2026): Sproom A/S erstatter Storecove som e-faktura Access Point — Sproom-webhooks verificeres nu med RSA-SHA256 (`X-Signature`) i stedet for HMAC; Tink tilføjet til eksterne HTTPS-kald. 2.2: tidligere udgave (Storecove-baseret).
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
 **Compliance-mål:** Erhvervsstyrelsen — Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023) og Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023)
 **Dataansvarlig:** AlphaAi Consult ApS (App Owner)
@@ -24,7 +25,7 @@
 
 ## 1. Indledning
 
-Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den findes i kodebasen pr. 2026. Formålet er at give Erhvervsstyrelsen en præcis oversigt over:
+Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den findes i kodebasen pr. september 2026. Formålet er at give Erhvervsstyrelsen en præcis oversigt over:
 
 - Hvilke data der er **krypteret** i databasen (AES-256-GCM).
 - Hvilke data der er **ukrypteret** i databasen, og hvilke kompenserende foranstaltninger der beskytter dem.
@@ -33,7 +34,7 @@ Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den f
 - Hvordan krypteringsnøgler administreres.
 
 **Ansvarlig:** AlphaAi Consult ApS (CVR-oplysninger for AlphaAi Consult ApS (CVR 46312058, Skelagervej 124C, 8200 Aarhus N) fremgår af Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 18.2 og Bilag 1 (Bilag-01_Anmeldelsespakke.md) afsnit 2).
-**Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) + 5 mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL.
+**Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) + 5 mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL. (`pg-service` — embedded PostgreSQL 17 + pgvector — er et sandbox-hjælpeværktøj og indgår ikke i produktions-setup.)
 
 ---
 
@@ -205,18 +206,18 @@ Password min. længde: **6 tegn**.
 | Hashing | SHA-256 + fast applikationssalt: `alphaflow-2fa-backup:${code}` |
 | DB-lagring | Hashed koder samles i JSON-array og **AES-256-GCM-krypteres** som ét felt (`User.twoFactorBackupCodes`) |
 
-### 3.8 Webhook-signaturer (HMAC-SHA256)
+### 3.8 Webhook-signaturer (HMAC-SHA256 + RSA-SHA256)
 
-AlphaFlow verificerer HMAC-SHA256-signaturer på indgående webhooks fra fire integrationer:
+AlphaFlow verificerer signaturer på indgående webhooks fra fire integrationer — Frisbii/Flatpay og TokenPay via symmetrisk HMAC-SHA256 (delt secret), Sproom via asymmetrisk RSA-SHA256 (offentlig nøgle):
 
 | Integration | Header | Implementering |
 |---|---|---|
-| Storecove | `X-Storecove-Signature` | `src/lib/storecove-client.ts:546-560` — `createHmac('sha256')` + `timingSafeEqual` |
+| Sproom | `X-Signature` | `src/lib/sproom-client.ts` — RSA-SHA256-verifikation (SHA256withRSA) via `crypto.createVerify('RSA-SHA256')`; offentlig nøgle hentes fra GET /api/webhooks/key og cachelagres (eller pins via `SPROOM_WEBHOOK_PUBLIC_KEY`) |
 | Frisbii (Flatpay) | `Reepay-Signature` | `src/lib/flatpay-client.ts:303-320` — `createHmac('sha256')` + `timingSafeEqual` |
 | TokenPay | `x-tokenpay-signature` | HMAC-SHA256 + `crypto.timingSafeEqual`. ✅ Udbedret (U-6/U-14). |
 | Flatpay webhook | `frisbii-signature` | `src/lib/flatpay-client.ts` — `createHmac('sha256')` + `timingSafeEqual` (Buffer) |
 
-**Dev-fallback:** ✅ Udbedret (U-6/U-14). Tidligere accepteredes alle webhooks hvis `STORECOVE_WEBHOOK_SECRET` eller `FLATPAY_WEBHOOK_SECRET` manglede. Dette er nu rettet — manglende secrets afvises i produktion. TokenPay bruger nu `crypto.timingSafeEqual` i stedet for string XOR.
+**Dev-fallback:** ✅ Udbedret (U-6/U-14). Tidligere accepteredes alle webhooks hvis `STORECOVE_WEBHOOK_SECRET` (legacy Storecove-integration) eller `FLATPAY_WEBHOOK_SECRET` manglede. Dette er nu rettet — manglende secrets afvises i produktion (fail-closed). Efter Sproom-migreringen (september 2026) verificeres Sproom-webhooks asymmetrisk med Sprooms RSA-offentlige nøgle (`X-Signature`-header; nøgle hentes fra GET /api/webhooks/key eller pins via `SPROOM_WEBHOOK_PUBLIC_KEY`), og `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` håndhæver fail-closed adfærd i produktion. TokenPay bruger nu `crypto.timingSafeEqual` i stedet for string XOR.
 
 ### 3.9 Bilag-immutability & checksums
 
@@ -264,7 +265,7 @@ AlphaFlow verificerer HMAC-SHA256-signaturer på indgående webhooks fra fire in
   - `/api/hermes/*` → hermes-agent :3004 (Bearer `HERMES_ADMIN_KEY`)
   - `/api/knowledge/*` → knowledge-service :3006 (Bearer `HERMES_ADMIN_KEY`)
 - **Real-time WebSocket:** Socket.IO via Caddy reverse proxy med `?XTransformPort=<port>`-routing — TLS-termineret af Caddy.
-- **Eksterne API-kald:** alle over HTTPS (SKAT, Storecove, Frisbii, CVR, OpenRouter). AI-kald (chat-LLM, embeddings, VLM) er konsolideret via OpenRouter — se Bilag 14 (konsolideret AI-DPA).
+- **Eksterne API-kald:** alle over HTTPS (SKAT, Sproom, Frisbii, CVR, OpenRouter, Tink). AI-kald (chat-LLM, embeddings, VLM) er konsolideret via OpenRouter — se Bilag 14 (konsolideret AI-DPA).
 
 ### 4.5 Browser-side
 
@@ -391,7 +392,7 @@ Filer på IONOS VPS (`/home/<user>/alphaflow/`):
 
 ## 7. Applikationsniveau-kryptering i praksis
 
-Implementeringen i `src/lib/crypto.ts` (316 linjer):
+Implementeringen i `src/lib/crypto.ts` (313 linjer):
 
 ### 7.1 Funktioner
 
@@ -515,14 +516,14 @@ Nedenstående beskriver udvalgte arkitektoniske valg i AlphaFlows krypteringsimp
 ## Appendiks A — Berørte filer og komponenter
 
 ### Krypto-moduler
-- `src/lib/crypto.ts` — AES-256-GCM streng- og fil-kryptering (316 linjer).
-- `src/lib/two-factor.ts` — TOTP + backup-koder med AES-256-GCM (244 linjer).
+- `src/lib/crypto.ts` — AES-256-GCM streng- og fil-kryptering (313 linjer).
+- `src/lib/two-factor.ts` — TOTP + backup-koder med AES-256-GCM (243 linjer).
 - `src/lib/password.ts` — bcrypt-hashing med legacy-fallback.
 - `mini-services/tokenpay-access-service/src/tbkey-decryption.ts` — `.tbkey`-dekryptering (150 linjer).
 - `mini-services/tokenpay-access-service/src/encryption.ts` — HMAC-SHA256 webhook-signering.
 
 ### Backup-relateret
-- `src/lib/backup-engine.ts` — backup-oprettelse, SHA-256 checksum, AES-256-GCM fil-kryptering (1482 linjer).
+- `src/lib/backup-engine.ts` — backup-oprettelse, SHA-256 checksum, AES-256-GCM fil-kryptering (1504 linjer).
 - `src/lib/backup-scheduler.ts` — node-cron scheduler.
 - `scripts/migrate-bank-tokens.ts` — engangsmigration base64 → AES-256-GCM.
 - `scripts/apply-audit-immutability.ts` — installerer PostgreSQL-triggere på AuditLog.
@@ -535,7 +536,7 @@ Nedenstående beskriver udvalgte arkitektoniske valg i AlphaFlows krypteringsimp
 - `prisma/audit-immutability.sql` — AuditLog immutability-triggere.
 
 ### Prisma-schema
-- `prisma/schema.prisma` — 40 modeller, 25 enums. Krypterede felter på `BankConnection`, `User`. Ukrypterede persondata på `Contact`, `Company`, `Invoice`, `ReceivedInvoice`, etc.
+- `prisma/schema.prisma` — 45 modeller, 27 enums. Krypterede felter på `BankConnection`, `User`. Ukrypterede persondata på `Contact`, `Company`, `Invoice`, `ReceivedInvoice`, etc.
 
 ---
 
@@ -554,4 +555,4 @@ Nedenstående beskriver udvalgte arkitektoniske valg i AlphaFlows krypteringsimp
 
 ---
 
-*Dette dokument er udarbejdet som teknisk dokumentation til Erhvervsstyrelsens compliance-vurdering af AlphaFlow. Alle oplysninger er verificeret i kodebasen pr. 2026.*
+*Dette dokument er udarbejdet som teknisk dokumentation til Erhvervsstyrelsens compliance-vurdering af AlphaFlow. Alle oplysninger er verificeret i kodebasen pr. september 2026.*

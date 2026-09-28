@@ -1,8 +1,8 @@
 # AlphaFlow — TokenPay Access & Miljøvariabler-guide
 
 **Dokumenttype:** Operationsguide for TokenPay-adgangssystemet + komplet miljøvariabel-reference
-**Version:** 2.1
-**Dato:** 2026
+**Version:** 2.2
+**Dato:** September 2026
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
 **Målgruppe:** DevOps / systemadministrator (AlphaAi Consult ApS)
 
@@ -117,23 +117,24 @@ Komplet tabel over alle environment variables fra `.env.example`, kategoriseret.
 
 | Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
 |---|---|---|---|---|
-| `STORECOVE_API_KEY` | Storecove Peppol/NemHandel e-faktura. | Nej (sim-mode hvis tom) | (tom) | EU (Holland). |
-| `STORECOVE_WEBHOOK_SECRET` | HMAC-SHA256 webhook-verifikation (header `X-Storecove-Signature`). | **JA i prod** | (tom) | Påkrævet i produktion. Webhooks afvises (fail-closed) hvis secret mangler eller signaturen er ugyldig — U-6 implementeret. |
-| `STORECOVE_API_URL` | API endpoint. | Nej | `https://api.storecove.com/v2` | — |
+| `SPROOM_API_URL` | Sproom Access Point (Peppol BIS Billing 3.0 + NemHandel OIOUBL 2.1) — API-endpoint. | Nej | `https://staging.sproom.net` | Sproom staging er default; produktion via env-switch til `https://sproom.net`. |
+| `SPROOM_API_TOKEN` | Sproom parent-API-token — parent-auth (OAuth2 password grant) → child company pr. tenant (pr. CVR) → korttidstoken (impersonation, auto-hentet + cachelagret). | Nej (sim-mode hvis tom) | (tom) | DK — Sproom A/S er dansk selskab; dataforarbejdering i Danmark/EU, ingen SCC. Uden token kører e-faktura i simuleringsmode (fallback — kun til lokal udvikling). |
+| `SPROOM_WEBHOOK_PUBLIC_KEY` | Offentlig RSA-nøgle til webhook-signaturverifikation (SHA256withRSA, header `X-Signature`). Hentes automatisk fra GET /api/webhooks/key og caches hvis ikke sat. | Nej (auto-hent) | (auto-hent) | PEM-nøgle fra Sproom-dashboard; verificering med `crypto.createVerify('RSA-SHA256')`. |
+| `SPROOM_WEBHOOK_REQUIRE_SIGNATURE` | `true` = webhooks med ugyldig/manglende RSA-signatur afvises (fail-closed). | **JA i prod** | (unset = staging-mode) | Sæt `true` i produktion — U-6 fail-closed-princip. I staging-mode logges ugyldige signaturer som advarsel. |
+| `SPROOM_TEST_RECEIVER_SCHEME` / `SPROOM_TEST_RECEIVER_IDENTIFIER` | Valgfrit override af standard test-modtager (sandbox-test). | Nej | `DK:CVR` / `10150817` | NemHandel demo CVR-endepunkt — se Bilag 15. |
+| `DISABLE_SPROOM_INBOX_SCHEDULER` / `DISABLE_SPROOM_OUTBOX_SCHEDULER` | Deaktivér Sproom-pollers (indbakke hver 5. min, outbox hver 10. min — safety-net). | Nej | (unset = enabled) | Benyt f.eks. på staging-miljøer. |
 | `FLATPAY_API_KEY` | Frisbii/Flatpay abonnementsbetaling. | Nej (mock-mode hvis tom) | (tom) | EU (Tyskland). Frisbii private key starter med `priv_`. |
 | `FLATPAY_WEBHOOK_SECRET` | HMAC-SHA256 webhook (header `Reepay-Signature`/`frisbii-signature`). | **JA i prod** | (tom) | Påkrævet i produktion. Webhooks afvises (fail-closed) hvis secret mangler eller signaturen er ugyldig — U-6 implementeret. Fallback til `FLATPAY_API_KEY` som HMAC-secret hvis sat (kræver stadig valid signatur). |
 | `FLATPAY_API_BASE_URL` | Frisbii Checkout API URL. | Nej | `https://checkout-api.frisbii.com/v1` | — |
 | `SKAT_CLIENT_ID` | SKAT Moms-API OAuth2 client_id. | Nej (sim-mode) | (tom) | DK-myndighed. |
 | `SKAT_CLIENT_SECRET` | SKAT OAuth2 client_secret. | Nej (sim-mode) | (tom) | DK-myndighed. KUN moms — ingen årsopgørelse/e-indkomst. |
 | `SKAT_API_BASE` | SKAT API URL. | Nej | `https://api.skat.dk/moms` | — |
-| `NEMHANDEL_API_KEY` | NemHandel e-faktura (Nets Access Point). | Nej (sim-mode) | (tom) | DK. |
-| `NEMHANDEL_API_URL` | NemHandel API URL. | Nej | `https://nemhandel.nets.dk/api/v2` | — |
-| `NEMHANDEL_SIMULATION_MODE` | `true` = sim-mode, `false` = produktion. | Nej | `true` | **Sæt til `false` i prod med rigtige credentials.** |
-| `PEPPOL_AP_URL` | Peppol Access Point URL. | Nej | `https://peppol.accesspoint.dk` | — |
 | `CVR_API_USERNAME` | Erhvervsstyrelsen CVR-register (HTTP Basic Auth). | Nej (sim-mode) | (tom) | DK-myndighed. |
 | `CVR_API_PASSWORD` | CVR-register password. | Nej (sim-mode) | (tom) | DK-myndighed. |
 | `CVR_API_BASE_URL` | CVR API URL. | Nej | `http://distribution.virk.dk` | — |
 | `CVR_SIMULATION_MODE` | `true` = mock-data, `false` = rigtige opslag. | Nej | `false` | Sæt `false` i prod med credentials. |
+
+> **Note (Sproom — eneste e-faktura Access Point):** Sproom (dansk selskab, https://sproom.net) dækker **både** Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) — én Sproom child company pr. tenant dækker begge netværk. Aktiv klient: `src/lib/sproom-client.ts` (2.646 LOC); aktive ruter: `/api/sproom/*` (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). Dokumenter sendes som raw XML (POST /api/documents, `Content-Type: application/octet-stream`, auto-detektion af OIOUBL/BIS 3); modtagelse sker via DocumentReceived-webhook + safety-net-pollers i `instrumentation.ts` (indbakke hver 5. min, outbox hver 10. min med auto-retry). Idempotens via `X-Request-Id`; dokument-ID returneres i `X-Sproom-DocumentId` (HTTP 201); statuspolling via GET /api/documents/{id}/state. E-faktura-simulering sker **automatisk** når `SPROOM_API_TOKEN` mangler (fallback) — Sproom staging (`https://staging.sproom.net`) er default-endpoint. NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE` og `src/lib/storecove-client.ts` + `/api/storecove/*` er supersederet legacy. Platformens Sproom-abonnement: 399 kr./md. inkl. 500 transaktioner samlet på tværs af alle tenants; overforbrug 0,8 kr./transaktion.
 
 ### 2.6 Email / SMTP
 
@@ -175,9 +176,9 @@ Disse sættes i `ecosystem.config.js` under hver mini-services `env:`-blok, **ik
 | `TESSERACT_LANG` | scanner-service | Default: `dan+eng`. |
 | `LOG_LEVEL` | scanner-service | Default: `info`. |
 
-### 2.9 Tink bank-integration (ikke aktiveret i produktion)
+### 2.9 Tink bank-integration (reel integration — sandbox/produktion via credentials)
 
-Tink er en reel bank-integration (OAuth2 PSD2 consent-flow, kontosync). Aktiv når `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET` er sat. DPA med Tink indgås før produktivaktivering (ikke i Bilag 14 endnu). Nordea/Danske Bank/Jyske Bank er stubs; Demo-provider leverer syntetiske data.
+Tink er en reel integration — sandbox- og produktionstilstande; aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET` (samme credentials-flow, kun credentials adskiller miljøerne). `src/lib/tink-client.ts` (751 LOC) implementerer det fulde OAuth2 Authorization Code-flow via Tink Link (hosted consent-UI), kontoliste, transaktionshentning, token-refresh og revoke — og dækker 3.000+ europæiske banker. Aktive ruter: `/api/bank-connections/tink-callback` og `/api/bank-connections/tink-accounts`. DPA med Tink indgås før produktion (ikke i Bilag 14 endnu). Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data.
 
 | Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
 |---|---|---|---|---|
@@ -187,7 +188,7 @@ Tink er en reel bank-integration (OAuth2 PSD2 consent-flow, kontosync). Aktiv n�
 | `TINK_API_BASE_URL` | Tink API endpoint. | Nej | `https://api.tink.com` | — |
 | `TINK_MARKET` | Tink market region. | Nej | `DK` | Sættes normalt til `DK` for danske tenants. |
 
-> **Note:** Tink er IKKE aktiveret i den dokumenterede produktion. Aktivérings-flow: (1) indgå DPA med Tink; (2) sæt `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`; (3) tilføj Tink til leverandørregisteret (LEVERANDØERSTYRING §3.14) og Bilag 14.
+> **Note:** Tink er teknisk fuldt implementeret og aktiverbar, men IKKE aktiveret i den dokumenterede produktion endnu (DPA med Tink indgås før aktivering — jf. ovenfor). Aktivérings-flow: (1) indgå DPA med Tink; (2) sæt `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`; (3) tilføj Tink til leverandørregisteret (LEVERANDØRSTYRING §3.14) og Bilag 14.
 
 ---
 
@@ -203,7 +204,7 @@ Tink er en reel bank-integration (OAuth2 PSD2 consent-flow, kontosync). Aktiv n�
 >
 > Erstat med: `openssl rand -hex 32`
 
-> ⚠️ **Webhook-secrets SKAL sættes i produktion.** Ved manglende secret afvises webhooks (fail-closed, U-6) — tjenesten fungerer, men modtager ingen webhooks før secret konfigureres.
+> ⚠️ **Webhook-verifikation SKAL aktiveres i produktion.** Frisbii/Flatpay: sæt `FLATPAY_WEBHOOK_SECRET` (HMAC) — webhooks afvises fail-closed uden gyldig signatur (U-6). Sproom: sæt `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` — webhooks med ugyldig RSA-signatur afvises fail-closed (U-6); i staging-mode (unset) logges en advarsel i stedet.
 
 ### 3.2 Trin-for-trin produktionssætning
 
@@ -218,9 +219,10 @@ openssl rand -hex 32  # → PROOF_ENCRYPTION_KEY
 openssl rand -hex 32  # → TOKENPAY_API_KEY (også HMAC for TokenPay callback)
 openssl rand -hex 32  # → SCANNER_API_KEY
 openssl rand -hex 32  # → HERMES_ADMIN_KEY (eller genbrug OPENROUTER_API_KEY)
-openssl rand -hex 32  # → STORECOVE_WEBHOOK_SECRET
 openssl rand -hex 32  # → FLATPAY_WEBHOOK_SECRET
 ```
+
+> Sproom-webhooks verificeres med Sprooms offentlige RSA-nøgle (SHA256withRSA, `X-Signature`-header) — nøglen hentes automatisk fra GET /api/webhooks/key og cachelagres, så der genereres ingen delt secret. `SPROOM_WEBHOOK_PUBLIC_KEY` kan sættes valgfrit for at fastlåse nøglen.
 
 **Trin 2 — Udfyld root `.env`** (kun det Next.js-appen skal bruge):
 
@@ -251,14 +253,15 @@ APP_URL=https://alphaflow.dk
 # Scheduler
 BACKUP_TIMEZONE=Europe/Copenhagen
 
-# Integrationer
-STORECOVE_API_KEY=<key>
-STORECOVE_WEBHOOK_SECRET=<generated-64-hex>
+# Integrationer — e-faktura via Sproom Access Point (Peppol + NemHandel)
+SPROOM_API_URL=https://sproom.net          # produktion (default: https://staging.sproom.net)
+SPROOM_API_TOKEN=<token>
+SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true
+# SPROOM_WEBHOOK_PUBLIC_KEY=<valgfri PEM-nøgle — auto-hentes fra Sproom hvis udeladt>
 FLATPAY_API_KEY=<key>
 FLATPAY_WEBHOOK_SECRET=<generated-64-hex>
 SKAT_CLIENT_ID=<id>
 SKAT_CLIENT_SECRET=<secret>
-NEMHANDEL_SIMULATION_MODE=false
 CVR_API_USERNAME=<user>
 CVR_API_PASSWORD=<pass>
 CVR_SIMULATION_MODE=false
@@ -424,12 +427,12 @@ Brug denne checklist ved produktionssætning og periodisk audit.
 - [ ] `HERMES_ADMIN_KEY` er sat identisk i `alphaflow`, `hermes-agent` og `knowledge-service` PM2-env.
 - [ ] Dev-defaults (`tokenpay-dev-key-2026`, `scanner-dev-key-2026`) er **ikke** til stede i produktion (verificer med `grep -r "dev-key-2026" ecosystem.config.js` → ingen matches).
 
-### 5.3 Webhook-secrets
+### 5.3 Webhook-verifikation
 
-- [ ] `STORECOVE_WEBHOOK_SECRET` er sat og ikke-tom (webhooks afvises fail-closed uden gyldig signatur).
+- [ ] `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` er sat i produktion — Sproom-webhooks verificeres med gyldig RSA-signatur (`X-Signature`; offentlig nøgle auto-hentet fra GET /api/webhooks/key eller fastlåst via `SPROOM_WEBHOOK_PUBLIC_KEY`).
 - [ ] `FLATPAY_WEBHOOK_SECRET` er sat og ikke-tom (webhooks afvises fail-closed uden gyldig signatur).
 - [ ] Webhook-endpoints er nårbare fra internettet:
-  - `https://alphaflow.dk/api/storecove/webhook`
+  - `https://alphaflow.dk/api/sproom/webhook`
   - `https://alphaflow.dk/api/subscription/payment-webhook`
   - `https://alphaflow.dk/api/tokenpay/callback`
 
@@ -443,7 +446,7 @@ Brug denne checklist ved produktionssætning og periodisk audit.
 ### 5.5 Eksterne integrationer
 
 - [ ] `OPENROUTER_API_KEY` er sat i `hermes-agent`, `knowledge-service` og `scanner-service` PM2-env (konsolideret AI-integration — ellers fejler chat-LLM, RAG-embeddings og VLM-ekstraktion).
-- [ ] `NEMHANDEL_SIMULATION_MODE=false` hvis rigtige e-fakturaer skal sendes.
+- [ ] `SPROOM_API_TOKEN` er sat (og `SPROOM_API_URL=https://sproom.net`) hvis rigtige e-fakturaer skal sendes — uden token kører e-faktura i simuleringsmode (automatisk fallback); staging er default-endpoint.
 - [ ] `CVR_SIMULATION_MODE=false` hvis rigtige CVR-opslag skal foretages.
 - [ ] `SKAT_CLIENT_ID` + `SKAT_CLIENT_SECRET` sat hvis rigtige momsangivelser skal indsendes.
 
@@ -477,8 +480,9 @@ curl http://localhost:3100/health
 pm2 env tokenpay-access | grep -c PROOF_ENCRYPTION_KEY
 # Forventet: 1
 
-# 4. Webhook-secret sat (uden at lekke værdien)
-test -n "$STORECOVE_WEBHOOK_SECRET" && echo "OK" || echo "MISSING"
+# 4. E-faktura Access Point (Sproom) — token + signaturkrav sat (uden at lekke værdier)
+test -n "$SPROOM_API_TOKEN" && echo "OK" || echo "MISSING"
+test "$SPROOM_WEBHOOK_REQUIRE_SIGNATURE" = "true" && echo "OK" || echo "MISSING (påkrævet i prod)"
 test -n "$FLATPAY_WEBHOOK_SECRET" && echo "OK" || echo "MISSING"
 
 # 5. HTTPS virker og HSTS er aktiv
@@ -519,9 +523,9 @@ pm2 restart tokenpay-access
 
 ### Webhooks accepteres ikke
 
-**Årsag:** Webhook-secret matcher ikke mellem AlphaFlow og integrationens dashboard.
+**Årsag:** For Frisbii/Flatpay: webhook-secret matcher ikke mellem AlphaFlow og Frisbii-dashboardet. For Sproom: den offentlige RSA-nøgle er ændret/udløbet, eller `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` afviser ugyldige signaturer.
 
-**Løsning:** Verificer at `STORECOVE_WEBHOOK_SECRET` / `FLATPAY_WEBHOOK_SECRET` i `.env` matcher den secret der er konfigureret i Storecove/Frisbii dashboard. Genstart PM2.
+**Løsning:** Verificér at `FLATPAY_WEBHOOK_SECRET` i `.env` matcher den secret der er konfigureret i Frisbii-dashboardet. For Sproom: tjek at den offentlige RSA-nøgle er aktuel — AlphaFlow henter den automatisk fra GET /api/webhooks/key og cacher den (kan fastlåses med `SPROOM_WEBHOOK_PUBLIC_KEY`); genstart PM2 efter nøgleskift, så cachen tømmes. Genstart PM2.
 
 ### AI-chats fejler
 
@@ -530,6 +534,15 @@ pm2 restart tokenpay-access
 **Løsning:** Sæt `OPENROUTER_API_KEY` eksplicit i `hermes-agent` env-blok i `ecosystem.config.js`. Genstart.
 
 > **Konsolideret AI-integration:** Den samme `OPENROUTER_API_KEY` bruges nu til alle AI-tjenester (chat-LLM, RAG-embeddings, VLM). `ANTHROPIC_API_KEY` er fjernet — alt chat/VLM-trafik går via OpenRouter per GDPR Art. 28(4) (se Bilag 14). `OPENAI_API_KEY` er en valgfri alternativ embedding-udbyder i knowledge-service (`embedder.ts`); i produktion er KUN `OPENROUTER_API_KEY` sat (se §2.3).
+
+---
+
+## Versionshistorik
+
+| Version | Dato | Ændring |
+|---|---|---|
+| 2.1 | 2026 | Konsolideret AI-integration via OpenRouter (chat-LLM + RAG-embeddings + VLM); OpenAI som valgfri alternativ embedding-udbyder. |
+| 2.2 | September 2026 | Sproom (DK) har erstattet Storecove (NL) som eneste e-faktura Access Point (Peppol + NemHandel): `SPROOM_API_URL`/`SPROOM_API_TOKEN`/`SPROOM_WEBHOOK_PUBLIC_KEY`/`SPROOM_WEBHOOK_REQUIRE_SIGNATURE`; RSA-webhook-signatur (`X-Signature`, SHA256withRSA) i stedet for HMAC; simuleringsfallback automatisk når `SPROOM_API_TOKEN` mangler. Tink-afsnit opdateret (reel integration — sandbox/produktion via credentials). |
 
 ---
 

@@ -1,8 +1,8 @@
 # Beredskabsplan — AlphaFlow
 
 **AlphaAi Consult ApS** (CVR 46312058)
-**Dokumentversion:** 3.2
-**Dato:** 2026
+**Dokumentversion:** 3.3
+**Dato:** September 2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 **System:** AlphaFlow (`alphaai-accounting` v1.0.0) — alphaflow.dk
 
@@ -41,7 +41,7 @@ Planen sikrer at:
 Denne plan dækker hele AlphaFlow-platformen:
 
 - AlphaFlow-applikationen (Next.js 16) på IONOS VPS.
-- 5 mini-services (hermes-agent, knowledge-service, tokenpay-access, notification-ws, scanner-service).
+- 5 mini-services i produktion (hermes-agent, knowledge-service, tokenpay-access, notification-ws, scanner-service) — herudover findes `mini-services/pg-service` (embedded PostgreSQL 17 + pgvector), der udelukkende er et sandbox-hjælpeværktøj og **ikke** er en del af produktions-setuppet.
 - Neon PostgreSQL-database (primær DB).
 - 2 SQLite mini-DBs (`scanner.db`, `access.db`).
 - Backup-system og backup-lagring (`Tenant-Backup/`, AES-256-GCM-krypterede ZIPs).
@@ -94,7 +94,7 @@ Følgende komponenter skal kunne genoprettes ved en hændelse:
 
 | App-navn | Port | Teknologi | Funktion | max_memory |
 |---|---|---|---|---|
-| `alphaflow` | 3000 | Next.js 16 (Node) | Host-app — alle API-routes, UI, backup-scheduler (node-cron) | 1500M |
+| `alphaflow` | 3000 | Next.js 16 (Node) | Host-app — alle API-routes, UI + 6 baggrundsschedulere i `instrumentation.ts` (backup, recurring, billing, log-monitor, Sproom-indbakke hver 5. min, Sproom-outbox hver 10. min) | 1500M |
 | `hermes-agent` | 3004 | Bun + Socket.IO + Prisma | AI-chat-assistent (OpenRouter LLM) | 512M |
 | `knowledge-service` | 3006 | Bun + rå HTTP + Prisma + pgvector | RAG knowledge base (embeddings via OpenRouter) | 256M |
 | `tokenpay-access` | 3100 | Bun + Hono + SQLite (bun:sqlite) | TokenPay adgangskontrol (.tbkey proofs) | 256M |
@@ -129,7 +129,8 @@ Konfiguration: `ecosystem.config.example.js` (fork-mode, `autorestart:true`, `ma
 | TLS-certifikater | Let's Encrypt (automatisk via Caddy) | Caddy fornyer automatisk 30 dage før udløb |
 | DNS | IONOS / ekstern DNS-udbyder | _[Udfyldes]_ |
 | Neon DB | Neon, Inc. | Neon har indbygget HA (multi-AZ i region); PITR 7 dage |
-| OpenRouter (AI — chat, embeddings, VLM) | USA | Graceful degradation: Hermes-knowledge-base fallback, scanner OCR-only mode |
+| OpenRouter (AI — chat, embeddings, VLM, bankafstemning) | USA | Graceful degradation: Hermes-knowledge-base fallback, scanner OCR-only mode, regelbaseret matching |
+| Sproom (e-faktura Access Point — Peppol + NemHandel) | Sproom A/S (Danmark — EU) | Safety-net pollers (indbakke hver 5. min, outbox hver 10. min) med auto-retry af fejlede afsendelser sikrer, at e-fakturaer ikke går tabt; send-kø beholdes til Sproom er tilgængelig; kunder kan mellemtiden sende fakturaer som PDF via e-mail; eskalation via Sproom-dashboard (https://sproom.net) |
 
 ---
 
@@ -309,7 +310,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
    ```
 6. **Udfyld `.env` og `ecosystem.config.js`:**
    - Kopiér fra sikker backup (`.env.backup`, `ecosystem.config.backup.js`) eller genskab manuelt.
-   - **KRITISK:** Sæt `ENCRYPTION_KEY`, `PROOF_ENCRYPTION_KEY`, `DATABASE_URL`, `OPENROUTER_API_KEY` (AI-integrationer — chat, embeddings, VLM — samlet via OpenRouter), inter-service API-nøgler.
+   - **KRITISK:** Sæt `ENCRYPTION_KEY`, `PROOF_ENCRYPTION_KEY`, `DATABASE_URL`, `OPENROUTER_API_KEY` (AI-integrationer — chat, embeddings, VLM — samlet via OpenRouter), `SPROOM_API_TOKEN` + `SPROOM_WEBHOOK_PUBLIC_KEY` (e-fakturering via Sproom — i produktion desuden `SPROOM_API_URL=https://sproom.net` og `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true`), inter-service API-nøgler.
    - Erstat dev-defaults (`tokenpay-dev-key-2026`, `scanner-dev-key-2026`) med `openssl rand -hex 32`.
 7. **Start PM2:**
    ```bash
@@ -529,6 +530,19 @@ bun run scripts/rollback-encryption-keys.ts --execute
    - Se Caddy-log: `tail -100 /var/log/caddy/alphaflow-access.log`.
 3. **DNS-fejl:** Kontakt DNS-udbyder (_[Udfyldes]_).
 
+### 5.9 Sproom-nedetid (e-fakturering)
+
+**Scenarie:** Sproom-API'et (`https://staging.sproom.net` i staging / `https://sproom.net` i produktion) er utilgængeligt, eller afsendelse/modtagelse af e-fakturaer fejler.
+
+**Procedure:**
+
+1. **Ingen datatab:** Afsendelser ligger i send-køen (outbox) og forsøges automatisk igen — outbox-polleren kører hver 10. minut (`instrumentation.ts`), henter dokumentstatus via `GET /api/documents/{id}/state` og genindsender fejlede afsendelser (auto-retry).
+2. **Modtagelse:** Sproom-indbakke-polleren kører hver 5. minut som safety-net for `DocumentReceived`-webhookken — e-fakturaer hentes, så snart Sproom er tilgængelig igen.
+3. **Kompensation for kunder:** I påventeperioden kan kunder stadig sende fakturaer som PDF via e-mail (SMTP/Simply-Brevo) — e-mail-PDF fungerer som alternativ fakturakanal.
+4. **Status-tjek:** `GET /api/sproom/status` (integrationsstatus) og `GET /api/sproom/webhook-status` (webhook-registrering).
+5. **Eskalation:** Sproom-support via Sproom-dashboard (https://sproom.net). Nedetid registreres af log-monitor-scheduleren (`src/lib/log-monitor.ts`).
+6. **Efter genopretning:** Verificér at outbox er tømt, at webhooken igen er registreret (`/api/sproom/webhook-status`), og at modtagne e-fakturaer er importeret i indbakken.
+
 ---
 
 ## 6. Incident response-procedure
@@ -561,7 +575,7 @@ bun run scripts/rollback-encryption-keys.ts --execute
 1. **Isolér berørte systemer** — `pm2 stop <app>` eller IONOS-netværks-isolering.
 2. **Revoke sessions** — hvis auth-system kompromitteret, gennemtving password-reset for berørte brugere (invaliderer alle sessioner).
 3. **Bloker angriber-IP** — IONOS-firewall eller Caddy-konfiguration.
-4. **Deaktiver berørte integrationer** — f.eks. `STORECOVE_API_KEY` hvis webhook misbruges.
+4. **Deaktiver berørte integrationer** — f.eks. fjern `SPROOM_API_TOKEN` (e-fakturering) og sæt `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` (fail-closed webhook-verifikation), hvis Sproom-webhookken misbruges.
 5. **Bevar bevismateriale** — screenshot af PM2-status, log-uddrag, AuditLog-export (`/api/audit-logs`).
 6. **Aktivér maintenance mode** — Caddy returnerer 503 for alle requests undtagen `/api/health`.
 
@@ -594,7 +608,7 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 | **Berørte registrerede** (GDPR Art. 34) | Uden unødig forsinkelse | Ved "høj risiko" for borgernes rettigheder og friheder (f.eks. krypterede persondata, finansielle data, identitetstyveri-risiko) | E-mail via `/api/notifications/owner` eller manuel udsendelse |
 | **Erhvervsstyrelsen** | Straks | Ved bogføringsdata-tab, mistænkt manipulation, eller kompromittering af bogføringssystem | _[Udfyldes — telefon / e-mail]_ |
 | **Politi (NC3)** | Efter behov | Ved cyberangreb, ransomware, data breach | `www.politi.dk/NC3` eller _[Udfyldes — telefon]_ |
-| **Underbehandlere** | Straks | Hvis underbehandler-komponent berørt (OpenRouter/Storecove/Frisbii/Neon/IONOS) | Se kontaktliste afsnit 7 |
+| **Underbehandlere** | Straks | Hvis underbehandler-komponent berørt (OpenRouter/Sproom/Frisbii/Neon/IONOS) | Se kontaktliste afsnit 7 |
 | **Kunder (tenants)** | Uden unødig forsinkelse | Ved data breach der berører deres tenant-data | E-mail + in-app notifikation |
 | **Offentlighed / medier** | Ved behov | Ved store hændelser med offentlig interesse | Se kommunikationsplan afsnit 8 |
 
@@ -659,7 +673,7 @@ Se afsnit 5 (Genopretningsprocedurer) for specifikke scenarier.
 
 | Underbehandler | Formål | Lokation | Support-e-mail | DPA-status |
 |---|---|---|---|---|
-| **Storecove B.V.** | Peppol Access Point (e-fakturering) | Holland | `support@storecove.com` | _[Udfyldes — DPA på plads?]_ |
+| **Sproom A/S** | E-faktura Access Point — Peppol (BIS Billing 3.0/UBL 2.1) + NemHandel (OIOUBL 2.1). Staging: https://staging.sproom.net · Produktion: https://sproom.net | Danmark (EU) | Sproom-dashboard/support: https://sproom.net | DPA i Bilag 14 ("Sproom DPA") |
 | **Frisbii / Billwerk+ Reepay** | Abonnementsbetalinger | Tyskland | `support@frisbii.com` | _[Udfyldes — DPA på plads?]_ |
 | **Skattestyrelsen (SKAT)** | Momsangivelse | DK | `kontakt@skat.dk` | Myndighed — ingen DPA krævet |
 | **Erhvervsstyrelsen (VIRK/CVR)** | CVR-opslag | DK | `kontakt@erst.dk` | Myndighed — ingen DPA krævet |
@@ -938,3 +952,4 @@ pm2 list                                       # tabelleret status
 | **3.0** | **2026** | **Fuld omskrivning baseret på faktisk infrastruktur. Tilføjede: 6 PM2-apps detaljeret, backup-strategi med Lag 1-4, 8 genopretningsprocedurer (DB-tab/VPS-fejl/App-crash/Mini-service-crash/ENCRYPTION_KEY-kompromitteret/Ransomware/SQLite-tab/Caddy-fejl), 6-trins incident response-procedure, kontaktliste med underbehandlere, kommunikationsplan med skabeloner, årlig DR-test + kvartalsvis review.** | **AlphaAi Consult ApS** |
 | **3.1** | **2026** | **AI-konsolidering (Task C3): Verificeret at OpenRouter er AlphaFlows eneste AI-underbehandler (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). Antal eksterne integrationer opdateret fra 15 til 13. Bilag 14 (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM) reference verificeret i §7.4.** | **AlphaAi Consult ApS — Task C3** |
 | **3.2** | **2026** | **Dokumentationsnøjaktighed:** Bilag C backup-API-endpoints rettet — `Permission.BACKUP_DELETE` og `Permission.BACKUP_READ` eksisterer ikke i koden; erstattet med korrekte permissions (`BACKUP_CREATE` for create/delete/download, `BACKUP_RESTORE` for restore/upload-restore, `DATA_READ` for list/scheduler-status). §4.5 og §5.1 trin 3 rettet tilsvarende. | **AlphaAi Consult ApS — doc-editor G** |
+| **3.3** | **September 2026** | **Sproom-migrering (e-fakturering):** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som AlphaFlows eneste e-faktura Access Point (Peppol BIS Billing 3.0/UBL 2.1 + NemHandel OIOUBL 2.1) — integreret og live mod Sproom staging; produktionsaktivering via env-switch. §2.1: scheduler-oversigt opdateret (6 baggrundsschedulere inkl. Sproom-indbakke/outbox-pollers). §2.4: Sproom tilføjet til afhængighedskort med failover-strategi. Ny genopretningsprocedure §5.9 (Sproom-nedetid — safety-net pollers, send-kø med retry, e-mail-PDF-fallback). §5.2/§6.2: env-vars opdateret (SPROOM_API_TOKEN/SPROOM_WEBHOOK_PUBLIC_KEY; RSA-SHA256-webhooksignatur i X-Signature). §6.5/§7.5: notifikations- og kontaktlister rettet til Sproom. | **AlphaAi Consult ApS — doc-agent (Task 2-e)** |

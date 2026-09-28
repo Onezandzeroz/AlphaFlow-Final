@@ -3,7 +3,7 @@
 | **Felt** | **Oplysning** |
 |---|---|
 | **Dokumenttype** | Konsekvensanalyse / Data Protection Impact Assessment (DPIA) jf. GDPR Art. 35 + IT-risikovurdering jf. ISO/IEC 27005:2022 |
-| **Version** | 3.2 |
+| **Version** | 3.3 |
 | **Dato** | 2026 |
 | **Dataansvarlig** | AlphaAi Consult ApS (CVR 46312058) |
 | **System** | AlphaFlow (`alphaai-accounting` v1.0.0) — alphaflow.dk |
@@ -89,7 +89,7 @@ Se matrix i afsnit 6.
 
 ## 2. Kontekst & arkitektur
 
-AlphaFlow er en cloud-baseret dansk bogføringsplatform (SaaS) for små og mellemstore virksomheder. Platformen tilbyder dobbelt bogføring, fakturering, momsangivelse, e-fakturering (NemHandel/Peppol via Storecove), AI-assistent (Hermes), dokument-OCR (Tesseract + VLM via OpenRouter) og bank-integration (scaffolding).
+AlphaFlow er en cloud-baseret dansk bogføringsplatform (SaaS) for små og mellemstore virksomheder. Platformen tilbyder dobbelt bogføring, fakturering, momsangivelse, e-fakturering (NemHandel/Peppol via Sproom), AI-assistent (Hermes), dokument-OCR (Tesseract + VLM via OpenRouter) og bank-integration (Tink aktiv; Nordea/Danske Bank/Jyske Bank stubs).
 
 ### 2.1 Teknisk arkitektur
 
@@ -129,7 +129,7 @@ Udvalgte persondatafelter (email, telefon, adresser, kontonumre) opbevares ukryp
 |---|---|---|---|
 | 1 | Neon PostgreSQL | EU | Nej |
 | 2 | SKAT Moms-API | DK | Nej |
-| 3 | Storecove (Peppol) | Holland | Nej |
+| 3 | Sproom (Peppol + NemHandel e-faktura Access Point) | Danmark | Nej |
 | 4 | Frisbii/Flatpay | Tyskland | Nej |
 | 5 | CVR-opslag (VIRK) | DK | Nej |
 | 6 | **OpenRouter** (Hermes chat + embeddings + scanner VLM + AI-bankafstemning) | **USA** | **JA** (videresender til model-udbydere per GDPR Art. 28(4)) |
@@ -151,7 +151,7 @@ Udvalgte persondatafelter (email, telefon, adresser, kontonumre) opbevares ukryp
 | **Ekstern angriber** | Økonomisk gevinst, data-udnyttelse, ransomware | Høj — automatiserede værktøjer, botnets, public-facing overflade |
 | **Ondsindet insider (bruger)** | Konkurrencefordel, hævn, fejlbehæftet handling | Begrænset til egen tenant — men SuperDev oversight-mode har cross-tenant read-adgang |
 | **Forvirret insider (bruger)** | Uheldig fejl, manglende træning | Lav — begrænset af RBAC og audit-log |
-| **Underbehandler-kompromittering** | OpenRouter/Neon/IONOS | Lav–mellem — afhængig af underbehandlers sikkerhedskontrol |
+| **Underbehandler-kompromittering** | OpenRouter/Neon/IONOS/Sproom | Lav–mellem — afhængig af underbehandlers sikkerhedskontrol |
 | **Myndighedskrav** | Lovgivningsmæssig adgang, retskendelse | Lav i DK — retsbeskyttelse via grundloven |
 | **Teknisk fejl** | Software-bug, infrastruktur-fejl, konfiguration | Mellem — kompleks multi-service arkitektur |
 | **Naturkatastrofe / fysisk hændelse** | Brand, strømsvigt, hardware-fejl | Lav — Neon cloud + IONOS VPS i Tyskland |
@@ -180,7 +180,7 @@ Udvalgte persondatafelter (email, telefon, adresser, kontonumre) opbevares ukryp
 | **A5** | Backup-filer (`Tenant-Backup/`) | Fortroligt + Regulatorisk | AES-256-GCM-krypterede ZIPs pr. tenant + manifest v2 + SHA-256 checksum |
 | **A6** | Upload-lagring (`uploads/`) | Fortroligt | Bilag, kvitteringer, dokumenter pr. tenant |
 | **A7** | Session-tokens | Fortroligt | 256-bit httpOnly+secure+sameSite=lax cookies, 7d sliding expiry |
-| **A8** | Inter-service API-nøgler | Kritisk | `TOKENPAY_API_KEY`, `SCANNER_API_KEY`, `HERMES_ADMIN_KEY`, `FLATPAY_API_KEY+WEBHOOK_SECRET`, `STORECOVE_API_KEY+WEBHOOK_SECRET` |
+| **A8** | Inter-service API-nøgler | Kritisk | `TOKENPAY_API_KEY`, `SCANNER_API_KEY`, `HERMES_ADMIN_KEY`, `FLATPAY_API_KEY+WEBHOOK_SECRET`, `SPROOM_API_TOKEN`+`SPROOM_WEBHOOK_PUBLIC_KEY` |
 | **A9** | Eksterne API-secrets | Kritisk | `OPENROUTER_API_KEY`, `SKAT_CLIENT_SECRET`, `CVR_API_PASSWORD`, `SMTP_PASS` |
 | **A10** | AI-data (Hermes / embeddings / scanner-billeder) | Fortroligt | Sendes til USA — se R-13 |
 | **A11** | SQLite mini-DBs (`scanner.db`, `access.db`) | Fortroligt | Scan-job-historik + access-log + proof-fil-references — ukrypteret på disk, se R-18 |
@@ -227,7 +227,7 @@ Følgende tekniske kontroller er implementeret og udgør den eksisterende afhjæ
 - ✅ TLS 1.2/1.3 (Caddy).
 - ✅ HttpOnly + Secure + SameSite=Lax session cookies.
 - ✅ In-memory rate-limiting på auth-endpoints (login 5/min/IP, register 3/min, 2FA 5-10/min, forgot-password 1/5min/email).
-- ✅ Webhook HMAC-SHA256 verifikation (Frisbii, Storecove, TokenPay) — `timingSafeEqual` for Frisbii.
+- ✅ Webhook-signaturverifikation: HMAC-SHA256 (Frisbii, TokenPay) med `timingSafeEqual` for Frisbii, samt RSA-SHA256 for Sproom (SHA256withRSA i `X-Signature`-header; offentlig nøgle hentes fra GET /api/webhooks key og cachelagres; verificering med `crypto.createVerify('RSA-SHA256')`; `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` i produktion).
 - ✅ Audit-trail immutability 3 niveauer: app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggers (`prevent_audit_update`, `prevent_audit_delete`) + `onDelete: Restrict` cascade.
 - ✅ Konto-deaktivering i stedet for hard-delete (BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13 > GDPR Art. 17(3)(c)).
 - ✅ Sliding session expiry (7 dage) — password-reset invaliderer alle eksisterende sessioner.
@@ -400,14 +400,14 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 
 | Attribut | Værdi |
 |---|---|
-| **Beskrivelse** | Alle webhook-ruter afviser nu når secret mangler (fail-closed). `crypto.timingSafeEqual` bruges i alle HMAC-verifikationer. |
+| **Beskrivelse** | Alle webhook-ruter afviser nu når secret mangler (fail-closed). `crypto.timingSafeEqual` bruges i alle HMAC-verifikationer. Sproom-webhook'en (e-faktura-modtagelse) verificeres via RSA-SHA256 (SHA256withRSA i `X-Signature`-headeren; offentlig nøgle hentes fra GET /api/webhooks key og cachelagres) med `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` i produktion — fail-closed ved manglende/ugyldig signatur. |
 | **Trussel** | Forged webhook hvis env-variabler ikke er sat i produktion (f.eks. konfigurationsfejl ved deploy). |
-| **Sårbarhed** | HMAC-SHA256 verifikation når secret er sat; fail-closed når secret mangler. |
+| **Sårbarhed** | HMAC-SHA256-verifikation når secret er sat (Frisbii, TokenPay); RSA-SHA256-verifikation for Sproom (offentlig nøgle auto-hentes fra GET /api/webhooks key eller sættes via `SPROOM_WEBHOOK_PUBLIC_KEY`). Fail-closed når secret/nøgle mangler. |
 | **Aktiv** | A8 (inter-service API-nøgler), A2 (abonnement-status, e-faktura-status). |
 | **Sandsynlighed** | Lav (kun hvis env mangler i prod) |
 | **Konsekvens** | Mellem |
 | **Risikoniveau (før)** | **Lav–Mellem** |
-| **Eksisterende afhjælpning** | HMAC-SHA256 verifikation når secret er sat; `timingSafeEqual` Buffer-sammenligning for Frisbii; idempotency-check på webhook-events; AuditLog på alle webhook-modtagere. |
+| **Eksisterende afhjælpning** | HMAC-SHA256-verifikation når secret er sat; `timingSafeEqual` Buffer-sammenligning for Frisbii; Sproom-webhook verificeret med `crypto.createVerify('RSA-SHA256')` mod offentlig nøgle (fail-closed via `SPROOM_WEBHOOK_REQUIRE_SIGNATURE`); idempotency-check på webhook-events; AuditLog på alle webhook-modtagere. |
 | **Rest risiko** | ✅ **Minimal** — fail-closed implementeret; afviser hvis secret mangler. `crypto.timingSafeEqual` i alle 3 integrationspunkter. |
 | **Afhjælpning** | ✅ **Udbedret (U-6/U-14).** Dev-fallback fjernet (fail-closed). `crypto.timingSafeEqual` erstattet i 3 filer. Se UDBEDRINGSPLAN U-6 + U-14. |
 
@@ -579,7 +579,7 @@ Matrix viser risikoniveau = Sandsynlighed × Konsekvens. Risici markeret med der
                  │  R-04, R-08, R-12           │  R-01, R-02, R-13           │                             │
                  ├─────────────────────────────┼─────────────────────────────┼─────────────────────────────┤
  Mellem (M)      │  LAV                        │  MELLEM                     │  HØJ                        │
-                 │  R-09, R-14, R-16, R-18,    │  R-05, R-06, R-07, R-11,    │                             │
+                 │  R-09, R-14, R-16, R-18,    │  R-05, R-06, R-07, R-11,    │  R-21                      │
                  │  R-19                       │  R-15, R-17, R-20           │                             │
                  ├─────────────────────────────┼─────────────────────────────┼─────────────────────────────┤
  Lav (L)         │  LAV                        │  LAV                        │  MELLEM                     │
@@ -593,7 +593,7 @@ Matrix viser risikoniveau = Sandsynlighed × Konsekvens. Risici markeret med der
 |---|---|---|
 | **Kritisk** | 0 | — |
 | **Høj** | 5 | R-01, R-02, R-03, R-13, R-21 |
-| **Mellem** | 10 | R-04, R-05, R-06, R-07, R-08, R-10, R-11, R-12, R-15, R-17, R-20 |
+| **Mellem** | 11 | R-04, R-05, R-06, R-07, R-08, R-10, R-11, R-12, R-15, R-17, R-20 |
 | **Lav** | 5 | R-09, R-14, R-16, R-18, R-19 |
 
 > Bemærk: R-10 klassificeres som Mellem på grund af høj sandsynlighed for kommerciel afvisning (selvom konsekvensen er lav). R-16 (AI-bankafstemning auto-match) nedjusteret fra Mellem til Lav–Mellem efter at AI-bankafstemning er implementeret i produktion (R-16 omformuleret fra sandbox-only til auto-match-risiko). R-21 (AI non-determinisme) klassificeres som Høj før afhjælpning pga. høj sandsynlighed; rest risiko Lav–Mellem via toggle-kontroller + advarsler.
@@ -648,7 +648,7 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 
 > **Udbedrede risici (fjernet fra ovenstående plan):** R-01 (CSP, U-3), R-02 (antivirus, U-4), R-03 (key rotation, U-1), R-11 (webhook fail-closed, U-6), R-14 (timingSafeEqual, U-14), R-19 + R-20 (Socket.IO auth, U-5). Se §5 for reststatus.
 
-> **Bemærkning om krydsreferencer:** Bilag 12 (`Bilag-12_Udbedringsplan.md` v3.0, 2026) er den tidssvarende udbedringsplan der dækker **alle 20 risici** (R-01…R-20) fra denne risikovurdering samt de 5 oprindelige compliance-punkter fra april 2026. Hver risiko er klassificeret i Kategori A (skal udbedres før indsendelse), Kategori B (indsendes med åbenhed, udbedres efter tidsplan) eller Kategori C (accepteret). Reststatus for hver risiko fremgår af §6 (restrisiko-fordeling) og §7 (accepterede risici) heri; konkret handlingsplan, ansvarlig, tidsramme og acceptkriterier fremgår af Bilag 12 §3-5.
+> **Bemærkning om krydsreferencer:** Bilag 12 (`Bilag-12_Udbedringsplan.md` v3.0, 2026) er den tidssvarende udbedringsplan der dækker **alle 21 risici** (R-01…R-21) fra denne risikovurdering samt de 5 oprindelige compliance-punkter fra april 2026. Hver risiko er klassificeret i Kategori A (skal udbedres før indsendelse), Kategori B (indsendes med åbenhed, udbedres efter tidsplan) eller Kategori C (accepteret). Reststatus for hver risiko fremgår af §6 (restrisiko-fordeling) og §7 (accepterede risici) heri; konkret handlingsplan, ansvarlig, tidsramme og acceptkriterier fremgår af Bilag 12 §3-5.
 
 ### 8.3 Overvågning og løbende opgaver
 
@@ -684,3 +684,4 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 | **3.0** | **2026** | **Fuld omskrivning til DPIA (GDPR Art. 35). 21 risici (R-01..R-21). Risikomatrix + accept-begrundelser + prioriteret afhjælpningsplan.** | **AlphaAi Consult ApS** |
 | **3.1** | **2026** | **AI-konsolidering (C2):** R-13 opdateret — 3 USA-AI-underbehandlere (OpenAI, OpenRouter, Anthropic) konsolideret til 1 (OpenRouter, Inc., som videresender til model-udbydere per GDPR Art. 28(4)). §1.2 scope: 15→13 integrationer. §2 kontekst: "Anthropic VLM" → "VLM via OpenRouter". §2.4 integrationstabel: 3 USA-rækker → 1. §3.1 trusselsaktører: OpenAI/Anthropic fjernet. §4.1 A9: `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` fjernet (de er OpenRouter-konfiguration). §4.2 sårbarhed 13 opdateret. §8.2 P1 R-13 afhjælpningsplan opdateret (DPA+SCC+TIA for OpenRouter, konsolideret). Restrisiko for R-13 bevaret som Mellem (DPA+SCC+TIA stadig påkrævet). Bilag A: ingen OpenAI/Anthropic-specifikke referencer at fjerne. | **AlphaAi Consult ApS — AI-konsolidering C2** |
 | **3.2** | **2026** | **Dokumentationsnøjaktighed:** RBAC permissions 18→23 i 7 kategorier (§2.2, §4.2, §4.3). SuperDev oversight nuance — admin-endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare (§2.2, §4.2, §4.3, R-08). AI-bankafstemning opdateret fra "sandbox-only" til "aktiv i produktion via OpenRouter" — §2.4 (13→12 integrationer, da z-ai-web-dev-sdk ikke er en selvstændig integration men en feature under OpenRouter); §4.2 sårbarhed #16 opdateret; R-16 omformuleret fra "sandbox-only" til "auto-match risiko" med nedjusteret risikoniveau (Lav–Mellem); R-16 flyttet fra Mellem-cell til Lav-cell i §6 risikomatrix; R-21 eksisterende afhjælpning og §7 accept opdateret — "tre advarsler + AI_CONSENT_ACCEPTED + fodnote på hver besked" erstattet af toggle-baseret aktivering (enable/disable + `dataAccessEnabled`) med audit `action: UPDATE`. | **AlphaAi Consult ApS — doc-editor G** |
+| **3.3** | **September 2026** | **Sproom-migrering:** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som e-faktura Access Point — dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1); live mod Sproom staging (https://staging.sproom.net), produktion via env-switch (https://sproom.net). §2: e-fakturering/bank-integration-tekst opdateret (Sproom; Tink aktiv — ikke "scaffolding"). §2.4 integrationstabel række 3: Storecove → Sproom (Danmark/EU). §3.1: Sproom tilføjet i underbehandler-kompromitterings-rækken. §4.1 A8: `STORECOVE_API_KEY+WEBHOOK_SECRET` → `SPROOM_API_TOKEN`+`SPROOM_WEBHOOK_PUBLIC_KEY`. §4.3 + R-11: webhook-verifikation opdateret — RSA-SHA256 (X-Signature, offentlig nøgle fra GET /api/webhooks key, `crypto.createVerify('RSA-SHA256')`) for Sproom ud over HMAC-SHA256 (Frisbii/TokenPay). Risiko ved manglende NemHandel-AP-aftale (Bilag 12 U-9) reduceret — Sproom-aftale indgået, staging aktiv, produktion via env-switch. §6: optælling rettet (Mellem 10→11) og R-21 tilføjet i risikomatrix-cell (Høj/Mellem-konsekvens). §8.2: "alle 20 risici" → "alle 21 risici". | **AlphaAi Consult ApS** |

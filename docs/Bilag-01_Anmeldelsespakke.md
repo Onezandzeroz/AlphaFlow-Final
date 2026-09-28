@@ -6,9 +6,11 @@
 >
 > **Lovgrundlag:** Lov om bogføring (LOV nr. 700 af 24. maj 2022)
 >
-> **Pakke-version:** 1.0 — revideret 2026
+> **Pakke-version:** 1.1 — revideret september 2026
 >
 > **Ansvarlig:** AlphaAi Consult ApS
+>
+> **Opdateret v1.1 (september 2026):** Sproom (DK) har erstattet Storecove (NL) som Peppol- og NemHandel Access Point (webhooks + safety-net-pollere, per-send status-tracking og auto-retry); Tink er nu en reel Open Banking-integration; kreditnota (type 381) fuldt understøttet i e-faktura-pipelinen; arkitektur-oversigt opdateret (6 mini-services, 45 Prisma-modeller/27 enums, 179 API-ruter).
 
 ---
 
@@ -45,10 +47,10 @@ Anmeldelsespakken fungerer som **forside og indeks** for den samlede dokumentati
 **AlphaFlow** er en cloud-baseret, multi-tenant dansk bogføringsplatform (SaaS) rettet mod **små og mellemstore danske virksomheder**. Platformen tilbyder:
 
 - **Dobbelt bogføring** med FSR-baseret standardkontoplan, finansjournal, hovedbog, tilbagevendende posteringer, regnskabsperioder med lock, årsafslutning.
-- **Fakturering** — salgsfakturaer (DRAFT/SENT/PAID/CANCELLED) med PDF-generering, e-mail-afsendelse og e-fakturering via Peppol/NemHandel (Storecove som Access Point).
-- **E-fakturering** — OIOUBL (NemHandel) + Peppol BIS Billing 3.0; modtagelse af e-fakturaer i indbakke med godkend/afvis-workflow.
-- **Momsangivelse** — indsendelse direkte til Skattestyrelsens Moms-API (OAuth2 `client_credentials`).
-- **Bank-integration** (scaffolding) — bank-forbindelser med AES-256-GCM-krypterede tokens; AI-assisteret bankafstemning er implementeret i produktion via OpenRouter (LLM). Tre-niveau matching i `src/lib/matching-engine.ts`: (1) regelbaseret eksakt (beløb ±0,01 DKK, dato ±3 dage, reference), (2) fuzzy (beløb ±5 DKK, dato ±7 dage, beskrivelses-lighed >70%), (3) AI via OpenRouter med konfidens-score. AI-match med konfidens ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 markeres AI_SUGGESTED og kræver manuel godkendelse; <0,80 ignoreres. AI-output overstyrer aldrig automatisk bogførte posteringer uden brugergodkendelse.
+- **Fakturering** — salgsfakturaer (DRAFT/SENT/PAID/CANCELLED) og kreditnotaer med PDF-generering, e-mail-afsendelse og e-fakturering via Peppol/NemHandel (**Sproom som eneste Access Point for begge netværk**).
+- **E-fakturering** — OIOUBL 2.1 (NemHandel) + Peppol BIS Billing 3.0 (UBL 2.1) via Sproom (`src/lib/sproom-client.ts`, aktive ruter `/api/sproom/*`); kreditnotaer (type 381) med reference til originalfaktura; modtagelse via DocumentReceived-webhook (RSA-SHA256-signaturverifikation) + safety-net-pollere (indbakke hver 5. min, outbox hver 10. min) med per-afsendelse status-tracking og auto-retry; modtagne e-fakturaer i indbakke med godkend/afvis-workflow.
+- **Momsangivelse** — indsendelse direkte til Skattestyrelsens Moms-API (OAuth2 `client_credentials`), integreret med simulationsfallback (dev/sandbox).
+- **Bank-integration** — Tink er en reel integration (OAuth2 Authorization Code flow via Tink Link hosted consent-UI, kontoliste, transaktionshentning, token-refresh og revoke; 3.000+ europæiske banker — sandbox- og produktionstilstande aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`; DPA med Tink indgås før produktion). Bank-forbindelser med AES-256-GCM-krypterede tokens; AI-assisteret bankafstemning er implementeret i produktion via OpenRouter (LLM). Tre-niveau matching i `src/lib/matching-engine.ts`: (1) regelbaseret eksakt (beløb ±0,01 DKK, dato ±3 dage, reference), (2) fuzzy (beløb ±5 DKK, dato ±7 dage, beskrivelses-lighed >70%), (3) AI via OpenRouter med konfidens-score. AI-match med konfidens ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 markeres AI_SUGGESTED og kræver manuel godkendelse; <0,80 ignoreres. AI-output overstyrer aldrig automatisk bogførte posteringer uden brugergodkendelse.
 - **AI-assistent Hermes** — Socket.IO chat via OpenRouter (konfigurerbar LLM-model), knowledge-RAG via OpenRouter (embedding-modeller), proaktive påmindelser. Dataadgang er per-tenant opt-in (`dataAccessEnabled`, default false) — uden opt-in sendes kun brugerspørgsmål og en statisk system-prompt. Se Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 13.
 - **Dokument-OCR** — Tesseract + VLM via OpenRouter (vision-language model), returnerer struktureret faktura/kvitteringsdata og FSR-konto-forslag.
 - **PWA** — installerbar, offline-understøttelse, kamera-adgang til kvitteringsfotos.
@@ -63,7 +65,8 @@ Følgende funktionelle afgrænsninger er relevante for anmeldelsesomfanget:
 
 | Område | Status |
 |---|---|
-| **Reelle bank-API-kald** | Delvist — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
+| **Reelle bank-API-kald** | Delvist — Tink er en reel integration (sandbox- og produktionstilstande; aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`; DPA med Tink indgås før produktion); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
+| **E-faktura Access Point (Sproom)** | Integreret — live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch (https://sproom.net). Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) i samme integration. Supersederet Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) er inaktiv legacy. |
 | **MitID / NemID / BankID** | Autentificering via email + password + TOTP 2FA. |
 
 ---
@@ -79,7 +82,7 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 | **Backup & 5-års retention** | BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 | node-cron scheduler: hourly/daily/weekly/monthly + cleanup; AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant; SHA-256 checksum; monthly retention 60 måneder = 5 år; `Tenant-Backup/` på IONOS VPS. | ✅ Opfyldt |
 | **SAF-T Financial DK eksport** | BEK 98 | `/api/export-saft` — maskinlæsbar eksport af hele regnskabet. | ✅ Opfyldt |
 | **Årsrapport (XBRL/CSV)** | BEK 98 | `/api/reports/annual-xbrl` + `/api/reports/annual-csv`. | ✅ Opfyldt |
-| **E-fakturering (NemHandel/Peppol)** | BEK 98 | Send/modtag via Storecove som Peppol Access Point. OIOUBL + Peppol BIS Billing 3.0. E-faktura-indbakke med godkend/afvis. | ✅ Opfyldt |
+| **E-fakturering (NemHandel/Peppol)** | BEK 98 | Send/modtag via Sproom som Access Point for både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) — inkl. kreditnotaer (type 381). Modtagelse via webhooks + safety-net-pollere, per-send status-tracking og auto-retry. E-faktura-indbakke med godkend/afvis. | ✅ Opfyldt |
 | **Momsangivelse til SKAT** | BEK 98 | `/api/vat/submit` — OAuth2 `client_credentials`, moms:indberet-scope. **KUN moms** — ingen årsopgørelse/e-indkomst. | ✅ Opfyldt (kun moms) |
 | **Standardkontoplan** | BEK 98 | FSR-baseret kontoplan (Account-model) + `StandardAccountMapping` til SKAT's fællesoffentlige standardkontoplan. | ✅ Opfyldt |
 | **Udbyderskift / dataeksport** | Bogføringsloven §13; BEK 98 | `/api/export-tenant` (JSON + filer, SHA-256 manifest), `/api/export-saft`, `/api/company/export-info`. | ✅ Opfyldt |
@@ -96,22 +99,23 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 
 ## 5. Arkitektur-oversigt (kort)
 
-AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 5 mini-services, hostet på IONOS VPS med Neon PostgreSQL som databaselag.
+AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 6 mini-services — tokenpay-access, notification-ws, hermes-agent, scanner-service og knowledge-service i produktions-setup, samt pg-service som udelukkende er et sandbox-hjælpeværktøj (embedded PostgreSQL 17 + pgvector; indgår ikke i produktions-setup) — hostet på IONOS VPS med Neon PostgreSQL som datalager.
 
 | Komponent | Teknologi | Rolle |
 |---|---|---|
 | **Web-app** | Next.js 16 (App Router) + TypeScript 5 + Tailwind CSS 4 | Brugergrænseflade, API-routes, SSR. Port 3000. |
 | **Database** | PostgreSQL på Neon (serverless) + Prisma ORM + pgvector | Primært datalager for alle tenant-data. EU-datacentre (Frankfurt + Amsterdam). |
 | **Reverse proxy / TLS** | Caddy (self-hosted på IONOS VPS) | TLS 1.2/1.3 (Let's Encrypt), security headers, routing til mini-services via `?XTransformPort=<port>`. |
-| **Proces-manager** | PM2 (fork-mode, 6 processer) | Autorestart (max 10 restarts, 5s delay), separate log-filer i `./logs/`. |
+| **Proces-manager** | PM2 (fork-mode, 6 processer: web-app + 5 produktions-mini-services) | Autorestart (max 10 restarts, 5s delay), separate log-filer i `./logs/`. |
 | **Hosting** | IONOS VPS (EU/Tyskland, IONOS SE) | Applikationsserver + lokal backup-lagring (`Tenant-Backup/`) + uploads (`uploads/`). |
 | **Mini-service: hermes-agent** | Bun + Socket.IO + Prisma (port 3004) | AI-chat-assistent, OpenRouter LLM, reminders. Deler Neon DB. |
 | **Mini-service: knowledge-service** | Bun + rå HTTP + Prisma + pgvector (port 3006) | RAG-knowledge base, embeddings via OpenRouter. Deler Neon DB. |
 | **Mini-service: notification-ws** | Bun + Socket.IO (port 3001) | Real-time notifikationer, in-memory. |
 | **Mini-service: scanner-service** | Python + FastAPI + SQLite (port 3005) | OCR (Tesseract) + VLM via OpenRouter. |
 | **Mini-service: tokenpay-access** | Bun + Hono + SQLite (port 3100) | `.tbkey` proof-verifikation, adgangsstyring. |
+| **Mini-service: pg-service** | Bun + embedded PostgreSQL 17 + pgvector (lokal) | KUN sandbox-/udviklingshjælpeværktøj — indgår ikke i produktions-setup (produktion bruger Neon PostgreSQL). |
 
-**Multi-tenant isolation:** `Company` er tenant-grænse, `companyId` på tværs af 24 Prisma-modeller, RBAC-isolation via `tenantFilter(ctx)`. SuperDev oversight-mode tillader read-only cross-tenant adgang for AlphaAi-admin.
+**Multi-tenant isolation:** `Company` er tenant-grænse, `companyId` på tværs af 32 af i alt 45 Prisma-modeller (27 enums), RBAC-isolation via `tenantFilter(ctx)`. SuperDev oversight-mode tillader read-only cross-tenant adgang for AlphaAi-admin.
 
 **Backup-lag:** Neons managed PITR (Point-in-Time Recovery, 7 dage) — defense-in-depth lag 1; AlphaFlows egne `Tenant-Backup/` ZIP-filer (AES-256-GCM, SHA-256, 5-års retention) — lag 2.
 
@@ -121,7 +125,7 @@ AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 5 
 
 ## 6. Dokumentindeks
 
-Nedenstående tabel indekserer de **13 dokumenter** i AlphaFlows `docs/`-mappe, der udgør anmeldelsespakken til Erhvervsstyrelsen (med tilknyttede bilagsnumre jf. CANON-SPEC Bilagsliste). 12 dokumenter er revideret i denne anmeldelsesrunde (2026); 1 dokument (`SUBMISSION_CHECKLIST.md`) er supersederet. Dokumenter uden relevans for registreringen er flyttet til `docs/udenfor-scope/` (se note under tabellen).
+Nedenstående tabel indekserer de **15 dokumenter** i AlphaFlows `docs/`-mappe, der udgør anmeldelsespakken til Erhvervsstyrelsen (med tilknyttede bilagsnumre jf. CANON-SPEC Bilagsliste). 14 dokumenter er revideret i denne anmeldelsesrunde (2026); 1 dokument (`SUBMISSION_CHECKLIST.md`) er supersederet. Dokumenter uden relevans for registreringen er flyttet til `docs/udenfor-scope/` (se note under tabellen).
 
 | # | Dokument (bilag) | Formål | Status |
 |---|---|---|---|
@@ -134,13 +138,15 @@ Nedenstående tabel indekserer de **13 dokumenter** i AlphaFlows `docs/`-mappe, 
 | 7 | `Bilag-07_Databehandleraftale.md` (Bilag 7) | Standard databehandleraftale (GDPR Art. 28) mellem AlphaAi Consult ApS og AlphaFlow-brugere, med referencer til underbehandlere. | Revideret 2026 |
 | 8 | `Bilag-08_Risikovurdering-DPIA.md` (Bilag 8) | IT-risikovurdering — trusselsidentifikation, risikomatrix, eksisterende kontroller, restrisici. | Revideret 2026 |
 | 9 | `Bilag-09_Beredskabsplan.md` (Bilag 9) | Disaster Recovery-plan — RTO/RPO, gendannelsesprocedurer, backup-strategi, kontaktliste. | Revideret 2026 |
-| 10 | `Bilag-10_Leverandørstyring.md` (Bilag 10) | Evaluering og styring af tekniske leverandører (Neon, IONOS, Storecove, OpenRouter, SKAT, Flatpay/Frisbii). | Revideret 2026 |
+| 10 | `Bilag-10_Leverandørstyring.md` (Bilag 10) | Evaluering og styring af tekniske leverandører (Neon, IONOS, Sproom, OpenRouter, SKAT, Flatpay/Frisbii). | Revideret 2026 |
 | 11 | `Bilag-11_IT-sikkerhed-Neon-og-IONOS.md` (Bilag 11) | Tredjeparts IT-sikkerhedsdokumentation for de to primære infrastruktur-udbydere (Neon DB + IONOS VPS). | Revideret 2026 |
 | 12 | `Bilag-12_Udbedringsplan.md` (Bilag 12) | Tidssvarende plan for afhjælpning af kendte mangler før indsendelse — dækker alle 20 risici (R-01…R-20) fra Bilag 8 + 5 oprindelige mangler (april 2026), klassificeret i Kategori A/B/C. | Revideret 2026 (v3.0) |
 | 13 | `Bilag-13_TokenPay-TokenBay-guide.md` (Bilag 13) | Miljø- og opsætningsguide for TokenPay/TokenBay-adgangssystemet (`.tbkey` proofs, trial, free tier). | Revideret 2026 |
 | 14 | `SUBMISSION_CHECKLIST.md` | Tidligere indsendelsesguide — nu supersederet og omdirigerer til Bilag 1, 2 og 3. | Supersederet — eksisterende version gælder som omdirigering. |
+| 15 | `Bilag-15_NemHandel-Demo-Endepunkter.md` (Bilag 15) | NemHandel demo-endepunkter for alle fire endepunkts-ID-typer — fremsendt som bilag til Erhvervsstyrelsens anmodning om oplysninger (Hovedkrav 3). | NY — september 2026 |
+| 16 | `Bilag-16_Peppol-Testbed-Rapport.md` (Bilag 16) | Standardiseret Peppol-testbed-rapport (BIS Billing 3.0-testfaktura afsendt via Sproom staging) — fremsendt som bilag til Erhvervsstyrelsens anmodning om oplysninger (Hovedkrav 3). | NY — september 2026 |
 
-> Dokumenterne 1 samt Bilag 2 (`Bilag-02_Bilagsoversigt.md`), Bilag 3 (`Bilag-03_Tjekliste.xlsx`) og Bilag 4–13 udgør den ajourførte anmeldelsespakke for 2026-revisionen. Dokument 12 (UDBEDRINGSPLAN, Bilag 12) refereres fra afsnit 8 nedenfor og opretholdes som separat løbende dokument. **Bilag 14 (underbehandler-DPA'er for Neon, IONOS, Storecove, Flatpay/Frisbii, OpenRouter og Simply/Brevo) vedhæftes anmeldelsen som separate PDF'er samlet under ét bilagspunkt** — se `Bilag-02_Bilagsoversigt.md` (Bilag 2) for fuld oversigt.
+> Dokumenterne 1 samt Bilag 2 (`Bilag-02_Bilagsoversigt.md`), Bilag 3 (`Bilag-03_Tjekliste.xlsx`), Bilag 4–13 og Bilag 15–16 udgør den ajourførte anmeldelsespakke for 2026-revisionen. Dokument 12 (UDBEDRINGSPLAN, Bilag 12) refereres fra afsnit 8 nedenfor og opretholdes som separat løbende dokument. **Bilag 14 (underbehandler-DPA'er for Neon, IONOS, Sproom, Flatpay/Frisbii, OpenRouter og Simply/Brevo) vedhæftes anmeldelsen som separate PDF'er samlet under ét bilagspunkt** — se `Bilag-02_Bilagsoversigt.md` (Bilag 2) for fuld oversigt.
 >
 > **Dokumenter udenfor scope:** `MULTI_TENANT_PLAN.md` (designnoter for multi-tenant-arkitektur) og `PROJECTS_IMPLEMENTATION.md` (implementeringsnoter for valgfrit projekt-modul) er interne udviklingsdokumenter uden relevans for Erhvervsstyrelsen-registreringen og er flyttet til `docs/udenfor-scope/`. Se `docs/udenfor-scope/README.md` for begrundelse.
 
@@ -190,10 +196,11 @@ Følgende sikkerhedsarkitektoniske detaljer og funktionelle afgrænsninger er re
 ### Funktionelle afgrænsninger (i relation til anmeldelsen)
 
 6. **Immutability** håndhæves via AuditLog 3-niveau + PostgreSQL-triggers.
-7. **Bank-integration (delvist)** — Tink er en reel integration; Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink.
+7. **Bank-integration (delvist)** — Tink er en reel integration — sandbox- og produktionstilstande; aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`. DPA med Tink indgås før produktion. Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink.
 8. **MitID / NemID / BankID** — autentificering via email + password + TOTP 2FA.
 9. **Uploads** gemmes på VPS-disk med disk-encryption og adgangskontrol. Backup-filer er AES-256-GCM-krypterede.
 10. **AI non-determinisme** — AI-output er ikke deterministisk. Aktivering og dataadgang audit-logges; ved lav VLM-konfidens markeres output 'Kræver gennemsyn'; AI-output overstyrer aldrig automatisk bogførte posteringer. Se Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 13 og Bilag 8 (Bilag-08_Risikovurdering-DPIA.md) R-21.
+11. **E-faktura Access Point (Sproom)** — Sproom-integrationen er live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch til https://sproom.net (med `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true`). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering samt MLR/AR håndteres af Sproom som Access Point. Supersederet Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) er inaktiv legacy, bevaret for bagudkompatibilitet — al e-fakturering foregår via Sproom (`src/lib/sproom-client.ts` + `/api/sproom/*`).
 
 ---
 

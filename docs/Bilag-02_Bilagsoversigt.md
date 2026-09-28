@@ -4,7 +4,9 @@
 >
 > **Lovgrundlag:** Lov om bogføring (LOV nr. 700 af 24. maj 2022); BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen); BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen).
 >
-> **Version:** 1.4 — 2026 · **Ansvarlig:** AlphaAi Consult ApS
+> **Version:** 1.5 — september 2026 · **Ansvarlig:** AlphaAi Consult ApS
+>
+> **Opdateret v1.5 (september 2026):** Sproom (DK) har erstattet Storecove (NL) som Peppol- og NemHandel Access Point og indgår nu som DPA-part i Bilag 14 (i stedet for Storecove — dataforarbejdering i Danmark/EU, ingen SCC nødvendig); bilagslisten udvidet med Bilag 15 (NemHandel-demo-endepunkter) og Bilag 16 (Peppol-Testbed-Rapport via Sproom staging).
 >
 > **Opdateret v1.4:** Bilagsstruktur omrokeret — Bilag 1 = Anmeldelsespakke, Bilag 2 = Bilagsoversigt, Bilag 3 = Tjekliste. Øvrige bilag renummereret herefter. DPA'er forbliver som Bilag 14.
 >
@@ -42,8 +44,10 @@ Erhvervsstyrelsen har i sagsbehandlingen anmodet om, at dokumentationshenvisning
 | **12** | Udbedringsplan | `docs/Bilag-12_Udbedringsplan.md` | Plan for videreudvikling af platformen |
 | **13** | TokenPay/TokenBay-guide | `docs/Bilag-13_TokenPay-TokenBay-guide.md` | Adgangsstyring og miljøvariabel-guide |
 | **14** | Databehandleraftaler med underbehandlere | separat PDF ved indsendelse | Underskrevne DPA'er for AlphaFlows underbehandlere — vedhæftes samlet ved indsendelsen |
+| **15** | NemHandel Demo-Endepunkter | `docs/Bilag-15_NemHandel-Demo-Endepunkter.md` | NemHandel demo-endepunkter for alle fire endepunkts-ID-typer (svar på Erhvervsstyrelsens anmodning om oplysninger, Hovedkrav 3) |
+| **16** | Peppol Testbed-Rapport | `docs/Bilag-16_Peppol-Testbed-Rapport.md` | Standardiseret testbed-rapport — afsendelse af Peppol BIS Billing 3.0-testfaktura via Sproom staging (svar på Erhvervsstyrelsens anmodning om oplysninger, Hovedkrav 3) |
 
-> Bilag 1–3 og 4–13 udgør den skriftlige dokumentation i repositoriet (Bilag 1–2 og 4–13 som markdown/PDF, Bilag 3 som xlsx). Bilag 14 er de underskrevne underbehandler-DPA'er, der vedhæftes som separate PDF-filer ved indsendelsen.
+> Bilag 1–3, 4–13 og 15–16 udgør den skriftlige dokumentation i repositoriet (Bilag 1–2, 4–13 og 15–16 som markdown/PDF, Bilag 3 som xlsx). Bilag 14 er de underskrevne underbehandler-DPA'er, der vedhæftes som separate PDF-filer ved indsendelsen.
 
 ---
 
@@ -62,20 +66,20 @@ Bilag 14 udgøres af de underskrevne databehandleraftaler med AlphaFlows underbe
 
 ### IONOS SE
 - **Parter:** AlphaAi Consult ApS — IONOS SE
-- **Formål:** (a) Applikationsserver (Next.js + 5 mini-services + Caddy + PM2); (b) lokal backup-lagring (`Tenant-Backup/`)
+- **Formål:** (a) Applikationsserver (Next.js + 5 produktions-mini-services + Caddy + PM2 — den sjette mini-service, pg-service, er et sandbox-hjælpeværktøj og indgår ikke i produktions-setup); (b) lokal backup-lagring (`Tenant-Backup/`)
 - **Datakategorier:** Applikationsdata i transit, uploadede filer (`uploads/`), AES-256-GCM-krypterede backup-ZIP-filer, SQLite-filer for mini-services
 - **Behandlingslokation:** EU (Tyskland) — IONOS SE
 - **DPA-status:** Underskrevet. Kilde: IONOS DPA.
 - **SCC-status:** Ikke relevant (EU-baseret, ingen dataoverførsel ud af EU/EEA).
 - **Henvisning i LEVERANDØERSTYRING:** Bilag 10, afsnit 3.2. IT-sikkerhed: Bilag 11, afsnit 4.
 
-### Storecove B.V.
-- **Parter:** AlphaAi Consult ApS — Storecove B.V.
-- **Formål:** Peppol Access Point — afsendelse og modtagelse af e-fakturaer (OIOUBL/NemHandel + Peppol BIS Billing 3.0)
-- **Datakategorier:** Faktura-XML (OIOUBL/Peppol BIS), kunde-CVR, leverandør-CVR, fakturabeløb
-- **Behandlingslokation:** Nederlandene (EU)
-- **DPA-status:** Underskrevet. Kilde: Storecove DPA.
-- **SCC-status:** Ikke relevant (EU-baseret).
+### Sproom A/S
+- **Parter:** AlphaAi Consult ApS — Sproom A/S
+- **Formål:** Peppol- og NemHandel Access Point — afsendelse og modtagelse af e-fakturaer (Peppol BIS Billing 3.0/UBL 2.1 + OIOUBL 2.1/NemHandel) for begge netværk. NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema-/schematron-validering samt MLR/AR håndteres af Sproom som Access Point.
+- **Datakategorier:** Faktura-XML (OIOUBL 2.1/Peppol BIS Billing 3.0), kunde-CVR, leverandør-CVR, fakturabeløb, afsendelses-/modtagelsesstatus-metadata
+- **Behandlingslokation:** Danmark (EU) — dansk selskab (Sproom A/S, https://sproom.net)
+- **DPA-status:** Underskrevet. Kilde: Sproom DPA.
+- **SCC-status:** Ikke relevant (dansk selskab — dataforarbejdering i Danmark/EU).
 - **Henvisning i LEVERANDØERSTYRING:** Bilag 10, afsnit 3.3.
 
 ### Flatpay / Frisbii
@@ -133,6 +137,7 @@ Følgende integrationer findes i koden, men er **ikke aktive i produktion** og u
 |---|---|---|
 | Bank-API'er (Nordea, Danske Bank, Jyske Bank) | Stub (implementeret, ikke aktiv) | `src/lib/bank-providers.ts` — returnerer fejl. Aktivering kræver reel PSD2-aftale pr. bank + DPA. |
 | Tink (bank) | Reel implementering | Aktiv når `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET` er sat. DPA med Tink indgås før aktivering. |
+| Storecove (legacy e-faktura-Access Point) | Supersederet — inaktiv | `src/lib/storecove-client.ts` + `/api/storecove/*` er supersederet legacy-kode, bevaret for bagudkompatibilitet — al e-fakturering foregår via Sproom (`src/lib/sproom-client.ts` + aktive ruter `/api/sproom/*`). Koden er inaktiv og udveksler ingen data; den tidligere Storecove DPA er afløst af Sproom DPA i Bilag 14. |
 | z-ai-web-dev-sdk (legacy AI-SDK) | Sandbox-only — inaktiv | Legacy sandbox-SDK; fejler graceful i produktion. AI-bankafstemning er nu implementeret i produktion via OpenRouter (`src/lib/matching-engine.ts`) og udveksler persondata via OpenRouter (Bilag 14) — se ikke denne række for AI-bankafstemning. SDK'et selv udveksler ingen data. |
 
 > Ved aktivering af Tink eller reelle bank-API'er indgås der DPA, og bilagslisten opdateres tilsvarende. Se Bilag 12 (UDBEDRINGSPLAN) for status.

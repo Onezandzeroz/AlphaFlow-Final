@@ -8,12 +8,19 @@
 |------|---------|
 | **Dokumenttype** | Compliance-rapport til Erhvervsstyrelsen |
 | **Systemnavn** | AlphaFlow (`alphaflow.dk`) — pakke-navn `alphaai-accounting` v1.0.0 |
-| **Dokumentversion** | 3.2 |
+| **Dokumentversion** | 3.3 |
 | **Udarbejdet af** | AlphaAi Consult ApS (App Owner / dataansvarlig) |
 | **Lovgrundlag** | Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023), Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023), GDPR (forordning 2016/679), IT-sikkerhedsloven |
 | **Formål** | Registrering/godkendelse som digitalt regnskabssystem hos Erhvervsstyrelsen |
 | **Sprog** | Dansk |
 | **Dokumentation** | Dette dokument dokumenterer platformens compliance-tilstand jf. Lov om bogføring, BEK 97/98 og GDPR. Alle oplysninger er verificerbare i kildekoden. |
+
+**Versionshistorik:**
+
+| Version | Dato | Ændring |
+|---------|------|---------|
+| 3.3 | September 2026 | Sproom-migrering: Sproom A/S (Danmark) erstatter Storecove B.V. som AlphaFlows eneste e-invoicing Access Point (Peppol BIS Billing 3.0 + NemHandel OIOUBL 2.1). Webhook-signaturverifikation ændret fra HMAC (`X-Storecove-Signature`, legacy) til RSA-SHA256 (`X-Signature`). Tink-bankintegration aktualiseret som reel integration. |
+| 3.2 | 2026 | Tidligere udgave (Storecove-baseret e-fakturering). |
 
 ---
 
@@ -59,15 +66,15 @@ Rapporten dokumenterer platformens compliance-tilstand med afsæt i den faktiske
 |------|-----------|------------|
 | **Dataansvarlig** (controller) | AlphaAi Consult ApS | Definerer formål og midler for behandling af lejernes data. |
 | **Databehandler** (processor) | AlphaAi Consult ApS (drift) | Drifter AlphaFlow på IONOS VPS (Tyskland/EU). |
-| **Underbehandlere** | Neon (DB, USA-virksomhed, EU-datacentre), OpenRouter (USA — se kapitel V), Storecove (Holland), Frisbii/Flatpay (Tyskland), SKAT/Virk (DK), CVR-registeret (DK). | Fulde fortegnelser i `Bilag-07_Databehandleraftale.md`. |
+| **Underbehandlere** | Neon (DB, USA-virksomhed, EU-datacentre), OpenRouter (USA — se kapitel V), Sproom (Danmark — e-faktura Access Point for Peppol + NemHandel), Tink (EU — Open Banking-bankdata ved aktiv integration; DPA med Tink indgås før produktion), Frisbii/Flatpay (Tyskland), SKAT/Virk (DK), CVR-registeret (DK). | Fulde fortegnelser i `Bilag-07_Databehandleraftale.md`. |
 | **Systemansvarlig** | AlphaAi Consult ApS | Teknisk drift, sikkerhed, backup, vedligeholdelse. |
 | **Revisor-tilgang** | Lejerens revisor via `AUDITOR`-rolle | Eksport af SAF-T, rapporter og audit-log. |
 
 ### 1.4 Platformens omfang
 
-AlphaFlow er et cloud-baseret multi-tenant SaaS-regnskabssystem til små/mellemstore danske virksomheder. Kernefunktionalitet: dobbelt bogføring, FSR-baseret kontoplan, fakturering, e-fakturering (NemHandel/Peppol via Storecove), momsangivelse til SKAT, bank-integration (demo + scaffolding til reelle providere), OCR-scanning af kvitteringer, AI-assistent (Hermes), SAF-T og årsrapport-eksport (CSV/iXBRL).
+AlphaFlow er et cloud-baseret multi-tenant SaaS-regnskabssystem til små/mellemstore danske virksomheder. Kernefunktionalitet: dobbelt bogføring, FSR-baseret kontoplan, fakturering, e-fakturering (Peppol/NemHandel via Sproom), momsangivelse til SKAT, bank-integration (Tink Open Banking — reel integration; Demo-provider leverer syntetiske data), OCR-scanning af kvitteringer, AI-assistent (Hermes), SAF-T og årsrapport-eksport (CSV/iXBRL).
 
-Teknisk stack: Next.js 16 (App Router), TypeScript 5, PostgreSQL på Neon (EU), Prisma ORM, Caddy reverse proxy på IONOS VPS, PM2 (6 mini-services: `alphaflow`, `hermes-agent`, `knowledge-service`, `tokenpay-access`, `notification-ws`, `scanner-service`).
+Teknisk stack: Next.js 16 (App Router), TypeScript 5, PostgreSQL på Neon (EU), Prisma ORM (45 modeller, 27 enums), Caddy reverse proxy på IONOS VPS, PM2 (6 apps: `alphaflow` + mini-services `tokenpay-access` :3100, `notification-ws` :3001, `hermes-agent` :3004, `scanner-service` :3005 (Python/FastAPI, OCR+VLM) og `knowledge-service` :3006 (RAG); `pg-service` er et sandbox-hjælpeværktøj og indgår ikke i produktions-setup). 179 API-route.ts-filer.
 
 ---
 
@@ -84,7 +91,8 @@ Lov om bogføring § 3 stiller krav om, at regnskabssystemet skal være egnet ti
 | Mapping til SKAT Fællesoffentlig Standardkontoplan | ✅ Opfyldt | `StandardAccountMapping`-model + `buildAutoMapping()` i `src/lib/standard-chart-of-accounts.ts`. |
 | Automatisk momsberegning | ✅ Opfyldt | 10 momskoder (`VATCode`-enum: S25, S12, S0, SEU, K25, K12, K0, KEU, KUF, NONE) med automatisk kontering. |
 | Regnskabsperioder | ✅ Opfyldt | `FiscalPeriod`-model med `PeriodStatus` (OPEN/CLOSED) og låsning (`lockedAt`/`lockedBy`). |
-| Fakturering | ✅ Opfyldt | `Invoice`-model med DRAFT/SENT/PAID/CANCELLED. PDF-generering. Kreditnotaer er fuldt implementeret: UI-knap, backend med `creditNotePrefix` (KRE-{år}-{seq}), spejlet bogføring, valgfrit `originalInvoiceId`, PDF og OIOUBL type 381. Annullering opretter modpostering `REVERSAL-{invoiceNumber}`. |
+| Fakturering | ✅ Opfyldt | `Invoice`-model med DRAFT/SENT/PAID/CANCELLED. PDF-generering. Kreditnotaer er fuldt implementeret: UI-knap, backend med `creditNotePrefix` (KRE-{år}-{seq}), spejlet bogføring, valgfrit `originalInvoiceId`, PDF og e-faktura som type 381 (kreditnota). OIOUBL-generatoren emitterer korrekt `<CreditNote>`-rodelement med `<cac:CreditNoteLine>`/`<cbc:CreditedQuantity>` og `<cac:BillingReference>` til originalfakturaen; send-pipelineen vælger 381/380 ud fra `documentType === 'CREDIT_NOTE'` (fallback: `creditNotePrefix` "KRE-"), så kreditnotaer understøttes i både NemHandel (OIOUBL 2.1) og Peppol BIS Billing 3.0. Annullering opretter modpostering `REVERSAL-{invoiceNumber}`. |
+| E-fakturering (NemHandel/Peppol) | ✅ Opfyldt | **Sproom A/S** (dansk selskab, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker **begge** netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Status: integreret — live mod Sproom staging (https://staging.sproom.net), produktionsklar via env-switch (https://sproom.net). Arkitektur: parent-auth (OAuth2 password grant) → child company pr. tenant (pr. CVR) → korttidstoken (impersonation, cachelagret) → registrering i begge netværk (POST /api/registrations/nemhandel + /api/registrations/peppol med Peppol participant verification) → raw XML-upload (POST /api/documents, Content-Type: application/octet-stream, auto-detektion af OIOUBL/BIS 3) → modtagelse via DocumentReceived-webhook (RSA-signaturverifikation, se afsnit 8.5) → safety-net pollers (Sproom-indbakke hver 5. min + Sproom-outbox hver 10. min i `src/instrumentation.ts`) med auto-retry af fejlede afsendelser via GET /api/documents/{id}/state. Idempotens via `X-Request-Id` request header; document-ID returneres i `X-Sproom-DocumentId` response header (201). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Klient: `src/lib/sproom-client.ts`; aktive ruter: `/api/sproom/*` (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). Env: `SPROOM_API_URL` (default https://staging.sproom.net), `SPROOM_API_TOKEN`, `SPROOM_WEBHOOK_PUBLIC_KEY`, `SPROOM_WEBHOOK_REQUIRE_SIGNATURE` (sæt til `true` i produktion). Legacy: `src/lib/storecove-client.ts` + `/api/storecove/*` (supersederet, bevaret for bagudkompatibilitet; DB-felter som `storecoveConnected`/`storecoveLegalEntityId` bevares). Se `Bilag-16_Peppol-Testbed-Rapport.md`. |
 | Momsangivelse til SKAT | ✅ Opfyldt (med begrænsning) | `src/lib/vat-submit.ts` med OAuth2 `client_credentials`. **Kun momsangivelse** — ingen årsopgørelse, e-indkomst eller AM-bidrag. |
 | Bank-integration | ⚠️ Delvist | `BankConnection`-model med krypterede tokens. **Tink er en reel integration** (PSD2 consent-flow virker); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. AI-assisteret bankafstemning er implementeret i produktion via OpenRouter i `src/lib/matching-engine.ts`. Tre-niveau matching: (1) regelbaseret eksakt, (2) fuzzy, (3) AI via OpenRouter med konfidens-score. AI-match ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 = AI_SUGGESTED (manuel godkendelse); <0,80 ignoreres. AI overstyrer aldrig automatisk bogførte posteringer uden godkendelse. |
 | Fremmedvaluta | ✅ Opfyldt | Frankfurter API (ECB reference rates) i `src/lib/currency-utils.ts`. 1-times in-memory cache med stale fallback. DKK, EUR, USD, GBP, SEK, NOK. |
@@ -150,13 +158,13 @@ BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om b
 
 | Krav | Status | Implementering |
 |------|--------|----------------|
-| Fortløbende, unik bilagsnummerering | ✅ Opfyldt | `Company.journalPrefix` (default `"BIL"`) + `Company.nextJournalSequence` (default 1). Sekvensen inkrementeres atomisk ved bogføring. | `prisma/schema.prisma` (linje 236–237) |
+| Fortløbende, unik bilagsnummerering | ✅ Opfyldt | `Company.journalPrefix` (default `"BIL"`) + `Company.nextJournalSequence` (default 1). Sekvensen inkrementeres atomisk ved bogføring. Filkilde: `prisma/schema.prisma` (linje 236–237). |
 
 ### 2.6 Regnskabsperiode-låsning
 
 | Krav | Status | Implementering |
 |------|--------|----------------|
-| Periode-låsning forhindrer bogføring i lukkede perioder | ✅ Opfyldt | `FiscalPeriod` med `status: OPEN/CLOSED` og `lockedAt`/`lockedBy`-felter. Lukning kræver `PERIOD_CLOSE`-permission (OWNER, ADMIN, ACCOUNTANT). Genåbning kræver `PERIOD_OPEN` (OWNER, ADMIN). Alle handlinger logges i AuditLog. | `prisma/schema.prisma` (linje 773–790), `src/lib/rbac.ts` |
+| Periode-låsning forhindrer bogføring i lukkede perioder | ✅ Opfyldt | `FiscalPeriod` med `status: OPEN/CLOSED` og `lockedAt`/`lockedBy`-felter. Lukning kræver `PERIOD_CLOSE`-permission (OWNER, ADMIN, ACCOUNTANT). Genåbning kræver `PERIOD_OPEN` (OWNER, ADMIN). Alle handlinger logges i AuditLog. Filkilde: `prisma/schema.prisma` (linje 773–790), `src/lib/rbac.ts`. |
 
 ### 2.7 SAF-T eksport
 
@@ -359,7 +367,7 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 | Krav | Status | Implementering |
 |------|--------|----------------|
 | Data minimization som standard | ✅ Opfyldt | `HermesAgent.dataAccessEnabled = false` som default. |
-| Tenant-isolation | ✅ Opfyldt | `tenantFilter(ctx)` på alle databasekald; `companyId` per række på 24 modeller. |
+| Tenant-isolation | ✅ Opfyldt | `tenantFilter(ctx)` på alle databasekald; `companyId` per række på 32 modeller. |
 | Role-based access control (min-tilgang) | ✅ Opfyldt | 5 roller + 23 permissions. Se afsnit 4. |
 | Pseudonymisering hvor muligt | ⚠️ Delvist | Bank-tokens krypteret (ikke pseudonymiserede), bruger-ID bruges internt. |
 
@@ -431,7 +439,7 @@ AlphaFlow anvender én USA-baseret AI-underbehandler, der potentielt flytter per
 **EU/EØS-baserede underbehandlere** (ingen dataoverførsel til tredjelande):
 
 - **Neon, Inc.** — PostgreSQL-database. (US-virksomhed, men datacentre i Frankfurt + Amsterdam — EU/EEA). SOC 2 Type II-certificeret.
-- **Storecove** (Holland) — e-faktura via Peppol/NemHandel.
+- **Sproom A/S** (Danmark) — e-faktura Access Point for både Peppol (BIS Billing 3.0) og NemHandel (OIOUBL 2.1). Dansk selskab — dataforarbejdning sker i Danmark/EU; ingen SCC nødvendig.
 - **Frisbii/Flatpay** (Tyskland) — abonnementsbetaling.
 - **IONOS** (Tyskland) — VPS-hosting og backup-lagring. C5 + IT-Grundschutz-certificeret.
 - **SMTP-udbyder** (Simply/Brevo — EU).
@@ -607,7 +615,8 @@ Følgende persondata-felter opbevares **ukrypteret** i PostgreSQL og afhænger a
 |----------|-----------|
 | bcrypt (12 rounds) | Adgangskode-hashing (`src/lib/password.ts`). |
 | SHA-256 | Backup-koder (hashBackupCode), backup-fil-checksum (`Backup.sha256`), tenant-export-manifest, webhook-signaturer (HMAC-SHA256). |
-| HMAC-SHA256 | Webhook-signaturverifikation (Storecove, Frisbii, TokenPay, Flatpay). |
+| HMAC-SHA256 | Webhook-signaturverifikation (Frisbii, TokenPay, Flatpay). |
+| RSA (SHA256withRSA) | Webhook-signaturverifikation (Sproom — `X-Signature`-header; offentlig nøgle hentes fra GET /api/webhooks/key og cachelagres, verificeres med `crypto.createVerify('RSA-SHA256')`). |
 
 ---
 
@@ -643,7 +652,7 @@ Se afsnit 2.3 for fuld beskrivelse af 3-niveau immutability-strategien (applikat
 
 | Funktion | Status |
 |----------|--------|
-| Antal API-ruter der kalder audit-funktioner | 72 ruter (bekræftet via grep på `auditCreate`/`auditLog`/`auditUpdate`/`auditCancel`/`auditAuth`/`auditDeleteAttempt` i `src/app/api`). |
+| Antal API-ruter der kalder audit-funktioner | 89 ruter (bekræftet via grep på `auditCreate`/`auditLog`/`auditUpdate`/`auditCancel`/`auditAuth`/`auditDeleteAttempt` i `src/app/api`). |
 | Auth-events | `LOGIN`, `LOGIN_FAILED`, `LOGOUT`, `REGISTER`, `SESSION_INVALIDATE`, `LOGIN_2FA_VERIFIED` — alle med IP + User-Agent. |
 | Mutationer | Alle POST/PUT/PATCH/DELETE-handlinger logges med before/after-changes. |
 | Oversight | Alle oversight-handlinger logges som `OVERSIGHT`-action. |
@@ -732,11 +741,11 @@ AuditLoggens uforanderlighed er fundamentet for hele beredskabet: beviserne kan 
 
 ### 7.1 Implementeringsprincip
 
-AlphaFlow anvender virksomhedsbaseret tenant-isolering: `Company`-entiteten er tenant-grænsen. `companyId` er foreign key på 24 modeller, og alle databaseforespørgsler filtreres via `tenantFilter(ctx)` / `companyScope(ctx)`.
+AlphaFlow anvender virksomhedsbaseret tenant-isolering: `Company`-entiteten er tenant-grænsen. `companyId` er foreign key på 32 modeller, og alle databaseforespørgsler filtreres via `tenantFilter(ctx)` / `companyScope(ctx)`.
 
 | Funktion | Implementering |
 |----------|----------------|
-| Tenant-grænse | `Company`-model. `companyId` på 24 datamodeller. |
+| Tenant-grænse | `Company`-model. `companyId` på 32 datamodeller. |
 | Prisma-where-filter | `tenantFilter(ctx)` / `companyScope(ctx)` returnerer `{ companyId: <user's active company> }`. |
 | Oversight-mode | Scope sættes til `oversightCompanyId` — read-only, mutationer blokeres via `blockOversightMutation()`. |
 | Ingen aktivt firma | `{ companyId: '__none__' }` (brugeren ser intet). |
@@ -795,11 +804,11 @@ Ingen konfigureret CORS-policy i `next.config.ts` eller `Caddyfile`. API-routes 
 
 | Underbehandler | Header | Algoritme |
 |----------------|--------|-----------|
-| Storecove | `X-Storecove-Signature` | HMAC-SHA256 + `timingSafeEqual` (Buffer). |
+| Sproom | `X-Signature` | RSA-SHA256 (`crypto.createVerify('RSA-SHA256')`) — offentlig nøgle hentes fra GET /api/webhooks/key og cachelagres (eller pins via `SPROOM_WEBHOOK_PUBLIC_KEY`). |
 | Frisbii / Flatpay | `Reepay-Signature` / `frisbii-signature` | HMAC-SHA256 + `timingSafeEqual` (Buffer). |
 | TokenPay | `x-tokenpay-signature` | HMAC-SHA256 + `crypto.timingSafeEqual`. ✅ Udbedret (U-14). |
 
-**✅ Opdateret (U-6/U-14):** Dev-fallback "accept all" er fjernet fra alle 3 webhook-ruter — de afviser nu når `WEBHOOK_SECRET` mangler (fail-closed). TokenPay string-XOR er erstattet med `crypto.timingSafeEqual` i 3 filer. Se `Bilag-12_Udbedringsplan.md` U-6 + U-14.
+**✅ Opdateret (U-6/U-14):** Dev-fallback "accept all" er fjernet fra webhook-ruterne — HMAC-webhooks (Frisbii/Flatpay, TokenPay) afvises nu når `WEBHOOK_SECRET` mangler (fail-closed). TokenPay string-XOR er erstattet med `crypto.timingSafeEqual` i 3 filer. Efter Sproom-migreringen (september 2026) verificeres Sproom-webhooks asymmetrisk med RSA-offentlig nøgle (`X-Signature`, se ovenfor), og `SPROOM_WEBHOOK_REQUIRE_SIGNATURE` håndhæver fail-closed adfærd i produktion (`true`). Se `Bilag-12_Udbedringsplan.md` U-6 + U-14.
 
 ---
 
@@ -896,7 +905,8 @@ Platformen opfylder GDPR's sikkerhedskrav (art. 32): kryptering i transit (TLS 1
 | **Immutability (BEK 97 Bilag 1 / Lov om bogføring §13)** | Immutability håndhæves via AuditLog 3-niveau (applikation CREATE-only + PostgreSQL-triggers + cascade-Restrict). |
 | **Persondata-kryptering i hvile (GDPR art. 32)** | Følsomme data (bank-tokens, 2FA-secrets) er AES-256-GCM-krypteret. Øvrige persondata (email, telefon, adresser) opbevares ukrypteret og beskyttes af Neon TLS + DB-adgangskontrol + RBAC. |
 | **Bank-integration** | Tink er en reel integration (PSD2 consent-flow); Nordea/Danske Bank/Jyske Bank er stubs; Demo-provider leverer syntetiske data. AI-assisteret bankafstemning er implementeret i produktion via OpenRouter (`src/lib/matching-engine.ts`): tre-niveau matching (regelbaseret/fuzzy/AI) med konfidens-tærskler ≥0,95 autoprogrammeres, 0,80–0,95 kræver manuel godkendelse. |
-| **Kreditnota-oprettelse** | Kreditnotaer er fuldt implementeret: UI-knap, backend med `creditNotePrefix` (KRE-{år}-{seq}), spejlet bogføring, valgfrit `originalInvoiceId`, PDF og OIOUBL type 381. Annullering opretter modpostering `REVERSAL-{invoiceNumber}`. |
+| **E-fakturering (Access Point)** | Sproom A/S (Danmark) er AlphaFlows eneste e-invoicing Access Point og dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Status: integreret — staging aktiv (https://staging.sproom.net), produktion via env-switch (https://sproom.net). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Tidligere Access Point (Storecove) er supersederet legacy i koden. |
+| **Kreditnota-oprettelse** | Kreditnotaer er fuldt implementeret: UI-knap, backend med `creditNotePrefix` (KRE-{år}-{seq}), spejlet bogføring, valgfrit `originalInvoiceId`, PDF og e-faktura som type 381 (`<CreditNote>`-rodelement med `<cac:CreditNoteLine>`/`<cbc:CreditedQuantity>` og `<cac:BillingReference>`; 381/380 vælges ud fra `documentType === 'CREDIT_NOTE'`, fallback `creditNotePrefix` "KRE-"). Annullering opretter modpostering `REVERSAL-{invoiceNumber}`. |
 | **Moms-API** | Momsangivelse til SKAT via OAuth2 `client_credentials`. |
 
 ### 11.3 Supplerende sikkerhedsforanstaltninger (planlagt)
@@ -948,7 +958,9 @@ AlphaAi Consult ApS forpligter sig til løbende at vedligeholde og udvikle platf
 | Årsrapport iXBRL | `src/lib/annual-report-xbrl.ts` |
 | Moms-API | `src/lib/vat-submit.ts` |
 | CVR-klient | `src/lib/cvr-client.ts` |
-| Storecove-klient + webhook | `src/lib/storecove-client.ts`, `src/app/api/storecove/webhook/route.ts` |
+| Sproom-klient + webhook | `src/lib/sproom-client.ts`, `src/app/api/sproom/webhook/route.ts` |
+| Storecove-klient (legacy) | `src/lib/storecove-client.ts`, `src/app/api/storecove/*` — supersederet, bevaret for bagudkompatibilitet |
+| Tink-klient | `src/lib/tink-client.ts` |
 | Flatpay-klient + webhook | `src/lib/flatpay-client.ts`, `src/app/api/subscription/payment-webhook/route.ts` |
 | TokenPay callback | `src/app/api/tokenpay/callback/route.ts` |
 | Hermes-agent | `mini-services/hermes-agent/` |
@@ -979,4 +991,4 @@ AlphaAi Consult ApS forpligter sig til løbende at vedligeholde og udvikle platf
 
 ---
 
-*Version 3.2 — udarbejdet af AlphaAi Consult ApS.*
+*Version 3.3 — udarbejdet af AlphaAi Consult ApS.*

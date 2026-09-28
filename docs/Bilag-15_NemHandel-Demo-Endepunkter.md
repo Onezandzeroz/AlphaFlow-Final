@@ -16,9 +16,10 @@ endepunkts-ID-typer, der er tilgængelige i NemHandels demo/test-miljø. Dette
 opfylder kravet fra Erhvervsstyrelsen om at fremsende "Nemhandel demo-endepunkter
 for alle fire typer endepunkts-ID'er" som bilag til anmodningen.
 
-AlphaFlow afsender OIOUBL 2.1 (type 380) via Storecove som adgangspunkt til
-NemHandel eDelivery-netværket. Se Bilag 4 (Compliance-rapport) afsnit 2.1 og
-Bilag 6 (Brugsvejledning) afsnit 6.4 for dokumentation af afsendelsesflowet.
+AlphaFlow afsender OIOUBL 2.1 (type 380 — og kreditnotaer, type 381) via Sproom
+som adgangspunkt til NemHandel eDelivery-netværket. Se Bilag 4 (Compliance-rapport)
+afsnit 2.1 og Bilag 6 (Brugsvejledning) afsnit 6.4 for dokumentation af
+afsendelsesflowet.
 
 ---
 
@@ -92,14 +93,22 @@ Alle fire demo-endepunkter:
 
 ## AlphaFlow's integration
 
-AlphaFlow sender elektroniske fakturaer i OIOUBL 2.1 format via Storecove som
-certificeret Peppol/NemHandel adgangspunkt. Storecove håndterer:
+AlphaFlow sender elektroniske fakturaer i OIOUBL 2.1 format via Sproom som
+certificeret Peppol/NemHandel adgangspunkt. Sproom (dansk selskab —
+https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker
+både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Sproom
+håndterer:
 
 - AS4 transport til modtagende adgangspunkt
 - MitID Erhverv-certifikatsignering (på vegne af AlphaFlow)
 - SMP/NHR opslag for modtager-routing
 - Schema- og schematron-validering
 - MLR/AR-svar ved valideringsfejl
+
+Integrationen er færdig og live mod Sproom staging
+(https://staging.sproom.net); produktion aktiveres via env-switch
+(`SPROOM_API_URL=https://sproom.net` + `SPROOM_API_TOKEN` +
+`SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true`).
 
 Ved afsendelse til demo-miljøet anvendes et test-modtager-endepunkt fra tabellen
 ovenfor. Se Bilag 4 (Compliance-rapport) afsnit 2.1 og Bilag 6 (Brugsvejledning)

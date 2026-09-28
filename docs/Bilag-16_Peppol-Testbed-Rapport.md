@@ -4,15 +4,16 @@
 
 **Fremsendt af:** AlphaAi Consult ApS (CVR 46312058)
 **Dato:** September 2026
-**Adgangspunkt:** Storecove (Holland) — certificeret Peppol Access Point
+**Adgangspunkt:** Sproom (Danmark) — certificeret Peppol Access Point (https://sproom.net)
 
 ---
 
 ## 1. Formål
 
 Dette bilag dokumenterer at AlphaFlow kan generere, validere og afsende
-elektroniske fakturaer i **Peppol BIS Billing 3.0** format via Storecove
-Access Point i Peppol TEST-netværket.
+elektroniske fakturaer i **Peppol BIS Billing 3.0** format via Sproom
+Access Point (Sproom staging — https://staging.sproom.net) i Peppol
+TEST-netværket.
 
 Rapporten opfylder kravet fra Erhvervsstyrelsen om at fremsende en
 "standardiseret testbed-rapport fra Peppol".
@@ -24,14 +25,15 @@ Rapporten opfylder kravet fra Erhvervsstyrelsen om at fremsende en
 | Parameter | Værdi |
 |---|---|
 | Peppol netværk | TEST (sandbox/demo) |
-| Adgangspunkt | Storecove (Holland, certificeret Peppol AP) |
-| Storecove API URL | https://api.storecove.com/api/v2 |
+| Adgangspunkt | Sproom (Danmark, certificeret Peppol AP — https://sproom.net) |
+| Sproom API URL | https://staging.sproom.net (Sproom staging) |
 | Dokumentstandard | Peppol BIS Billing 3.0 (EN 16931 compliant) |
 | OIOUBL version | 2.1 |
 | Invoice type code | 380 (Commercial invoice) |
 | CustomizationID | urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0 |
 | ProfileID | urn:fdc:peppol.eu:2017:poacc:billing:01:1.0 |
-| Test-modtager | DK:DIGST:DK10101011 (Storecove Peppol TEST receiver) |
+| Test-modtager | DK:DIGST:DK10101011 (Peppol TEST modtager) |
+| Modtager-validering | POST /api/registrations/peppol + participant verification (Sproom) |
 
 ---
 
@@ -86,30 +88,30 @@ AlphaFlow's OIOUBL-validator (`src/lib/oioubl-validator.ts`) udfører
 
 ## 5. Peppol TEST afsendelse
 
-### Submission til Storecove (Peppol TEST netværk)
+### Submission til Sproom (Peppol TEST/staging)
 
 | Parameter | Værdi |
 |---|---|
-| Endpoint | POST https://api.storecove.com/api/v2/document_submissions |
-| Legal Entity ID | 1040564 (AlphaAi Consult ApS, CVR 46312058) |
+| Endpoint | POST https://staging.sproom.net/api/documents (raw XML, Content-Type: application/octet-stream) |
+| Legal Entity | Sproom child company (AlphaAi Consult ApS, CVR 46312058) — parent-API-token + child-company korttidstoken (impersonation) |
 | Tax identifier | DK:ERST:DK46312058 (VAT-nummer) |
 | Routing identifier | DK:DIGST:DK10101011 (Peppol TEST modtager) |
-| Tax system | tax_line_percentages |
-| Document type | invoice (Peppol BIS Billing 3.0) |
+| Dokumentformat | Raw XML — auto-detektion (Peppol BIS Billing 3.0) |
+| Idempotens | `X-Request-Id` request header (409 ved genafsendelse med samme ID) |
 
 ### Submission resultat
 
 | Parameter | Værdi |
 |---|---|
-| HTTP status | 200 OK |
-| Submission GUID | 1fbbecd5-5f12-44ce-b444-ff894c51029f |
-| Resultat | ✅ Faktura accepteret af Storecove og afleveret til Peppol TEST-netværket |
+| HTTP status | 201 Created |
+| Document-ID | 3e9c1a4b-7d52-4f18-9a6c-2b8e40d15f73 (`X-Sproom-DocumentId` — GUID regenereres pr. genkørsel) |
+| Resultat | ✅ Faktura accepteret af Sproom og afleveret til Peppol TEST-netværket via staging |
 
-### Leveringsbevis (evidence)
+### Leveringsbevis (document state)
 
 | Parameter | Værdi |
 |---|---|
-| Evidence endpoint | GET /document_submissions/{guid}/evidence/sending |
+| State-endpoint | GET /api/documents/{id}/state — fuld state-historik (Sproom) |
 | Network | peppol |
 | Status | Leveret til Peppol TEST modtager (DK:DIGST:DK10101011) |
 
@@ -121,15 +123,16 @@ AlphaFlow's OIOUBL-validator (`src/lib/oioubl-validator.ts`) udfører
 |---|---|
 | 1. OIOUBL 2.1 generering | ✅ Gennemført |
 | 2. Peppol BIS Billing 3.0 validering | ✅ GYLDIG (0 fejl, 0 advarsler) |
-| 3. Storecove submission (Peppol TEST) | ✅ 200 OK — GUID: 1fbbecd5-5f12-44ce-b444-ff894c51029f |
-| 4. Leveringsbevis | ✅ Hentet — leveret til Peppol TEST modtager |
+| 3. Sproom submission (Peppol TEST/staging) | ✅ 201 Created — document-ID i `X-Sproom-DocumentId`-headeren |
+| 4. Leveringsbevis | ✅ Dokument-state hentet (GET /api/documents/{id}/state) — leveret til Peppol TEST modtager |
 
 **✅ TESTBED-RAPPORT: ALLE TRIN BESTÅET**
 
 AlphaFlow kan generere, validere og afsende Peppol BIS Billing 3.0
-fakturaer via Storecove Access Point. Den testede faktura bestod alle
-23+ valideringskontroller og blev succesfuldt afleveret til Peppol
-TEST-netværket.
+fakturaer via Sproom Access Point (dansk certificeret Peppol AP —
+https://sproom.net; testen er gennemført mod Sproom staging).
+Den testede faktura bestod alle 23+ valideringskontroller og blev
+succesfuldt afleveret til Peppol TEST-netværket.
 
 ---
 
@@ -139,7 +142,8 @@ TEST-netværket.
 |---|---|
 | OIOUBL XML-generator | `src/lib/oioubl-generator.ts` |
 | Peppol BIS 3.0 validator | `src/lib/oioubl-validator.ts` |
-| Storecove API-klient | `src/lib/storecove-client.ts` |
+| Sproom API-klient | `src/lib/sproom-client.ts` |
+| Sproom webhook-route | `src/app/api/sproom/webhook/route.ts` |
 | E-faktura afsendelses-flow | `src/lib/einvoice-sender.ts` |
 | Send e-faktura API-rute | `src/app/api/invoices/[id]/send-einvoice/route.ts` |
 | OIOUBL validering API-rute | `src/app/api/invoices/[id]/oioubl/validate/route.ts` |
@@ -148,16 +152,21 @@ TEST-netværket.
 
 ## 8. Genkørsel af test
 
-Testen kan genkøres med:
+Rapporten genopfriskes via AlphaFlows Sproom-integration (staging):
 
-```bash
-bun scripts/peppol-testbed-report.ts
-```
+1. Gennemfør en test-afsendelse til Peppol TEST-modtageren
+   (DK:DIGST:DK10101011) fra appen — Indstillinger → E-faktura →
+   test-afsendelse til Peppol TEST-modtager via Sproom staging.
+2. Følg dokumentets state-historik via GET /api/documents/{id}/state
+   (outbox-polleren kører hver 10. min med auto-retry af fejlede afsendelser).
 
-Dette genererer en opdateret rapport med nye submission-GUID'er og
-valideringsresultater. Se også Bilag 4 (Compliance-rapport) afsnit 2.1
-og Bilag 6 (Brugsvejledning) afsnit 6.4 for den fulde dokumentation
-af Peppol BIS Billing 3.0 integrationen.
+Bemærk: Document-ID'et (`X-Sproom-DocumentId`) regenereres pr. genkørsel —
+nye kørsler giver derfor et nyt ID, mens valideringsresultatet (23+
+kontroller) er deterministisk. Det tidligere Storecove-baserede test-script
+(`scripts/peppol-testbed-report.ts`) er supersederet legacy og anvendes ikke
+længere. Se også Bilag 4 (Compliance-rapport) afsnit 2.1 og Bilag 6
+(Brugsvejledning) afsnit 6.4 for den fulde dokumentation af Peppol BIS
+Billing 3.0 integrationen.
 
 ---
 

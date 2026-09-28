@@ -1,6 +1,6 @@
 # AlphaFlow — Brugsvejledning
 
-**Version 3.1 — 2026**
+**Version 3.2 — September 2026**
 
 > Komplet brugermanual for AlphaFlow, den danskudviklede cloud-baserede bogføringsplatform til små og mellemstore virksomheder. Udviklet af AlphaAi Consult ApS til overholdelse af Lov om bogføring (LOV nr. 700 af 24. maj 2022), BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen), BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen) og GDPR.
 
@@ -66,7 +66,7 @@ AlphaFlow er **multi-tenant**: din virksomheds data er fuldt adskilt fra andre k
 | Gratis | 0 kr./md. | Ingen | 1 | Basisbogføring, manuel OIOUBL, demo-bank |
 | Månedlig | 199 kr./md. | Ingen | 3 | Bankintegration (Demo + Tink), avancerede rapporter, dataeksport, iXBRL |
 | Pro (årlig) | 169 kr./md. | 12 md. | 5 | Alt i Månedlig + Hermes AI |
-| Business (2-årig) | 149 kr./md. | 24 md. | Ubegrænset | Alt i Pro + auto e-faktura |
+| Business (2-årig) | 149 kr./md. | 24 md. | Ubegrænset | Alt i Pro + ubegrænsede sæder og større forbrugskvoter |
 | Business Extended (3-årig) | 145 kr./md. | 36 md. | Ubegrænset | Alt i Business + projektregnskab |
 
 Detaljer om funktioner pr. plan findes i afsnit 16. Alle nye brugere får 60 dages gratis prøveperiode.
@@ -142,7 +142,7 @@ Når du er logget ind første gang, vises en onboarding-wizard. Antallet af trin
 |------|-----------|--------|
 | 1. Virksomhedsoplysninger | Alle | Indtast CVR, navn, adresse, bank |
 | 2. Kontoplan | Alle | Opret FSR-baseret standardkonti |
-| 3. eLevering / eFaktura | Kun Business+ (AUTO_EINVOICE-feature) | Konfigurer Storecove + Peppol/NemHandel |
+| 3. eLevering / eFaktura | Kun betalende planer (AUTO_EINVOICE-feature) | Sproom-tilmelding (NemHandel + Peppol) |
 
 Hvert trin har baggrundsillustration, ikon og "udført"-status, der synkroniseres på tværs af enheder. Når alle trin er gennemført, vises en **OnboardingCompleteOverlay** (mobil: cirkel+checkmark-animation, desktop: inline kort).
 
@@ -702,7 +702,7 @@ Fil-upload er sikret med MIME-whitelist, størrelsesgrænse og path-traversal-be
 
 ## 6. Fakturering
 
-AlphaFlows faktureringsmodul (`/invoices`) håndterer salgsfakturaer, e-mail-afsendelse, e-faktura via Peppol/NemHandel/Storecove og modtagelse af e-fakturaer.
+AlphaFlows faktureringsmodul (`/invoices`) håndterer salgsfakturaer, e-mail-afsendelse, e-faktura via NemHandel/Peppol (gennem Sproom Access Point) og modtagelse af e-fakturaer.
 
 ### 6.1 Oprette salgsfaktura
 
@@ -750,46 +750,57 @@ Fra faktura-preview-dialogen (klik på en faktura i listen):
 - **Annuller** — skift status til CANCELLED med årsag. Systemet opretter automatisk en modpostering (`REVERSAL-{invoiceNumber}`), der neutraliserer den oprindelige accrual- og evt. kassejournalpost jf. Bogføringsloven §§ 10-12.
 - **Slet** — kun for DRAFT-status.
 
-### 6.4 Send e-faktura (Peppol/NemHandel)
+### 6.4 Send e-faktura (Peppol/NemHandel via Sproom)
 
 Fra faktura-preview-dialogen klik på **Send e-faktura** (`SendEInvoiceDialog`):
 
 1. Vælg afsendelseskanal:
 
-   | Kanal | Format | Krav |
-   |-------|--------|------|
-   | NemHandel | OIOUBL 2.1 | Modtager tilmeldt NemHandel |
-   | Peppol BIS | Peppol BIS Billing 3.0 (EN 16931) | Modtager tilmeldt Peppol |
-   | Storecove | Multi-format (videresender) | Storecove API-nøgle konfigureret |
+   | Kanal | Format | Forklaring |
+   |-------|--------|------------|
+   | Sproom (Auto Peppol+NemHandel) | OIOUBL 2.1 eller Peppol BIS Billing 3.0 (vælges automatisk) | Standard. Sproom vælger automatisk OIOUBL til danske modtagere (NemHandel) og Peppol BIS 3 til internationale modtagere |
+   | Sproom (Peppol) | Peppol BIS Billing 3.0 (EN 16931) | Tvinger Peppol BIS 3-format. Bruges kun til internationale afsendelser, hvor modtageren eksplicit kræver Peppol |
+   | E-mail (PDF) | PDF | Fakturaen sendes som PDF-vedhæftning — kræver ikke Sproom/NemHandel |
 
-2. Systemet validerer modtagerens endpoint via Peppol participant lookup (CVR-opslag).
-3. Vælg om fakturaen skal sendes automatisk ved finalize.
-4. Klik på **Send**.
+2. Har kunden et CVR-nummer, udfører systemet automatisk et pre-flight tjek af, at modtageren er tilmeldt netværket (participant-opslag via Sproom).
+3. Klik på **Send**.
 
-Fakturaen konverteres til OIOUBL eller Peppol BIS XML og sendes via Storecove access point. Leveringsstatus spores i `EInvoiceSendStatus`-tabellen (channel, format, status SENT/DELIVERED/ACCEPTED/ERROR, retry-count, messageId).
+Fakturaen konverteres til OIOUBL- eller Peppol BIS-XML (kreditnotaer som type 381 med reference til den oprindelige faktura) og sendes som rå XML til AlphaFlows integrerede Access Point **Sproom** (dansk selskab), som videresender i det valgte format. Sproom håndterer som Access Point den tekniske distribution: NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag samt schema/schematron-validering og MLR/AR-svar (Message Level Response/Application Response).
 
-> **Begrænsning:** Auto-e-faktura ved finalize kræver `AUTO_EINVOICE`-feature (Business-abonnement eller derover). Manuel afsendelse fra preview-dialogen er tilgængelig for alle abonnementer.
+Leveringsstatus spores pr. dokument i `EInvoiceSending`-tabellen (kanal, format, status, retry-count, messageId) med en komplet, append-only statushistorik (`EInvoiceSendEvent`). Status opdateres i realtid via Sprooms webhooks, og en outbox-poller (hver 10. minut) fungerer som sikkerhedsnet med automatisk genforsøg af fejlede afsendelser. Se leveringsstatusser i afsnit 6.5.
+
+> **Begrænsning:** Afsendelse via Sproom (alle e-faktura-kanaler) kræver `AUTO_EINVOICE`-feature — dvs. et betalende abonnement (Månedlig eller derover). Gratis-planen kan modtage e-fakturaer og downloade OIOUBL-XML manuelt, men ikke afsende. Auto-e-faktura ved finalize aktiveres i Indstillinger → E-faktura (afsnit 16.3). Der gælder en månedlig forbrugskvote pr. plan (afsendelser + modtagelser): Gratis 10, Månedlig 30, Pro 50, Business 100, Business Extended 150 — ekstra forbrug kan tilkøbes (se afsnit 16.9).
 
 ### 6.5 Leveringsstatus (e-faktura afsendelse)
 
+Status pr. afsendelse vises i faktura-preview-dialogen (Send-historik) og i E-faktura Center. Typisk forløb: `SENT → IN_TRANSIT → DELIVERED → ACCEPTED → PAID`.
+
 | Status | Beskrivelse |
 |--------|-------------|
-| SENT | Sendt til access point |
-| DELIVERED | Leveret til modtager |
-| ACCEPTED | Modtager har accepteret |
-| ERROR | Afsendelse mislykkedes — kan prøves igen |
+| PENDING | I kø lokalt — endnu ikke overdraget til Sproom |
+| SENT | Sproom har accepteret XML'en — dokumentet er i Sprooms pipeline |
+| IN_TRANSIT | Sproom overfører dokumentet til modtagerens Access Point |
+| DELIVERED | Modtagerens Access Point har bekræftet modtagelsen |
+| PENDING_APPROVAL | Dokumentet ligger hos modtageren og afventer udtrykkelig godkendelse/afvisning |
+| ACCEPTED | Modtageren har udtrykkeligt godkendt fakturaen (positiv Application Response) |
+| REJECTED | Modtageren har afvist fakturaen (negativ Application Response) |
+| PAID | Fakturaen er markeret som betalt i AlphaFlow — statussen føjes til afsendelsen for end-to-end-sporing |
+| FAILED | Afsendelse eller levering fejlede (valideringsfejl, endpoint ikke fundet osv.) — den rå Sproom-fejlkode (fx `SchematronValidationError` eller `EndpointNotFound`) gemmes, så årsagen kan vises |
 
-Hvis en e-faktura fejler, kan du klikke **Prøv igen** for at gentage afsendelsen.
+Hver statusskift logges i statushistorikken (tidslinje pr. afsendelse) — drevet af Sproom-webhooks med outbox-polleren som fallback. Mislykkedes afsendelsen, genprøver systemet automatisk, og du kan også klikke **Prøv igen** for at gentage afsendelsen manuelt.
 
 ### 6.6 E-faktura Indbakke (modtagne)
 
-Under **Køb & Kvittering → E-faktura Indbakke** (`EInvoiceInbox`) ser du modtagne e-fakturaer fra Peppol/Storecove:
+Under **Køb & Kvittering → E-faktura Indbakke** (`EInvoiceInbox`) ser du modtagne e-fakturaer fra NemHandel og Peppol (begge netværk leveres via Sproom):
 
 - Filtrer på status, søgning, tabel-visning.
 - Klik på en faktura for at se preview med alle detaljer (leverandør, linjer, beløb, moms).
+- **Godkend eller afvis** en modtaget e-faktura — ved godkendelse/afvisning sendes et Application Response tilbage til afsenderen via Sproom, så afsenderen får kvittering.
 - Upload XML manuelt, hvis du har modtaget en fil uden for platformen.
 - Opret indkøbspostering direkte fra den modtagne faktura.
 - Slet modtagne fakturaer.
+
+E-fakturaer modtages automatisk via Sprooms DocumentReceived-webhook, og en indbakke-poller (hver 5. minut) fungerer som sikkerhedsnet, så ingen dokumenter går tabt. Statusforløbet for en modtaget faktura er `RECEIVED → APPROVED/REJECTED → POSTED → SETTLED` (afregnet via bankafstemning).
 
 Systemet registrerer automatisk formatet (OIOUBL eller Peppol BIS) baseret på CustomizationID og ProfileID i XML-filen.
 
@@ -863,6 +874,15 @@ Gå til **Bankafstemning → Open Banking** (`OpenBankingSection`).
 2. Vælg **Demo** som udbyder for at få simulerede transaktioner til test/demonstration.
 3. Bekræft oprettelsen.
 
+**Tink-forbindelse (reel Open Banking-integration):**
+
+1. Klik på **Tilføj bankforbindelse** og vælg **Tink** som udbyder (3.000+ europæiske banker).
+2. Du videresendes til **Tink Link** — Tinks hosted godkendelses-side — hvor du logger ind med dit bank-ID (fx MitID) og godkender samtykket.
+3. Efter godkendelse kaldes callback-ruten `/api/bank-connections/tink-callback`, og du vælger, hvilken konto der skal synkroniseres (`/api/bank-connections/tink-accounts`).
+4. Transaktioner hentes derefter automatisk; adgangstoken fornyes automatisk (token-refresh) og kan tilbagekaldes (revoke).
+
+> Tink er en reel integration — sandbox- og produktionstilstande; aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`. DPA med Tink indgås før produktion.
+
 **PSD2-forbindelse (Danske Bank, Nordea, Jyske Bank):**
 
 1. Vælg bank fra listen.
@@ -871,7 +891,7 @@ Gå til **Bankafstemning → Open Banking** (`OpenBankingSection`).
 4. Synkronisér transaktioner manuelt eller automatisk.
 5. Visning af forbindelses-status, sidste sync, accountNumber/IBAN.
 
-> **Bemærkning om MitID:** Consent-flow hos ægte banker ville normalt kræve MitID, men da bank-API-integrationerne er stubs, er der ingen MitID-integration i AlphaFlow i den nuværende version.
+> **Bemærkning om MitID:** Bankgodkendelse i Tink-forbindelsen foregår i Tink Links hosted godkendelses-UI — ikke i AlphaFlow selv. De øvrige PSD2-bankintegrationer (Danske Bank, Nordea, Jyske Bank) er stubs i den nuværende version, så deres consent-flow fører ikke til reelle bankdata.
 
 **Bankforbindelses-status:**
 
@@ -1421,7 +1441,7 @@ Gå til **Eksport** i sidebjælken (`/exports`) for at få adgang til alle ekspo
 | SAF-T | XML (Dansk Finansskema v1.0) | Komplet regnskab til Skat/Erhvervsstyrelse |
 | Posteringer | CSV | Alle transaktioner i regnearksformat |
 | Rapporter | PDF | Resultatopgørelse / balance |
-| OIOUBL | XML | E-faktura i Peppol BIS Billing 3.0 |
+| OIOUBL | XML | E-fakturaer som OIOUBL 2.1-XML pr. faktura (manuel download/upload) |
 | iXBRL | XML | Årsrapport til Erhvervsstyrelsen |
 | CSV (årlig) | CSV | Årsrapport i regnearksformat |
 | Eksporter alt | JSON + ZIP | Komplet tenant-snapshot (med filer) — til udvandring |
@@ -1472,6 +1492,7 @@ AlphaFlow overholder GDPR via:
 - Dataportabilitet via export-tenant.
 - Konto-deaktivering frem for permanent sletning.
 - Underbehandler-aftaler (SCC + TIA) med OpenRouter (data sendes til USA — se afsnit 13 for Hermes-dataadgang). OpenRouter er AlphaFlows eneste AI-underbehandler; model-udbydere (Anthropic, Meta, OpenAI m.fl.) er OpenRouter's underbehandlere per GDPR Art. 28(4).
+- Underbehandler-aftale (DPA) med **Sproom A/S** (dansk selskab) for e-faktura-transmission via NemHandel/Peppol — dataforarbejdning sker i Danmark/EU, så der er ikke behov for Standard Contractual Clauses. Se Bilag 14 for aftalegrundlaget.
 - Ingen CPR-data registreres (kun CVR).
 
 ---
@@ -1516,14 +1537,14 @@ Gå til **Indstillinger** i sidebjælken (`/settings`). SettingsPage er en tab-b
 
 ### 16.3 E-faktura
 
-`EInvoiceSettings` (`/settings-edelivery`) — onboarding step 3, kun for Business+ (`AUTO_EINVOICE`):
+`EInvoiceSettings` (`/settings-edelivery`) — onboarding step 3, kræver en betalende plan (`AUTO_EINVOICE`-feature, se afsnit 16.9):
 
 - Aktiver e-faktura-afsendelse (toggle).
-- Vælg default kanal (NemHandel, Peppol BIS Billing 3.0).
-- Endpoint ID (CVR), GLN (valgfrit), Peppol AS4 ID.
+- Vælg default kanal (Sproom Auto — OIOUBL/Peppol BIS Billing 3.0 — eller Peppol BIS Billing 3.0).
+- Endpoint ID (CVR) og Peppol AS4 ID styres automatisk af Sproom-tilmeldingen; GLN kan angives valgfrit.
 - Auto-send ved finalize (toggle).
-- NemHandel-registrering (registreringsnummer, status, dato).
-- **Storecove-forbindelsesopsætning**: API-key, legal entity ID, connection status, test-forbindelse, frakobl.
+- NemHandel-registrering (tilmeldingsknap, status, dato).
+- **Sproom-tilmelding** (Access Point — Peppol + NemHandel): en Sproom **child company** oprettes automatisk pr. virksomhed (kræver verificeret CVR), hvorefter virksomheden registreres i **begge netværk** (NemHandel + Peppol). Kortet viser forbindelsesstatus, child company-ID, tilmeldingsstatus pr. netværk, test-forbindelse og frakobl.
 - Peppol participant lookup (tjek om modtager eksisterer på Peppol-netværket).
 
 ### 16.4 Defaults
@@ -1573,15 +1594,19 @@ Standardindstillinger:
 
 | Funktion | Gratis | Månedlig | Pro | Business | Business Ext. |
 |----------|--------|----------|-----|----------|---------------|
-| Manuel e-faktura (OIOUBL) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Manuel e-faktura (OIOUBL-XML-download + modtagelse) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bankintegration (Demo + Tink) | ✅ Gratis (Demo) | ✅ Månedlig+ | ✅ Pro+ | ✅ Business+ | ✅ Business Ext.+ |
 | Avancerede rapporter | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Data eksport (CSV/PDF/SAF-T) | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Årsrapport iXBRL | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Hermes AI-assistent | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Auto e-faktura (Peppol) | ❌ | ❌ | ❌ | ✅ | ✅ |
+| Auto e-faktura (afsendelse via Sproom — Peppol/NemHandel) | ❌ | ✅ | ✅ | ✅ | ✅ |
+| E-faktura-forbrug pr. md. (send + modtag) | 10 | 30 | 50 | 100 | 150 |
+| Hermes AI-beskeder pr. md. | 0 | 0 | 200 | 500 | 1.000 |
 | Ubegrænsede sæder | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Projektregnskab | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+> **Forbrugskvoter og tilkøb:** E-faktura-forbruget (afsendelser + modtagelser, inkl. kreditnotaer) og Hermes-beskeder måles pr. måned. Gratis-planen kan **modtage** e-fakturaer og downloade OIOUBL-XML manuelt — **afsendelse** via Sproom kræver en betalende plan. Ekstra e-faktura-forbrug tilkøbes i faste pakker à 200/500/1.000/2.000 transaktioner til 1,0 kr. pr. transaktion; Hermes-pakker (250/500/1.000/2.000 beskeder) aftales via supporten. Pakkerne aktiveres i dag af App Ejer via oversight — selvbetjent tilkøb i appen er endnu ikke tilgængeligt (🚧).
 
 > **Prisforbehold:** Specifikke priser og bindingsperioder fremgår af `/pricing`. Priser for årlige og flerårige planer opkræves som et samlet beløb for bindingsperioden. Gratis og Månedlig har ingen binding; årlige planer fornyes automatisk til Månedlig ved udløb, medmindre andet er aftalt.
 
@@ -1665,10 +1690,10 @@ Kunden tilmelder sig frivilligt ved at:
 1. Gå til **Indstillinger → eLevering / eFaktura**.
 2. Aktivere e-fakturering (toggle).
 3. Udfylde endpoint-ID (CVR-baseret, scheme 0184), vælge standardkanal (NemHandel eller Peppol BIS Billing 3.0).
-4. Forbinde Storecove Access Point (API-nøgle + legal entity ID).
+4. Tilslutte Sproom Access Point — Sproom-tilmeldingen opretter automatisk en child company pr. virksomhed (kræver verificeret CVR) og registrerer virksomheden i både NemHandel og Peppol.
 5. Markere at virksomheden ønsker tilmelding til NemHandelsregisteret og give samtykke.
 
-Når samtykket er givet, håndterer AlphaFlow automatisk tilmeldingen via den integrerede Storecove Access Point (`src/lib/einvoice-sender.ts` → `registerNemHandel()`). Se også afsnit 16.3 (E-faktura).
+Når samtykket er givet, håndterer AlphaFlow automatisk tilmeldingen via den integrerede Sproom Access Point (`src/lib/sproom-client.ts` + ruterne `/api/sproom/register-nemhandel` og `/api/sproom/peppol` — med participant-verificering i Peppol). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport og SMP/NHR-opslag varetages af Sproom som Access Point. Se også afsnit 16.3 (E-faktura).
 
 > **Henvisning:** Kravene er defineret i Bilag 2 (Erhvervsstyrelsen Gennemgang) række 47 (Krav 8) og række 48 (Krav 9).
 
@@ -1815,6 +1840,13 @@ AlphaFlow understøtter moderne browsere (Chrome, Edge, Firefox, Safari). Kendte
 | Ingen account-lockout | Kun IP-baseret rate-limiting. |
 
 Disse begrænsninger er anført for at hjælpe dig med at vurdere, om AlphaFlow dækker dine behov. For spørgsmål til specifikke funktioner, kontakt AlphaAi Consult ApS via `/contact`.
+
+### 18.8 Versionshistorik
+
+| Version | Dato | Væsentlige ændringer |
+|---------|------|----------------------|
+| 3.2 | September 2026 | **Sproom-migrering:** Sproom (dansk selskab, sproom.net) har erstattet Storecove som AlphaFlows eneste e-invoicing Access Point og dækker begge netværk — NemHandel (OIOUBL 2.1) og Peppol (BIS Billing 3.0). Automatisk Sproom-tilmelding pr. virksomhed (child company + registrering i begge netværk), afsendelse som rå XML, udvidet leveringsstatus pr. dokument (inkl. IN_TRANSIT, PENDING_APPROVAL, REJECTED, PAID) med fuld statushistorik og auto-retry, samt godkend/afvis i e-faktura-indbakken med Application Response tilbage til afsenderen. Afsendelse via Sproom kræver nu et betalende abonnement (alle betalende planer — tidligere Business+). Tilføjet månedlige forbrugskvoter (e-faktura 10/30/50/100/150; Hermes 0/0/200/500/1.000) med tilkøbspakker. Tink beskrevet som reel bankintegration (Tink Link-flow). |
+| 3.1 | 2026 | Forrige udgave — e-fakturering beskrevet med Storecove som aktivt Access Point. |
 
 ---
 

@@ -54,6 +54,7 @@ import {
   Search,
   Activity,
   PlusCircle,
+  Beaker,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -169,6 +170,13 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     childCompanyId: string | null;
   } | null>(null);
   const [isPeppolVerifying, setIsPeppolVerifying] = useState(false);
+
+  // ── DevMode CVR-bypass toggle (only rendered when NODE_ENV !== 'production') ──
+  // Lets a developer skip the CVR-verification gate for Sproom staging sandbox
+  // testing without a real Danish CVR number. Backed by /api/sproom/dev-bypass-cvr.
+  const isDevMode = process.env.NODE_ENV !== 'production';
+  const [devBypassActive, setDevBypassActive] = useState(false);
+  const [isTogglingDevBypass, setIsTogglingDevBypass] = useState(false);
   const [peppolDialogOpen, setPeppolDialogOpen] = useState(false);
   const [peppolDialogData, setPeppolDialogData] = useState<{ message?: string; state?: string | null; registered?: boolean } | null>(null);
 
@@ -251,6 +259,41 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     fetchCompanyCvr();
     fetchSproomStatus();
   }, [fetchSettings, fetchCompanyCvr, fetchSproomStatus]);
+
+  // ── DevMode CVR-bypass toggle handler ──
+  // POST   /api/sproom/dev-bypass-cvr → set cvrVerifiedAt = now  (gate passes)
+  // DELETE /api/sproom/dev-bypass-cvr → set cvrVerifiedAt = null (gate re-armed)
+  // The route itself hard-checks NODE_ENV !== 'production' on the server side,
+  // so even if this UI leaked into a prod build it would be inert.
+  const handleToggleDevBypass = useCallback(
+    async (enable: boolean) => {
+      setIsTogglingDevBypass(true);
+      try {
+        const res = await fetch('/api/sproom/dev-bypass-cvr', {
+          method: enable ? 'POST' : 'DELETE',
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(data?.error || (isDa ? 'Kunne ikke ændre DevMode-bypass' : 'Failed to toggle DevMode bypass'));
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        const nowVerified = !!data?.cvrVerifiedAt;
+        setDevBypassActive(enable);
+        setCvrVerified(nowVerified);
+        toast.success(
+          enable
+            ? (isDa ? 'DevMode-bypass aktiveret — CVR betragtes som verificeret' : 'DevMode bypass enabled — CVR treated as verified')
+            : (isDa ? 'DevMode-bypass deaktiveret — CVR skal verificeres igen' : 'DevMode bypass disabled — CVR must be re-verified'),
+        );
+      } catch {
+        toast.error(isDa ? 'Netværksfejl under toggle' : 'Network error during toggle');
+      } finally {
+        setIsTogglingDevBypass(false);
+      }
+    },
+    [isDa],
+  );
 
   // ── Create child company in Sproom (tenant-initiated) ──
   // Uses the platform Sproom parent credentials from .env, gated on CVR
@@ -1246,6 +1289,48 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 </div>
               </div>
             </div>
+
+            {/* ── DevMode CVR-bypass toggle (dev builds only) ──
+                Lets a developer skip the CVR-verification gate for Sproom
+                staging sandbox testing. The server route (POST/DELETE
+                /api/sproom/dev-bypass-cvr) hard-refuses in production, so
+                this UI is informational only when running in a prod build. */}
+            {isDevMode && !sproomStatus?.connected && (
+              <div className="rounded-lg bg-amber-50 dark:bg-amber-900/15 border border-amber-300 dark:border-amber-700/50 p-3 space-y-3">
+                <div className="flex items-start gap-2">
+                  <Beaker className="h-4 w-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                      {isDa ? 'DevMode: Spring CVR-verifikation over' : 'DevMode: Skip CVR verification'}
+                    </p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5 leading-snug">
+                      {isDa
+                        ? 'Aktivér for at teste Sproom staging sandbox uden et ægte CVR-nummer. Sætter cvrVerifiedAt = nu, så KYC-gaten passeres. Deaktivér for at kræve reel CVR-verifikation igen.'
+                        : 'Enable to test the Sproom staging sandbox without a real CVR number. Sets cvrVerifiedAt = now so the KYC gate passes. Disable to require real CVR verification again.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3 pl-6">
+                  <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                    {devBypassActive
+                      ? (isDa ? 'Bypass aktiv — CVR betragtes som verificeret' : 'Bypass active — CVR treated as verified')
+                      : (isDa ? 'Bypass inaktiv — CVR-verifikation kræves' : 'Bypass inactive — CVR verification required')}
+                  </span>
+                  <ResponsiveSwitch
+                    checked={devBypassActive}
+                    disabled={isTogglingDevBypass}
+                    onCheckedChange={(checked) => handleToggleDevBypass(checked)}
+                    aria-label={isDa ? 'DevMode CVR-bypass' : 'DevMode CVR bypass'}
+                  />
+                </div>
+                {isTogglingDevBypass && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-400 pl-6">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {isDa ? 'Opdaterer...' : 'Updating...'}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Create child company / Test connection ──
                 Sproom uses parent-level OAuth2 credentials from .env
