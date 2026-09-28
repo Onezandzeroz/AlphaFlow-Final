@@ -196,9 +196,9 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   // toggle, which is correct — bypassing KYC against real Sproom prod
   // is never appropriate.
   //
-  // The server route (POST/DELETE /api/sproom/dev-bypass-cvr) independently
-  // checks NODE_ENV !== 'production' as a defence-in-depth, so even if
-  // this UI condition somehow became stale, the server would still refuse.
+  // The server route (POST/DELETE /api/sproom/dev-bypass-cvr) refuses
+  // ONLY based on sproomClient.environment === 'production'. It does
+  // NOT check NODE_ENV — see the route's header comment for the rationale.
   const sproomEnv = sproomStatus?.sproomEnvironment;
   const isSandboxSproom = sproomEnv === 'staging' || sproomEnv === 'custom' || sproomEnv === 'simulation';
   const isDevMode = isSandboxSproom;
@@ -1320,9 +1320,9 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
             {/* ── DevMode CVR-bypass toggle (shown when Sproom is in a non-production environment) ──
                 Lets a developer skip the CVR-verification gate for Sproom
                 staging sandbox testing. The server route (POST/DELETE
-                /api/sproom/dev-bypass-cvr) hard-refuses in production
-                (NODE_ENV === 'production'), so even if this UI leaked
-                into a prod build it would be inert. */}
+                /api/sproom/dev-bypass-cvr) refuses ONLY when Sproom is
+                pointed at production (sproomClient.environment === 'production').
+                It does NOT check NODE_ENV — see the route header for rationale. */}
             {isDevMode && !sproomStatus?.connected && (
               <div className="rounded-lg bg-amber-50 dark:bg-amber-900/15 border border-amber-300 dark:border-amber-700/50 p-3 space-y-3">
                 <div className="flex items-start gap-2">
