@@ -352,7 +352,16 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
   // verification. The route also registers the child in NemHandel + Peppol
   // and auto-configures einvoiceEnabled / endpointId / peppolAs4Id.
   const handleCreateSproomChild = useCallback(async () => {
-    if (!cvrVerified) {
+    // CVR gate (frontend): the user can proceed if EITHER
+    //   (a) this tenant's CVR is verified (the normal path), OR
+    //   (b) the SuperDev has enabled the platform-wide DevMode CVR
+    //       bypass flag (sproomStatus.cvrBypassEnabled === true). The
+    //       backend re-checks this flag on every request, so the
+    //       frontend check is just a UX guard — it doesn't bypass
+    //       anything on its own.
+    // When bypass is ON, the user can create a Sproom child company
+    // without first verifying their CVR (e.g. in a staging sandbox test).
+    if (!cvrVerified && !sproomStatus?.cvrBypassEnabled) {
       toast.error(isDa
         ? 'Bekræft dit CVR-nummer i Virksomhedsindstillinger først.'
         : 'Verify your CVR number in Company settings first.');
@@ -417,7 +426,7 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
     } finally {
       setIsCreatingSproomChild(false);
     }
-  }, [cvrVerified, isDa, handleMutationError, fetchSproomStatus, fetchSettings]);
+  }, [cvrVerified, sproomStatus, isDa, handleMutationError, fetchSproomStatus, fetchSettings]);
 
   // ── Test Sproom connection ──
   const handleTestSproom = useCallback(async () => {
@@ -1441,16 +1450,34 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                     </a>
                   </div>
                 )}
-                {cvrVerified ? (
+                {/* CVR gate (UX): show the "Create child company" button when
+                    EITHER the tenant's CVR is verified, OR the SuperDev has
+                    enabled the platform-wide DevMode CVR bypass flag
+                    (sproomStatus.cvrBypassEnabled === true). The backend
+                    re-checks the bypass flag on every actual request, so
+                    this is just a UX gate — it doesn't grant anything on
+                    its own. */}
+                {(cvrVerified || sproomStatus?.cvrBypassEnabled) ? (
                   <>
-                    <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
-                      <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
-                      <span>
-                        {isDa
-                          ? `CVR ${companyCvr} er verificeret. Du kan oprette en child company i Sproom — AlphaFlow bruger platformens Sproom-konto automatisk og tilmelder dig både NemHandel og Peppol.`
-                          : `CVR ${companyCvr} is verified. You can create a child company in Sproom — AlphaFlow uses the platform Sproom account automatically and registers you on both NemHandel and Peppol.`}
-                      </span>
-                    </div>
+                    {cvrVerified ? (
+                      <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
+                        <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span>
+                          {isDa
+                            ? `CVR ${companyCvr} er verificeret. Du kan oprette en child company i Sproom — AlphaFlow bruger platformens Sproom-konto automatisk og tilmelder dig både NemHandel og Peppol.`
+                            : `CVR ${companyCvr} is verified. You can create a child company in Sproom — AlphaFlow uses the platform Sproom account automatically and registers you on both NemHandel and Peppol.`}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="rounded-lg bg-amber-50 dark:bg-amber-900/15 border border-amber-300 dark:border-amber-700/50 p-3 text-xs text-amber-700 dark:text-amber-400 flex items-start gap-2">
+                        <Beaker className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span>
+                          {isDa
+                            ? 'Dit CVR er ikke verificeret, men DevMode CVR-bypass er aktiveret for hele platformen af en SuperDev. Du kan oprette en child company i Sproom staging sandbox uden CVR-verifikation.'
+                            : 'Your CVR is not verified, but the DevMode CVR bypass is enabled platform-wide by a SuperDev. You can create a child company in the Sproom staging sandbox without CVR verification.'}
+                        </span>
+                      </div>
+                    )}
                     <Button
                       onClick={handleCreateSproomChild}
                       disabled={isCreatingSproomChild}
