@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/auth-store';
 import { useDataSyncStore } from '@/lib/data-sync-store';
 import { useTranslation } from '@/lib/use-translation';
+import { useHermesOwlStore } from '@/lib/hermes-owl-store';
 import { FileText, Receipt, CheckCircle2, XCircle, AlertCircle, Loader2, Send, Clock, Banknote } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -59,6 +60,46 @@ export function EInvoiceEventNotifier() {
   const companyId = user?.activeCompanyId ?? null;
   const { language } = useTranslation();
   const isDa = language === 'da';
+
+  // ── Hermes owl show/hide ──
+  // When a toast fires, we show the Hermes owl (setFabHidden(false)) so
+  // it "pops forward" alongside the toast — as if Hermes is delivering
+  // the notification. After the toast's duration elapses, we hide the
+  // owl again (setFabHidden(true)) so it fades back. This is done via
+  // a ref so the socket listener (set up once) always uses the current
+  // store function.
+  const setFabHiddenRef = useRef(useHermesOwlStore.getState().setFabHidden);
+  useEffect(() => {
+    setFabHiddenRef.current = useHermesOwlStore.getState().setFabHidden;
+  }, []);
+
+  /**
+   * Show the Hermes owl, then auto-hide it after `durationMs` milliseconds.
+   * Called whenever a toast fires — makes the owl "pop forward" and
+   * "fade back" in sync with the toast.
+   *
+   * Uses a ref-based timeout so we don't create a new interval each time.
+   * If a new toast fires before the previous timeout expires, the
+   * timeout is cleared and a new one starts — so the owl stays visible
+   * as long as toasts keep coming, and only hides after the LAST toast
+   * has faded.
+   */
+  const owlHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showOwlThenHide = (durationMs: number) => {
+    // Show the owl immediately
+    setFabHiddenRef.current(false);
+    // Clear any previous hide-timeout (so the owl stays visible if
+    // multiple toasts fire in quick succession)
+    if (owlHideTimeoutRef.current) {
+      clearTimeout(owlHideTimeoutRef.current);
+    }
+    // Schedule the hide after the toast duration + a small grace period
+    // (500ms extra so the owl is still visible as the toast fades out)
+    owlHideTimeoutRef.current = setTimeout(() => {
+      setFabHiddenRef.current(true);
+      owlHideTimeoutRef.current = null;
+    }, durationMs + 500);
+  };
 
   // Keep the store's bumpVersion in a ref so the socket listener (set up once
   // per connection) always calls the current implementation without re-subscribing.
@@ -176,6 +217,8 @@ export function EInvoiceEventNotifier() {
                 description: 'einvoice-inbound-toast-description',
               },
             });
+            // Show Hermes owl alongside the toast, then hide after toast fades
+            showOwlThenHide(3000);
             return;
           }
 
@@ -234,6 +277,8 @@ export function EInvoiceEventNotifier() {
                 description: 'einvoice-inbound-toast-description',
               },
             });
+            // Show Hermes owl alongside the toast
+            showOwlThenHide(5000);
             return;
           }
 
@@ -254,6 +299,8 @@ export function EInvoiceEventNotifier() {
                 description: 'einvoice-inbound-toast-description',
               },
             });
+            // Show Hermes owl alongside the toast
+            showOwlThenHide(8000);
             return;
           }
 
@@ -267,6 +314,8 @@ export function EInvoiceEventNotifier() {
             duration: outDuration,
             icon: <StatusIcon className="h-4 w-4" />,
           });
+          // Show Hermes owl alongside the toast
+          showOwlThenHide(outDuration);
         });
       })
       .catch((err) => {
@@ -279,6 +328,11 @@ export function EInvoiceEventNotifier() {
       if (socket) {
         socket.removeAllListeners();
         socket.disconnect();
+      }
+      // Clean up any pending owl-hide timeout
+      if (owlHideTimeoutRef.current) {
+        clearTimeout(owlHideTimeoutRef.current);
+        owlHideTimeoutRef.current = null;
       }
     };
   }, [userId, companyId]);
