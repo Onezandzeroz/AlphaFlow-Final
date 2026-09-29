@@ -95,9 +95,41 @@ async function pullInboxForCompany(company: {
     // the in-memory dedup Set + storeReceivedInvoice's idempotency make
     // re-processing cheap (no-op). For high-volume tenants the webhook
     // remains the primary path; this is just a safety net.
-    docs = await sproomClient.listDocuments(0, undefined, {
-      childCompanyId: company.sproomChildCompanyId,
-    });
+    //
+    // Retry logic: Sproom staging can be slow or have transient outages.
+    // The default 30s timeout may abort before Sproom responds. We retry
+    // up to 2 times (3 attempts total) with a short delay between
+    // attempts — most transient failures resolve within a few seconds.
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 2000;
+    let lastError: unknown = null;
+    docs = null as unknown as Awaited<ReturnType<typeof sproomClient.listDocuments>>;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        docs = await sproomClient.listDocuments(0, undefined, {
+          childCompanyId: company.sproomChildCompanyId,
+        });
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        // Abort/timeout errors are retried; other errors (auth, 4xx) fail fast.
+        const isAbort = errMsg.includes('aborted') || errMsg.includes('timeout') || errMsg.includes('Timeout');
+        if (!isAbort || attempt === MAX_ATTEMPTS) {
+          throw err;
+        }
+        logger.warn('[SPROOM-INBOX] listDocuments timed out, retrying', {
+          companyId: company.id,
+          childCompanyId: company.sproomChildCompanyId,
+          attempt,
+          maxAttempts: MAX_ATTEMPTS,
+          error: errMsg,
+        });
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      }
+    }
+    if (lastError) throw lastError;
   } catch (err) {
     logger.warn('[SPROOM-INBOX] listDocuments failed', {
       companyId: company.id,
