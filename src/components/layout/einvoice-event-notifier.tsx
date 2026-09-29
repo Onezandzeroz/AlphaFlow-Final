@@ -62,41 +62,42 @@ export function EInvoiceEventNotifier() {
   const isDa = language === 'da';
 
   // ── Hermes owl show/hide ──
-  // When a toast fires, we show the Hermes owl (setFabHidden(false)) so
-  // it "pops forward" alongside the toast — as if Hermes is delivering
-  // the notification. After the toast's duration elapses, we hide the
-  // owl again (setFabHidden(true)) so it fades back. This is done via
-  // a ref so the socket listener (set up once) always uses the current
-  // store function.
-  const setFabHiddenRef = useRef(useHermesOwlStore.getState().setFabHidden);
+  // When a toast fires, we activate a "notification override" that keeps
+  // the Hermes owl visible — overriding HermesOverlay's auto-hide timer.
+  // After the toast's duration elapses, we clear the override, which lets
+  // HermesOverlay's auto-hide timer resume (it will hide the owl after
+  // its normal 5s delay).
+  //
+  // We use `notificationOverride` instead of directly setting `fabHidden`
+  // because HermesOverlay's useEffect would otherwise fight our changes
+  // (it has a 5s auto-hide timer that re-triggers whenever fabHidden
+  // changes, causing a "two timers fighting" problem).
+  const setNotificationOverrideRef = useRef(useHermesOwlStore.getState().setNotificationOverride);
   useEffect(() => {
-    setFabHiddenRef.current = useHermesOwlStore.getState().setFabHidden;
+    setNotificationOverrideRef.current = useHermesOwlStore.getState().setNotificationOverride;
   }, []);
 
   /**
-   * Show the Hermes owl, then auto-hide it after `durationMs` milliseconds.
-   * Called whenever a toast fires — makes the owl "pop forward" and
-   * "fade back" in sync with the toast.
+   * Show the Hermes owl (via notification override), then clear the
+   * override after `durationMs` milliseconds — letting HermesOverlay's
+   * auto-hide timer resume.
    *
-   * Uses a ref-based timeout so we don't create a new interval each time.
-   * If a new toast fires before the previous timeout expires, the
-   * timeout is cleared and a new one starts — so the owl stays visible
-   * as long as toasts keep coming, and only hides after the LAST toast
-   * has faded.
+   * If multiple toasts fire in quick succession, the timeout is reset
+   * with each new toast — so the owl stays visible as long as toasts
+   * keep coming, and only hides after the LAST toast has faded.
    */
   const owlHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showOwlThenHide = (durationMs: number) => {
-    // Show the owl immediately
-    setFabHiddenRef.current(false);
+    // Activate the override (owl stays visible, HermesOverlay skips auto-hide)
+    setNotificationOverrideRef.current(true);
     // Clear any previous hide-timeout (so the owl stays visible if
     // multiple toasts fire in quick succession)
     if (owlHideTimeoutRef.current) {
       clearTimeout(owlHideTimeoutRef.current);
     }
-    // Schedule the hide after the toast duration + a small grace period
-    // (500ms extra so the owl is still visible as the toast fades out)
+    // Schedule clearing the override after the toast duration + grace
     owlHideTimeoutRef.current = setTimeout(() => {
-      setFabHiddenRef.current(true);
+      setNotificationOverrideRef.current(false);
       owlHideTimeoutRef.current = null;
     }, durationMs + 500);
   };

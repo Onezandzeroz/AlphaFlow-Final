@@ -70,6 +70,7 @@ export function HermesOverlay({
   // space as the owl slides off/on screen.
   const fabHidden = useHermesOwlStore((s) => s.fabHidden);
   const setFabHidden = useHermesOwlStore((s) => s.setFabHidden);
+  const notificationOverride = useHermesOwlStore((s) => s.notificationOverride);
 
   useEffect(() => {
     // First activation: owl stays visible, no timer.
@@ -77,6 +78,16 @@ export function HermesOverlay({
 
     // Chat is expanded: owl stays visible, no timer.
     if (isOpen) {
+      setFabHidden(false);
+      return;
+    }
+
+    // Notification override active: owl stays visible, skip auto-hide.
+    // This prevents HermesOverlay's auto-hide timer from fighting with
+    // EInvoiceEventNotifier's showOwlThenHide() — when a toast fires,
+    // the override keeps the owl visible until the toast fades, then
+    // the override is cleared and normal auto-hide resumes.
+    if (notificationOverride) {
       setFabHidden(false);
       return;
     }
@@ -90,7 +101,7 @@ export function HermesOverlay({
     }, FAB_AUTO_HIDE_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [isOpen, hasEverOpened, fabHidden, setFabHidden]);
+  }, [isOpen, hasEverOpened, fabHidden, setFabHidden, notificationOverride]);
 
   // Reveal the owl when the tab is hovered/tapped.
   const revealFab = () => setFabHidden(false);
