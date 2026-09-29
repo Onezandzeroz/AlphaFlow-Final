@@ -151,4 +151,26 @@ toast.custom = (
 // Pass through dismiss without owl activation
 toast.dismiss = sonnerToast.dismiss;
 
+/**
+ * Fire a rich e-invoice toast with full invoice/credit note details.
+ * Uses sonner's toast.custom with the EInvoiceToast component.
+ *
+ * @param data - The e-invoice toast data (status, documentType, counterparty, etc.)
+ * @param durationMs - How long the toast stays visible (default 5000ms)
+ */
+export function einvoiceToast(data: import('@/components/invoices/einvoice-toast').EInvoiceToastData, durationMs: number = 5000) {
+  showOwlThenToast(durationMs, () => {
+    // Dynamic import to avoid pulling React component into the .ts module
+    Promise.all([
+      import('@/components/invoices/einvoice-toast'),
+      import('react'),
+    ]).then(([{ EInvoiceToast }, React]) => {
+      sonnerToast.custom(
+        (() => React.createElement(EInvoiceToast, { data })) as (id: string | number) => React.ReactElement,
+        { duration: durationMs, className: 'einvoice-rich-toast' },
+      );
+    });
+  });
+}
+
 export { toast };

@@ -137,7 +137,7 @@ function getStatusConfig(status: string, isDa: boolean) {
       icon: <Clock className="h-3 w-3" />,
     },
     SENDING: {
-      label: isDa ? 'Sender' : 'Sending',
+      label: isDa ? 'Afsendes' : 'Sending',
       colorClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800/40',
       icon: <Send className="h-3 w-3" />,
     },

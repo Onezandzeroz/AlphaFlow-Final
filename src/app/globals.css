@@ -6433,3 +6433,17 @@ select:focus-visible {
    Vi justerer ikke offset her da det ville kræve at vi kender
    fabHidden-state i CSS (hvilket vi ikke gør). Toaster forbliver
    på samme position — det ser stadig fint ud. */
+
+/* ==========================================================================
+   Rich e-invoice toast — større, med mere information
+   ========================================================================== */
+.einvoice-rich-toast {
+  min-width: 380px !important;
+  max-width: 480px !important;
+  padding: 16px 20px !important;
+  border-radius: 16px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--popover) !important;
+  box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.15), 0 4px 12px -4px rgba(15, 23, 42, 0.08) !important;
+  backdrop-filter: blur(8px) !important;
+}
