@@ -152,6 +152,94 @@ export function EInvoiceEventNotifier() {
           console.warn('[EInvoiceEvent] Socket.IO connection error:', err.message);
         });
 
+        // ── FALLBACK: listen for 'data-changed' events on 'einvoice-sends' ──
+        // The primary toast path is the 'einvoice-event' socket event (below).
+        // But if the einvoice-event was lost (e.g. the server-side
+        // notifyEInvoiceEvent() failed, or the event was emitted while this
+        // socket was disconnected), we can still detect status changes via
+        // the 'data-changed' event — which is sent by notifyDataChange() and
+        // is more reliable because it goes through the same /broadcast
+        // endpoint and the same socket connection.
+        //
+        // When a 'data-changed' event arrives for 'einvoice-sends', we
+        // re-fetch the sending list from the API and compare statuses to
+        // detect new ACCEPTED/REJECTED/DELIVERED transitions — firing toasts
+        // for any we find. This is a GLOBAL fallback that works on ANY page
+        // (not just the tracking page), because EInvoiceEventNotifier is
+        // mounted in the AppLayout.
+        const fallbackPrevStatuses = new Map<string, string>();
+        let fallbackInitialized = false;
+
+        const checkFallbackToasts = async () => {
+          try {
+            const res = await fetch('/api/einvoice-sends?page=1&limit=50');
+            if (!res.ok) return;
+            const data = await res.json();
+            const sends = (data.sends || []) as Array<{
+              id: string;
+              status: string;
+              recipientName: string;
+              invoice?: { invoiceNumber?: string };
+            }>;
+
+            if (!fallbackInitialized) {
+              // First call — just record statuses, don't toast
+              for (const s of sends) fallbackPrevStatuses.set(s.id, s.status);
+              fallbackInitialized = true;
+              return;
+            }
+
+            const isDa = isDaRef.current;
+            let anyToastFired = false;
+
+            for (const s of sends) {
+              const prev = fallbackPrevStatuses.get(s.id);
+              if (prev && prev !== s.status) {
+                const desc = `${s.invoice?.invoiceNumber ?? ''} · ${s.recipientName ?? ''}`;
+                if (s.status === 'ACCEPTED') {
+                  toast.success(isDa ? 'E-faktura godkendt' : 'E-invoice approved', {
+                    description: desc, duration: 5000,
+                    icon: <CheckCircle2 className="h-4 w-4" />,
+                  });
+                  showOwlThenHide(5000);
+                  anyToastFired = true;
+                } else if (s.status === 'REJECTED') {
+                  toast.error(isDa ? 'E-faktura afvist' : 'E-invoice rejected', {
+                    description: desc, duration: 8000,
+                    icon: <XCircle className="h-4 w-4" />,
+                  });
+                  showOwlThenHide(8000);
+                  anyToastFired = true;
+                } else if (s.status === 'DELIVERED') {
+                  toast.success(isDa ? 'E-faktura leveret' : 'E-invoice delivered', {
+                    description: desc, duration: 4000,
+                    icon: <CheckCircle2 className="h-4 w-4" />,
+                  });
+                  showOwlThenHide(4000);
+                  anyToastFired = true;
+                }
+              }
+              fallbackPrevStatuses.set(s.id, s.status);
+            }
+          } catch {
+            // Non-critical — fail silently
+          }
+        };
+
+        // Also listen for 'data-changed' events (same socket, different event)
+        socket.on('data-changed', (data: { scope?: string; companyId?: string; action?: string }) => {
+          if (!data || data.scope !== 'einvoice-sends') return;
+          // Defer slightly to let the DB commit settle
+          setTimeout(() => checkFallbackToasts(), 500);
+        });
+
+        // Initialize the fallback status map on connect
+        socket.on('connect', () => {
+          // Re-initialize on reconnect (statuses may have changed while disconnected)
+          fallbackInitialized = false;
+          checkFallbackToasts();
+        });
+
         socket.on('einvoice-event', (data: EInvoiceEvent) => {
           if (!data) return;
           // Read the current language without re-subscribing the socket listener.
