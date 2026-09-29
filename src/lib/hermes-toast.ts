@@ -6,8 +6,9 @@
  * Wraps sonner's `toast` so that ANY toast fired anywhere in the app
  * automatically activates the Hermes owl (via the notificationOverride
  * mechanism in useHermesOwlStore). The owl pops forward BEFORE the
- * toast appears (with a 200ms lead) and fades back after the toast's
- * duration elapses.
+ * toast appears (with a 300ms lead so the owl's Framer Motion slide-in
+ * animation starts first) and fades back EXACTLY when the toast's
+ * duration elapses — matching the toast's lifetime precisely.
  *
  * Usage — replace `import { toast } from 'sonner'` with:
  *   import { toast } from '@/lib/hermes-toast'
@@ -30,16 +31,30 @@ function ensureInit() {
   }
 }
 
-/**
- * Show the Hermes owl immediately, then schedule hiding it after
- * `durationMs + 500ms`. Called before every toast so the owl appears
- * slightly BEFORE the toast.
- */
-function showOwlBeforeToast(durationMs: number) {
-  ensureInit();
-  if (!setOverride) return;
+// How long before the toast to show the owl (ms).
+// HermesFab's Framer Motion slide-in takes ~600ms (duration: 0.6, ease: 'easeInOut').
+// 300ms gives the owl a head start — it's visibly sliding in when the toast appears.
+const OWL_LEAD_MS = 300;
 
-  // Activate override immediately — owl pops forward
+/**
+ * Show the Hermes owl, then schedule the toast to appear after OWL_LEAD_MS.
+ * The owl hide timer matches the toast's duration EXACTLY (no grace period)
+ * so the owl and toast disappear together.
+ *
+ * Returns a Promise that resolves when the toast has been dispatched.
+ */
+function showOwlThenToast(
+  durationMs: number,
+  dispatchToast: () => void,
+): void {
+  ensureInit();
+  if (!setOverride) {
+    // Owl store not available — just show the toast immediately
+    dispatchToast();
+    return;
+  }
+
+  // Activate override immediately — owl starts sliding in
   setOverride(true);
 
   // Clear any previous hide timeout
@@ -47,11 +62,17 @@ function showOwlBeforeToast(durationMs: number) {
     clearTimeout(hideTimeout);
   }
 
-  // Schedule clearing the override after the toast duration + grace
+  // Wait OWL_LEAD_MS so the owl is visibly sliding in, THEN show the toast
+  setTimeout(() => {
+    dispatchToast();
+  }, OWL_LEAD_MS);
+
+  // Schedule clearing the override after OWL_LEAD_MS + durationMs
+  // so the owl hides EXACTLY when the toast fades out (no grace period)
   hideTimeout = setTimeout(() => {
     setOverride?.(false);
     hideTimeout = null;
-  }, durationMs + 500);
+  }, OWL_LEAD_MS + durationMs);
 }
 
 // Default duration if the toast doesn't specify one
@@ -59,12 +80,11 @@ const DEFAULT_DURATION = 4000;
 
 /**
  * Wrapped toast function — identical API to sonner's `toast`.
- * Activates the Hermes owl BEFORE the toast appears.
+ * Activates the Hermes owl BEFORE the toast appears (300ms lead).
  */
 function toast(message: string, options?: Parameters<typeof sonnerToast>[1]) {
   const duration = (options as { duration?: number })?.duration ?? DEFAULT_DURATION;
-  showOwlBeforeToast(duration);
-  return sonnerToast(message, options);
+  showOwlThenToast(duration, () => sonnerToast(message, options));
 }
 
 /**
@@ -72,8 +92,7 @@ function toast(message: string, options?: Parameters<typeof sonnerToast>[1]) {
  */
 toast.success = (message: string, options?: Parameters<typeof sonnerToast.success>[1]) => {
   const duration = (options as { duration?: number })?.duration ?? DEFAULT_DURATION;
-  showOwlBeforeToast(duration);
-  return sonnerToast.success(message, options);
+  showOwlThenToast(duration, () => sonnerToast.success(message, options));
 };
 
 /**
@@ -81,8 +100,7 @@ toast.success = (message: string, options?: Parameters<typeof sonnerToast.succes
  */
 toast.error = (message: string, options?: Parameters<typeof sonnerToast.error>[1]) => {
   const duration = (options as { duration?: number })?.duration ?? DEFAULT_DURATION;
-  showOwlBeforeToast(duration);
-  return sonnerToast.error(message, options);
+  showOwlThenToast(duration, () => sonnerToast.error(message, options));
 };
 
 /**
@@ -90,8 +108,7 @@ toast.error = (message: string, options?: Parameters<typeof sonnerToast.error>[1
  */
 toast.info = (message: string, options?: Parameters<typeof sonnerToast.info>[1]) => {
   const duration = (options as { duration?: number })?.duration ?? DEFAULT_DURATION;
-  showOwlBeforeToast(duration);
-  return sonnerToast.info(message, options);
+  showOwlThenToast(duration, () => sonnerToast.info(message, options));
 };
 
 /**
@@ -99,8 +116,7 @@ toast.info = (message: string, options?: Parameters<typeof sonnerToast.info>[1])
  */
 toast.warning = (message: string, options?: Parameters<typeof sonnerToast.warning>[1]) => {
   const duration = (options as { duration?: number })?.duration ?? DEFAULT_DURATION;
-  showOwlBeforeToast(duration);
-  return sonnerToast.warning(message, options);
+  showOwlThenToast(duration, () => sonnerToast.warning(message, options));
 };
 
 /**
@@ -108,8 +124,7 @@ toast.warning = (message: string, options?: Parameters<typeof sonnerToast.warnin
  */
 toast.loading = (message: string, options?: Parameters<typeof sonnerToast.loading>[1]) => {
   const duration = (options as { duration?: number })?.duration ?? DEFAULT_DURATION;
-  showOwlBeforeToast(duration);
-  return sonnerToast.loading(message, options);
+  showOwlThenToast(duration, () => sonnerToast.loading(message, options));
 };
 
 /**
@@ -119,8 +134,7 @@ toast.promise = <T>(
   promise: Promise<T>,
   options: Parameters<typeof sonnerToast.promise>[1],
 ) => {
-  showOwlBeforeToast(DEFAULT_DURATION);
-  return sonnerToast.promise(promise, options);
+  showOwlThenToast(DEFAULT_DURATION, () => sonnerToast.promise(promise, options));
 };
 
 /**
@@ -131,8 +145,7 @@ toast.custom = (
   options?: Parameters<typeof sonnerToast.custom>[1],
 ) => {
   const duration = (options as { duration?: number })?.duration ?? DEFAULT_DURATION;
-  showOwlBeforeToast(duration);
-  return sonnerToast.custom(component, options);
+  showOwlThenToast(duration, () => sonnerToast.custom(component, options));
 };
 
 // Pass through dismiss without owl activation
