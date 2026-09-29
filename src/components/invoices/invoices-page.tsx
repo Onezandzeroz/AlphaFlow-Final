@@ -178,6 +178,7 @@ interface Invoice {
   subtotal: number;
   vatTotal: number;
   total: number;
+  currency?: string;
   status: 'DRAFT' | 'SENT' | 'PAID' | 'CANCELLED';
   notes: string | null;
   createdAt: string;
@@ -2155,31 +2156,68 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                   className="w-full h-10 justify-between text-left font-normal"
                 >
                   {originalInvoiceId
-                    ? (() => { const orig = invoices.find(i => i.id === originalInvoiceId); return orig ? `${orig.invoiceNumber} — ${orig.customerName}` : t('selectOriginalInvoice'); })()
+                    ? (() => {
+                        const orig = invoices.find(i => i.id === originalInvoiceId);
+                        if (!orig) return t('selectOriginalInvoice');
+                        const total = Number(orig.total) || 0;
+                        const currency = orig.currency || 'DKK';
+                        const amount = total.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        return (
+                          <span className="flex items-center gap-2 truncate">
+                            <span className="font-medium">{orig.invoiceNumber}</span>
+                            <span className="text-muted-foreground">—</span>
+                            <span className="truncate">{orig.customerName}</span>
+                            <span className="text-muted-foreground shrink-0">{amount} {currency}</span>
+                          </span>
+                        );
+                      })()
                     : <span className="text-muted-foreground">{t('noOriginalInvoice')}</span>}
                   <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="p-0" align="start">
+              <PopoverContent className="p-0 w-[460px]" align="start">
                 <Command>
                   <CommandInput placeholder={language === 'da' ? 'Søg faktura…' : 'Search invoice…'} />
                   <CommandList>
                     <CommandEmpty>{language === 'da' ? 'Ingen fakturaer fundet' : 'No invoices found'}</CommandEmpty>
                     <CommandGroup>
-                      {creditableInvoices.map((inv) => (
-                        <CommandItem
-                          key={inv.id}
-                          value={`${inv.invoiceNumber} ${inv.customerName}`}
-                          onSelect={() => handleSelectOriginalInvoice(inv)}
-                        >
-                          <div className="flex flex-col">
-                            <span className="font-medium">{inv.invoiceNumber} — {inv.customerName}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {inv.issueDate ? td(new Date(inv.issueDate)) : ''} · {inv.status}
-                            </span>
-                          </div>
-                        </CommandItem>
-                      ))}
+                      {creditableInvoices.map((inv) => {
+                        const total = Number(inv.total) || 0;
+                        const currency = inv.currency || 'DKK';
+                        const amount = total.toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        return (
+                          <CommandItem
+                            key={inv.id}
+                            value={`${inv.invoiceNumber} ${inv.customerName} ${amount} ${inv.customerCvr ?? ''}`}
+                            onSelect={() => handleSelectOriginalInvoice(inv)}
+                          >
+                            <div className="flex items-start gap-2 w-full py-0.5">
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{inv.invoiceNumber}</span>
+                                  <span className="text-muted-foreground">—</span>
+                                  <span className="truncate">{inv.customerName}</span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
+                                  <span>{inv.issueDate ? td(new Date(inv.issueDate)) : ''}</span>
+                                  <span>·</span>
+                                  <span>{inv.status === 'PAID' ? (language === 'da' ? 'Betalt' : 'Paid') : (language === 'da' ? 'Sendt' : 'Sent')}</span>
+                                  {inv.customerCvr && (
+                                    <>
+                                      <span>·</span>
+                                      <span>CVR {inv.customerCvr}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="font-semibold tabular-nums">{amount}</span>
+                                <span className="text-xs text-muted-foreground ml-1">{currency}</span>
+                              </div>
+                            </div>
+                          </CommandItem>
+                        );
+                      })}
                     </CommandGroup>
                   </CommandList>
                 </Command>
