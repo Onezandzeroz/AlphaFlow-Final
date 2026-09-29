@@ -35,6 +35,7 @@ import { db } from '@/lib/db';
 import { sproomClient } from '@/lib/sproom-client';
 import { applyStateHistory } from '@/lib/einvoice-status-tracker';
 import { notifyEInvoiceEvent } from '@/lib/notify-einvoice-event';
+import { notifyDataChange } from '@/lib/notify-data-change';
 import { PlanTier, tierHasFeature, Feature } from '@/lib/plan-features';
 
 // ─── State ────────────────────────────────────────────────────────────────
@@ -169,6 +170,24 @@ async function pollSendingStatus(sending: {
   // If status changed, emit a real-time toast so the tenant is notified
   // (mirrors the webhook path — for missed webhooks this is the only signal).
   if (result.changed > 0 && result.finalStatus) {
+    // ── 1. Fire data-changed so the tracking page re-fetches ──
+    // This is CRITICAL — without it, the tracking page doesn't know the
+    // status changed and can't fire the fallback toast. The webhook path
+    // calls notifyDataChange too; the outbox scheduler was missing it.
+    try {
+      await notifyDataChange({
+        scope: 'einvoice-sends',
+        companyId: sending.companyId,
+        action: 'update',
+      });
+    } catch (err) {
+      logger.warn('[SPROOM-OUTBOX] notifyDataChange failed', {
+        sendingId: sending.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    // ── 2. Fire einvoice-event for the toast notification ──
     try {
       const invoice = await db.invoice.findUnique({
         where: { id: sending.invoiceId },

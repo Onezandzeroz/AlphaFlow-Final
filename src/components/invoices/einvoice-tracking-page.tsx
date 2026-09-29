@@ -268,24 +268,32 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
         setStats(data.stats || {});
         setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 1 });
 
-        // ── Fallback toast: detect new ACCEPTED/REJECTED since last fetch ──
+        // ── Fallback toast: detect status changes since last fetch ──
         // Skip on initial fetch (don't toast for statuses that were already
         // there when the page first loaded).
+        // Covers: DELIVERED, ACCEPTED, REJECTED — the key milestones the
+        // user needs to be notified about (required by Erhvervsstyrelsen).
         if (!isInitialFetchRef.current) {
           const prev = prevStatusesRef.current;
           for (const send of newSends) {
             const prevStatus = prev.get(send.id);
             if (prevStatus && prevStatus !== send.status) {
-              // Status changed since last fetch — check if it's a "toastable" transition
-              if (send.status === 'ACCEPTED') {
+              const desc = `${send.invoice?.invoiceNumber ?? ''} · ${send.recipientName ?? ''}`;
+              if (send.status === 'DELIVERED') {
+                toast.success(isDa ? 'E-faktura leveret' : 'E-invoice delivered', {
+                  description: desc,
+                  duration: 4000,
+                  icon: <CheckCircle2 className="h-4 w-4" />,
+                });
+              } else if (send.status === 'ACCEPTED') {
                 toast.success(isDa ? 'E-faktura godkendt' : 'E-invoice approved', {
-                  description: `${send.invoice?.invoiceNumber ?? ''} · ${send.recipientName ?? ''}`,
+                  description: desc,
                   duration: 5000,
                   icon: <CheckCircle2 className="h-4 w-4" />,
                 });
               } else if (send.status === 'REJECTED') {
                 toast.error(isDa ? 'E-faktura afvist' : 'E-invoice rejected', {
-                  description: `${send.invoice?.invoiceNumber ?? ''} · ${send.recipientName ?? ''}`,
+                  description: desc,
                   duration: 8000,
                   icon: <XCircle className="h-4 w-4" />,
                 });
