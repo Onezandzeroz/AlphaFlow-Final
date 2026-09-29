@@ -898,7 +898,7 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         const { applyLocalTransition } = await import('@/lib/einvoice-status-tracker');
         await applyLocalTransition({
           sendingId,
-          status: 'SENT' as any,
+          status: 'SENDING' as any,
           message: 'Document accepted by Sproom Access Point',
           source: 'local_send',
           eventTimestamp: new Date(),
@@ -918,7 +918,7 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         await db.eInvoiceSending.update({
           where: { id: sendingId },
           data: {
-            status: EInvoiceSendStatus.SENT,
+            status: EInvoiceSendStatus.SENDING,
             sentAt: new Date(),
             messageId: result.messageId || sending.messageId,
             responseXml: result.responseXml || null,
