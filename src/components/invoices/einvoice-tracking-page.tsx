@@ -296,17 +296,27 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
                 FAILED: 10000,
               };
               if (MILESTONE_DURATIONS[send.status]) {
-                einvoiceToast({
-                  status: send.status,
-                  documentType: null,
-                  counterpartyName: send.recipientName ?? null,
-                  counterpartyCvr: null,
-                  invoiceNumber: send.invoice?.invoiceNumber ?? null,
-                  amount: null,
-                  currency: null,
-                  issueDate: null,
-                  isDa,
-                }, MILESTONE_DURATIONS[send.status]);
+                try {
+                  einvoiceToast({
+                    status: send.status,
+                    documentType: null,
+                    counterpartyName: send.recipientName ?? null,
+                    counterpartyCvr: null,
+                    invoiceNumber: send.invoice?.invoiceNumber ?? null,
+                    amount: null,
+                    currency: null,
+                    issueDate: null,
+                    isDa,
+                  }, MILESTONE_DURATIONS[send.status]);
+                } catch (toastErr) {
+                  // Fallback to simple toast if einvoiceToast fails
+                  console.warn('[EInvoiceTracking] einvoiceToast failed:', toastErr);
+                  const cfg = getStatusConfig(send.status, isDa);
+                  const num = send.invoice?.invoiceNumber ?? '';
+                  const party = send.recipientName ?? '';
+                  const msg = `${cfg.label}: ${num}${party ? ' — ' + party : ''}`;
+                  toast.success(msg, { duration: 4000 });
+                }
               } else {
                 // For non-milestone transitions (SENT, SENDING, IN_TRANSIT),
                 // use a simple toast — these are frequent and don't need the

@@ -488,42 +488,60 @@ export async function applyStatusTransition(
   // approval), so without this synthetic event the user would never see
   // "Leveret" on the timeline. The user wants both "Leveret" AND "Godkendt"
   // to appear together when the document is approved.
+  //
+  // IMPORTANT (Task 61): The synthetic DELIVERED insert is wrapped in a
+  // try-catch. If it fails (e.g. database error, race condition), we MUST
+  // NOT let it crash the entire applyStatusTransition — otherwise the
+  // ACCEPTED event would never be created, the sending's status would not
+  // update to ACCEPTED, transitionChanged would be false, and NO toast
+  // would be sent to the user. The synthetic DELIVERED is a nice-to-have
+  // for the timeline; the ACCEPTED transition + toast is the critical path.
   let insertedSyntheticDelivered = false;
   if (newStatus === 'ACCEPTED') {
-    // Check if a DELIVERED event already exists for this sending
-    const existingDelivered = await db.eInvoiceSendEvent.findFirst({
-      where: { sendingId, status: 'DELIVERED' },
-      select: { id: true },
-    });
-    if (!existingDelivered) {
-      // Insert synthetic DELIVERED event — same timestamp as the Approved
-      // event so they appear adjacent on the timeline.
-      await db.eInvoiceSendEvent.create({
-        data: {
-          sendingId,
-          status: 'DELIVERED',
-          // Use 'Received' as the synthetic raw state — clearly identifies
-          // this as the "modtager har modtaget" event.
-          sproomRawState: 'Received',
-          sproomStatusCode: 401, // canonical Sproom code for Received
-          deliveryType: deliveryType ?? null,
-          message: message ?? null,
-          failedProperties: Prisma.DbNull,
-          source,
-          eventTimestamp: ts,
-          metadata: {
-            synthetic: true,
-            source: 'approved-syntese',
-            triggerState: sproomState,
-            ...(metadata ?? {}),
-          } as unknown as Prisma.InputJsonValue,
-        },
+    try {
+      // Check if a DELIVERED event already exists for this sending
+      const existingDelivered = await db.eInvoiceSendEvent.findFirst({
+        where: { sendingId, status: 'DELIVERED' },
+        select: { id: true },
       });
-      insertedSyntheticDelivered = true;
-      logger.info('[STATUS-TRACKER] Synthetic DELIVERED event inserted (approved-syntese)', {
+      if (!existingDelivered) {
+        // Insert synthetic DELIVERED event — same timestamp as the Approved
+        // event so they appear adjacent on the timeline.
+        await db.eInvoiceSendEvent.create({
+          data: {
+            sendingId,
+            status: 'DELIVERED',
+            // Use 'Received' as the synthetic raw state — clearly identifies
+            // this as the "modtager har modtaget" event.
+            sproomRawState: 'Received',
+            sproomStatusCode: 401, // canonical Sproom code for Received
+            deliveryType: deliveryType ?? null,
+            message: message ?? null,
+            failedProperties: Prisma.DbNull,
+            source,
+            eventTimestamp: ts,
+            metadata: {
+              synthetic: true,
+              source: 'approved-syntese',
+              triggerState: sproomState,
+              ...(metadata ?? {}),
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        insertedSyntheticDelivered = true;
+        logger.info('[STATUS-TRACKER] Synthetic DELIVERED event inserted (approved-syntese)', {
+          sendingId,
+          triggerState: sproomState,
+          eventTimestamp: ts.toISOString(),
+        });
+      }
+    } catch (synthErr) {
+      // Non-critical — log + continue with the ACCEPTED transition.
+      // The timeline will just not have a separate "Leveret" event, but
+      // the ACCEPTED transition + toast will still work.
+      logger.warn('[STATUS-TRACKER] Synthetic DELIVERED insert failed (non-critical, continuing with ACCEPTED)', {
         sendingId,
-        triggerState: sproomState,
-        eventTimestamp: ts.toISOString(),
+        error: synthErr instanceof Error ? synthErr.message : String(synthErr),
       });
     }
   }

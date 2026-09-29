@@ -162,16 +162,23 @@ toast.dismiss = sonnerToast.dismiss;
  * silently (no toast, no error), which is exactly what caused the
  * "no notifications" bug.
  *
+ * The React element is built INSIDE the callback function passed to
+ * sonnerToast.custom (not pre-built synchronously). This matches sonner's
+ * expected API more closely — sonner may call the function multiple times
+ * during rendering/animation, and each call should produce a fresh element.
+ *
  * @param data - The e-invoice toast data (status, documentType, counterparty, etc.)
  * @param durationMs - How long the toast stays visible (default 5000ms)
  */
 export function einvoiceToast(data: EInvoiceToastData, durationMs: number = 5000) {
-  // Build the React element synchronously (no dynamic import) so the toast
-  // dispatches reliably inside the showOwlThenToast callback.
-  const element = React.createElement(EInvoiceToast, { data });
   showOwlThenToast(durationMs, () => {
+    // Build the React element INSIDE the callback — sonner calls this
+    // function to render the toast, and expects a fresh element each time.
     sonnerToast.custom(
-      (() => element) as (id: string | number) => React.ReactElement,
+      // The arrow function ignores the `id` argument (EInvoiceToast doesn't
+      // need it — it doesn't dismiss itself). It returns a fresh element
+      // built from `data` on each render.
+      (() => React.createElement(EInvoiceToast, { data })) as (id: string | number) => React.ReactElement,
       { duration: durationMs, className: 'einvoice-rich-toast' },
     );
   });

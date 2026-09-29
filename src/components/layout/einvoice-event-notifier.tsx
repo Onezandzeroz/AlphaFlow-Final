@@ -165,19 +165,30 @@ export function EInvoiceEventNotifier() {
                   REJECTED: 8000,
                   DELIVERED: 4000,
                   PAID: 5000,
+                  FAILED: 10000,
                 };
                 if (MILESTONE_DURATIONS[s.status]) {
-                  einvoiceToast({
-                    status: s.status,
-                    documentType: null,
-                    counterpartyName: s.recipientName ?? null,
-                    counterpartyCvr: null,
-                    invoiceNumber: s.invoice?.invoiceNumber ?? null,
-                    amount: null,
-                    currency: null,
-                    issueDate: null,
-                    isDa: isDaRef.current,
-                  }, MILESTONE_DURATIONS[s.status]);
+                  try {
+                    einvoiceToast({
+                      status: s.status,
+                      documentType: null,
+                      counterpartyName: s.recipientName ?? null,
+                      counterpartyCvr: null,
+                      invoiceNumber: s.invoice?.invoiceNumber ?? null,
+                      amount: null,
+                      currency: null,
+                      issueDate: null,
+                      isDa: isDaRef.current,
+                    }, MILESTONE_DURATIONS[s.status]);
+                  } catch (toastErr) {
+                    // Fallback to simple toast if einvoiceToast fails
+                    console.warn('[EInvoiceEvent] fallback einvoiceToast failed:', toastErr);
+                    const statusLabel = s.status || 'Status';
+                    const num = s.invoice?.invoiceNumber ?? '';
+                    const party = s.recipientName ?? '';
+                    const msg = `${statusLabel}: ${num}${party ? ' — ' + party : ''}`;
+                    toast.success(msg, { duration: 4000 });
+                  }
                 }
               }
               fallbackPrevStatuses.set(s.id, s.status);
@@ -214,25 +225,52 @@ export function EInvoiceEventNotifier() {
           bumpVersionRef.current(scope);
 
           // ── 2. Build + fire the toast.
-          const isCreditNote =
-            (data.documentType ?? '').toUpperCase() === 'CREDIT_NOTE';
-          const docLabel = isCreditNote
-            ? isDa
-              ? 'e-kreditnota'
-              : 'e-credit note'
-            : isDa
-              ? 'e-faktura'
-              : 'e-invoice';
+          // Wrapped in try-catch so a failure in einvoiceToast (e.g. React
+          // rendering error) does NOT crash the socket event handler. Without
+          // this, a single bad toast would prevent all future toasts.
+          try {
+            const isCreditNote =
+              (data.documentType ?? '').toUpperCase() === 'CREDIT_NOTE';
+            const docLabel = isCreditNote
+              ? isDa
+                ? 'e-kreditnota'
+                : 'e-credit note'
+              : isDa
+                ? 'e-faktura'
+                : 'e-invoice';
 
-          const party = data.counterpartyName ?? '';
-          const num = data.invoiceNumber ?? '';
-          const amt =
-            data.amount && data.currency ? `${data.amount} ${data.currency}` : '';
+            const party = data.counterpartyName ?? '';
+            const num = data.invoiceNumber ?? '';
+            const amt =
+              data.amount && data.currency ? `${data.amount} ${data.currency}` : '';
 
-          if (data.direction === 'inbound') {
-            // ── Inbound: a document arrived in the tenant's inbox. ──
+            if (data.direction === 'inbound') {
+              // ── Inbound: a document arrived in the tenant's inbox. ──
+              einvoiceToast({
+                status: 'RECEIVED',
+                documentType: data.documentType ?? null,
+                counterpartyName: data.counterpartyName ?? null,
+                counterpartyCvr: null,
+                invoiceNumber: data.invoiceNumber ?? null,
+                amount: data.amount ?? null,
+                currency: data.currency ?? null,
+                issueDate: null,
+                isDa,
+              }, 3000);
+              return;
+            }
+
+            // ── Outbound status transition. ──
+            // Key milestones (Godkendt, Betalt, Afvist) get longer duration.
+            const MILESTONE_DURATION: Record<string, number> = {
+              ACCEPTED: 5000,
+              REJECTED: 8000,
+              PAID: 5000,
+            };
+            const outDuration = MILESTONE_DURATION[data.status] ?? (data.status === 'FAILED' ? 10000 : 5000);
+
             einvoiceToast({
-              status: 'RECEIVED',
+              status: data.status,
               documentType: data.documentType ?? null,
               counterpartyName: data.counterpartyName ?? null,
               counterpartyCvr: null,
@@ -241,30 +279,21 @@ export function EInvoiceEventNotifier() {
               currency: data.currency ?? null,
               issueDate: null,
               isDa,
-            }, 3000);
-            return;
+            }, outDuration);
+          } catch (toastErr) {
+            // Fallback: if einvoiceToast fails, log + try a simple toast
+            // so the user at least gets SOME notification.
+            console.warn('[EInvoiceEvent] einvoiceToast failed, falling back to simple toast:', toastErr);
+            try {
+              const statusLabel = data.status || 'Status';
+              const num = data.invoiceNumber ?? '';
+              const party = data.counterpartyName ?? '';
+              const msg = `${statusLabel}: ${num}${party ? ' — ' + party : ''}`;
+              toast.success(msg, { duration: 4000 });
+            } catch {
+              // Last resort — give up silently (logged above)
+            }
           }
-
-          // ── Outbound status transition. ──
-          // Key milestones (Godkendt, Betalt, Afvist) get longer duration.
-          const MILESTONE_DURATION: Record<string, number> = {
-            ACCEPTED: 5000,
-            REJECTED: 8000,
-            PAID: 5000,
-          };
-          const outDuration = MILESTONE_DURATION[data.status] ?? (data.status === 'FAILED' ? 10000 : 5000);
-
-          einvoiceToast({
-            status: data.status,
-            documentType: data.documentType ?? null,
-            counterpartyName: data.counterpartyName ?? null,
-            counterpartyCvr: null,
-            invoiceNumber: data.invoiceNumber ?? null,
-            amount: data.amount ?? null,
-            currency: data.currency ?? null,
-            issueDate: null,
-            isDa,
-          }, outDuration);
         });
       })
       .catch((err) => {
