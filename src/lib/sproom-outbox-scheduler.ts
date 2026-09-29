@@ -111,7 +111,10 @@ async function pollSendingStatus(sending: {
     return { applied: 0, changed: 0, finalStatus: null };
   }
 
-  markChecked(sending.id, sending.storecoveSubmissionId);
+  // NOTE: recentlyChecked / markChecked removed — the staleness cutoff
+  // (updatedAt < 10 min ago) in the query already prevents polling
+  // sendings that were JUST updated. No in-memory dedup needed.
+  // See the comment in runSproomOutboxCycle for full rationale.
 
   // Fetch the full state-history from Sproom
   // Retry logic: Sproom staging can be extremely slow (30+ seconds for
@@ -351,20 +354,18 @@ export async function runSproomOutboxCycle(): Promise<{
   let totalChanged = 0;
 
   for (const sending of candidates) {
-    // Skip recently-checked (dedup) — BUT only for intermediate statuses.
-    // PENDING_APPROVAL sendings must NOT be skipped because we need to
-    // detect when the recipient approves/rejects (the Application Response
-    // arrives as a new Sproom state that we haven't seen yet). If we skip
-    // PENDING_APPROVAL sendings, the status will NEVER update to
-    // ACCEPTED/REJECTED — the outbox poller is the safety net for missed
-    // webhooks, and skipping PENDING_APPROVAL defeats that purpose.
-    if (
-      sending.storecoveSubmissionId &&
-      sending.status !== 'PENDING_APPROVAL' &&
-      recentlyChecked.has(dedupKey(sending.id, sending.storecoveSubmissionId))
-    ) {
-      continue;
-    }
+    // NOTE: We do NOT use recentlyChecked dedup for ANY non-terminal sending.
+    // The outbox poller is the safety net for missed webhooks — if we skip
+    // a sending because it was "recently checked", we might miss the
+    // transition to its next status (e.g. IN_TRANSIT → DELIVERED →
+    // PENDING_APPROVAL → ACCEPTED). All non-terminal sendings must be
+    // polled every cycle so we catch every status transition.
+    //
+    // The staleness cutoff (10 min) already prevents polling sendings
+    // that were JUST updated (via webhook or previous poll) — the
+    // `updatedAt: { lt: stalenessCutoff }` filter in the query ensures
+    // we only poll sendings that haven't been updated in the last 10 min.
+    // That's sufficient dedup — no need for an additional in-memory Set.
 
     try {
       const result = await pollSendingStatus({
