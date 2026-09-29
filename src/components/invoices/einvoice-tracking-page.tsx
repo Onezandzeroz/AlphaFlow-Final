@@ -55,6 +55,7 @@ import {
   Search,
   Activity,
   RotateCw,
+  Ban,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -327,6 +328,42 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
     }
   }, [fetchSends, isDa]);
 
+  // ── Cancel a stuck/duplicate sending ──
+  // Calls POST /api/einvoice-sends/[id]/cancel which sets the status to
+  // CANCELLED. This removes it from the active tracking list without
+  // deleting the record (for audit trail).
+  // Available for any non-terminal sending (PENDING, QUEUED, SENDING,
+  // SENT, IN_TRANSIT, DELIVERED, PENDING_APPROVAL) — NOT for terminal
+  // states (ACCEPTED, REJECTED, PAID, FAILED, CANCELLED).
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const CANCELLABLE_STATUSES = ['PENDING', 'QUEUED', 'SENDING', 'SENT', 'IN_TRANSIT', 'DELIVERED', 'PENDING_APPROVAL'];
+  const handleCancel = useCallback(async (send: EInvoiceSendingSummary) => {
+    if (!CANCELLABLE_STATUSES.includes(send.status)) return;
+    setCancellingId(send.id);
+    try {
+      const res = await fetch(`/api/einvoice-sends/${send.id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data?.error || (isDa ? 'Annullering fejlede' : 'Cancel failed'));
+        return;
+      }
+      toast.success(isDa ? 'E-forsendelse annulleret' : 'E-invoice sending cancelled', {
+        description: isDa
+          ? `Forsendelse ${send.invoice?.invoiceNumber ?? ''} er nu annulleret og fjernet fra listen.`
+          : `Sending ${send.invoice?.invoiceNumber ?? ''} has been cancelled and removed from the list.`,
+      });
+      // Refresh the list
+      fetchSends(true);
+    } catch {
+      toast.error(isDa ? 'Netværksfejl under annullering' : 'Network error during cancel');
+    } finally {
+      setCancellingId(null);
+    }
+  }, [fetchSends, isDa]);
+
   // ── Pipeline stats cards ──
   const STATUS_ORDER = [
     'PENDING', 'QUEUED', 'SENDING', 'SENT', 'IN_TRANSIT', 'DELIVERED',
@@ -566,7 +603,7 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
                             )}
                           </TableCell>
 
-                          {/* Expand + Retry */}
+                          {/* Expand + Retry + Cancel */}
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
                               {/* Retry button — only for FAILED sendings */}
@@ -583,6 +620,23 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <RotateCw className="h-3.5 w-3.5" />
+                                  )}
+                                </Button>
+                              )}
+                              {/* Cancel button — for any non-terminal sending (stuck/duplicate) */}
+                              {CANCELLABLE_STATUSES.includes(send.status) && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  onClick={() => handleCancel(send)}
+                                  disabled={cancellingId === send.id}
+                                  title={isDa ? 'Annuller' : 'Cancel'}
+                                >
+                                  {cancellingId === send.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Ban className="h-3.5 w-3.5" />
                                   )}
                                 </Button>
                               )}
