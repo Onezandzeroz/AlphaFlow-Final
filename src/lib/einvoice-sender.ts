@@ -571,6 +571,39 @@ export async function queueEInvoiceSend(params: {
     // 4. Determine format based on channel
     const format = channelToFormat(channel);
 
+    // 4b. Prevent duplicate sends — check if an EInvoiceSending already
+    // exists for this invoice in a non-terminal state. A sending is
+    // "in flight" if it's in PENDING / QUEUED / SENDING / SENT /
+    // IN_TRANSIT / DELIVERED / PENDING_APPROVAL — i.e. anything that's
+    // not a terminal state (ACCEPTED / REJECTED / PAID / FAILED /
+    // CANCELLED). If such a sending exists, reject the new send so the
+    // user doesn't accidentally create a duplicate row in the tracking
+    // list.
+    //
+    // FAILED sendings CAN be retried — but via the explicit
+    // retryEInvoiceSend() function (which re-uses the existing row and
+    // resets it to PENDING), NOT via this queueEInvoiceSend() function
+    // (which would create a new row). The send-einvoice route checks
+    // the existing sending's status and calls retryEInvoiceSend() for
+    // FAILED sends, queueEInvoiceSend() for fresh sends only.
+    const NON_TERMINAL_STATUSES = [
+      'PENDING', 'QUEUED', 'SENDING', 'SENT', 'IN_TRANSIT', 'DELIVERED', 'PENDING_APPROVAL',
+    ] as EInvoiceSendStatus[];
+    const existing = await db.eInvoiceSending.findFirst({
+      where: {
+        invoiceId,
+        status: { in: NON_TERMINAL_STATUSES },
+      },
+      select: { id: true, status: true },
+    });
+    if (existing) {
+      throw new Error(
+        `Denne faktura/kreditnota har allerede en aktiv e-forsendelse (status: ${existing.status}). ` +
+        `Kun én e-forsendelse ad gangen per faktura. ` +
+        `Hvis den eksisterende forsendelse er fejlet, kan du gensende den via "Gensend"-knappen i sporing.`
+      );
+    }
+
     // 5. Generate unique message ID
     const messageId = generateMessageId();
 

@@ -54,7 +54,9 @@ import {
   ShieldCheck,
   Search,
   Activity,
+  RotateCw,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
 
@@ -286,6 +288,44 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
       fetchTimeline(sendingId);
     }
   };
+
+  // ── Retry a failed sending ──
+  // Calls POST /api/invoices/[invoiceId]/einvoice-sends/[sendingId]/retry
+  // which resets the sending to PENDING and re-processes it via
+  // processEInvoiceSend (re-generates XML + re-submits to Sproom).
+  // Only available for sendings with status FAILED.
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const handleRetry = useCallback(async (send: EInvoiceSendingSummary) => {
+    if (send.status !== 'FAILED') return;
+    setRetryingId(send.id);
+    try {
+      const res = await fetch(
+        `/api/invoices/${send.invoiceId}/einvoice-sends/${send.id}/retry`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' } },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data?.error || (isDa ? 'Gensendelse fejlede' : 'Retry failed'));
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        toast.success(isDa ? 'E-faktura gensendt' : 'E-invoice retried', {
+          description: isDa
+            ? `Faktura ${send.invoice?.invoiceNumber ?? ''} er nu i gang igen`
+            : `Invoice ${send.invoice?.invoiceNumber ?? ''} is being resent`,
+        });
+        // Refresh the list to show the updated status
+        fetchSends(true);
+      } else {
+        toast.error(data?.error || (isDa ? 'Gensendelse fejlede' : 'Retry failed'));
+      }
+    } catch {
+      toast.error(isDa ? 'Netværksfejl under gensendelse' : 'Network error during retry');
+    } finally {
+      setRetryingId(null);
+    }
+  }, [fetchSends, isDa]);
 
   // ── Pipeline stats cards ──
   const STATUS_ORDER = [
@@ -526,20 +566,39 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
                             )}
                           </TableCell>
 
-                          {/* Expand */}
+                          {/* Expand + Retry */}
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => toggleExpand(send.id)}
-                            >
-                              {isExpanded ? (
-                                <ChevronUp className="h-3.5 w-3.5" />
-                              ) : (
-                                <ChevronDown className="h-3.5 w-3.5" />
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Retry button — only for FAILED sendings */}
+                              {send.status === 'FAILED' && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                                  onClick={() => handleRetry(send)}
+                                  disabled={retryingId === send.id}
+                                  title={isDa ? 'Gensend' : 'Retry'}
+                                >
+                                  {retryingId === send.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <RotateCw className="h-3.5 w-3.5" />
+                                  )}
+                                </Button>
                               )}
-                            </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => toggleExpand(send.id)}
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="h-3.5 w-3.5" />
+                                ) : (
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
 
