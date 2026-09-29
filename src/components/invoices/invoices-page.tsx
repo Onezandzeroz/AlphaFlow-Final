@@ -683,14 +683,42 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
   }, [invoiceForm.lineItems]);
 
   // Credit note: invoices eligible to be credited (sent/paid, not cancelled,
-  // not already a credit note). Powers the optional "original invoice" selector.
+  // not already a credit note, AND not fully covered by existing credit notes).
+  // Powers the optional "original invoice" selector.
+  //
+  // An invoice is excluded if the sum of its existing credit notes' totals
+  // meets or exceeds its own total — it's already fully credited and there's
+  // no remaining amount to credit. This prevents the user from selecting an
+  // invoice that's already been fully reversed by one or more credit notes.
   const creditableInvoices = useMemo(() => {
-    return invoices.filter(
-      (inv) =>
-        !inv.cancelled &&
-        inv.documentType !== 'CREDIT_NOTE' &&
-        (inv.status === 'SENT' || inv.status === 'PAID')
-    );
+    // Build a map: invoiceId → sum of credit note totals that credit it.
+    // Credit notes in the invoices list have documentType='CREDIT_NOTE' and
+    // originalInvoiceId pointing to the parent invoice. Cancelled credit
+    // notes (cancelled=true) are excluded from the sum.
+    const creditedAmountByInvoice = new Map<string, number>();
+    for (const inv of invoices) {
+      if (inv.documentType === 'CREDIT_NOTE' && inv.originalInvoiceId && !inv.cancelled) {
+        const prev = creditedAmountByInvoice.get(inv.originalInvoiceId) ?? 0;
+        creditedAmountByInvoice.set(inv.originalInvoiceId, prev + (Number(inv.total) || 0));
+      }
+    }
+
+    return invoices.filter((inv) => {
+      // Must be a non-cancelled invoice (not a credit note itself)
+      if (inv.cancelled || inv.documentType === 'CREDIT_NOTE') return false;
+      // Must be SENT or PAID
+      if (inv.status !== 'SENT' && inv.status !== 'PAID') return false;
+
+      // Check if fully covered by existing credit notes
+      const creditedTotal = creditedAmountByInvoice.get(inv.id) ?? 0;
+      const invoiceTotal = Number(inv.total) || 0;
+      // Use 0.01 tolerance for floating-point comparison
+      if (creditedTotal >= invoiceTotal - 0.01) {
+        return false; // Fully credited — exclude from list
+      }
+
+      return true;
+    });
   }, [invoices]);
 
   // Credit note: autofill the form from the chosen original invoice so the
