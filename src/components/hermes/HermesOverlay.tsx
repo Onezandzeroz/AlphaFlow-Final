@@ -18,7 +18,7 @@ const DEFAULT_AGENT_NAME = 'Hermes';
 const DEFAULT_MAX_NOTIFICATIONS = 3;
 
 /** Milliseconds after which the owl auto-hides when the chat is not expanded. */
-const FAB_AUTO_HIDE_DELAY_MS = 5000;
+const FAB_AUTO_HIDE_DELAY_MS = 3000;
 
 export function HermesOverlay({
   tenantId = DEFAULT_TENANT_ID,
