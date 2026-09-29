@@ -364,15 +364,31 @@ function buildOIOUBLData(
       contactEmail: invoice.customerEmail || undefined,
       contactPhone: invoice.customerPhone || undefined,
     },
-    lines: lines.map((line, index) => ({
-      id: String(index + 1),
-      description: line.description || line.name || 'Linje',
-      quantity: Number(line.quantity) || 1,
-      unitCode: line.unitCode || 'EA',
-      unitPrice: Number(line.unitPrice) || Number(line.price) || 0,
-      vatPercent: Number(line.vatPercent) || Number(line.vatRate) || 25,
-      vatCategoryCode: (Number(line.vatPercent) || Number(line.vatRate) || 25) === 0 ? 'Z' : 'S',
-    })),
+    lines: lines.map((line, index) => {
+      // Parse VAT percent — MUST handle 0% correctly.
+      // Using `||` would treat 0 as falsy and fall back to 25%, which is
+      // a critical bug for S0 (zero-rate) invoices: the generator would
+      // produce a TaxSubtotal with 25% VAT instead of 0%, causing Sproom
+      // schematron validation error F-LIB385 (TaxAmount mismatch).
+      // Use nullish coalescing (??) which only falls back on null/undefined,
+      // not on 0.
+      const rawVatPercent = Number(line.vatPercent);
+      const rawVatRate = Number(line.vatRate);
+      const vatPercent = (
+        !isNaN(rawVatPercent) && line.vatPercent != null ? rawVatPercent :
+        !isNaN(rawVatRate) && line.vatRate != null ? rawVatRate :
+        25 // fallback only when BOTH are missing/null/undefined
+      );
+      return {
+        id: String(index + 1),
+        description: line.description || line.name || 'Linje',
+        quantity: Number(line.quantity) || 1,
+        unitCode: line.unitCode || 'EA',
+        unitPrice: Number(line.unitPrice) || Number(line.price) || 0,
+        vatPercent,
+        vatCategoryCode: vatPercent === 0 ? 'Z' : 'S',
+      };
+    }),
     // ── CRITICAL OIOUBL vs Peppol BIS 3 SEMANTIC (Task 41 root-cause fix) ──
     //
     // In OIOUBL 2.1:
