@@ -42,6 +42,24 @@ import { PlanTier, tierHasFeature, Feature } from '@/lib/plan-features';
 const scheduledTasks: ScheduledTask[] = [];
 let _schedulerStarted = false;
 
+// ── Concurrency guard ────────────────────────────────────────────────────
+// Prevents overlapping cycles. If a cycle takes longer than the cron
+// interval (e.g. Sproom is slow and a cycle takes 12 min when cron fires
+// every 10 min), node-cron will start ANOTHER cycle while the first is
+// still running — which doubles the load on Sproom and can cascade
+// (3 cycles, 4 cycles, ...) until Sproom is overwhelmed.
+//
+// We track whether a cycle is currently running and SKIP the cron trigger
+// if so. The next cron tick will pick up if the previous one has finished
+// by then. This is the standard "skip if already running" pattern for
+// long-running cron jobs.
+//
+// Without this guard, AlphaFlow could accidentally contribute to Sproom
+// staging being slow — each cycle that times out leaves a hanging fetch
+// promise, and the next cycle starts more fetches, eventually saturating
+// Sproom's connection pool.
+let _cycleRunning = false;
+
 // In-memory dedup: track documentIds the poller has recently checked, so we
 // don't hammer Sproom's getDocumentState endpoint on every cycle for the
 // same slow-moving sending. Keyed by `${sendingId}:${documentId}`. Cleared
@@ -346,14 +364,28 @@ export function startSproomOutboxScheduler(): void {
   const schedule = process.env.SPROOM_OUTBOX_CRON_SCHEDULE || '*/10 * * * *';
 
   const task = cron.schedule(schedule, () => {
-    runSproomOutboxCycle().catch((err) => {
-      logger.error('[SPROOM-OUTBOX] Uncaught error in outbox cycle:', err);
-    });
+    // Concurrency guard: skip if a previous cycle is still running.
+    // This prevents overlapping cycles when Sproom is slow — each cycle
+    // would otherwise start more concurrent fetches, potentially
+    // overwhelming Sproom. The next cron tick will pick up when the
+    // current cycle finishes.
+    if (_cycleRunning) {
+      logger.info('[SPROOM-OUTBOX] Previous cycle still running — skipping this tick (concurrency guard)');
+      return;
+    }
+    _cycleRunning = true;
+    runSproomOutboxCycle()
+      .catch((err) => {
+        logger.error('[SPROOM-OUTBOX] Uncaught error in outbox cycle:', err);
+      })
+      .finally(() => {
+        _cycleRunning = false;
+      });
   });
   scheduledTasks.push(task);
 
   logger.info(
-    `[SPROOM-OUTBOX] Started — polling every ${schedule} (safety-net for the DocumentStatusChanged webhook)`,
+    `[SPROOM-OUTBOX] Started — polling every ${schedule} (safety-net for the DocumentStatusChanged webhook, concurrency-guarded)`,
   );
 }
 

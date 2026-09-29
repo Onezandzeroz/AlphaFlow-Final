@@ -33,6 +33,24 @@ import { notifyEInvoiceEvent } from '@/lib/notify-einvoice-event';
 const scheduledTasks: ScheduledTask[] = [];
 let _schedulerStarted = false;
 
+// ── Concurrency guard ────────────────────────────────────────────────────
+// Prevents overlapping cycles. If a cycle takes longer than the cron
+// interval (e.g. Sproom is slow and a cycle takes 7 min when cron fires
+// every 5 min), node-cron will start ANOTHER cycle while the first is
+// still running — which doubles the load on Sproom and can cascade
+// (3 cycles, 4 cycles, ...) until Sproom is overwhelmed.
+//
+// We track whether a cycle is currently running and SKIP the cron trigger
+// if so. The next cron tick will pick up if the previous one has finished
+// by then. This is the standard "skip if already running" pattern for
+// long-running cron jobs.
+//
+// Without this guard, AlphaFlow could accidentally contribute to Sproom
+// staging being slow — each cycle that times out leaves a hanging fetch
+// promise, and the next cycle starts more fetches, eventually saturating
+// Sproom's connection pool.
+let _cycleRunning = false;
+
 // In-memory dedup: track documentIds the puller has already processed so we
 // don't re-fetch + re-parse their XML on every poll. Keyed by
 // `${companyId}:${documentId}`. storeReceivedInvoice is ALSO idempotent
@@ -345,14 +363,28 @@ export function startSproomInboxScheduler(): void {
   const schedule = process.env.SPROOM_INBOX_CRON_SCHEDULE || '*/5 * * * *';
 
   const task = cron.schedule(schedule, () => {
-    runSproomInboxCycle().catch((err) => {
-      logger.error('[SPROOM-INBOX] Uncaught error in inbox cycle:', err);
-    });
+    // Concurrency guard: skip if a previous cycle is still running.
+    // This prevents overlapping cycles when Sproom is slow — each cycle
+    // would otherwise start more concurrent fetches, potentially
+    // overwhelming Sproom. The next cron tick will pick up when the
+    // current cycle finishes.
+    if (_cycleRunning) {
+      logger.info('[SPROOM-INBOX] Previous cycle still running — skipping this tick (concurrency guard)');
+      return;
+    }
+    _cycleRunning = true;
+    runSproomInboxCycle()
+      .catch((err) => {
+        logger.error('[SPROOM-INBOX] Uncaught error in inbox cycle:', err);
+      })
+      .finally(() => {
+        _cycleRunning = false;
+      });
   });
   scheduledTasks.push(task);
 
   logger.info(
-    `[SPROOM-INBOX] Started — pulling every ${schedule} (safety-net for the DocumentReceived webhook)`,
+    `[SPROOM-INBOX] Started — pulling every ${schedule} (safety-net for the DocumentReceived webhook, concurrency-guarded)`,
   );
 }
 
