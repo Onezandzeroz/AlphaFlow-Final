@@ -206,7 +206,7 @@ export function EInvoiceEventNotifier() {
             IN_TRANSIT: { da: `${capDocLabel} undervejs`, en: `${capDocLabel} in transit` },
             DELIVERED: { da: `${capDocLabel} leveret`, en: `${capDocLabel} delivered` },
             PENDING_APPROVAL: { da: `${capDocLabel} afventer godkendelse`, en: `${capDocLabel} pending approval` },
-            ACCEPTED: { da: `${capDocLabel} accepteret`, en: `${capDocLabel} accepted` },
+            ACCEPTED: { da: `${capDocLabel} godkendt`, en: `${capDocLabel} approved` },
             PAID: { da: `${capDocLabel} betalt`, en: `${capDocLabel} paid` },
             REJECTED: { da: `${capDocLabel} afvist`, en: `${capDocLabel} rejected` },
             FAILED: { da: `${capDocLabel} fejlet`, en: `${capDocLabel} failed` },
@@ -215,7 +215,52 @@ export function EInvoiceEventNotifier() {
             ? (isDa ? statusTitles[data.status].da : statusTitles[data.status].en)
             : `${capDocLabel}: ${data.status}`;
 
-          const outDuration = (data.status === 'REJECTED' || data.status === 'FAILED') ? 10000 : 8000;
+          // ACCEPTED ("godkendt") is a key milestone — the recipient explicitly
+          // approved the invoice. Use the luftig inbound-style toast (same
+          // as the inbound "Ny e-faktura modtaget") with a 5-second duration
+          // and a green success icon.
+          if (data.status === 'ACCEPTED') {
+            toast(outTitle, {
+              description: outDescription,
+              duration: 5000,
+              icon: (
+                <span className="einvoice-inbound-icon is-invoice" aria-hidden="true">
+                  <CheckCircle2 className="h-4 w-4" />
+                </span>
+              ),
+              classNames: {
+                toast: 'einvoice-inbound-toast',
+                title: 'einvoice-inbound-toast-title',
+                description: 'einvoice-inbound-toast-description',
+              },
+            });
+            return;
+          }
+
+          // REJECTED ("afvist") — also a key milestone. Use the luftig style
+          // with a red error icon so the user notices immediately.
+          if (data.status === 'REJECTED') {
+            toast(outTitle, {
+              description: outDescription,
+              duration: 8000,
+              icon: (
+                <span className="einvoice-inbound-icon is-credit-note" aria-hidden="true" style={{ background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)', color: '#dc2626' }}>
+                  <XCircle className="h-4 w-4" />
+                </span>
+              ),
+              classNames: {
+                toast: 'einvoice-inbound-toast',
+                title: 'einvoice-inbound-toast-title',
+                description: 'einvoice-inbound-toast-description',
+              },
+            });
+            return;
+          }
+
+          // All other outbound statuses (SENT, IN_TRANSIT, DELIVERED,
+          // PENDING_APPROVAL, PAID, FAILED) — use the standard sonner
+          // styling with appropriate duration.
+          const outDuration = (data.status === 'FAILED') ? 10000 : 8000;
           const outMethod = cfg.variant === 'success' ? toast.success : cfg.variant === 'error' ? toast.error : toast.info;
           outMethod(outTitle, {
             description: outDescription,
