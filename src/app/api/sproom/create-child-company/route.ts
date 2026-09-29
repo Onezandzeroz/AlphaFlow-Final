@@ -6,7 +6,6 @@ import { logger } from '@/lib/logger';
 import { auditCreate, requestMetadata } from '@/lib/audit';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
-import { isCvrVerificationRequired } from '@/lib/platform-settings';
 
 /**
  * POST /api/sproom/create-child-company
@@ -42,25 +41,6 @@ export const POST = withGuard(
     permissions: [Permission.DATA_EDIT],
   },
   async (request, ctx) => {
-    // Declare company/cvr/gln OUTSIDE the try block so they're accessible
-    // in the catch block below (for the payloadSent debug output). They're
-    // assigned inside the try block via `await`, so TypeScript can't prove
-    // they're definitely assigned — we initialize to undefined and use
-    // optional chaining + fallbacks in the catch block.
-    let company: {
-      id: string;
-      name: string;
-      cvrNumber: string;
-      cvrVerifiedAt: Date | null;
-      address: string | null;
-      email: string | null;
-      phone: string | null;
-      einvoiceGLN: string | null;
-      sproomChildCompanyId: string | null;
-    } | null = null;
-    let cvr: string | undefined = undefined;
-    let gln: string | undefined = undefined;
-
     try {
       // Rate limit: 3 attempts per minute per IP
       const clientIp = getClientIp(request);
@@ -77,7 +57,7 @@ export const POST = withGuard(
       }
 
       // ── 1. Fetch + validate company ──────────────────────────────
-      company = await db.company.findUnique({
+      const company = await db.company.findUnique({
         where: { id: ctx.activeCompanyId! },
         select: {
           id: true,
@@ -96,17 +76,13 @@ export const POST = withGuard(
         return NextResponse.json({ error: 'Company not found' }, { status: 404 });
       }
 
-      // CVR gate — required by default, but the SuperDev can disable it
-      // platform-wide via the /api/sproom/dev-bypass-cvr route (writes
-      // {cvrVerificationRequired: false} to data/platform-settings.json).
-      // When verification is disabled, the gate is skipped for ALL tenants
-      // on the platform — not just this one. The dev-bypass-cvr route
-      // refuses to disable verification when Sproom is pointed at
-      // production (sproomClient.environment === 'production'), so this
-      // bypass is inert against real Sproom prod regardless of what the
-      // settings file says.
-      const cvrVerificationRequired = await isCvrVerificationRequired();
-      if (cvrVerificationRequired && !company.cvrVerifiedAt) {
+      // CVR gate — Sproom validates the CVR against the real Danish CVR
+      // register, so we require cvrVerifiedAt to be set (which means the
+      // tenant has verified their CVR via /api/cvr/lookup against the
+      // official CVR register). This prevents attempting to create a
+      // Sproom child company with a CVR that Sproom will reject anyway,
+      // saving the user from a confusing HTTP 400 from Sproom.
+      if (!company.cvrVerifiedAt) {
         return NextResponse.json(
           {
             error: 'Dit CVR-nummer er ikke blevet verificeret. Bekræft dit CVR-nummer i Virksomhedsindstillinger før du opretter en child company i Sproom.',
@@ -115,14 +91,8 @@ export const POST = withGuard(
           { status: 403 }
         );
       }
-      if (!cvrVerificationRequired) {
-        logger.info('[SPROOM_CREATE_CHILD] CVR gate skipped (platform-wide CVR verification is disabled by SuperDev)', {
-          companyId: ctx.activeCompanyId,
-          cvr: company.cvrNumber ?? '(none)',
-        });
-      }
 
-      cvr = company.cvrNumber.trim();
+      const cvr = company.cvrNumber.trim();
       if (!/^\d{8}$/.test(cvr)) {
         return NextResponse.json(
           {
@@ -142,7 +112,7 @@ export const POST = withGuard(
       // company-owned (assigned by GS1 Denmark). Only a valid 13-digit GLN
       // is forwarded; a malformed one is skipped so it doesn't break creation.
       const rawGln = company.einvoiceGLN?.trim() || '';
-      gln = /^\d{13}$/.test(rawGln) ? rawGln : undefined;
+      const gln = /^\d{13}$/.test(rawGln) ? rawGln : undefined;
       if (rawGln && !gln) {
         logger.warn('[SPROOM_CREATE_CHILD] Skipping malformed GLN (not 13 digits)', {
           companyId: ctx.activeCompanyId,
@@ -542,31 +512,11 @@ export const POST = withGuard(
           }
         }
 
-        // The payload we sent to Sproom — useful for the user to verify
-        // that the company name and CVR are actually what they expected.
-        // The CVR is sensitive business data but NOT personally
-        // identifiable, so it's safe to include in the error message.
-        //
-        // NOTE: `company`, `cvr`, and `gln` are all defined in the outer
-        // try block above. If the error happened BEFORE those were
-        // assigned (e.g. company.findUnique threw), they may be
-        // undefined here — so we use optional chaining + fallbacks to
-        // avoid "Cannot find name" / "used before assigned" TypeScript
-        // errors. The fallbacks are safe defaults (empty string) that
-        // clearly signal "this field wasn't set" in the error output.
-        const payloadSent = {
-          companyName: company?.name ?? '(ikke udfyldt)',
-          cvr: cvr ?? '(ikke udfyldt)',
-          schemeId: 'DK:CVR',
-          gln: gln ?? null,
-        };
-
         // Build a detailed error message that includes:
         //   1. The base error message (HTTP status + Sproom's message)
         //   2. Per-field validation details (if any)
-        //   3. The payload we sent (so the user can spot missing fields)
-        //   4. Sproom's raw response body (for cases where there's no
-        //      `errors` array — the user can see exactly what Sproom sent)
+        //   3. Sproom's raw response body (so the user can see exactly
+        //      what Sproom rejected)
         const baseMsg = error.message;
         const sections: string[] = [];
 
@@ -575,12 +525,6 @@ export const POST = withGuard(
             `Sproom valideringsfejl:\n${validationDetails.map((d) => `• ${d}`).join('\n')}`
           );
         }
-
-        // Always include the payload — it helps the user verify what we
-        // sent and spot obvious issues (empty name, malformed CVR, etc.).
-        sections.push(
-          `Payload sendt til Sproom:\n${JSON.stringify(payloadSent, null, 2)}`
-        );
 
         // Always include Sproom's raw response body — even if it's just
         // `{ message: "The request is invalid." }`, seeing the actual
@@ -617,7 +561,6 @@ export const POST = withGuard(
             sproomStatus: error.status,
             sproomErrorCode: error.errorCode,
             validationDetails: validationDetails.length > 0 ? validationDetails : undefined,
-            payloadSent,
             rawResponseBody: rawBodyStr,
             responseHeaders: error.responseHeaders,
           },

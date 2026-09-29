@@ -5,7 +5,6 @@ import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { getActiveAccessPoint } from '@/lib/einvoice-sender';
-import { getPlatformSettings } from '@/lib/platform-settings';
 
 /**
  * GET /api/sproom/status
@@ -49,12 +48,6 @@ export const GET = withGuard(
       if (!company) {
         return NextResponse.json({ error: 'Company not found' }, { status: 404 });
       }
-
-      // Fetch platform-wide settings (SuperDev-controlled CVR-verification
-      // flag etc.) so the frontend can display the toggle's current state
-      // without a separate authenticated call to /api/sproom/dev-bypass-cvr.
-      // (Read-only, harmless, no audit log needed.)
-      const platformSettings = await getPlatformSettings();
 
       // Test Sproom connection health + verify the child company still exists.
       //
@@ -143,23 +136,6 @@ export const GET = withGuard(
             // company has been created, as long as EINVOICE_ACCESS_POINT=sproom).
             activeAccessPoint: getActiveAccessPoint(),
             sproomConfigured: sproomClient.isConfigured,
-            // Sproom environment the platform is currently pointed at:
-            //   'production' — sproom.net (real MitID, real NemHandel)
-            //   'staging'    — staging.sproom.net (sandbox, AcceptButton)
-            //   'custom'     — SPROOM_API_URL points to something else
-            //   'simulation' — no SPROOM_API_TOKEN configured (synthetic)
-            // Frontend uses this to show the Sproom env badge in the
-            // SuperDev CVR-verification toggle card.
-            sproomEnvironment: sproomClient.environment,
-            sproomBaseUrl: sproomClient.baseUrlValue,
-            // SuperDev-controlled platform-wide CVR-verification flag.
-            // When false, the create-child-company route skips the
-            // cvrVerifiedAt gate for ALL tenants on the platform (not
-            // just the active one). Inert when Sproom is in production
-            // (the dev-bypass-cvr route refuses to disable verification
-            // in that case).
-            cvrVerificationRequired: platformSettings.cvrVerificationRequired !== false,
-            cvrVerificationLastChangedAt: platformSettings.cvrVerificationLastChangedAt,
             reconciled: true,
           });
         }
@@ -255,13 +231,6 @@ export const GET = withGuard(
         // company has been created, as long as EINVOICE_ACCESS_POINT=sproom).
         activeAccessPoint: getActiveAccessPoint(),
         sproomConfigured: sproomClient.isConfigured,
-        // Sproom environment — see above for the four possible values.
-        sproomEnvironment: sproomClient.environment,
-        sproomBaseUrl: sproomClient.baseUrlValue,
-        // SuperDev-controlled platform-wide CVR-verification flag.
-        // See above for the full explanation.
-        cvrVerificationRequired: platformSettings.cvrVerificationRequired !== false,
-        cvrVerificationLastChangedAt: platformSettings.cvrVerificationLastChangedAt,
         reconciled,
       });
     } catch (error) {
