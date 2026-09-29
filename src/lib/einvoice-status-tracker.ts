@@ -91,32 +91,35 @@ const STATUS_MAP: Record<SproomDocumentStatus, EInvoiceSendStatus> = {
   // Sproom flow: Created → TransmissionStarted → Sent → Received →
   //             TransmissionCompleted → PendingApproval → Approved/Rejected
   //
-  // Brugerens forventede flow i Sporing UI + Tidslinje:
-  //   Afsendt → Afsendes → Undervejs → Leveret → Afventer godkendelse → Godkendt
+  // Brugerens forventede flow i Sporing UI + Tidslinje (Task 59):
+  //   Afsendt → Afsendes → Undervejs → [forbliver Undervejs] → Leveret + Godkendt
   //
-  // Mapping (Task 53 fix):
+  // Mapping (Task 59 fix):
   //   - 'Created' #101 = Afsendt (dokumentet oprettet lokalt)
   //   - 'Local Send' (accepted) = Afsendes (Sproom har accepteret XML)
-  //   - 'TransmissionStarted' #301 + 'Sent' #302 = Undervejs (begge kollapset
-  //     til én "Undervejs" status i tidslinjen)
-  //   - 'Received' #401 = Leveret (modtager AP har modtaget dokumentet)
-  //   - 'TransmissionCompleted' #402 = Afventer godkendelse (transmission
-  //     fuldført, afventer Application Response fra modtager)
-  //   - 'PendingApproval' = Afventer godkendelse (sammen som TransmissionCompleted)
-  //   - 'Approved' = Godkendt (modtager trykkede "Godkend" → Application Response)
-  //   - 'Rejected' = Afvist (modtager afviste → Application Response)
+  //   - 'TransmissionStarted' #301 + 'Sent' #302 = Undervejs
+  //   - 'Received' #401 = UNDERVEJS (IN_TRANSIT) — vi viser IKKE "Leveret"
+  //     separat før godkendelse. Tidslinjen forbliver "Undervejs".
+  //   - 'TransmissionCompleted' #402 = UNDERVEJS (IN_TRANSIT) — vi viser
+  //     IKKE "Afventer godkendelse" længere. Tidslinjen forbliver "Undervejs".
+  //   - 'PendingApproval' = UNDERVEJS (IN_TRANSIT) — samme som TransmissionCompleted.
+  //   - 'Approved' = Godkendt (Application Response). Når Approved arrives,
+  //     indsætter vi BÅDE et 'DELIVERED' (Leveret) OG et 'ACCEPTED' (Godkendt)
+  //     event — så brugeren ser "Leveret" og "Godkendt" dukke op sammen når
+  //     fakturaen bliver godkendt.
+  //   - 'Rejected' = Afvist (Application Response)
   //
-  // VIGTIGT: 'Received' betyder "modtagerens AP har modtaget" = Leveret.
-  // 'TransmissionCompleted' betyder "transmission er færdig" = Afventer
-  // godkendelse. Dette adskiller de to steps som brugeren ønsker.
+  // VIGTIGT: PENDING_APPROVAL status er fuldstændig fjernet fra flowet.
+  // Tidslinjen forbliver "Undervejs" indtil fakturaen bliver godkendt
+  // (eller afvist). Ved godkendelse dukker både "Leveret" og "Godkendt" op.
   TransmissionStarted: 'IN_TRANSIT',
   Sent: 'IN_TRANSIT', // Samme som TransmissionStarted — "Undervejs"
-  Received: 'DELIVERED', // Modtager AP har modtaget — "Leveret"
-  TransmissionCompleted: 'PENDING_APPROVAL', // Transmission færdig — "Afventer godkendelse"
+  Received: 'IN_TRANSIT', // Forbliver "Undervejs" — først "Leveret" ved godkendelse
+  TransmissionCompleted: 'IN_TRANSIT', // Forbliver "Undervejs" — ingen "Afventer godkendelse"
 
   // ── Recipient action ──
-  PendingApproval: 'PENDING_APPROVAL', // Samme som TransmissionCompleted
-  Approved: 'ACCEPTED', // Application Response — "Godkendt"
+  PendingApproval: 'IN_TRANSIT', // Forbliver "Undervejs" — ingen "Afventer godkendelse"
+  Approved: 'ACCEPTED', // Application Response — "Godkendt" (også "Leveret" via syntese)
   Rejected: 'REJECTED', // Application Response — "Afvist"
   ApplicationReponseBusinessReject: 'REJECTED',
   ApplicationReponseProfileReject: 'REJECTED',
@@ -477,6 +480,54 @@ export async function applyStatusTransition(
   // We always create an event row — even if the status didn't change —
   // because the raw Sproom state may have changed (e.g. SENT → SENT with
   // different statusCode). This preserves the full timeline.
+  //
+  // SPECIAL CASE (Task 59): When transitioning to ACCEPTED (Sproom 'Approved'
+  // Application Response), we ALSO insert a synthetic DELIVERED event FIRST
+  // if the sending has never been DELIVERED. This is because we no longer
+  // map 'Received' → DELIVERED (we keep timeline at "Undervejs" until
+  // approval), so without this synthetic event the user would never see
+  // "Leveret" on the timeline. The user wants both "Leveret" AND "Godkendt"
+  // to appear together when the document is approved.
+  let insertedSyntheticDelivered = false;
+  if (newStatus === 'ACCEPTED') {
+    // Check if a DELIVERED event already exists for this sending
+    const existingDelivered = await db.eInvoiceSendEvent.findFirst({
+      where: { sendingId, status: 'DELIVERED' },
+      select: { id: true },
+    });
+    if (!existingDelivered) {
+      // Insert synthetic DELIVERED event — same timestamp as the Approved
+      // event so they appear adjacent on the timeline.
+      await db.eInvoiceSendEvent.create({
+        data: {
+          sendingId,
+          status: 'DELIVERED',
+          // Use 'Received' as the synthetic raw state — clearly identifies
+          // this as the "modtager har modtaget" event.
+          sproomRawState: 'Received',
+          sproomStatusCode: 401, // canonical Sproom code for Received
+          deliveryType: deliveryType ?? null,
+          message: message ?? null,
+          failedProperties: Prisma.DbNull,
+          source,
+          eventTimestamp: ts,
+          metadata: {
+            synthetic: true,
+            source: 'approved-syntese',
+            triggerState: sproomState,
+            ...(metadata ?? {}),
+          } as unknown as Prisma.InputJsonValue,
+        },
+      });
+      insertedSyntheticDelivered = true;
+      logger.info('[STATUS-TRACKER] Synthetic DELIVERED event inserted (approved-syntese)', {
+        sendingId,
+        triggerState: sproomState,
+        eventTimestamp: ts.toISOString(),
+      });
+    }
+  }
+
   await db.eInvoiceSendEvent.create({
     data: {
       sendingId,
@@ -509,6 +560,12 @@ export async function applyStatusTransition(
   const tsField = timestampFieldFor(newStatus);
   if (tsField) {
     updateData[tsField] = ts;
+  }
+
+  // If we inserted a synthetic DELIVERED event, also set deliveredAt on
+  // the sending (so the UI shows the delivered timestamp).
+  if (insertedSyntheticDelivered) {
+    updateData.deliveredAt = ts;
   }
 
   // For failure states, persist error message + code on the sending
@@ -732,8 +789,13 @@ export async function applyLocalTransition(input: {
  * When a tenant marks an Invoice as PAID locally (via PATCH /api/invoices/[id]
  * with paidDate), this function upgrades all EInvoiceSendings for that invoice
  * from ACCEPTED/DELIVERED/PENDING_APPROVAL → PAID. This closes the loop:
- * tenants see the full lifecycle SENT → DELIVERED → ACCEPTED → PAID in the
+ * tenants see the full lifecycle SENT → IN_TRANSIT → ACCEPTED → PAID in the
  * timeline, even though Sproom itself doesn't know about payments.
+ *
+ * NOTE (Task 59): PENDING_APPROVAL er bevaret i eligible-listen for backward
+ * compat med ældre sendings der evt. stadig er i denne status. Nye sendings
+ * sættes ikke længere i PENDING_APPROVAL — de forbliver IN_TRANSIT indtil
+ * Approved/Rejected.
  *
  * Idempotent: sendings already in PAID state are skipped.
  */

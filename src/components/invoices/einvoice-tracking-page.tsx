@@ -271,32 +271,31 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
         // ── Fallback toast: detect status changes since last fetch ──
         // Skip on initial fetch (don't toast for statuses that were already
         // there when the page first loaded).
-        // Covers: DELIVERED, ACCEPTED, REJECTED — the key milestones the
-        // user needs to be notified about (required by Erhvervsstyrelsen).
+        //
+        // NOTE: We intentionally use simple `toast.success` (NOT `einvoiceToast`)
+        // here. The rich `einvoiceToast` uses a dynamic import inside a
+        // setTimeout callback, which proved unreliable when fired from this
+        // page's data-fetch path — it resulted in NO notification appearing.
+        // The EInvoiceEventNotifier (mounted globally in AppLayout) already
+        // fires the rich einvoiceToast for every e-invoice event, including
+        // when the user is on this page. This fallback is just a safety net
+        // for the rare case where the socket event was lost — a simple toast
+        // is sufficient and reliable.
         if (!isInitialFetchRef.current) {
           const prev = prevStatusesRef.current;
           for (const send of newSends) {
             const prevStatus = prev.get(send.id);
             if (prevStatus && prevStatus !== send.status) {
-              const desc = `${send.invoice?.invoiceNumber ?? ''} · ${send.recipientName ?? ''}`;
-              if (send.status === 'DELIVERED') {
-                toast.success(isDa ? 'E-faktura leveret' : 'E-invoice delivered', {
-                  description: desc,
-                  duration: 4000,
-                  icon: <CheckCircle2 className="h-4 w-4" />,
-                });
-              } else if (send.status === 'ACCEPTED') {
-                toast.success(isDa ? 'E-faktura godkendt' : 'E-invoice approved', {
-                  description: desc,
-                  duration: 5000,
-                  icon: <CheckCircle2 className="h-4 w-4" />,
-                });
-              } else if (send.status === 'REJECTED') {
-                toast.error(isDa ? 'E-faktura afvist' : 'E-invoice rejected', {
-                  description: desc,
-                  duration: 8000,
-                  icon: <XCircle className="h-4 w-4" />,
-                });
+              const cfg = getStatusConfig(send.status, isDa);
+              const num = send.invoice?.invoiceNumber ?? '';
+              const party = send.recipientName ?? '';
+              const msg = isDa
+                ? `${cfg.label}: ${num}${party ? ' — ' + party : ''}`
+                : `${cfg.label}: ${num}${party ? ' — ' + party : ''}`;
+              if (send.status === 'REJECTED' || send.status === 'FAILED') {
+                toast.error(msg, { duration: 6000 });
+              } else {
+                toast.success(msg, { duration: 4000 });
               }
             }
           }

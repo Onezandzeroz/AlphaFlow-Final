@@ -10,7 +10,11 @@
  *   - status i { SENT, IN_TRANSIT, DELIVERED, PENDING_APPROVAL }
  *     (dvs. documentet er kommet ind i Sproom-netværket men endnu ikke i en
  *     terminal state som ACCEPTED/REJECTED/PAID/FAILED)
- *   - OG updatedAt er ældre end 10 minutter siden (så vi ikke poller noget
+ *     NOTE: PENDING_APPROVAL er bevaret for backward compat — nye sendings
+ *     sættes ikke længere i PENDING_APPROVAL (Task 59), men ældre sendings
+ *     der allerede er i denne status skal stadig polles så de kan opdage
+ *     Approved/Rejected overgange.
+ *   - OG updatedAt er ældre end 2 minutter siden (så vi ikke poler noget
  *      der netop er opdateret via en webhook)
  *
  * For hver kandidat-sending:
@@ -362,14 +366,15 @@ export async function runSproomOutboxCycle(): Promise<{
     // NOTE: We do NOT use recentlyChecked dedup for ANY non-terminal sending.
     // The outbox poller is the safety net for missed webhooks — if we skip
     // a sending because it was "recently checked", we might miss the
-    // transition to its next status (e.g. IN_TRANSIT → DELIVERED →
-    // PENDING_APPROVAL → ACCEPTED). All non-terminal sendings must be
-    // polled every cycle so we catch every status transition.
+    // transition to its next status (e.g. IN_TRANSIT → ACCEPTED, hvor
+    // tracker'en automatisk indsætter et syntetisk DELIVERED event).
+    // All non-terminal sendings must be polled every cycle so we catch
+    // every status transition.
     //
-    // The staleness cutoff (10 min) already prevents polling sendings
+    // The staleness cutoff (2 min) already prevents polling sendings
     // that were JUST updated (via webhook or previous poll) — the
     // `updatedAt: { lt: stalenessCutoff }` filter in the query ensures
-    // we only poll sendings that haven't been updated in the last 10 min.
+    // we only poll sendings that haven't been updated in the last 2 min.
     // That's sufficient dedup — no need for an additional in-memory Set.
 
     try {
