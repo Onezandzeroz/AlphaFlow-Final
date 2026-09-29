@@ -61,7 +61,7 @@ export function EInvoiceEventNotifier() {
   const isDa = language === 'da';
 
   // NOTE: Hermes owl activation is now handled automatically by the
-  // `hermes-toast` wrapper (src/lib/hermes-toast.ts). Every `toast()` call
+  // `hermes-toast` wrapper (src/lib/hermes-toast.tsx). Every `toast()` call
   // in this file automatically activates the notificationOverride in the
   // Hermes owl store, making the owl pop forward BEFORE the toast appears,
   // and fade back after the toast's duration elapses. No manual

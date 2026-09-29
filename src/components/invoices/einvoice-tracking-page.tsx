@@ -57,7 +57,7 @@ import {
   RotateCw,
   Ban,
 } from 'lucide-react';
-import { toast } from '@/lib/hermes-toast';
+import { toast, einvoiceToast } from '@/lib/hermes-toast';
 import { format } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
 
@@ -272,29 +272,49 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
         // Skip on initial fetch (don't toast for statuses that were already
         // there when the page first loaded).
         //
-        // NOTE: We intentionally use simple `toast.success` (NOT `einvoiceToast`)
-        // here. The rich `einvoiceToast` uses a dynamic import inside a
-        // setTimeout callback, which proved unreliable when fired from this
-        // page's data-fetch path — it resulted in NO notification appearing.
-        // The EInvoiceEventNotifier (mounted globally in AppLayout) already
-        // fires the rich einvoiceToast for every e-invoice event, including
-        // when the user is on this page. This fallback is just a safety net
-        // for the rare case where the socket event was lost — a simple toast
-        // is sufficient and reliable.
+        // Uses einvoiceToast (rich toast with Hermes owl activation) — same as
+        // EInvoiceEventNotifier. This is a SAFETY NET: when the 'einvoice-event'
+        // socket event is lost (e.g. WS disconnected during emission), this
+        // fallback still notifies the user when a status transition is
+        // discovered via the data-sync refresh.
+        //
+        // (Task 59: einvoiceToast now uses STATIC imports instead of dynamic
+        // imports — the previous dynamic-import-inside-setTimeout was
+        // unreliable in Next.js dev mode and could fail silently, which is
+        // what caused the "no notifications" bug.)
         if (!isInitialFetchRef.current) {
           const prev = prevStatusesRef.current;
           for (const send of newSends) {
             const prevStatus = prev.get(send.id);
             if (prevStatus && prevStatus !== send.status) {
-              const cfg = getStatusConfig(send.status, isDa);
-              const num = send.invoice?.invoiceNumber ?? '';
-              const party = send.recipientName ?? '';
-              const msg = isDa
-                ? `${cfg.label}: ${num}${party ? ' — ' + party : ''}`
-                : `${cfg.label}: ${num}${party ? ' — ' + party : ''}`;
-              if (send.status === 'REJECTED' || send.status === 'FAILED') {
-                toast.error(msg, { duration: 6000 });
+              // Use rich e-invoice toast for key milestones
+              const MILESTONE_DURATIONS: Record<string, number> = {
+                DELIVERED: 4000,
+                ACCEPTED: 5000,
+                REJECTED: 8000,
+                PAID: 5000,
+                FAILED: 10000,
+              };
+              if (MILESTONE_DURATIONS[send.status]) {
+                einvoiceToast({
+                  status: send.status,
+                  documentType: null,
+                  counterpartyName: send.recipientName ?? null,
+                  counterpartyCvr: null,
+                  invoiceNumber: send.invoice?.invoiceNumber ?? null,
+                  amount: null,
+                  currency: null,
+                  issueDate: null,
+                  isDa,
+                }, MILESTONE_DURATIONS[send.status]);
               } else {
+                // For non-milestone transitions (SENT, SENDING, IN_TRANSIT),
+                // use a simple toast — these are frequent and don't need the
+                // full rich toast treatment.
+                const cfg = getStatusConfig(send.status, isDa);
+                const num = send.invoice?.invoiceNumber ?? '';
+                const party = send.recipientName ?? '';
+                const msg = `${cfg.label}: ${num}${party ? ' — ' + party : ''}`;
                 toast.success(msg, { duration: 4000 });
               }
             }

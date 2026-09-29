@@ -7,7 +7,7 @@
  * Shows: document type icon, status badge, counterparty name + CVR,
  * invoice/credit note number, amount + currency, and issue date.
  *
- * Used by hermes-toast.ts via toast.custom() for e-invoice specific toasts.
+ * Used by hermes-toast.tsx via toast.custom() for e-invoice specific toasts.
  * Other toasts (settings, generic actions) use the standard sonner styling.
  */
 
