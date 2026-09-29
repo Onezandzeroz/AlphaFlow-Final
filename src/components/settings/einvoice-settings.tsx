@@ -55,7 +55,7 @@ import {
   Activity,
   PlusCircle,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { format } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
 

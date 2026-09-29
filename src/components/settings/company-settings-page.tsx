@@ -20,7 +20,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { CvrVerifyButton, mapCvrFormToCompanyType, type CvrInfo } from '@/components/shared/cvr-verify-button';

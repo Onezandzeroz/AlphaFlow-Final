@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useSyncExternalStore } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { WifiOff } from 'lucide-react';
 import { useTranslation } from '@/lib/use-translation';
 

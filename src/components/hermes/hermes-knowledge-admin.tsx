@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import {
   BookOpen,
   Plus,

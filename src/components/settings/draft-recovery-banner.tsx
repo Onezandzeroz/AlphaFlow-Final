@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { FileEdit, Trash2, AlertCircle } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 
 // ─── Pretty labels for known draft key prefixes ──────────────────────
 // Maps the first segment of a draft key (e.g. 'transaction' from

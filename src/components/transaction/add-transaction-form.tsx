@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useTranslation } from '@/lib/use-translation';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useScannerStore } from '@/lib/scanner-store';
 import { useOcr, type OCRResult } from '@/lib/ocr';

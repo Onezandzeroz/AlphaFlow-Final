@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { useTranslation } from '@/lib/use-translation';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { Loader2, Send, Mail, CheckCircle2, XCircle } from 'lucide-react';
 import {
   Select,

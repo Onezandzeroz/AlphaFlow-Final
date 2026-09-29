@@ -38,7 +38,7 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { TenantTwoFactorToggle } from '@/components/settings/tenant-two-factor-toggle';
 import { format, formatDistanceToNow } from 'date-fns';
 import { da } from 'date-fns/locale';

@@ -3,7 +3,7 @@
 import { useCallback } from 'react';
 import { useTranslation } from '@/lib/use-translation';
 import { parseApiError, isAccessDenied } from '@/lib/api-error-handler';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useUpgradeModalStore } from '@/lib/upgrade-modal-store';
 
 /**

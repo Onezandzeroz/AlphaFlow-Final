@@ -54,7 +54,7 @@ import { AddTransactionForm } from '@/components/transaction/add-transaction-for
 import { PageHeader } from '@/components/shared/page-header';
 import { StatsCard } from '@/components/shared/stats-card';
 import { MobileFilterDropdown } from '@/components/shared/mobile-filter-dropdown';
-import { toast } from "sonner";
+import { toast } from '@/lib/hermes-toast';
 import {
   Plus,
   Search,

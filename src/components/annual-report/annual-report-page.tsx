@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';

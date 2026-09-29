@@ -73,7 +73,7 @@ import {
 import { PageHeader } from '@/components/shared/page-header';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { OpenBankingSection } from '@/components/bank-reconciliation/open-banking-section';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { format as formatDateFns } from 'date-fns';
 import { da } from 'date-fns/locale';
 import { DK_DATE_SHORT } from '@/lib/date-utils';

@@ -11,7 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { ResponsiveSwitch } from '@/components/ui/responsive-switch';
 import { OTPInput } from '@/components/ui/otp-input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import {
   Shield,
   ShieldCheck,

@@ -6,7 +6,7 @@ import { ResponsiveSwitch } from '@/components/ui/responsive-switch';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useTranslation } from '@/lib/use-translation';
 import {
   Wrench,

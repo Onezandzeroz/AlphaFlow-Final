@@ -34,7 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { getCurrentTermsVersion, getTermsUrl } from '@/lib/legal';
 
 // ─── Plan definitions ──────────────────────────────────────────────────

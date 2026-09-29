@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ResponsiveSwitch } from '@/components/ui/responsive-switch';
 import { Separator } from '@/components/ui/separator';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import {
   Shield,
   ShieldCheck,

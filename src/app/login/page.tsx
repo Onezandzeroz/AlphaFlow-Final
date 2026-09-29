@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAuthStore, User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { isViewBlockedInProjectMode } from '@/lib/project-mode-visibility';
 import { LoginForm } from '@/components/auth/login-form';
 import { RegisterForm } from '@/components/auth/register-form';

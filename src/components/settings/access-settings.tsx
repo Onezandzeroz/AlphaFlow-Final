@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { useSubscriptionPlansStore } from '@/lib/subscription-plans-store';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import {
   KeyRound,
   ShieldCheck,

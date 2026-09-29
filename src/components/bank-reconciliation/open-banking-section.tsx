@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { useDraftSync } from '@/hooks/use-draft-sync';
 import { useWarnOnUnsaved } from '@/hooks/use-warn-unsaved';

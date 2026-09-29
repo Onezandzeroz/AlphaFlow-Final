@@ -20,11 +20,10 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useAuthStore } from '@/lib/auth-store';
 import { useDataSyncStore } from '@/lib/data-sync-store';
 import { useTranslation } from '@/lib/use-translation';
-import { useHermesOwlStore } from '@/lib/hermes-owl-store';
 import { FileText, Receipt, CheckCircle2, XCircle, AlertCircle, Loader2, Send, Clock, Banknote } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -61,46 +60,12 @@ export function EInvoiceEventNotifier() {
   const { language } = useTranslation();
   const isDa = language === 'da';
 
-  // ── Hermes owl show/hide ──
-  // When a toast fires, we activate a "notification override" that keeps
-  // the Hermes owl visible — overriding HermesOverlay's auto-hide timer.
-  // After the toast's duration elapses, we clear the override, which lets
-  // HermesOverlay's auto-hide timer resume (it will hide the owl after
-  // its normal 5s delay).
-  //
-  // We use `notificationOverride` instead of directly setting `fabHidden`
-  // because HermesOverlay's useEffect would otherwise fight our changes
-  // (it has a 5s auto-hide timer that re-triggers whenever fabHidden
-  // changes, causing a "two timers fighting" problem).
-  const setNotificationOverrideRef = useRef(useHermesOwlStore.getState().setNotificationOverride);
-  useEffect(() => {
-    setNotificationOverrideRef.current = useHermesOwlStore.getState().setNotificationOverride;
-  }, []);
-
-  /**
-   * Show the Hermes owl (via notification override), then clear the
-   * override after `durationMs` milliseconds — letting HermesOverlay's
-   * auto-hide timer resume.
-   *
-   * If multiple toasts fire in quick succession, the timeout is reset
-   * with each new toast — so the owl stays visible as long as toasts
-   * keep coming, and only hides after the LAST toast has faded.
-   */
-  const owlHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const showOwlThenHide = (durationMs: number) => {
-    // Activate the override (owl stays visible, HermesOverlay skips auto-hide)
-    setNotificationOverrideRef.current(true);
-    // Clear any previous hide-timeout (so the owl stays visible if
-    // multiple toasts fire in quick succession)
-    if (owlHideTimeoutRef.current) {
-      clearTimeout(owlHideTimeoutRef.current);
-    }
-    // Schedule clearing the override after the toast duration + grace
-    owlHideTimeoutRef.current = setTimeout(() => {
-      setNotificationOverrideRef.current(false);
-      owlHideTimeoutRef.current = null;
-    }, durationMs + 500);
-  };
+  // NOTE: Hermes owl activation is now handled automatically by the
+  // `hermes-toast` wrapper (src/lib/hermes-toast.ts). Every `toast()` call
+  // in this file automatically activates the notificationOverride in the
+  // Hermes owl store, making the owl pop forward BEFORE the toast appears,
+  // and fade back after the toast's duration elapses. No manual
+  // showOwlThenHide() calls needed.
 
   // Keep the store's bumpVersion in a ref so the socket listener (set up once
   // per connection) always calls the current implementation without re-subscribing.
@@ -201,21 +166,18 @@ export function EInvoiceEventNotifier() {
                     description: desc, duration: 5000,
                     icon: <CheckCircle2 className="h-4 w-4" />,
                   });
-                  showOwlThenHide(5000);
                   anyToastFired = true;
                 } else if (s.status === 'REJECTED') {
                   toast.error(isDa ? 'E-faktura afvist' : 'E-invoice rejected', {
                     description: desc, duration: 8000,
                     icon: <XCircle className="h-4 w-4" />,
                   });
-                  showOwlThenHide(8000);
                   anyToastFired = true;
                 } else if (s.status === 'DELIVERED') {
                   toast.success(isDa ? 'E-faktura leveret' : 'E-invoice delivered', {
                     description: desc, duration: 4000,
                     icon: <CheckCircle2 className="h-4 w-4" />,
                   });
-                  showOwlThenHide(4000);
                   anyToastFired = true;
                 }
               }
@@ -307,7 +269,6 @@ export function EInvoiceEventNotifier() {
               },
             });
             // Show Hermes owl alongside the toast, then hide after toast fades
-            showOwlThenHide(3000);
             return;
           }
 
@@ -367,7 +328,6 @@ export function EInvoiceEventNotifier() {
               },
             });
             // Show Hermes owl alongside the toast
-            showOwlThenHide(5000);
             return;
           }
 
@@ -389,7 +349,6 @@ export function EInvoiceEventNotifier() {
               },
             });
             // Show Hermes owl alongside the toast
-            showOwlThenHide(8000);
             return;
           }
 
@@ -404,7 +363,6 @@ export function EInvoiceEventNotifier() {
             icon: <StatusIcon className="h-4 w-4" />,
           });
           // Show Hermes owl alongside the toast
-          showOwlThenHide(outDuration);
         });
       })
       .catch((err) => {
@@ -417,11 +375,6 @@ export function EInvoiceEventNotifier() {
       if (socket) {
         socket.removeAllListeners();
         socket.disconnect();
-      }
-      // Clean up any pending owl-hide timeout
-      if (owlHideTimeoutRef.current) {
-        clearTimeout(owlHideTimeoutRef.current);
-        owlHideTimeoutRef.current = null;
       }
     };
   }, [userId, companyId]);

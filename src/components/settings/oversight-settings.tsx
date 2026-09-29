@@ -27,7 +27,7 @@ import {
   Bot, CheckCircle2, XCircle, CreditCard,
   UserX, Trash2, Mail, Calendar,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { format, formatDistanceToNow } from 'date-fns';
 import { da } from 'date-fns/locale';
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from '@/lib/use-translation';
 import { isProjectAccount } from '@/lib/project-chart-constants';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';

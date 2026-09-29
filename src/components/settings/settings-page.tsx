@@ -21,7 +21,7 @@ import { SystemMessagesTab } from '@/components/settings/system-messages-tab';
 import { AccessSettings } from '@/components/settings/access-settings';
 import { HermesSettings } from '@/components/settings/hermes-settings';
 import { EInvoiceSettings } from '@/components/settings/einvoice-settings';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import {
   Settings,

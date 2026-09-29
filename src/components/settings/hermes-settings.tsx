@@ -7,7 +7,7 @@ import { ResponsiveSwitch } from '@/components/ui/responsive-switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useTranslation } from '@/lib/use-translation';
 import {
   Info,

@@ -21,7 +21,7 @@ import { NotificationCenter } from '@/components/notification-center';
 import { EInvoiceEventNotifier } from '@/components/layout/einvoice-event-notifier';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import {
   Tooltip,
   TooltipContent,

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { Button } from '@/components/ui/button';

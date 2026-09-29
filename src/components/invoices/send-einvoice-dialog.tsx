@@ -38,7 +38,7 @@ import {
   Zap,
   Mail,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 
 // ── Types ──────────────────────────────────────────────────────────
 

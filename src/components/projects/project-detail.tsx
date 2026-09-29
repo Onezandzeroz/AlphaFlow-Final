@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, type CSSProperties }
 import { User, useAuthStore } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { useDataVersion } from '@/hooks/use-data-version';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

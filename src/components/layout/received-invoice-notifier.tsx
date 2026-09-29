@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/hermes-toast';
 import { useTranslation } from '@/lib/use-translation';
 import { useDataVersion } from '@/hooks/use-data-version';
 

@@ -112,7 +112,7 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { da, enGB } from 'date-fns/locale';
 import { DK_DATE_SHORT } from '@/lib/date-utils';
 import { Calendar } from '@/components/ui/calendar';
-import { toast } from "sonner";
+import { toast } from '@/lib/hermes-toast';
 import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
 import { useWriteAccessGuard } from '@/hooks/use-write-access-guard';
 import { useDataVersion } from '@/hooks/use-data-version';
