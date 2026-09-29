@@ -6404,3 +6404,32 @@ select:focus-visible {
     font-size: 11px !important;
   }
 }
+
+/* ==========================================================================
+   Toaster position — toasts pop ned til venstre for Hermes owl
+   ==========================================================================
+   På desktop er Hermes 120px + right-16 (64px margin) = 184px fra
+   højre kant. Toaster er offset 200px (16px gap til Hermes).
+   På mobil er Hermes 60px + right-1 (4px margin) = 64px.
+   Toaster er offset 76px (12px gap).
+   ========================================================================== */
+
+@media (max-width: 1023px) {
+  /* Mobile/tablet — Hermes is 60px + right-1 (4px) = 64px from right */
+  .toaster {
+    right: var(--hermes-offset-mobile, 76px) !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktop — Hermes is 120px + right-16 (64px) = 184px from right */
+  .toaster {
+    right: var(--hermes-offset-desktop, 200px) !important;
+  }
+}
+
+/* Når Hermes er skjult (fabHidden=true), ryk toasts længere mod højre
+   så de ikke svæver i luften — der er ingen owl at komme "fra".
+   Vi justerer ikke offset her da det ville kræve at vi kender
+   fabHidden-state i CSS (hvilket vi ikke gør). Toaster forbliver
+   på samme position — det ser stadig fint ud. */
