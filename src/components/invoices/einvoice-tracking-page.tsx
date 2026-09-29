@@ -332,11 +332,19 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
   // Calls POST /api/einvoice-sends/[id]/cancel which sets the status to
   // CANCELLED. This removes it from the active tracking list without
   // deleting the record (for audit trail).
-  // Available for any non-terminal sending (PENDING, QUEUED, SENDING,
-  // SENT, IN_TRANSIT, DELIVERED, PENDING_APPROVAL) — NOT for terminal
-  // states (ACCEPTED, REJECTED, PAID, FAILED, CANCELLED).
+  //
+  // ONLY available for sends that never left the local system:
+  //   - PENDING — queued but never started processing
+  //   - QUEUED — handed off but never started
+  //   - SENDING — processEInvoiceSend started but timed out before SENT
+  //
+  // NOT available for:
+  //   - SENT / IN_TRANSIT / DELIVERED / PENDING_APPROVAL — already delivered
+  //     to the recipient. Cancelling would be misleading (the document
+  //     is already received and cannot be "taken back").
+  //   - ACCEPTED / REJECTED / PAID / FAILED / CANCELLED — terminal.
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const CANCELLABLE_STATUSES = ['PENDING', 'QUEUED', 'SENDING', 'SENT', 'IN_TRANSIT', 'DELIVERED', 'PENDING_APPROVAL'];
+  const CANCELLABLE_STATUSES = ['PENDING', 'QUEUED', 'SENDING'];
   const handleCancel = useCallback(async (send: EInvoiceSendingSummary) => {
     if (!CANCELLABLE_STATUSES.includes(send.status)) return;
     setCancellingId(send.id);

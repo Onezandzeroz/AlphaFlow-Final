@@ -9,44 +9,30 @@ import { EInvoiceSendStatus } from '@prisma/client';
 /**
  * POST /api/einvoice-sends/[id]/cancel
  *
- * Cancel a (possibly stuck/duplicate) e-invoice sending. Sets status to
- * CANCELLED so it disappears from the active tracking list.
+ * Cancel a stuck/duplicate e-invoice sending that NEVER left the system.
+ * Sets status to CANCELLED so it disappears from the active tracking list.
  *
- * Unlike cancelEInvoiceSend() in einvoice-sender.ts (which only allows
- * PENDING/QUEUED), this endpoint allows cancelling ANY non-terminal
- * sending — including SENDING, SENT, IN_TRANSIT, DELIVERED, and
- * PENDING_APPROVAL. This is necessary because:
+ * ONLY allows cancelling PENDING, QUEUED, or SENDING — these are sends
+ * that are stuck locally and never made it to Sproom (e.g. duplicates
+ * created before the Task 35 duplicate-prevention fix, or sends where
+ * processEInvoiceSend timed out before updating to SENT/FAILED).
  *
- *   1. Duplicate sends (from the pre-Task-35 era when there was no
- *      duplicate prevention) may be stuck in PENDING or SENDING state
- *      if the Sproom API call timed out without updating the status.
- *
- *   2. A sending may be stuck in SENT/IN_TRANSIT/DELIVERED/
- *      PENDING_APPROVAL if Sproom never sends a terminal webhook
- *      (ACCEPTED/REJECTED) — e.g. the recipient never opens the invoice.
- *
- *   3. The user may want to clean up the tracking list by removing
- *      stale entries that will never progress.
- *
- * Terminal statuses (ACCEPTED, REJECTED, PAID, FAILED, CANCELLED) cannot
- * be cancelled — they're already final.
- *
- * NOTE: This does NOT recall or undo the Sproom-side document — if the
- * document has already been delivered to the recipient, cancelling the
- * AlphaFlow-side tracking record only removes it from the tracking list.
- * The recipient still has the document. For a real "undo", the user
- * would need to send a credit note.
+ * Does NOT allow cancelling:
+ *   - SENT / IN_TRANSIT / DELIVERED / PENDING_APPROVAL — the document
+ *     has already been delivered to the recipient. Cancelling the
+ *     tracking record would be misleading (it implies the send was
+ *     undone, but the recipient still has the document).
+ *   - ACCEPTED / REJECTED / PAID — terminal, already final.
+ *   - FAILED — can be retried via the retry button, not cancelled.
+ *   - CANCELLED — already cancelled.
  */
 
-// Non-terminal statuses that CAN be cancelled
+// Only truly stuck sends (never left the local system) can be cancelled.
+// Once a send reaches SENT, it's in Sproom's network and cannot be "taken back".
 const CANCELLABLE_STATUSES = [
   'PENDING',
   'QUEUED',
   'SENDING',
-  'SENT',
-  'IN_TRANSIT',
-  'DELIVERED',
-  'PENDING_APPROVAL',
 ] as EInvoiceSendStatus[];
 
 export const POST = withGuard(
@@ -81,11 +67,11 @@ export const POST = withGuard(
         );
       }
 
-      // Check if it's already in a terminal state
+      // Check if it's cancellable (only stuck/duplicate sends that never left the system)
       if (!CANCELLABLE_STATUSES.includes(sending.status as EInvoiceSendStatus)) {
         return NextResponse.json(
           {
-            error: `Kan ikke annullere en forsendelse med status "${sending.status}". Kun aktive (ikke-afsluttede) forsendelser kan annulleres.`,
+            error: `Kan ikke annullere en forsendelse med status "${sending.status}". Kun forsendelser der ikke er kommet afsted (Afventer/Sender) kan annulleres. Forsendelser der er afsendt eller leveret kan ikke trækkes tilbage — de er allerede modtaget af modtageren.`,
             code: 'NOT_CANCELLABLE',
             currentStatus: sending.status,
           },
