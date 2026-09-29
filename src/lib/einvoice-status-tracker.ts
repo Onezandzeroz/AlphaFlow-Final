@@ -482,16 +482,6 @@ export async function applyStatusTransition(
   // We always create an event row — even if the status didn't change —
   // because the raw Sproom state may have changed (e.g. SENT → SENT with
   // different statusCode). This preserves the full timeline.
-  //
-  // NOTE (Task 62): The synthetic DELIVERED insert (added in Task 59,
-  // wrapped in try-catch in Task 61) has been REMOVED. It is no longer
-  // needed because we now map 'Received' #401 → DELIVERED directly in
-  // STATUS_MAP, so a natural DELIVERED event is created when Sproom
-  // notifies us that the recipient AP received the document. This is
-  // cleaner and more reliable than synthesising one at approval time.
-  // The "Leveret" milestone now appears on the timeline at the correct
-  // moment (when the document is actually delivered), not retroactively
-  // at approval time.
   await db.eInvoiceSendEvent.create({
     data: {
       sendingId,
@@ -513,17 +503,100 @@ export async function applyStatusTransition(
     },
   });
 
+  // ── SPECIAL CASE (Task 63): Synthetic ACCEPTED event at DELIVERED time ──
+  //
+  // The user's observation: in their staging environment, `received #401`
+  // (which we map to DELIVERED / "Leveret") is the response that comes from
+  // the recipient when they press the "Approve" (Application Response) button.
+  // This means `received #401` IS the approval — so both "Leveret" AND
+  // "Godkendt" should appear together on the timeline at the same moment.
+  //
+  // To achieve this, when `received #401` arrives (newStatus === DELIVERED),
+  // we ALSO insert a synthetic ACCEPTED event with the same timestamp. The
+  // sending's status is upgraded to ACCEPTED immediately, so:
+  //   - The timeline shows "Leveret" + "Godkendt" adjacent (same timestamp)
+  //   - The final status is ACCEPTED (so the toast shows "Godkendt")
+  //   - Any subsequent states (transmissionCompleted #402, PendingApproval)
+  //     are ignored by the regression guard (they would downgrade ACCEPTED)
+  //   - If a real `Approved` event arrives later, the idempotency check
+  //     catches it (same status + same rawState = no-op)
+  //
+  // Wrapped in try-catch so a failure does NOT crash the transition —
+  // the DELIVERED event is already persisted, and the sending will just
+  // stay at DELIVERED (still a valid state, just without the early ACCEPTED).
+  let syntheticAccepted = false;
+  let finalNewStatus: EInvoiceSendStatus = newStatus;
+  let finalSproomRawState: string = sproomState;
+
+  if (newStatus === 'DELIVERED') {
+    try {
+      // Check if an ACCEPTED event already exists for this sending
+      // (idempotency — don't insert duplicate synthetic ACCEPTED)
+      const existingAccepted = await db.eInvoiceSendEvent.findFirst({
+        where: { sendingId, status: 'ACCEPTED' },
+        select: { id: true },
+      });
+      if (!existingAccepted) {
+        // Insert synthetic ACCEPTED event — same timestamp as the DELIVERED
+        // event so they appear adjacent on the timeline.
+        await db.eInvoiceSendEvent.create({
+          data: {
+            sendingId,
+            status: 'ACCEPTED',
+            // Use 'Approved' as the synthetic raw state — this matches what
+            // Sproom would send for a real Application Response approval.
+            sproomRawState: 'Approved',
+            sproomStatusCode: null,
+            deliveryType: deliveryType ?? null,
+            message: 'Application Response: Approved by recipient (synthesised at delivery time)',
+            failedProperties: Prisma.DbNull,
+            source,
+            eventTimestamp: ts,
+            metadata: {
+              synthetic: true,
+              source: 'received-syntese',
+              triggerState: sproomState,
+              triggerStatusCode: sproomStatusCode ?? null,
+              ...(metadata ?? {}),
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        syntheticAccepted = true;
+        finalNewStatus = 'ACCEPTED';
+        finalSproomRawState = 'Approved';
+        logger.info('[STATUS-TRACKER] Synthetic ACCEPTED event inserted (received-syntese)', {
+          sendingId,
+          triggerState: sproomState,
+          eventTimestamp: ts.toISOString(),
+        });
+      }
+    } catch (synthErr) {
+      // Non-critical — log + continue with DELIVERED status only.
+      // The timeline will show "Leveret" but not "Godkendt" — acceptable
+      // degradation. The sending stays at DELIVERED (valid state).
+      logger.warn('[STATUS-TRACKER] Synthetic ACCEPTED insert failed (non-critical, continuing with DELIVERED)', {
+        sendingId,
+        error: synthErr instanceof Error ? synthErr.message : String(synthErr),
+      });
+    }
+  }
+
   // ── Update the sending ──
   const updateData: Record<string, unknown> = {
-    status: newStatus,
-    sproomRawStatus: sproomState,
+    status: finalNewStatus,
+    sproomRawStatus: finalSproomRawState,
   };
 
-  // Set the relevant timestamp field (don't overwrite if already set —
-  // first occurrence is the canonical timestamp).
+  // Set the relevant timestamp field for the ORIGINAL status (e.g. deliveredAt)
+  // — don't overwrite if already set (first occurrence is canonical).
   const tsField = timestampFieldFor(newStatus);
   if (tsField) {
     updateData[tsField] = ts;
+  }
+
+  // If we inserted a synthetic ACCEPTED, also set acceptedAt
+  if (syntheticAccepted) {
+    updateData.acceptedAt = ts;
   }
 
   // For failure states, persist error message + code on the sending
@@ -546,8 +619,8 @@ export async function applyStatusTransition(
     userId: sending.sentBy,
     companyId: sending.companyId,
     changes: {
-      status: { old: previousStatus, new: newStatus },
-      sproomRawStatus: { old: sending.sproomRawStatus, new: sproomState },
+      status: { old: previousStatus, new: finalNewStatus },
+      sproomRawStatus: { old: sending.sproomRawStatus, new: finalSproomRawState },
     },
     metadata: {
       source,
@@ -556,6 +629,7 @@ export async function applyStatusTransition(
       deliveryType: deliveryType ?? null,
       message: message ?? null,
       eventTimestamp: ts.toISOString(),
+      syntheticAccepted,
       ...(metadata ?? {}),
     },
   });
@@ -563,19 +637,21 @@ export async function applyStatusTransition(
   logger.info('[STATUS-TRACKER] Transition applied', {
     sendingId,
     previousStatus,
-    newStatus,
+    newStatus: finalNewStatus,
+    originalNewStatus: newStatus,
     sproomState,
     source,
+    syntheticAccepted,
   });
 
   return {
     sendingId,
     previousStatus,
-    newStatus,
+    newStatus: finalNewStatus,
     changed: true,
     eventCreated: true,
-    mappedStatus: newStatus,
-    sproomRawState: sproomState,
+    mappedStatus: finalNewStatus,
+    sproomRawState: finalSproomRawState,
   };
 }
 
