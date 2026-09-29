@@ -527,32 +527,89 @@ export const PUT = withGuard(
         }
 
         // ── Auto-settlement for credit notes ──────────────────────────
-        // If this is a credit note that matches the full amount of a posted
-        // invoice from the same supplier, automatically mark it as SETTLED
-        // (Betalt). The credit note offsets the invoice — no bank recon
-        // match is needed. The match is by supplier (CVR or name) + amount.
+        // If this is a credit note, try to match it to the original invoice
+        // it credits. The match priority is:
+        //
+        //   1. ORIGINAL INVOICE NUMBER MATCH (preferred):
+        //      If the credit note has an originalInvoiceNumber (parsed from
+        //      the cac:BillingReference/cbc:ID element in the XML), match to
+        //      the invoice with that EXACT invoice number from the same
+        //      supplier. This is the precise, correct match — the credit
+        //      note explicitly says "I credit invoice X".
+        //
+        //   2. AMOUNT + SUPPLIER FALLBACK (only when no BillingReference):
+        //      If the credit note has NO originalInvoiceNumber (freestanding
+        //      credit note — no BillingReference in the XML), fall back to
+        //      matching by amount (within 0.01 DKK) + supplier. This is less
+        //      precise and could match the wrong invoice if multiple
+        //      invoices from the same supplier have the same amount — but
+        //      it's better than not matching at all.
+        //
+        // The old code (before this fix) ONLY used amount + supplier
+        // matching, which caused credit notes to be matched to the wrong
+        // invoice when multiple invoices from the same supplier had
+        // similar amounts.
         if (isCreditNote) {
           const creditAmount = Number(existing.payableAmount) || 0;
-          const matchWhere = {
-            companyId,
-            id: { not: id }, // not the credit note itself
-            documentType: { in: ['INVOICE' as EInvoiceType, 'CORRECTED' as EInvoiceType] },
-            status: { in: ['POSTED' as ReceivedInvoiceStatus, 'SETTLED' as ReceivedInvoiceStatus] },
-            // Match by supplier (CVR if available, else name)
-            ...(existing.supplierCvr
-              ? { supplierCvr: existing.supplierCvr }
-              : { supplierName: { equals: existing.supplierName, mode: 'insensitive' as const } }),
-            // Amount must match within 0.01 DKK
-            payableAmount: {
-              gte: creditAmount - 0.01,
-              lte: creditAmount + 0.01,
-            },
-          };
 
-          const matchingInvoice = await db.receivedInvoice.findFirst({
-            where: matchWhere,
-            select: { id: true, invoiceNumber: true },
-          });
+          // ── Strategy 1: Match by originalInvoiceNumber (preferred) ──
+          let matchingInvoice: { id: string; invoiceNumber: string } | null = null;
+
+          if (existing.originalInvoiceNumber) {
+            matchingInvoice = await db.receivedInvoice.findFirst({
+              where: {
+                companyId,
+                id: { not: id },
+                documentType: { in: ['INVOICE' as EInvoiceType, 'CORRECTED' as EInvoiceType] },
+                status: { in: ['POSTED' as ReceivedInvoiceStatus, 'SETTLED' as ReceivedInvoiceStatus] },
+                // Exact invoice number match — this is the precise match
+                invoiceNumber: existing.originalInvoiceNumber,
+                // Still scope by supplier to avoid cross-supplier matches
+                ...(existing.supplierCvr
+                  ? { supplierCvr: existing.supplierCvr }
+                  : { supplierName: { equals: existing.supplierName, mode: 'insensitive' as const } }),
+              },
+              select: { id: true, invoiceNumber: true },
+            });
+
+            if (matchingInvoice) {
+              logger.info(
+                `Credit note ${existing.invoiceNumber} matched to original invoice ${matchingInvoice.invoiceNumber} via BillingReference (originalInvoiceNumber=${existing.originalInvoiceNumber})`
+              );
+            }
+          }
+
+          // ── Strategy 2: Fallback — amount + supplier match ──
+          // Only used when no originalInvoiceNumber (freestanding credit
+          // note) OR when the originalInvoiceNumber didn't match any
+          // posted invoice (e.g. the original invoice was from a
+          // different supplier, or hasn't been received yet).
+          if (!matchingInvoice) {
+            matchingInvoice = await db.receivedInvoice.findFirst({
+              where: {
+                companyId,
+                id: { not: id },
+                documentType: { in: ['INVOICE' as EInvoiceType, 'CORRECTED' as EInvoiceType] },
+                status: { in: ['POSTED' as ReceivedInvoiceStatus, 'SETTLED' as ReceivedInvoiceStatus] },
+                // Match by supplier (CVR if available, else name)
+                ...(existing.supplierCvr
+                  ? { supplierCvr: existing.supplierCvr }
+                  : { supplierName: { equals: existing.supplierName, mode: 'insensitive' as const } }),
+                // Amount must match within 0.01 DKK
+                payableAmount: {
+                  gte: creditAmount - 0.01,
+                  lte: creditAmount + 0.01,
+                },
+              },
+              select: { id: true, invoiceNumber: true },
+            });
+
+            if (matchingInvoice) {
+              logger.info(
+                `Credit note ${existing.invoiceNumber} matched to invoice ${matchingInvoice.invoiceNumber} via amount+supplier fallback (no BillingReference or no match on BillingReference)`
+              );
+            }
+          }
 
           if (matchingInvoice) {
             await db.receivedInvoice.update({

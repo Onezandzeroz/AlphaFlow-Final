@@ -211,6 +211,11 @@ export async function storeReceivedInvoice(
       // when this invoice is approved/rejected — GAP I-7 fix)
       sproomDocumentId: documentGuid ?? null,
 
+      // Credit note original invoice reference (from cac:BillingReference)
+      // Used by auto-settlement to match the credit note to the correct
+      // original invoice — NOT just by amount + supplier.
+      originalInvoiceNumber: parsed.originalInvoiceNumber ?? null,
+
       // Validation
       validationErrors: result.errors.length > 0 ? JSON.stringify(result.errors) : null,
       validationWarnings: result.warnings.length > 0 ? JSON.stringify(result.warnings) : null,

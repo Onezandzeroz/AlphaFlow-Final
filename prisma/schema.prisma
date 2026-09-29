@@ -1469,6 +1469,23 @@ model ReceivedInvoice {
   // flow extracts the GUID from the notes string as a fallback.
   sproomDocumentId String?
 
+  // ── Credit note original invoice reference ──────────────────────────
+  // For received credit notes (documentType = CREDIT_NOTE), this stores
+  // the invoice number from the cac:BillingReference/cbc:ID element in
+  // the XML — i.e. the invoice this credit note is crediting.
+  //
+  // Used by the auto-settlement matching logic in the received-invoice
+  // post route: when a credit note has an originalInvoiceNumber, we
+  // match it to the invoice with that exact number from the same
+  // supplier — NOT just by amount + supplier (which was the old, error-
+  // prone logic that could match the wrong invoice if multiple invoices
+  // from the same supplier had similar amounts).
+  //
+  // Null for regular invoices and for freestanding credit notes (no
+  // BillingReference in the XML). In the freestanding case, the auto-
+  // settlement falls back to amount + supplier matching.
+  originalInvoiceNumber String?
+
   // Validation
   validationErrors   String? // JSON array of errors from parsing
   validationWarnings String? // JSON array of warnings

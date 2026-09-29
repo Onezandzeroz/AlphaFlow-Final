@@ -72,6 +72,13 @@ export interface ParsedEInvoice {
   // Payment info
   paymentMeansCode?: string;
   paymentAccountId?: string;
+
+  // Credit note original invoice reference
+  // For credit notes (documentType = '381'), this is the invoice number
+  // from the cac:BillingReference/cbc:ID element — the invoice this
+  // credit note is crediting. Null/undefined for regular invoices and
+  // freestanding credit notes.
+  originalInvoiceNumber?: string;
 }
 
 export interface ParsedEInvoiceResult {
@@ -647,6 +654,65 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     warnings.push('Credit notes typically do not have a due date — DueDate found and will be ignored');
   }
 
+  // ── PARSE BILLING REFERENCE (credit note → original invoice) ────
+  // For credit notes, the cac:BillingReference/cbc:ID element contains
+  // the invoice number this credit note is crediting. This is the KEY
+  // field for correct credit-note-to-invoice matching in auto-settlement.
+  //
+  // Without this, the auto-settlement logic falls back to amount + supplier
+  // matching, which can match the WRONG invoice if multiple invoices from
+  // the same supplier have similar amounts.
+  //
+  // XML structure (OIOUBL CreditNote):
+  //   <cac:BillingReference>
+  //     <cac:InvoiceDocumentReference>
+  //       <cbc:ID>INV-2024-001</cbc:ID>
+  //     </cac:InvoiceDocumentReference>
+  //   </cac:BillingReference>
+  //
+  // XML structure (Peppol BIS 3 CreditNote — same structure, same
+  // cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID path):
+  //   <cac:BillingReference>
+  //     <cac:InvoiceDocumentReference>
+  //       <cbc:ID>INV-2024-001</cbc:ID>
+  //     </cac:InvoiceDocumentReference>
+  //   </cac:BillingReference>
+  let originalInvoiceNumber: string | undefined;
+  if (documentType === '381') {
+    const billingRefNode = first(cac['cac:BillingReference']) as
+      | Record<string, unknown>
+      | undefined;
+    if (billingRefNode) {
+      const invoiceDocRefNode = first(
+        billingRefNode['cac:InvoiceDocumentReference']
+      ) as Record<string, unknown> | undefined;
+      if (invoiceDocRefNode) {
+        originalInvoiceNumber = getText(first(invoiceDocRefNode['cbc:ID']))
+          ?? undefined;
+      }
+    }
+    if (!originalInvoiceNumber) {
+      // Some implementations use cac:AdditionalDocumentReference instead of
+      // cac:BillingReference for the original invoice reference. Try it
+      // as a fallback (matching on cbc:DocumentType = "OriginalInvoice"
+      // or just taking the first cbc:ID).
+      const addDocRefNodes = cac['cac:AdditionalDocumentReference'];
+      if (Array.isArray(addDocRefNodes)) {
+        for (const refNode of addDocRefNodes) {
+          const ref = Array.isArray(refNode) ? first(refNode) : refNode;
+          if (ref && typeof ref === 'object') {
+            const refObj = ref as Record<string, unknown>;
+            const docType = getText(first(refObj['cbc:DocumentType']));
+            if (docType && docType.toLowerCase().includes('original')) {
+              originalInvoiceNumber = getText(first(refObj['cbc:ID'])) ?? undefined;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
   // ── BUILD RESULT ────────────────────────────────────────────
 
   const data: ParsedEInvoice = {
@@ -673,6 +739,7 @@ export function parseEInvoiceXml(xml: string): ParsedEInvoiceResult {
     payableAmount: finalPayable,
     paymentMeansCode,
     paymentAccountId,
+    originalInvoiceNumber,
   };
 
   // If we have critical errors, still return the partial data
