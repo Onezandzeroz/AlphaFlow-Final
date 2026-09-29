@@ -15,7 +15,7 @@
  * (bumpes af webhook-handler når Sproom sender DocumentStatusChanged events).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/lib/use-translation';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -232,6 +232,21 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
   // ── Real-time refresh (WS data-changed event) ──
   const einvoiceSendsVersion = useDataVersion('einvoice-sends');
 
+  // ── Track previous statuses for fallback toast detection ──
+  // When the einvoice-sends data-sync version bumps (via DataSyncProvider's
+  // 'data-changed' WebSocket event), we re-fetch the list. If a sending's
+  // status changed to ACCEPTED or REJECTED since the last fetch, we fire a
+  // fallback toast — this covers the case where the 'einvoice-event' socket
+  // event was lost (e.g. socket.io disconnected when the event was emitted).
+  //
+  // This is a SAFETY NET — when the einvoice-event socket IS connected, the
+  // toast fires from EInvoiceEventNotifier (which has the full payload
+  // including counterparty name, amount, etc.). This fallback only has
+  // what's in the sending summary (invoice number, recipient name, status)
+  // — but that's enough to notify the user.
+  const prevStatusesRef = useRef<Map<string, string>>(new Map());
+  const isInitialFetchRef = useRef(true);
+
   // ── Fetch list ──
   const fetchSends = useCallback(async (silent = false) => {
     if (silent) setIsRefreshing(true); else setIsLoading(true);
@@ -248,9 +263,44 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
       const res = await fetch(`/api/einvoice-sends?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setSends(data.sends || []);
+        const newSends = data.sends || [];
+        setSends(newSends);
         setStats(data.stats || {});
         setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 1 });
+
+        // ── Fallback toast: detect new ACCEPTED/REJECTED since last fetch ──
+        // Skip on initial fetch (don't toast for statuses that were already
+        // there when the page first loaded).
+        if (!isInitialFetchRef.current) {
+          const prev = prevStatusesRef.current;
+          for (const send of newSends) {
+            const prevStatus = prev.get(send.id);
+            if (prevStatus && prevStatus !== send.status) {
+              // Status changed since last fetch — check if it's a "toastable" transition
+              if (send.status === 'ACCEPTED') {
+                toast.success(isDa ? 'E-faktura godkendt' : 'E-invoice approved', {
+                  description: `${send.invoice?.invoiceNumber ?? ''} · ${send.recipientName ?? ''}`,
+                  duration: 5000,
+                  icon: <CheckCircle2 className="h-4 w-4" />,
+                });
+              } else if (send.status === 'REJECTED') {
+                toast.error(isDa ? 'E-faktura afvist' : 'E-invoice rejected', {
+                  description: `${send.invoice?.invoiceNumber ?? ''} · ${send.recipientName ?? ''}`,
+                  duration: 8000,
+                  icon: <XCircle className="h-4 w-4" />,
+                });
+              }
+            }
+          }
+        }
+
+        // Update the status map for next comparison
+        const next = new Map<string, string>();
+        for (const send of newSends) {
+          next.set(send.id, send.status);
+        }
+        prevStatusesRef.current = next;
+        isInitialFetchRef.current = false;
       }
     } catch (err) {
       console.error('Failed to fetch e-invoice sends:', err);
@@ -258,7 +308,7 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [statusFilter, channelFilter, searchQuery]);
+  }, [statusFilter, channelFilter, searchQuery, isDa]);
 
   useEffect(() => {
     fetchSends();

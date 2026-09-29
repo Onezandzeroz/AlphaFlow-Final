@@ -113,11 +113,39 @@ async function pollSendingStatus(sending: {
   markChecked(sending.id, sending.storecoveSubmissionId);
 
   // Fetch the full state-history from Sproom
+  // Retry logic: Sproom staging can be extremely slow (30+ seconds for
+  // simple endpoints per Task 32). The default 30s timeout may abort
+  // before Sproom responds. We retry up to 2 times (3 attempts total)
+  // with a short delay between attempts — same pattern as the inbox
+  // scheduler (Task 31).
   let states: Awaited<ReturnType<typeof sproomClient.getDocumentState>> = [];
   try {
-    states = await sproomClient.getDocumentState(sending.storecoveSubmissionId, {
-      childCompanyId: company.sproomChildCompanyId,
-    });
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 2000;
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        states = await sproomClient.getDocumentState(sending.storecoveSubmissionId, {
+          childCompanyId: company.sproomChildCompanyId,
+        });
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const isAbort = errMsg.includes('aborted') || errMsg.includes('timeout') || errMsg.includes('Timeout');
+        if (!isAbort || attempt === MAX_ATTEMPTS) throw err;
+        logger.warn('[SPROOM-OUTBOX] getDocumentState timed out, retrying', {
+          sendingId: sending.id,
+          documentId: sending.storecoveSubmissionId,
+          attempt,
+          maxAttempts: MAX_ATTEMPTS,
+          error: errMsg,
+        });
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      }
+    }
+    if (lastError) throw lastError;
   } catch (err) {
     logger.warn('[SPROOM-OUTBOX] getDocumentState failed', {
       sendingId: sending.id,
