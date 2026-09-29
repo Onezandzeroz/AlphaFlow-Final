@@ -328,7 +328,12 @@ export async function runSproomOutboxCycle(): Promise<{
   // Non-terminal = still in-flight (waiting for Sproom to deliver or recipient
   // to ack/reject). Terminal states (ACCEPTED/REJECTED/PAID/FAILED/CANCELLED)
   // are excluded — they're done.
-  const stalenessMinutes = 10;
+  // Staleness cutoff: 2 minutes (was 10). Sproom staging webhooks are
+  // unreliable — we need to poll frequently to discover transitions like
+  // received#401 (Leveret) and transmissionCompleted#402 (Afventer
+  // godkendelse) quickly. The idempotency checks in applyStatusTransition
+  // prevent duplicate events, so frequent polling is safe.
+  const stalenessMinutes = 2;
   const stalenessCutoff = new Date(Date.now() - stalenessMinutes * 60 * 1000);
 
   const candidates = await db.eInvoiceSending.findMany({
@@ -416,7 +421,7 @@ export function startSproomOutboxScheduler(): void {
   }
   _schedulerStarted = true;
 
-  const schedule = process.env.SPROOM_OUTBOX_CRON_SCHEDULE || '*/10 * * * *';
+  const schedule = process.env.SPROOM_OUTBOX_CRON_SCHEDULE || '*/2 * * * *';
 
   const task = cron.schedule(schedule, () => {
     // Concurrency guard: skip if a previous cycle is still running.
