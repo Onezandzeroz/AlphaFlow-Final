@@ -91,34 +91,33 @@ const STATUS_MAP: Record<SproomDocumentStatus, EInvoiceSendStatus> = {
   // Sproom flow: Created → TransmissionStarted → Sent → Received →
   //             TransmissionCompleted → PendingApproval → Approved/Rejected
   //
-  // Brugerens forventede flow i Sporing UI:
-  //   Sendt → Undervejs → Leveret → Afventer godkendelse → Godkendt
+  // Brugerens forventede flow i Sporing UI + Tidslinje:
+  //   Afsendt → Afsendes → Undervejs → Leveret → Afventer godkendelse → Godkendt
   //
-  // Mapping (Task 30 fix):
-  //   - 'TransmissionStarted' / 'Sent' / 'Received' = dokumentet er undervejs
-  //     i netværket → IN_TRANSIT (vises som ÉN "Undervejs" status, ikke tre)
-  //   - 'TransmissionCompleted' = transmission er fuldført, dokumentet er i
-  //     modtagerens indbakke → DELIVERED ("Leveret")
-  //   - 'PendingApproval' = modtageren har åbnet/markeret dokumentet,
-  //     afventer modtagerens godkendelse → PENDING_APPROVAL ("Afventer godkendelse")
-  //   - 'Approved' = modtageren trykkede på "Godkend" → ACCEPTED ("Godkendt")
+  // Mapping (Task 53 fix):
+  //   - 'Created' #101 = Afsendt (dokumentet oprettet lokalt)
+  //   - 'Local Send' (accepted) = Afsendes (Sproom har accepteret XML)
+  //   - 'TransmissionStarted' #301 + 'Sent' #302 = Undervejs (begge kollapset
+  //     til én "Undervejs" status i tidslinjen)
+  //   - 'Received' #401 = Leveret (modtager AP har modtaget dokumentet)
+  //   - 'TransmissionCompleted' #402 = Afventer godkendelse (transmission
+  //     fuldført, afventer Application Response fra modtager)
+  //   - 'PendingApproval' = Afventer godkendelse (sammen som TransmissionCompleted)
+  //   - 'Approved' = Godkendt (modtager trykkede "Godkend" → Application Response)
+  //   - 'Rejected' = Afvist (modtager afviste → Application Response)
   //
-  // VIGTIGT: 'DELIVERED' ("Leveret") betyder HER at dokumentet er ankommet
-  // til modtagerens indbakke — IKKE at modtageren har godkendt. Godkendelse
-  // sker først når modtageren trykker på "Godkend"-knappen, hvilket mappes
-  // til ACCEPTED. Dette er forskelligt fra Task 29's mapping (hvor
-  // TransmissionCompleted blev mappet til PENDING_APPROVAL), men matcher
-  // brugerens forventning om et tydeligt "Leveret" step før "Afventer
-  // godkendelse".
+  // VIGTIGT: 'Received' betyder "modtagerens AP har modtaget" = Leveret.
+  // 'TransmissionCompleted' betyder "transmission er færdig" = Afventer
+  // godkendelse. Dette adskiller de to steps som brugeren ønsker.
   TransmissionStarted: 'IN_TRANSIT',
-  Sent: 'IN_TRANSIT', // Afsender AP har sendt — stadig "Undervejs"
-  Received: 'IN_TRANSIT', // Modtager AP har modtaget — stadig "Undervejs"
-  TransmissionCompleted: 'DELIVERED', // I modtagerens indbakke — "Leveret"
+  Sent: 'IN_TRANSIT', // Samme som TransmissionStarted — "Undervejs"
+  Received: 'DELIVERED', // Modtager AP har modtaget — "Leveret"
+  TransmissionCompleted: 'PENDING_APPROVAL', // Transmission færdig — "Afventer godkendelse"
 
   // ── Recipient action ──
-  PendingApproval: 'PENDING_APPROVAL', // Modtager har åbnet dok — "Afventer godkendelse"
-  Approved: 'ACCEPTED', // Modtager trykkede "Godkend" — "Godkendt"
-  Rejected: 'REJECTED',
+  PendingApproval: 'PENDING_APPROVAL', // Samme som TransmissionCompleted
+  Approved: 'ACCEPTED', // Application Response — "Godkendt"
+  Rejected: 'REJECTED', // Application Response — "Afvist"
   ApplicationReponseBusinessReject: 'REJECTED',
   ApplicationReponseProfileReject: 'REJECTED',
   ApplicationReponseTechnicalReject: 'REJECTED',
