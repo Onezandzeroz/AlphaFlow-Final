@@ -154,12 +154,12 @@ function getStatusConfig(status: string, isDa: boolean) {
       icon: <CheckCircle2 className="h-3 w-3" />,
     },
     PENDING_APPROVAL: {
-      label: isDa ? 'Afventer godk.' : 'Pending approval',
+      label: isDa ? 'Afventer godkendelse' : 'Pending approval',
       colorClass: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40',
       icon: <Clock className="h-3 w-3" />,
     },
     ACCEPTED: {
-      label: isDa ? 'Accepteret' : 'Accepted',
+      label: isDa ? 'Godkendt' : 'Accepted',
       colorClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40',
       icon: <CheckCircle2 className="h-3 w-3" />,
     },
@@ -414,7 +414,7 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
                     <TableHead className="hidden md:table-cell min-w-[120px]">{isDa ? 'Kanal' : 'Channel'}</TableHead>
                     <TableHead className="hidden sm:table-cell min-w-[110px]">{isDa ? 'Afsendt' : 'Sent'}</TableHead>
                     <TableHead className="hidden lg:table-cell min-w-[110px]">{isDa ? 'Leveret' : 'Delivered'}</TableHead>
-                    <TableHead className="hidden xl:table-cell min-w-[110px]">{isDa ? 'Accepteret/Betalt' : 'Accepted/Paid'}</TableHead>
+                    <TableHead className="hidden xl:table-cell min-w-[110px]">{isDa ? 'Godkendt/Betalt' : 'Approved/Paid'}</TableHead>
                     <TableHead className="text-right min-w-[60px]"></TableHead>
                   </TableRow>
                 </TableHeader>

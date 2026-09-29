@@ -144,12 +144,12 @@ function getStatusConfig(status: string, isDa: boolean) {
     },
     // ── NEW: PENDING_APPROVAL — recipient has the doc, awaiting accept/reject ──
     PENDING_APPROVAL: {
-      label: isDa ? 'Afventer godk.' : 'Pending approval',
+      label: isDa ? 'Afventer godkendelse' : 'Pending approval',
       colorClass: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800/40',
       icon: <Clock className="h-3 w-3" />,
     },
     ACCEPTED: {
-      label: isDa ? 'Accepteret' : 'Accepted',
+      label: isDa ? 'Godkendt' : 'Accepted',
       colorClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40',
       icon: <CheckCircle2 className="h-3 w-3" />,
     },
@@ -181,7 +181,7 @@ function getStatusConfig(status: string, isDa: boolean) {
       icon: <Clock className="h-3 w-3" />,
     },
     APPROVED: {
-      label: isDa ? 'Accepteret' : 'Approved',
+      label: isDa ? 'Godkendt' : 'Approved',
       colorClass: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40',
       icon: <CheckCircle2 className="h-3 w-3" />,
     },
@@ -626,7 +626,7 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
                   <div className="flex items-start gap-2">
                     <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
                     <span className="text-green-700 dark:text-green-400">
-                      {isDa ? 'Accepteret' : 'Accepted'}:{' '}
+                      {isDa ? 'Godkendt' : 'Accepted'}:{' '}
                       {format(new Date(record.acceptedAt), 'dd.MM.yyyy HH:mm', { locale })}
                     </span>
                   </div>
