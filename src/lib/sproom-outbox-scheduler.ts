@@ -351,9 +351,16 @@ export async function runSproomOutboxCycle(): Promise<{
   let totalChanged = 0;
 
   for (const sending of candidates) {
-    // Skip recently-checked (dedup)
+    // Skip recently-checked (dedup) — BUT only for intermediate statuses.
+    // PENDING_APPROVAL sendings must NOT be skipped because we need to
+    // detect when the recipient approves/rejects (the Application Response
+    // arrives as a new Sproom state that we haven't seen yet). If we skip
+    // PENDING_APPROVAL sendings, the status will NEVER update to
+    // ACCEPTED/REJECTED — the outbox poller is the safety net for missed
+    // webhooks, and skipping PENDING_APPROVAL defeats that purpose.
     if (
       sending.storecoveSubmissionId &&
+      sending.status !== 'PENDING_APPROVAL' &&
       recentlyChecked.has(dedupKey(sending.id, sending.storecoveSubmissionId))
     ) {
       continue;
