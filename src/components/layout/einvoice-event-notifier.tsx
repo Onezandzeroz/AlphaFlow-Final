@@ -261,13 +261,20 @@ export function EInvoiceEventNotifier() {
             }
 
             // ── Outbound status transition. ──
-            // Key milestones (Godkendt, Betalt, Afvist) get longer duration.
+            // Key milestones get longer duration:
+            //   DELIVERED (Leveret) — 4000ms (recipient AP received document)
+            //   ACCEPTED  (Godkendt) — 5000ms (Application Response: approved)
+            //   REJECTED  (Afvist) — 8000ms (Application Response: rejected)
+            //   PAID      (Betalt) — 5000ms (Invoice marked paid locally)
+            //   FAILED    (Fejlet) — 10000ms (transmission/validation error)
             const MILESTONE_DURATION: Record<string, number> = {
+              DELIVERED: 4000,
               ACCEPTED: 5000,
               REJECTED: 8000,
               PAID: 5000,
+              FAILED: 10000,
             };
-            const outDuration = MILESTONE_DURATION[data.status] ?? (data.status === 'FAILED' ? 10000 : 5000);
+            const outDuration = MILESTONE_DURATION[data.status] ?? 5000;
 
             einvoiceToast({
               status: data.status,

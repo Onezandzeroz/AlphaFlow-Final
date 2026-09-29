@@ -91,35 +91,37 @@ const STATUS_MAP: Record<SproomDocumentStatus, EInvoiceSendStatus> = {
   // Sproom flow: Created → TransmissionStarted → Sent → Received →
   //             TransmissionCompleted → PendingApproval → Approved/Rejected
   //
-  // Brugerens forventede flow i Sporing UI + Tidslinje (Task 59):
-  //   Afsendt → Afsendes → Undervejs → [forbliver Undervejs] → Leveret + Godkendt
+  // Brugerens forventede flow i Sporing UI + Tidslinje (Task 62 fix):
+  //   Afsendt → Afsendes → Undervejs → Leveret → Undervejs → Godkendt
+  //                              ↑              ↑             ↑
+  //                          received #401   transmissionCompleted  approved
   //
-  // Mapping (Task 59 fix):
+  // Mapping (Task 62 fix — partial revert of Task 59):
   //   - 'Created' #101 = Afsendt (dokumentet oprettet lokalt)
   //   - 'Local Send' (accepted) = Afsendes (Sproom har accepteret XML)
   //   - 'TransmissionStarted' #301 + 'Sent' #302 = Undervejs
-  //   - 'Received' #401 = UNDERVEJS (IN_TRANSIT) — vi viser IKKE "Leveret"
-  //     separat før godkendelse. Tidslinjen forbliver "Undervejs".
-  //   - 'TransmissionCompleted' #402 = UNDERVEJS (IN_TRANSIT) — vi viser
-  //     IKKE "Afventer godkendelse" længere. Tidslinjen forbliver "Undervejs".
-  //   - 'PendingApproval' = UNDERVEJS (IN_TRANSIT) — samme som TransmissionCompleted.
-  //   - 'Approved' = Godkendt (Application Response). Når Approved arrives,
-  //     indsætter vi BÅDE et 'DELIVERED' (Leveret) OG et 'ACCEPTED' (Godkendt)
-  //     event — så brugeren ser "Leveret" og "Godkendt" dukke op sammen når
-  //     fakturaen bliver godkendt.
-  //   - 'Rejected' = Afvist (Application Response)
+  //   - 'Received' #401 = DELIVERED → "Leveret" (modtagerens AP har modtaget
+  //     fakturaen — dette er en VIGTIG milestone der SKAL vises på tidslinjen)
+  //   - 'TransmissionCompleted' #402 = IN_TRANSIT → "Undervejs" (transmission
+  //     fuldført, men afventer Application Response — forbliver Undervejs,
+  //     INGEN "Afventer godkendelse" status)
+  //   - 'PendingApproval' = IN_TRANSIT → "Undervejs" (samme som TransmissionCompleted)
+  //   - 'Approved' = ACCEPTED → "Godkendt" (Application Response)
+  //   - 'Rejected' = REJECTED → "Afvist" (Application Response)
   //
-  // VIGTIGT: PENDING_APPROVAL status er fuldstændig fjernet fra flowet.
-  // Tidslinjen forbliver "Undervejs" indtil fakturaen bliver godkendt
-  // (eller afvist). Ved godkendelse dukker både "Leveret" og "Godkendt" op.
+  // VIGTIGT (Task 62): 'Received' #401 SKAL vises som "Leveret" — det er
+  // bekræftelsen af at modtageren har modtaget fakturaen. At skjule dette
+  // som "Undervejs" (Task 59) var en fejl — brugeren skal se fremgang på
+  // tidslinjen. Efter "Leveret" forbliver status "Undervejs" indtil
+  // godkendelsen (Application Response) ankommer, hvor "Godkendt" dukker op.
   TransmissionStarted: 'IN_TRANSIT',
   Sent: 'IN_TRANSIT', // Samme som TransmissionStarted — "Undervejs"
-  Received: 'IN_TRANSIT', // Forbliver "Undervejs" — først "Leveret" ved godkendelse
-  TransmissionCompleted: 'IN_TRANSIT', // Forbliver "Undervejs" — ingen "Afventer godkendelse"
+  Received: 'DELIVERED', // Modtager AP har modtaget — "Leveret" (milestone)
+  TransmissionCompleted: 'IN_TRANSIT', // Forbliver "Undervejs" — afventer Application Response
 
   // ── Recipient action ──
   PendingApproval: 'IN_TRANSIT', // Forbliver "Undervejs" — ingen "Afventer godkendelse"
-  Approved: 'ACCEPTED', // Application Response — "Godkendt" (også "Leveret" via syntese)
+  Approved: 'ACCEPTED', // Application Response — "Godkendt"
   Rejected: 'REJECTED', // Application Response — "Afvist"
   ApplicationReponseBusinessReject: 'REJECTED',
   ApplicationReponseProfileReject: 'REJECTED',
@@ -481,71 +483,15 @@ export async function applyStatusTransition(
   // because the raw Sproom state may have changed (e.g. SENT → SENT with
   // different statusCode). This preserves the full timeline.
   //
-  // SPECIAL CASE (Task 59): When transitioning to ACCEPTED (Sproom 'Approved'
-  // Application Response), we ALSO insert a synthetic DELIVERED event FIRST
-  // if the sending has never been DELIVERED. This is because we no longer
-  // map 'Received' → DELIVERED (we keep timeline at "Undervejs" until
-  // approval), so without this synthetic event the user would never see
-  // "Leveret" on the timeline. The user wants both "Leveret" AND "Godkendt"
-  // to appear together when the document is approved.
-  //
-  // IMPORTANT (Task 61): The synthetic DELIVERED insert is wrapped in a
-  // try-catch. If it fails (e.g. database error, race condition), we MUST
-  // NOT let it crash the entire applyStatusTransition — otherwise the
-  // ACCEPTED event would never be created, the sending's status would not
-  // update to ACCEPTED, transitionChanged would be false, and NO toast
-  // would be sent to the user. The synthetic DELIVERED is a nice-to-have
-  // for the timeline; the ACCEPTED transition + toast is the critical path.
-  let insertedSyntheticDelivered = false;
-  if (newStatus === 'ACCEPTED') {
-    try {
-      // Check if a DELIVERED event already exists for this sending
-      const existingDelivered = await db.eInvoiceSendEvent.findFirst({
-        where: { sendingId, status: 'DELIVERED' },
-        select: { id: true },
-      });
-      if (!existingDelivered) {
-        // Insert synthetic DELIVERED event — same timestamp as the Approved
-        // event so they appear adjacent on the timeline.
-        await db.eInvoiceSendEvent.create({
-          data: {
-            sendingId,
-            status: 'DELIVERED',
-            // Use 'Received' as the synthetic raw state — clearly identifies
-            // this as the "modtager har modtaget" event.
-            sproomRawState: 'Received',
-            sproomStatusCode: 401, // canonical Sproom code for Received
-            deliveryType: deliveryType ?? null,
-            message: message ?? null,
-            failedProperties: Prisma.DbNull,
-            source,
-            eventTimestamp: ts,
-            metadata: {
-              synthetic: true,
-              source: 'approved-syntese',
-              triggerState: sproomState,
-              ...(metadata ?? {}),
-            } as unknown as Prisma.InputJsonValue,
-          },
-        });
-        insertedSyntheticDelivered = true;
-        logger.info('[STATUS-TRACKER] Synthetic DELIVERED event inserted (approved-syntese)', {
-          sendingId,
-          triggerState: sproomState,
-          eventTimestamp: ts.toISOString(),
-        });
-      }
-    } catch (synthErr) {
-      // Non-critical — log + continue with the ACCEPTED transition.
-      // The timeline will just not have a separate "Leveret" event, but
-      // the ACCEPTED transition + toast will still work.
-      logger.warn('[STATUS-TRACKER] Synthetic DELIVERED insert failed (non-critical, continuing with ACCEPTED)', {
-        sendingId,
-        error: synthErr instanceof Error ? synthErr.message : String(synthErr),
-      });
-    }
-  }
-
+  // NOTE (Task 62): The synthetic DELIVERED insert (added in Task 59,
+  // wrapped in try-catch in Task 61) has been REMOVED. It is no longer
+  // needed because we now map 'Received' #401 → DELIVERED directly in
+  // STATUS_MAP, so a natural DELIVERED event is created when Sproom
+  // notifies us that the recipient AP received the document. This is
+  // cleaner and more reliable than synthesising one at approval time.
+  // The "Leveret" milestone now appears on the timeline at the correct
+  // moment (when the document is actually delivered), not retroactively
+  // at approval time.
   await db.eInvoiceSendEvent.create({
     data: {
       sendingId,
@@ -578,12 +524,6 @@ export async function applyStatusTransition(
   const tsField = timestampFieldFor(newStatus);
   if (tsField) {
     updateData[tsField] = ts;
-  }
-
-  // If we inserted a synthetic DELIVERED event, also set deliveredAt on
-  // the sending (so the UI shows the delivered timestamp).
-  if (insertedSyntheticDelivered) {
-    updateData.deliveredAt = ts;
   }
 
   // For failure states, persist error message + code on the sending
