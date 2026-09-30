@@ -7,9 +7,21 @@ import {
   buildAutoMapping,
   getStandardAccount,
 } from '@/lib/standard-chart-of-accounts';
+import { buildAiMapping } from '@/lib/ai-standard-mapping';
 import { withGuard } from '@/lib/route-guard';
 
 // POST - Generate automatic standard account mappings for all tenant accounts
+//
+// Two-phase approach:
+//   1. Heuristic (instant, no LLM cost): buildAutoMapping() handles the
+//      obvious cases — Bank → 6480, Salg → 1010, Varekøb → 1610, etc.
+//   2. AI-assisted (LLM): buildAiMapping() sends the remaining unmapped
+//      accounts to OpenRouter (Hermes) with the full official chart as
+//      context. The LLM maps them semantically based on account names.
+//
+// If the LLM call fails (rate limit, network, missing API key), the
+// heuristic-only mapping is used — the user still gets a working mapping,
+// just with more unmapped accounts.
 export const POST = withGuard({
   auth: true,
   requireCompany: true,
@@ -38,15 +50,29 @@ export const POST = withGuard({
       return NextResponse.json({ total: 0, autoMapped: 0, unmapped: 0 });
     }
 
-    // Build auto-mapping from FSR numbers to standard numbers
-    const autoMap = buildAutoMapping(
-      accounts.map((a) => ({
-        number: a.number,
-        name: a.name,
-        type: a.type,
-        group: a.group,
-      }))
-    );
+    const fsrAccounts = accounts.map((a) => ({
+      number: a.number,
+      name: a.name,
+      type: a.type,
+      group: a.group,
+    }));
+
+    // Phase 1: Heuristic mapping (instant)
+    const heuristicMap = buildAutoMapping(fsrAccounts);
+
+    // Phase 2: AI-assisted mapping for unmapped accounts
+    // Sends the remaining accounts to the LLM with the full official chart
+    // as context. Falls back gracefully to heuristic-only on LLM failure.
+    const aiResult = await buildAiMapping(fsrAccounts, heuristicMap);
+    const finalMap = aiResult.mapping;
+
+    logger.info('[AUTO_MAP] Mapping complete', {
+      totalAccounts: accounts.length,
+      heuristicMapped: aiResult.heuristicMappedCount,
+      llmMapped: aiResult.llmMappedCount,
+      usedLlm: aiResult.usedLlm,
+      unmapped: accounts.length - finalMap.size,
+    });
 
     // Delete all existing mappings for this company
     await db.standardAccountMapping.deleteMany({
@@ -71,19 +97,24 @@ export const POST = withGuard({
     let unmappedCount = 0;
 
     for (const account of accounts) {
-      const standardNumber = autoMap.get(account.number);
+      const standardNumber = finalMap.get(account.number);
 
       if (standardNumber) {
-        // Auto-mapped account
+        // Mapped account (heuristic or LLM)
         const stdAccount = getStandardAccount(standardNumber);
         const stdName = stdAccount?.name ?? standardNumber;
+
+        // Mark LLM-mapped accounts as 'ai' so users can distinguish them
+        // from heuristic-mapped ('auto') accounts in the UI.
+        const isAiMapped = aiResult.reasons.has(account.number);
+        const mappingType = isAiMapped ? 'ai' : 'auto';
 
         createData.push({
           companyId,
           accountId: account.id,
           standardAccountNumber: standardNumber,
           standardAccountName: stdName,
-          mappingType: 'auto',
+          mappingType,
         });
 
         // Update Account.publicStandardNumber
@@ -115,7 +146,7 @@ export const POST = withGuard({
       });
     }
 
-    // Audit log the auto-mapping run
+    // Audit log the auto-mapping run — include LLM reasoning for transparency
     await auditCreate(
       ctx.id,
       'Account',
@@ -123,8 +154,14 @@ export const POST = withGuard({
       {
         action: 'AUTO_MAP_STANDARD_ACCOUNTS',
         totalAccounts: accounts.length,
-        autoMapped: autoMappedCount,
+        heuristicMapped: aiResult.heuristicMappedCount,
+        aiMapped: aiResult.llmMappedCount,
+        usedLlm: aiResult.usedLlm,
         unmapped: unmappedCount,
+        // Include per-account LLM reasoning for audit trail
+        aiReasons: aiResult.usedLlm
+          ? Object.fromEntries(aiResult.reasons)
+          : undefined,
       },
       meta,
       companyId
@@ -138,6 +175,9 @@ export const POST = withGuard({
       total: totalMappings,
       autoMapped: autoMappedCount,
       unmapped: unmappedCount,
+      heuristicMapped: aiResult.heuristicMappedCount,
+      aiMapped: aiResult.llmMappedCount,
+      usedLlm: aiResult.usedLlm,
     });
   } catch (error) {
     logger.error('Auto-map standard accounts error:', error);

@@ -412,7 +412,7 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
                         />
                       </div>
 
-                      {/* Status */}
+                      {/* Status badge — shows how the mapping was created */}
                       <div className="shrink-0">
                         {isUnmapped ? (
                           <TooltipProvider>
@@ -429,13 +429,28 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
                             </Tooltip>
                           </TooltipProvider>
                         ) : (
-                          <Badge variant="outline" className={`text-[10px] ${currentValue !== mapping.standardAccountNumber ? 'text-amber-500 border-amber-200 dark:border-amber-800/50' : 'text-gray-400'}`}>
-                            {mapping.mappingType === 'auto' && currentValue === mapping.standardAccountNumber ? (
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${
+                              currentValue !== mapping.standardAccountNumber
+                                ? 'text-amber-500 border-amber-200 dark:border-amber-800/50'
+                                : mapping.mappingType === 'ai'
+                                  ? 'text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800/50'
+                                  : 'text-gray-400'
+                            }`}
+                          >
+                            {mapping.mappingType === 'ai' ? (
+                              <Sparkles className="h-3 w-3 mr-0.5" />
+                            ) : mapping.mappingType === 'auto' && currentValue === mapping.standardAccountNumber ? (
                               <Sparkles className="h-3 w-3 mr-0.5" />
                             ) : (
                               <CheckCircle2 className="h-3 w-3 mr-0.5" />
                             )}
-                            {isDanish ? mapping.mappingType : mapping.mappingType}
+                            {mapping.mappingType === 'ai'
+                              ? (isDanish ? 'AI' : 'AI')
+                              : mapping.mappingType === 'auto'
+                                ? (isDanish ? 'Auto' : 'Auto')
+                                : (isDanish ? 'Manuel' : 'Manual')}
                           </Badge>
                         )}
                       </div>

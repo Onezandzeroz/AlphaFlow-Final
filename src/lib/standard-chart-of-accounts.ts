@@ -705,7 +705,21 @@ export function buildAutoMapping(
     }
   }
 
-  // Phase 2: Type-based heuristics for unmapped accounts
+  // Phase 2: Type/group heuristics — using OFFICIAL_STANDARD_CHART (2026)
+  //
+  // IMPORTANT: The old code used PUBLIC_STANDARD_CHART (legacy 69-account
+  // public-sector chart with 0xxx-9xxx numbering). This caused catastrophic
+  // mismatches because account numbers mean different things in the two
+  // charts — e.g. 3200 = "Bankindeståender" in the legacy chart but
+  // "Øvrige indtægter af kapitalandele" in the official chart. Now we look
+  // up candidates in OFFICIAL_STANDARD_CHART by number, so the returned
+  // account always has the correct name/type.
+  //
+  // Accounts not covered by these heuristics are left unmapped — the LLM
+  // (ai-standard-mapping.ts) handles them with semantic understanding.
+  const findOfficial = (num: string) =>
+    OFFICIAL_STANDARD_CHART.find((a) => a.number === num)
+
   for (const fsr of fsrAccounts) {
     if (mapping.has(fsr.number)) continue
 
@@ -713,47 +727,52 @@ export function buildAutoMapping(
 
     switch (fsr.type) {
       case 'ASSET':
-        if (fsr.group === 'CASH') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '3100')
-        else if (fsr.group === 'BANK') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '3200')
-        else if (fsr.group === 'RECEIVABLES') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '3300')
-        else if (fsr.group === 'INVENTORY') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '2100')
-        else if (fsr.group === 'FIXED_ASSETS') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '3500')
-        else if (fsr.group === 'OUTPUT_VAT') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '7200')
-        else if (fsr.group === 'INPUT_VAT') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '7200')
-        else candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '3800')
+        // Official 2026 chart account numbers (verified):
+        //   6480 = Bankkonto, 6183 = Tilgodehavender fra salg,
+        //   6075 = Råvarer og hjælpematerialer (varelager),
+        //   5411 = Produktionsanlæg og maskiner (anlæg),
+        //   5561 = Andre anlæg, driftsmateriel og inventar,
+        //   6320 = Tilgodehavende moms (input VAT)
+        if (fsr.group === 'BANK') candidate = findOfficial('6480')
+        else if (fsr.group === 'RECEIVABLES') candidate = findOfficial('6183')
+        else if (fsr.group === 'INVENTORY') candidate = findOfficial('6075')
+        else if (fsr.group === 'INPUT_VAT') candidate = findOfficial('6320')
+        // CASH and FIXED_ASSETS: leave to LLM (too many sub-options)
         break
 
       case 'LIABILITY':
-        if (fsr.group === 'PAYABLES') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '4100')
-        else if (fsr.group === 'SHORT_TERM_DEBT') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '4500')
-        else if (fsr.group === 'LONG_TERM_DEBT') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '4600')
-        else if (fsr.group === 'OUTPUT_VAT') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '7100')
-        else candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '4700')
+        //   7840 = Skyldig moms (output VAT),
+        //   7330 = Gæld til banker (kortfristet),
+        //   7120 = Gæld til banker (langfristet)
+        if (fsr.group === 'OUTPUT_VAT') candidate = findOfficial('7840')
+        else if (fsr.group === 'SHORT_TERM_DEBT') candidate = findOfficial('7330')
+        else if (fsr.group === 'LONG_TERM_DEBT') candidate = findOfficial('7120')
+        // PAYABLES: leave to LLM (no exact "kreditorer" account in official chart)
         break
 
       case 'EQUITY':
-        if (fsr.group === 'SHARE_CAPITAL') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '5100')
-        else if (fsr.group === 'RETAINED_EARNINGS') {
-          if (fsr.number === '3400') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '5300')
-          else candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '5400')
-        }
-        else candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '5200')
+        //   6916 = Årets resultat, 6931 = Overført resultat
+        if (fsr.group === 'RETAINED_EARNINGS') candidate = findOfficial('6931')
+        // SHARE_CAPITAL: leave to LLM
         break
 
       case 'REVENUE':
-        if (fsr.group === 'SALES_REVENUE') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '1100')
-        else if (fsr.group === 'OTHER_REVENUE') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '1400')
-        else if (fsr.group === 'FINANCIAL_INCOME') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '6200')
-        else candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '1400')
+        //   1010 = Salg af varer og ydelser,
+        //   1500 = Andre driftsindtægter,
+        //   1550 = Øvrige andre driftsindtægter
+        if (fsr.group === 'SALES_REVENUE') candidate = findOfficial('1010')
+        else if (fsr.group === 'OTHER_REVENUE') candidate = findOfficial('1500')
+        // FINANCIAL_INCOME: leave to LLM (many sub-options)
         break
 
       case 'EXPENSE':
-        if (fsr.group === 'COST_OF_GOODS') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '0210')
-        else if (fsr.group === 'PERSONNEL') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '0100')
-        else if (fsr.group === 'OTHER_OPERATING') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '0500')
-        else if (fsr.group === 'FINANCIAL_EXPENSE') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '6100')
-        else if (fsr.group === 'TAX') candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '7500')
-        else candidate = PUBLIC_STANDARD_CHART.find(a => a.number === '0500')
+        //   1610 = Varekøb, 2842 = Lønninger,
+        //   2030 = Husleje, 2460 = Leje,
+        //   2810 = Andre eksterne omkostninger
+        if (fsr.group === 'COST_OF_GOODS') candidate = findOfficial('1610')
+        else if (fsr.group === 'PERSONNEL') candidate = findOfficial('2842')
+        else if (fsr.group === 'OTHER_OPERATING') candidate = findOfficial('2810')
+        // FINANCIAL_EXPENSE, TAX: leave to LLM
         break
     }
 
