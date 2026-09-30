@@ -71,16 +71,7 @@ export const PUT = withGuard({
     for (const mapping of mappings) {
       const { accountId, standardAccountNumber } = mapping;
 
-      if (!accountId || !standardAccountNumber) continue;
-
-      // Validate the standard account number exists
-      const stdAccount = getStandardAccount(standardAccountNumber);
-      if (!stdAccount) {
-        logger.warn(
-          `Skipping mapping: unknown standard account number ${standardAccountNumber}`
-        );
-        continue;
-      }
+      if (!accountId) continue;
 
       // Verify the account belongs to this tenant
       const account = await db.account.findFirst({
@@ -88,6 +79,70 @@ export const PUT = withGuard({
       });
 
       if (!account) continue;
+
+      // Handle "UNMAPPED" — delete the mapping and clear publicStandardNumber
+      if (!standardAccountNumber || standardAccountNumber === 'UNMAPPED') {
+        const oldMapping = await db.standardAccountMapping.findUnique({
+          where: { companyId_accountId: { companyId, accountId } },
+        });
+
+        if (oldMapping) {
+          await db.standardAccountMapping.delete({
+            where: { companyId_accountId: { companyId, accountId } },
+          });
+        }
+
+        // Create an "unmapped" record so the UI shows it as intentionally unmapped
+        // (rather than "never been mapped")
+        if (oldMapping) {
+          await db.standardAccountMapping.create({
+            data: {
+              companyId,
+              accountId,
+              standardAccountNumber: 'UNMAPPED',
+              standardAccountName: 'Ikke tilknyttet',
+              mappingType: 'none',
+            },
+          });
+        }
+
+        // Clear the publicStandardNumber on the Account
+        await db.account.update({
+          where: { id: accountId },
+          data: { publicStandardNumber: null },
+        });
+
+        // Audit log the unmapping
+        if (oldMapping) {
+          await auditUpdate(
+            ctx.id,
+            'Account',
+            accountId,
+            {
+              standardAccountNumber: oldMapping.standardAccountNumber,
+              mappingType: oldMapping.mappingType,
+            },
+            {
+              standardAccountNumber: 'UNMAPPED',
+              mappingType: 'none',
+            },
+            meta,
+            companyId
+          );
+        }
+
+        upsertedCount++;
+        continue;
+      }
+
+      // Validate the standard account number exists (for real account numbers)
+      const stdAccount = getStandardAccount(standardAccountNumber);
+      if (!stdAccount) {
+        logger.warn(
+          `Skipping mapping: unknown standard account number ${standardAccountNumber}`
+        );
+        continue;
+      }
 
       const oldMapping = await db.standardAccountMapping.findUnique({
         where: { companyId_accountId: { companyId, accountId } },
