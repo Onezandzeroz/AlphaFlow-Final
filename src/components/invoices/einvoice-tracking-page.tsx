@@ -551,9 +551,10 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{isDa ? 'Alle kanaler' : 'All channels'}</SelectItem>
-            <SelectItem value="NEMHANDEL_OIOUBL">Sproom (Auto)</SelectItem>
-            <SelectItem value="PEPPOL_BIS">Sproom (Peppol)</SelectItem>
-            <SelectItem value="STORECOVE">Sproom (Auto - legacy)</SelectItem>
+            <SelectItem value="NEMHANDEL_OIOUBL">Sproom (NemHandel / OIOUBL)</SelectItem>
+            <SelectItem value="PEPPOL_BIS">Sproom (Peppol BIS 3)</SelectItem>
+            {/* STORECOVE hidden from filter — legacy channel replaced by NEMHANDEL_OIOUBL.
+                Existing rows with channel=STORECOVE still match the "all" filter. */}
           </SelectContent>
         </Select>
       </div>

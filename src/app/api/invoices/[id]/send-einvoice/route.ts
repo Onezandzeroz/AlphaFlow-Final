@@ -16,6 +16,35 @@ import { getEInvoiceUsage } from '@/lib/usage-quotas';
 // through `sproomClient.sendDocument()` in `processEInvoiceSend()`.
 const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoiceSendChannel.PEPPOL_BIS, EInvoiceSendChannel.STORECOVE];
 
+/**
+ * Normalise UI channel aliases to canonical Prisma enum values.
+ *
+ * The send-einvoice dialog (src/components/invoices/send-einvoice-dialog.tsx)
+ * sends short aliases: 'OIOUBL' / 'PEPPOL' / 'STORECOVE'. The Prisma enum
+ * uses canonical names: 'NEMHANDEL_OIOUBL' / 'PEPPOL_BIS' / 'STORECOVE'.
+ * Without this normalisation, selecting "Sproom (Peppol)" in the UI sends
+ * channel='PEPPOL', which fails validation with "Ugyldig kanal".
+ */
+const CHANNEL_ALIAS_TO_ENUM: Record<string, EInvoiceSendChannel> = {
+  OIOUBL: EInvoiceSendChannel.NEMHANDEL_OIOUBL,
+  NEMHANDEL: EInvoiceSendChannel.NEMHANDEL_OIOUBL,
+  NEMHANDEL_OIOUBL: EInvoiceSendChannel.NEMHANDEL_OIOUBL,
+  PEPPOL: EInvoiceSendChannel.PEPPOL_BIS,
+  PEPPOL_BIS: EInvoiceSendChannel.PEPPOL_BIS,
+  STORECOVE: EInvoiceSendChannel.STORECOVE,
+};
+
+function normalizeChannelToEnum(channel: string): EInvoiceSendChannel | null {
+  const trimmed = channel.trim();
+  if (!trimmed) return null;
+  // Already a canonical enum value?
+  if (VALID_CHANNELS.includes(trimmed)) {
+    return trimmed as EInvoiceSendChannel;
+  }
+  // Try alias mapping (case-insensitive)
+  return CHANNEL_ALIAS_TO_ENUM[trimmed.toUpperCase()] ?? null;
+}
+
 // POST /api/invoices/[id]/send-einvoice — Send an e-invoice via OIOUBL, Peppol, or Sproom
 //
 // PLAN-GATING: The guard comes from routeConfig and requires the
@@ -59,11 +88,14 @@ export const POST = withGuard(
 
       const { id } = await context.params as { id: string };
       const body = await request.json();
-      const { channel } = body as { channel?: string };
+      const { channel: rawChannel } = body as { channel?: string };
 
-      if (!channel || !VALID_CHANNELS.includes(channel)) {
+      // Normalise UI aliases ('OIOUBL'/'PEPPOL') to canonical enum values.
+      // Rejects truly invalid channels with a helpful error.
+      const channel = rawChannel ? normalizeChannelToEnum(rawChannel) : null;
+      if (!channel) {
         return NextResponse.json(
-          { error: `Ugyldig kanal. Gyldige værdier: ${VALID_CHANNELS.join(', ')}` },
+          { error: `Ugyldig kanal. Gyldige værdier: ${VALID_CHANNELS.join(', ')} (eller alias: OIOUBL, PEPPOL)` },
           { status: 400 }
         );
       }
@@ -103,7 +135,7 @@ export const POST = withGuard(
         invoiceId: id,
         companyId: ctx.activeCompanyId!,
         userId: ctx.id,
-        channel: channel as EInvoiceSendChannel,
+        channel,
       });
 
       logger.info(`[EINVOICE_SEND_API] Queued e-invoice send for invoice ${id}`, {
