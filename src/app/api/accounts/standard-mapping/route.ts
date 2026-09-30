@@ -32,6 +32,20 @@ export const GET = withGuard({
       mappingType: m.mappingType,
     }));
 
+    // Sort by FSR account number (numeric) so the list is always in
+    // kontoplan order (1000, 1100, 1200, ...) regardless of when the
+    // mapping records were created. This prevents accounts from jumping
+    // around when they are unmapped or remapped (which deletes + recreates
+    // the mapping record, changing its createdAt).
+    result.sort((a, b) => {
+      const an = parseInt(a.accountNumber, 10);
+      const bn = parseInt(b.accountNumber, 10);
+      if (Number.isNaN(an) || Number.isNaN(bn)) {
+        return a.accountNumber.localeCompare(b.accountNumber);
+      }
+      return an - bn;
+    });
+
     return NextResponse.json({ mappings: result });
   } catch (error) {
     logger.error('List standard mappings error:', error);

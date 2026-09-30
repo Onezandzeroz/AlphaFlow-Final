@@ -187,7 +187,7 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
     if (typeFilter === 'UNMAPPED') {
       result = result.filter(m => m.standardAccountNumber === 'UNMAPPED');
     } else if (typeFilter === 'AUTO') {
-      result = result.filter(m => m.mappingType === 'auto');
+      result = result.filter(m => m.mappingType === 'auto' || m.mappingType === 'ai');
     } else if (typeFilter === 'MANUAL') {
       result = result.filter(m => m.mappingType === 'manual');
     }
@@ -200,6 +200,18 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
         m.standardAccountName.toLowerCase().includes(q)
       );
     }
+    // Always sort by FSR account number (numeric) so the list stays in
+    // kontoplan order (1000, 1100, 1200, ...) regardless of DB insert order.
+    // This is a stable sort — unmapping or remapping an account does NOT
+    // change its position in the list.
+    result = [...result].sort((a, b) => {
+      const an = parseInt(a.accountNumber, 10);
+      const bn = parseInt(b.accountNumber, 10);
+      if (Number.isNaN(an) || Number.isNaN(bn)) {
+        return a.accountNumber.localeCompare(b.accountNumber);
+      }
+      return an - bn;
+    });
     return result;
   }, [mappings, typeFilter, searchQuery]);
 
