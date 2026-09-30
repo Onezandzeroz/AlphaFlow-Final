@@ -21,6 +21,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────
 
 import { OFFICIAL_STANDARD_CHART, STANDARDKONTOPLAN_VERSION } from './official-standard-chart';
+import { VALIDATED_MAPPING as FSR_DIRECT_MAPPING } from './fsr-official-mapping';
 
 export interface StandardAccount {
   number: string
@@ -696,27 +697,40 @@ export function buildAutoMapping(
 ): Map<string, string> {
   const mapping = new Map<string, string>()
 
-  // Phase 1: Exact FSR number match from suggestions
+  // Phase 0: Direct FSR number lookup from the hardcoded AlphaFlow mapping table.
+  //
+  // This table maps AlphaFlow's standard FSR account numbers (1xxx-9xxx from
+  // seed-chart-of-accounts.ts) directly to the correct official 2026
+  // Standardkontoplan numbers — no heuristics, no guessing.
+  //
+  // Only accounts not in this table fall through to Phase 1 (FSR_SUGGESTIONS)
+  // and Phase 2 (LLM).
   for (const fsr of fsrAccounts) {
-    const suggestion = suggestStandardMapping(fsr.number)
-    if (suggestion) {
-      mapping.set(fsr.number, suggestion.number)
-      continue
+    const direct = FSR_DIRECT_MAPPING[fsr.number];
+    if (direct) {
+      mapping.set(fsr.number, direct);
+      continue;
     }
   }
 
-  // Phase 2: Type/group heuristics — using OFFICIAL_STANDARD_CHART (2026)
-  //
-  // IMPORTANT: The old code used PUBLIC_STANDARD_CHART (legacy 69-account
-  // public-sector chart with 0xxx-9xxx numbering). This caused catastrophic
-  // mismatches because account numbers mean different things in the two
-  // charts — e.g. 3200 = "Bankindeståender" in the legacy chart but
-  // "Øvrige indtægter af kapitalandele" in the official chart. Now we look
-  // up candidates in OFFICIAL_STANDARD_CHART by number, so the returned
-  // account always has the correct name/type.
-  //
-  // Accounts not covered by these heuristics are left unmapped — the LLM
-  // (ai-standard-mapping.ts) handles them with semantic understanding.
+  // Phase 1: Exact FSR number match from suggestions (fallback)
+  for (const fsr of fsrAccounts) {
+    if (mapping.has(fsr.number)) continue;
+    const suggestion = suggestStandardMapping(fsr.number)
+    if (suggestion) {
+      // Validate that the suggested account exists in the official chart
+      // (some old suggestions point to 0xxx legacy numbers that don't exist)
+      const existsInOfficial = OFFICIAL_STANDARD_CHART.find(a => a.number === suggestion.number);
+      if (existsInOfficial) {
+        mapping.set(fsr.number, suggestion.number);
+      }
+      continue;
+    }
+  }
+
+  // Phase 2: Type/group heuristics for remaining unmapped accounts.
+  // Only used for accounts NOT in the hardcoded table — handles custom
+  // accounts the user created beyond the standard seed chart.
   const findOfficial = (num: string) =>
     OFFICIAL_STANDARD_CHART.find((a) => a.number === num)
 
@@ -727,52 +741,31 @@ export function buildAutoMapping(
 
     switch (fsr.type) {
       case 'ASSET':
-        // Official 2026 chart account numbers (verified):
-        //   6480 = Bankkonto, 6183 = Tilgodehavender fra salg,
-        //   6075 = Råvarer og hjælpematerialer (varelager),
-        //   5411 = Produktionsanlæg og maskiner (anlæg),
-        //   5561 = Andre anlæg, driftsmateriel og inventar,
-        //   6320 = Tilgodehavende moms (input VAT)
         if (fsr.group === 'BANK') candidate = findOfficial('6480')
         else if (fsr.group === 'RECEIVABLES') candidate = findOfficial('6183')
         else if (fsr.group === 'INVENTORY') candidate = findOfficial('6075')
         else if (fsr.group === 'INPUT_VAT') candidate = findOfficial('6320')
-        // CASH and FIXED_ASSETS: leave to LLM (too many sub-options)
         break
 
       case 'LIABILITY':
-        //   7840 = Skyldig moms (output VAT),
-        //   7330 = Gæld til banker (kortfristet),
-        //   7120 = Gæld til banker (langfristet)
         if (fsr.group === 'OUTPUT_VAT') candidate = findOfficial('7840')
         else if (fsr.group === 'SHORT_TERM_DEBT') candidate = findOfficial('7330')
         else if (fsr.group === 'LONG_TERM_DEBT') candidate = findOfficial('7120')
-        // PAYABLES: leave to LLM (no exact "kreditorer" account in official chart)
         break
 
       case 'EQUITY':
-        //   6916 = Årets resultat, 6931 = Overført resultat
         if (fsr.group === 'RETAINED_EARNINGS') candidate = findOfficial('6931')
-        // SHARE_CAPITAL: leave to LLM
         break
 
       case 'REVENUE':
-        //   1010 = Salg af varer og ydelser,
-        //   1500 = Andre driftsindtægter,
-        //   1550 = Øvrige andre driftsindtægter
         if (fsr.group === 'SALES_REVENUE') candidate = findOfficial('1010')
         else if (fsr.group === 'OTHER_REVENUE') candidate = findOfficial('1500')
-        // FINANCIAL_INCOME: leave to LLM (many sub-options)
         break
 
       case 'EXPENSE':
-        //   1610 = Varekøb, 2842 = Lønninger,
-        //   2030 = Husleje, 2460 = Leje,
-        //   2810 = Andre eksterne omkostninger
         if (fsr.group === 'COST_OF_GOODS') candidate = findOfficial('1610')
         else if (fsr.group === 'PERSONNEL') candidate = findOfficial('2842')
         else if (fsr.group === 'OTHER_OPERATING') candidate = findOfficial('2810')
-        // FINANCIAL_EXPENSE, TAX: leave to LLM
         break
     }
 
