@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -17,8 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
   TooltipContent,
@@ -39,7 +39,7 @@ import {
   RefreshCw,
   Save,
 } from 'lucide-react';
-import { PUBLIC_STANDARD_CHART } from '@/lib/standard-chart-of-accounts';
+import { StandardAccountCombobox } from './standard-account-combobox';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -402,28 +402,14 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
                       {/* Arrow */}
                       <ArrowRightLeft className="h-3.5 w-3.5 text-gray-300 dark:text-gray-600 shrink-0 hidden sm:block" />
 
-                      {/* Standard Account Select */}
+                      {/* Standard Account — searchable combobox (652 accounts) */}
                       <div className="flex-1 min-w-0">
-                        <Select
+                        <StandardAccountCombobox
                           value={currentValue}
                           onValueChange={(val) => updateMapping(mapping.accountId, val)}
-                        >
-                          <SelectTrigger className={`w-full text-xs sm:text-sm h-8 sm:h-9 ${isUnmapped ? 'border-red-200 dark:border-red-800/50 text-red-500' : ''}`}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-white dark:bg-[#1a1f1e] max-h-64">
-                            <SelectItem value="UNMAPPED" className="text-red-500">
-                              {isDanish ? '— Ikke mapped —' : '— Unmapped —'}
-                            </SelectItem>
-                            {PUBLIC_STANDARD_CHART.map((std) => (
-                              <SelectItem key={std.number} value={std.number}>
-                                <span className="font-mono">{std.number}</span>
-                                <span className="mx-1.5 text-gray-300">—</span>
-                                <span className="truncate">{std.name}</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          isUnmapped={isUnmapped}
+                          isDanish={isDanish}
+                        />
                       </div>
 
                       {/* Status */}
