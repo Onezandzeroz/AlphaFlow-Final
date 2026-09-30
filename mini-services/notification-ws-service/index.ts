@@ -153,6 +153,19 @@ function broadcastToCompany(companyId: string, data: unknown): number {
   return io.sockets.adapter.rooms.get(room)?.size ?? 0;
 }
 
+// ─── Company-room broadcast for e-invoice events (toast) ────────────
+// Separate from broadcastToCompany() because the frontend
+// EInvoiceEventNotifier listens for the 'einvoice-event' socket event
+// (NOT 'data-changed'). Reusing broadcastToCompany() would emit
+// 'data-changed' — which the frontend's data-changed handler ignores
+// for EINVOICE_EVENT payloads (no scope field), so no toast would fire.
+
+function broadcastEInvoiceEvent(companyId: string, data: unknown): number {
+  const room = companyRoomName(companyId);
+  io.in(room).emit('einvoice-event', data);
+  return io.sockets.adapter.rooms.get(room)?.size ?? 0;
+}
+
 // ─── Broadcast request handlers ───────────────────────────────────────
 
 function handleReadStateBroadcast(data: { userId?: string; readIds?: unknown; type?: string }, res: any): void {
@@ -261,7 +274,7 @@ function handleEInvoiceEventBroadcast(
     timestamp: Date.now(),
   };
 
-  const recipients = broadcastToCompany(companyId, payload);
+  const recipients = broadcastEInvoiceEvent(companyId, payload);
 
   console.log(
     `[NotificationWS] EINVOICE_EVENT → company:${companyId} dir=${data.direction} status=${data.status} invoice=${data.invoiceNumber} (${recipients} socket(s))`
@@ -315,7 +328,7 @@ io.on('connection', (socket) => {
 httpServer.listen(PORT, () => {
   console.log(`[NotificationWS] Socket.IO server running on port ${PORT}`);
   console.log(`[NotificationWS] Endpoints: /health, /broadcast (POST), /stats`);
-  console.log(`[NotificationWS] Events: notification-update (per-user), data-changed (per-company)`);
+  console.log(`[NotificationWS] Events: notification-update (per-user), data-changed (per-company), einvoice-event (per-company, toast)`);
 });
 
 // ─── Graceful Shutdown ───────────────────────────────────────────────
