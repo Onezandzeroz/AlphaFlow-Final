@@ -10,7 +10,7 @@
 >
 > **Ansvarlig:** AlphaAi Consult ApS
 >
-> **Opdateret v1.1 (september 2026):** Sproom (DK) har erstattet Storecove (NL) som Peppol- og NemHandel Access Point (webhooks + safety-net-pollere, per-send status-tracking og auto-retry); Tink er nu en reel Open Banking-integration; kreditnota (type 381) fuldt understøttet i e-faktura-pipelinen; arkitektur-oversigt opdateret (6 mini-services, 45 Prisma-modeller/27 enums, 179 API-ruter).
+> **Opdateret v1.1 (september 2026):** Sproom (DK) har erstattet Storecove (NL) som Peppol- og NemHandel Access Point (webhooks + safety-net-pollere, per-send status-tracking og auto-retry); Tink er nu en reel Open Banking-integration; kreditnota (type 381) fuldt understøttet i e-faktura-pipelinen; arkitektur-oversigt opdateret (5 mini-services, 45 Prisma-modeller/27 enums, 176 API-ruter).
 
 ---
 
@@ -66,7 +66,7 @@ Følgende funktionelle afgrænsninger er relevante for anmeldelsesomfanget:
 | Område | Status |
 |---|---|
 | **Reelle bank-API-kald** | Delvist — Tink er en reel integration (sandbox- og produktionstilstande; aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`; DPA med Tink indgås før produktion); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
-| **E-faktura Access Point (Sproom)** | Integreret — live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch (https://sproom.net). Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) i samme integration. Supersederet Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) er inaktiv legacy. |
+| **E-faktura Access Point (Sproom)** | Integreret — live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch (https://sproom.net). Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) i samme integration. Tidligere Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) er **fuldt slettet** fra kodebasen (oktober 2026). |
 | **MitID / NemID / BankID** | Autentificering via email + password + TOTP 2FA. |
 
 ---
@@ -99,21 +99,20 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 
 ## 5. Arkitektur-oversigt (kort)
 
-AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 6 mini-services — tokenpay-access, notification-ws, hermes-agent, scanner-service og knowledge-service i produktions-setup, samt pg-service som udelukkende er et sandbox-hjælpeværktøj (embedded PostgreSQL 17 + pgvector; indgår ikke i produktions-setup) — hostet på IONOS VPS med Neon PostgreSQL som datalager.
+AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 5 mini-services — tokenpay-access, notification-ws, hermes-agent, scanner-service og knowledge-service — hostet på IONOS VPS med Neon PostgreSQL som datalager.
 
 | Komponent | Teknologi | Rolle |
 |---|---|---|
 | **Web-app** | Next.js 16 (App Router) + TypeScript 5 + Tailwind CSS 4 | Brugergrænseflade, API-routes, SSR. Port 3000. |
 | **Database** | PostgreSQL på Neon (serverless) + Prisma ORM + pgvector | Primært datalager for alle tenant-data. EU-datacentre (Frankfurt + Amsterdam). |
 | **Reverse proxy / TLS** | Caddy (self-hosted på IONOS VPS) | TLS 1.2/1.3 (Let's Encrypt), security headers, routing til mini-services via `?XTransformPort=<port>`. |
-| **Proces-manager** | PM2 (fork-mode, 6 processer: web-app + 5 produktions-mini-services) | Autorestart (max 10 restarts, 5s delay), separate log-filer i `./logs/`. |
+| **Proces-manager** | PM2 (fork-mode, 6 processer: web-app + 5 mini-services, inkl. Python scanner-service) | Autorestart (max 10 restarts, 5s delay), separate log-filer i `./logs/`. |
 | **Hosting** | IONOS VPS (EU/Tyskland, IONOS SE) | Applikationsserver + lokal backup-lagring (`Tenant-Backup/`) + uploads (`uploads/`). |
 | **Mini-service: hermes-agent** | Bun + Socket.IO + Prisma (port 3004) | AI-chat-assistent, OpenRouter LLM, reminders. Deler Neon DB. |
 | **Mini-service: knowledge-service** | Bun + rå HTTP + Prisma + pgvector (port 3006) | RAG-knowledge base, embeddings via OpenRouter. Deler Neon DB. |
 | **Mini-service: notification-ws** | Bun + Socket.IO (port 3001) | Real-time notifikationer, in-memory. |
 | **Mini-service: scanner-service** | Python + FastAPI + SQLite (port 3005) | OCR (Tesseract) + VLM via OpenRouter. |
 | **Mini-service: tokenpay-access** | Bun + Hono + SQLite (port 3100) | `.tbkey` proof-verifikation, adgangsstyring. |
-| **Mini-service: pg-service** | Bun + embedded PostgreSQL 17 + pgvector (lokal) | KUN sandbox-/udviklingshjælpeværktøj — indgår ikke i produktions-setup (produktion bruger Neon PostgreSQL). |
 
 **Multi-tenant isolation:** `Company` er tenant-grænse, `companyId` på tværs af 32 af i alt 45 Prisma-modeller (27 enums), RBAC-isolation via `tenantFilter(ctx)`. SuperDev oversight-mode tillader read-only cross-tenant adgang for AlphaAi-admin.
 
@@ -200,7 +199,7 @@ Følgende sikkerhedsarkitektoniske detaljer og funktionelle afgrænsninger er re
 8. **MitID / NemID / BankID** — autentificering via email + password + TOTP 2FA.
 9. **Uploads** gemmes på VPS-disk med disk-encryption og adgangskontrol. Backup-filer er AES-256-GCM-krypterede.
 10. **AI non-determinisme** — AI-output er ikke deterministisk. Aktivering og dataadgang audit-logges; ved lav VLM-konfidens markeres output 'Kræver gennemsyn'; AI-output overstyrer aldrig automatisk bogførte posteringer. Se Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 13 og Bilag 8 (Bilag-08_Risikovurdering-DPIA.md) R-21.
-11. **E-faktura Access Point (Sproom)** — Sproom-integrationen er live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch til https://sproom.net (med `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true`). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering samt MLR/AR håndteres af Sproom som Access Point. Supersederet Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) er inaktiv legacy, bevaret for bagudkompatibilitet — al e-fakturering foregår via Sproom (`src/lib/sproom-client.ts` + `/api/sproom/*`).
+11. **E-faktura Access Point (Sproom)** — Sproom-integrationen er live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch til https://sproom.net (med `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true`). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering samt MLR/AR håndteres af Sproom som Access Point. Tidligere Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*` — 5 routes) er **fuldt slettet** fra kodebasen (oktober 2026) — al e-fakturering foregår udelukkende via Sproom (`src/lib/sproom-client.ts` + `/api/sproom/*`). Backward-compat DB-felter (`storecoveSubmissionId`, `storecoveConnected` etc.) er bevaret for historiske posteringer.
 
 ---
 

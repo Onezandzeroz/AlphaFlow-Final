@@ -9,8 +9,8 @@
 | Felt | Indhold |
 |------|---------|
 | **Dokumenttype** | Databehandleraftale (DPA) jf. GDPR artikel 28 |
-| **Version** | 3.4 |
-| **Dato** | September 2026 |
+| **Version** | 3.5 |
+| **Dato** | Oktober 2026 |
 | **Gældende lov** | Europa-Parlamentets og Rådets forordning (EU) 2016/679 (GDPR); dansk databeskyttelseslovgivning (LBK nr. 775 af 25. juni 2021); Lov om bogføring (LOV nr. 700 af 24. maj 2022); BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen); BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen) |
 | **Parter** | **Dataansvarlig:** Kundens virksomhed (kunde hos AlphaFlow) — **Databehandler:** AlphaAi Consult ApS, CVR 46312058 |
 | **Sprog** | Dansk |
@@ -244,7 +244,7 @@ Følgende integrationer findes i koden, men er ikke aktive i produktion. De er i
 | # | Integration | Status | Begrundelse |
 |---|-------------|--------|-------------|
 | — | **Bank-API'er (Nordea, Danske Bank, Jyske Bank)** | Stub-only — ingen reelle API-kald. Tink er derimod en reel implementering (real OAuth2 via Tink Link); Demo-provider returnerer realistiske test-data. Bank-tokens krypteres dog alligevel med AES-256-GCM før lagring. | Nordea/Danske Bank/Jyske Bank implementeret som `createRealBankProvider()` factory, men consent-flow stubbes. `fetchTransactions` kaster "requires production configuration". Tink er fuldt implementeret (tink-client.ts) og aktiveres ved konfigurerede TINK_CLIENT_ID/SECRET. |
-| — | **E-faktura legacy (Storecove)** | Supersederet legacy — ikke aktiv. `src/lib/storecove-client.ts` og `/api/storecove/*`-ruterne findes stadig i kodebasen; DB-felter (`storecoveConnected`, `storecoveLegalEntityId`) bevares for bagudkompatibilitet. | Erstattet af Sproom som eneste e-faktura Access Point (Bilag A #3). Ingen data transmitteres via legacy-koden. |
+| — | **E-faktura legacy (Storecove)** | Legacy-kode slettet (oktober 2026) — ikke aktiv. `src/lib/storecove-client.ts` og `/api/storecove/*`-ruterne (5 endpoints: connect, create-legal-entity, participants, status, webhook) er **helt slettet** fra kodebasen; DB-felter (`storecoveSubmissionId`, `storecoveConnected`, `storecoveLegalEntityId`, `storecoveApiKeyId`, `storecoveConnectedAt`) bevares for bagudkompatibilitet med historiske databaserækker. | Erstattet af Sproom som eneste e-faktura Access Point (Bilag A #3). Ingen data transmitteres via legacy-koden. |
 
 > **Note om AI-bankafstemning:** AI-bankafstemning er aktiv i produktion via OpenRouter i `src/lib/matching-engine.ts` (tre-niveau matching: regelbaseret, fuzzy, AI). AI-match ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 markeres AI_SUGGESTED (kræver manuel godkendelse); <0,80 ignoreres. Den tidligere `z-ai-web-dev-sdk`-integration er erstattet af `callOpenRouter()`. AI-data transmitteres via OpenRouter (Bilag A #5) — AI-bankafstemning udgør derfor ikke en selvstændig underbehandler. AI-output overstyrer aldrig automatisk bogførte posteringer uden brugergodkendelse.
 
@@ -276,7 +276,7 @@ AlphaFlow implementerer følgende data-minimization-foranstaltninger i henhold t
 Dette er den primære minimization-foranstaltning for AI-underbehandleren (OpenRouter). Standard er `false` — dvs. uden udtrykkelig opt-in fra tenant-ejer (OWNER) sendes **KUN**:
 
 - Brugerens spørgsmål (naturligt sprog)
-- Statisk dansk regnskabs-system-prompt (`knowledge-base.ts`, 454 LOC — lovtekst, moms-satser, frister, virksomhedsklasser)
+- Statisk dansk regnskabs-system-prompt (`mini-services/hermes-agent/knowledge-base.ts`, 514 LOC — lovtekst, moms-satser, frister, virksomhedsklasser)
 - Samtalehistorik (sidste 20 beskeder)
 - Valgfrie Hermes-skill-prompts (tenant-administreret)
 
@@ -351,7 +351,7 @@ AlphaFlow implementerer følgende tekniske og organisatoriske sikkerhedsforansta
 | **TOTP 2FA** | RFC 6238, 30s step, ±1 tolerance, 10 backup-koder | `src/lib/two-factor.ts` |
 | **Session** | 256-bit random hex-token, httpOnly+secure+sameSite=lax, 7 dages sliding expiry | `src/lib/session.ts` |
 | **RBAC** | 5 roller (OWNER/ADMIN/ACCOUNTANT/VIEWER/AUDITOR) og 23 permissions i 7 kategorier | `src/lib/rbac.ts` |
-| **Multi-tenant isolation** | `tenantFilter(ctx)` + per-row `companyId` (24 modeller) | `src/lib/rbac.ts` |
+| **Multi-tenant isolation** | `tenantFilter(ctx)` + per-row `companyId` (32 modeller) | `src/lib/rbac.ts` |
 | **SuperDev oversight** | Read-only cross-tenant adgang for tenant-regnskabsdata for AlphaAi-teknikere; mutationer blokeres via `blockOversightMutation`. SuperDev-administrative endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare for abonnements- og trial-styring på tværs af tenants — bevidst App Owner-funktion. Alle oversight-sessioner logges som `OVERSIGHT` i audit-log. | `src/lib/rbac.ts` |
 
 ### 7.4 Audit-trail og immutability (Bogføringsloven §§ 10-12)
@@ -359,8 +359,8 @@ AlphaFlow implementerer følgende tekniske og organisatoriske sikkerhedsforansta
 | Foranstaltning | Implementering | Reference |
 |----------------|----------------|-----------|
 | **3-niveau immutability** | (1) App-kode KUN CREATE på AuditLog + (2) PostgreSQL BEFORE UPDATE/DELETE triggere + (3) `onDelete: Restrict` cascade | `prisma/audit-immutability.sql` |
-| **25 AuditAction-typer** | CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, BACKUP_*, SESSION_INVALIDATE, DATA_RESET, OVERSIGHT, TWO_FACTOR_*, etc. | `src/lib/audit.ts` |
-| **75+ routes logger** | Alle data-muterende API-ruter | `src/app/api/**` |
+| **22 AuditAction-typer** | CREATE, UPDATE, CANCEL, DELETE_ATTEMPT, LOGIN, LOGIN_FAILED, LOGOUT, REGISTER, BACKUP_*, SESSION_INVALIDATE, DATA_RESET, OVERSIGHT, TWO_FACTOR_*, ACCOUNT_DEACTIVATED, USER_HARD_DELETED, LOGIN_2FA_VERIFIED | `src/lib/audit.ts` |
+| **88 routes logger** | Alle data-muterende API-ruter via `auditCreate` / `auditUpdate` / `auditCancel` / `auditLog` / `auditAuth` / `auditDeleteAttempt` | `src/app/api/**` |
 | **Metadata** | IP-adresse, User-Agent, timestamp, før/efter-værdier | `src/lib/audit.ts` |
 
 ### 7.5 Rate-limiting og netværkssikkerhed
@@ -735,14 +735,14 @@ Denne databehandleraftale er accepteret af begge parter ved elektronisk accept i
 
 **Note vedr. OpenRouter's underbehandlere:** OpenRouter videresender anmodninger til relevante model-udbydere (f.eks. Anthropic, Meta, OpenAI) per GDPR Art. 28(4). Disse model-udbydere er OpenRouter's underbehandlere — ikke AlphaAi Consult ApS' — og indgås derfor ikke separate DPA'er med AlphaAi. AlphaAi's DPA og SCC med OpenRouter (Bilag 14) dækker alle AI-funktioner i AlphaFlow: Hermes chat-LLM, knowledge-RAG embeddings og scanner VLM.
 
-**Note vedr. Peppol/NemHandel Access Point:** AlphaFlow anvender **Sproom A/S (Danmark)** som eneste e-faktura Access Point for både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) i den nuværende konfiguration (underbehandler-DPA: Bilag 14). Integrationen er live mod Sproom staging (https://staging.sproom.net) og er produktionsklar via miljøvariabel-skift (`SPROOM_API_URL` → https://sproom.net). Miljøvariabler: `SPROOM_API_URL` (default https://staging.sproom.net), `SPROOM_API_TOKEN`, `SPROOM_WEBHOOK_PUBLIC_KEY` og `SPROOM_WEBHOOK_REQUIRE_SIGNATURE` (sættes til `true` i produktion). Den tidligere Storecove-integration (`src/lib/storecove-client.ts` + `/api/storecove/*`) er **supersederet legacy** og bevares udelukkende for bagudkompatibilitet — der transmitteres ingen data via legacy-koden. Hvis en direkte Nets-integration aktiveres i fremtiden, vil Nets blive tilføjet som selvstændig underbehandler med separat DPA (jf. § 14).
+**Note vedr. Peppol/NemHandel Access Point:** AlphaFlow anvender **Sproom A/S (Danmark)** som eneste e-faktura Access Point for både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) i den nuværende konfiguration (underbehandler-DPA: Bilag 14). Integrationen er live mod Sproom staging (https://staging.sproom.net) og er produktionsklar via miljøvariabel-skift (`SPROOM_API_URL` → https://sproom.net). Miljøvariabler: `SPROOM_API_URL` (default https://staging.sproom.net), `SPROOM_API_TOKEN`, `SPROOM_WEBHOOK_PUBLIC_KEY` og `SPROOM_WEBHOOK_REQUIRE_SIGNATURE` (sættes til `true` i produktion). Den tidligere Storecove-integration (`src/lib/storecove-client.ts` + `/api/storecove/*`, 5 endpoints: connect, create-legal-entity, participants, status, webhook) er **helt slettet** fra kodebasen (oktober 2026) — der transmitteres ingen data via legacy-koden. DB-felter (`storecoveSubmissionId`, `storecoveConnected`, `storecoveLegalEntityId`, `storecoveApiKeyId`, `storecoveConnectedAt`) bevares alene for bagudkompatibilitet med historiske databaserækker. Hvis en direkte Nets-integration aktiveres i fremtiden, vil Nets blive tilføjet som selvstændig underbehandler med separat DPA (jf. § 14).
 
 ### Bilag A.2 — Implementerede men IKKE aktive integrationer
 
 | Integration | Status | Begrundelse |
 |-------------|--------|-------------|
 | Bank-API'er (Nordea, Danske Bank, Jyske Bank) | Stub-only — ingen reelle API-kald i produktion. Tink er derimod en reel implementering (real OAuth2 via Tink Link). Demo-provider returnerer realistiske test-data. Bank-tokens krypteres dog alligevel med AES-256-GCM før lagring. | Implementeret men ikke produktionsaktiveret (Nordea/Danske/Jyske). Tink aktiv i produktion ved konfigurerede TINK_CLIENT_ID/SECRET. |
-| E-faktura legacy (Storecove) | Supersederet legacy — ikke aktiv. `src/lib/storecove-client.ts` (1.431 LOC) og `/api/storecove/*`-ruterne findes stadig i kodebasen; DB-felter (`storecoveConnected`, `storecoveLegalEntityId`) bevares for bagudkompatibilitet. | Erstattet af Sproom som eneste e-faktura Access Point (Bilag A #3). Ingen data transmitteres via legacy-koden. |
+| E-faktura legacy (Storecove) | Legacy-kode slettet (oktober 2026) — ikke aktiv. `src/lib/storecove-client.ts` (tidl. 1.431 LOC) og `/api/storecove/*`-ruterne (5 endpoints: connect, create-legal-entity, participants, status, webhook) er **helt slettet** fra kodebasen; DB-felter (`storecoveSubmissionId`, `storecoveConnected`, `storecoveLegalEntityId`, `storecoveApiKeyId`, `storecoveConnectedAt`) bevares for bagudkompatibilitet med historiske databaserækker. | Erstattet af Sproom som eneste e-faktura Access Point (Bilag A #3). Ingen data transmitteres via legacy-koden. |
 
 > **Note om AI-bankafstemning:** AI-bankafstemning er aktiv i produktion via OpenRouter (`src/lib/matching-engine.ts`) og transmitterer AI-data via OpenRouter (Bilag A #5) — udgør ikke en selvstændig underbehandler. Den tidligere `z-ai-web-dev-sdk`-integration er erstattet af `callOpenRouter()`.
 
@@ -807,6 +807,7 @@ Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
 | 3.2 | 2026 | **Dokumentationsnøjaktighed:** Rettet RBAC permissions 18→23 i 7 kategorier (§7.3); tilføjet SuperDev oversight-nuance (admin endpoints `/api/oversight/subscription` og `/api/oversight/trial` forbliver kaldbare); opdateret §5.1.G og Bilag A.2 — Tink nu korrekt beskrevet som reel implementering, `z-ai-web-dev-sdk`-række erstattet af aktiv AI-bankafstemning via OpenRouter (`matching-engine.ts`); opdateret §6.1 Hermes-consent til toggle-baseret beskrivelse (enable/disable + `dataAccessEnabled` toggles, audit `action: UPDATE`); `FSR-38`-navngivning rettet til `FSR-baseret`. |
 | 3.3 | 2026 | **Bilagsstruktur-konsolidering:** Underbehandler-DPA'er (Bilag 14–18) samlet til ét bilagspunkt (Bilag 14). Tjeklisten renummereret fra Bilag 19 til Bilag 3. Alle krydsreferencer til specifikke DPA-bilag (Neon, IONOS, Storecove, Flatpay/Frisbii, OpenRouter, Simply/Brevo) opdateret til Bilag 14. |
 | 3.4 | September 2026 | **Sproom-migrering:** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som e-faktura Access Point (underbehandler) — Sproom dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Tekniske detaljer opdateret (raw XML POST /api/documents, RSA-webhook-signatur i X-Signature-header, child companies pr. tenant/CVR). Webhook-signatur for e-faktura-AP ændret fra HMAC (X-Storecove-Signature) til RSA-SHA256; env-vars ændret til SPROOM_API_URL/SPROOM_API_TOKEN/SPROOM_WEBHOOK_PUBLIC_KEY/SPROOM_WEBHOOK_REQUIRE_SIGNATURE. Legacy Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) markeret som supersederet (bevaret for bagudkompatibilitet — Bilag A.2). §1.3 bank-forbindelser rettet til Tink som reel implementering. Datamodel-reference 40→45 modeller (27 enums). |
+| 3.5 | Oktober 2026 | **Storecove legacy-kode slettet:** `src/lib/storecove-client.ts` og `/api/storecove/*`-ruterne (5 endpoints: connect, create-legal-entity, participants, status, webhook) er **helt fjernet** fra kodebasen — koden er nu DELETET, ikke længere "supersederet legacy / bevaret for bagudkompatibilitet". Bilag A.2-række (Storecove legacy) opdateret til at afspejle sletningen; §5.1-note vedr. Peppol/NemHandel Access Point opdateret. DB-felter (`storecoveSubmissionId`, `storecoveConnected`, `storecoveLegalEntityId`, `storecoveApiKeyId`, `storecoveConnectedAt`) bevares fortsat for bagudkompatibilitet med historiske databaserækker — de slettes ikke. Ingen funktionel ændring (Sproom er fortsat eneste aktivt e-faktura Access Point). |
 
 ---
 

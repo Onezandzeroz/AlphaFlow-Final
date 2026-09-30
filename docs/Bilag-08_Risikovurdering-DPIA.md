@@ -47,7 +47,7 @@ Risikovurderingen er udført i overensstemmelse med ISO/IEC 27005:2022 og omfatt
 1. **Kontekstetablering** — se afsnit 2–4.
 2. **Trusselsidentifikation** — se afsnit 3.
 3. **Aktiv- og sårbarhedsidentifikation** — se afsnit 4.
-4. **Risikovurdering** — systematisk tabel med 20 risici (R-01..R-20), se afsnit 5.
+4. **Risikovurdering** — systematisk tabel med 21 risici (R-01..R-21), se afsnit 5.
 5. **Risikomatrix** — se afsnit 6.
 6. **Risikohåndtering** — eksisterende afhjælpninger dokumenteret pr. risiko; planlagte afhjælpninger i `Bilag-12_Udbedringsplan.md`.
 7. **Restrisiko og accept** — se afsnit 7.
@@ -231,7 +231,7 @@ Følgende tekniske kontroller er implementeret og udgør den eksisterende afhjæ
 - ✅ Audit-trail immutability 3 niveauer: app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggers (`prevent_audit_update`, `prevent_audit_delete`) + `onDelete: Restrict` cascade.
 - ✅ Konto-deaktivering i stedet for hard-delete (BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13 > GDPR Art. 17(3)(c)).
 - ✅ Sliding session expiry (7 dage) — password-reset invaliderer alle eksisterende sessioner.
-- ✅ Audit-logging i 75+ API-routes (auth, mutationer, oversight, 2FA, backup).
+- ✅ Audit-logging i 88 API-ruter (auth, mutationer, oversight, 2FA, backup) via `auditCreate` / `auditUpdate` / `auditCancel` / `auditLog` / `auditAuth` / `auditDeleteAttempt`.
 - ✅ Demo-firma read-only for non-SuperDev.
 - ✅ Neons disk-encryption (managed) + PITR 7 dage.
 - ✅ IONOS VPS C5 + IT-Grundschutz cert. (EU-hosting).
@@ -291,20 +291,20 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Rest risiko** | ✅ **Lav** — keyring med version-prefixed ciphertext; rotation via migration-script; rollback understøttet. |
 | **Afhjælpning** | ✅ **Udbedret (U-1).** Implementeret keyring med version-prefixed ciphertext, `encryptionKeyVersion`-kolonner på User/BankConnection/Backup, migration-script (`rotate-encryption-keys.ts`) og rollback-script. Se Bilag 5 (Bilag-05_Krypteringsrapport.md) §2.4 og Bilag 9 (Bilag-09_Beredskabsplan.md) §5.5. |
 
-### R-04 — Ingen hash-chain på posteringer
+### R-04 — Hash-chain på posteringer (udbedret, U-15)
 
 | Attribut | Værdi |
 |---|---|
-| **Beskrivelse** | BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13 — håndhæves via AuditLog + PostgreSQL-triggere — ingen kryptografisk hash-chain mellem posteringer (`previousHash`/`hash`/`locked`/`immutable`/`version` felter findes ikke). |
+| **Beskrivelse** | BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13 — håndhæves nu via (1) AuditLog + PostgreSQL-triggers, OG (2) en kryptografisk SHA-256 hash-chain mellem posteringerne (`recordHash`/`previousHash`/`hashedAt` på både `JournalEntry` og `Transaction`). Tidligere manglede hash-chain på selve posteringerne; dette er nu udbedret (U-15, se Bilag-04 afsnit 2.10). |
 | **Trussel** | Insider med direkte DB-adgang (DBA, ondsindet Neon-ansat) forsøger at ændre historiske posteringer "usynligt". |
-| **Sårbarhed** | AuditLog-tabellen er immutable (3-niveau), men selve `JournalEntry`/`Transaction`-rækker kan i princippet muteres direkte i DB uden hash-chain-detektion. |
+| **Sårbarhed** | Tidligere kunne `JournalEntry`/`Transaction`-rækker i princippet muteres direkte i DB uden hash-chain-detektion. Dette er nu lukket — mutation detekteres via rekalkulation af `recordHash` fra aktuelle felter, og direkte UPDATE/DELETE på forseglede rækker blokeres af PostgreSQL-triggersne `prevent_journal_entry_update_sealed` / `prevent_transaction_update_sealed` / `prevent_transaction_delete_sealed`. |
 | **Aktiv** | A2 (finansielle data), A12 (AuditLog). |
 | **Sandsynlighed** | Lav |
 | **Konsekvens** | Høj |
 | **Risikoniveau (før)** | **Mellem** |
-| **Eksisterende afhjælpning** | 3-niveau immutability: (1) app CREATE-only audit-funktioner (`src/lib/audit.ts`), (2) PostgreSQL `BEFORE UPDATE/DELETE` triggers `prevent_audit_update`/`prevent_audit_delete` på AuditLog, (3) `onDelete: Restrict` cascade — User/Company kan ikke slettes når AuditLog-entry findes. AuditLog indeholder `changes` JSON (`{field: {old, new}}`) + `metadata` (IP, userAgent, timestamp, reason). 25 AuditAction-typer, 24 EntityType-typer, 75+ routes logger. |
-| **Rest risiko** | Lav — mutation af selve posteringerne vil ikke afspejles i AuditLog, men det vil kunne ses ved sammenligning med backup-ZIPs. |
-| **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — hash-chain (som Bitcoin-blockchain) eller periodisk verifikation af posteringer mod backup-checksums. Accepteret for nu — se afsnit 7. |
+| **Eksisterende afhjælpning** | 3-niveau immutability: (1) app CREATE-only audit-funktioner (`src/lib/audit.ts`), (2) PostgreSQL `BEFORE UPDATE/DELETE` triggers `prevent_audit_update`/`prevent_audit_delete` på AuditLog, (3) `onDelete: Restrict` cascade — User/Company kan ikke slettes når AuditLog-entry findes. AuditLog indeholder `changes` JSON (`{field: {old, new}}`) + `metadata` (IP, userAgent, timestamp, reason). 22 AuditAction-typer, 25 EntityType-typer, 88 ruter logger. **Derudover** er posteringernes egen kryptografiske SHA-256 hash-chain implementeret (`recordHash`/`previousHash`/`hashedAt` på `JournalEntry` og `Transaction`) — kæden er per-tenant og verificerbart via revisor-endpoint `/api/journal-entries/verify-integrity`. Filkilder: `src/lib/journal-hash-chain.ts` (468 LOC) + `prisma/schema.prisma` linje 587-589 (Transaction) og 834-836 (JournalEntry). |
+| **Rest risiko** | ✅ **Lav** — direkte mutation af posteringer detekteres nu både via hash-chain (verificerbart af revisor) og via PostgreSQL-triggers (blokerer UPDATE/DELETE på forseglede rækker). Backup-sammenligning forbliver en supplerende kontrol. |
+| **Afhjælpning** | ✅ **Udbedret (U-15, oktober 2026).** SHA-256 hash-chain (Bitcoin-lignende) på `JournalEntry` og `Transaction` implementeret — se Bilag-04 afsnit 2.10 og Bilag-12 §3. |
 
 ### R-05 — Ingen account-lockout
 
@@ -362,7 +362,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Sandsynlighed** | Lav |
 | **Konsekvens** | Høj |
 | **Risikoniveau (før)** | **Mellem** |
-| **Eksisterende afhjælpning** | `withGuard()` gennemtvinger auth/company/oversight/demo/TokenPay/permissions/features på alle protected routes; `tenantFilter(ctx)` på DB-queries; SuperDev oversight read-only for tenant-regnskabsdata (mutationer blokeres via `blockOversightMutation`); SuperDev-admin endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare; demo-firma read-only; AuditLog på 75+ routes. |
+| **Eksisterende afhjælpning** | `withGuard()` gennemtvinger auth/company/oversight/demo/TokenPay/permissions/features på alle protected routes; `tenantFilter(ctx)` på DB-queries; SuperDev oversight read-only for tenant-regnskabsdata (mutationer blokeres via `blockOversightMutation`); SuperDev-admin endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare; demo-firma read-only; AuditLog på 88 ruter. |
 | **Rest risiko** | Lav |
 | **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — implementer `src/middleware.ts` der gennemtvinger auth-redirect på alle ikke-`/login`/`/register` routes, samt default-deny for API-routes der ikke eksplicit tillader public adgang. Kombinér med CSP-header (R-01). |
 
@@ -605,7 +605,7 @@ Matrix viser risikoniveau = Sandsynlighed × Konsekvens. Risici markeret med der
 | **Høj** | 0 | — |
 | **Mellem** | 9 | R-01, R-02, R-07, R-10, R-12, R-13, R-15, R-17, R-21 (Lav-Mellem, optaget her) |
 | **Lav** | 12 | R-03, R-04, R-05, R-06, R-08, R-09, R-11, R-14, R-16, R-18, R-19, R-20 |
-| **Accepteret** | 9 | R-04, R-09, R-10, R-15, R-16, R-17 (midlertidigt), R-18, R-19, R-21 (med kompenserende foranstaltninger) |
+| **Accepteret** | 8 | R-09, R-10, R-15, R-16, R-17 (midlertidigt), R-18, R-19, R-21 (med kompenserende foranstaltninger) |
 
 ---
 
@@ -615,7 +615,7 @@ Følgende risici er **accepteret** af AlphaAi Consult ApS med begrundelse — ek
 
 | Risiko ID | Accept-begrundelse |
 |---|---|
-| **R-04** (Ingen hash-chain) | 3-niveau immutability (app + DB-triggers + cascade-Restrict) vurderes som tilstrækkelig til BEK 97 Bilag 1 (uforanderlighed) — Lov om bogføring §13. Hash-chain er ikke eksplicit påkrævet af Erhvervsstyrelsen. |
+| **R-04** (Hash-chain på posteringer — udbedret) | ✅ **Udbedret (U-15, oktober 2026).** SHA-256 hash-chain implementeret på `JournalEntry` og `Transaction` via `recordHash`/`previousHash`/`hashedAt`-felter + PostgreSQL-triggers der blokerer UPDATE/DELETE på forseklede rækker + revisor-endpoint `/api/journal-entries/verify-integrity`. Se Bilag-04 afsnit 2.10. Tidligere accept-begrundelse (3-niveau immutability som tilstrækkelig) er nu suppleret med selve posteringernes hash-chain. |
 | **R-09** (Ingen CSRF-token) | SameSite=Lax + HttpOnly + Secure cookies + Next.js indbygget CSRF-beskyttelse for POST vurderes som tilstrækkelig for same-origin SPA-arkitektur. |
 | **R-10** (Ingen OAuth/SSO) | Email+password+TOTP er standard for SMB-markedet. SSO kan tilføjes ved enterprise-kunde-efterspørgsel. Accepteret kommercielt. |
 | **R-15** (Bank-API stubs) | Bank-integration: Tink er aktiv i produktion (real OAuth2 via Tink Link); Nordea/Danske Bank/Jyske Bank er stubs. Kunder informeres omkring hvilke banker der er aktive. AES-256-GCM-kryptering er allerede implementeret fremtidssikret for når øvrige bank-integrationer aktiveres. |
@@ -646,7 +646,7 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 | **P3 — Mellem** | R-08 (Next.js middleware) | 1-2 dage (inkl. test af alle routes) | `Bilag-08_Risikovurdering-DPIA.md` §6-7 (restrisiko Lav) |
 | **P4 — Lav** | R-12 (persondata kryptering) | 3-5 dage (komplekst pga. unikke felter) | `Bilag-08_Risikovurdering-DPIA.md` §6-7 (restrisiko Mellem) |
 
-> **Udbedrede risici (fjernet fra ovenstående plan):** R-01 (CSP, U-3), R-02 (antivirus, U-4), R-03 (key rotation, U-1), R-11 (webhook fail-closed, U-6), R-14 (timingSafeEqual, U-14), R-19 + R-20 (Socket.IO auth, U-5). Se §5 for reststatus.
+> **Udbedrede risici (fjernet fra ovenstående plan):** R-01 (CSP, U-3), R-02 (antivirus, U-4), R-03 (key rotation, U-1), R-04 (hash-chain på posteringer, U-15), R-11 (webhook fail-closed, U-6), R-14 (timingSafeEqual, U-14), R-19 + R-20 (Socket.IO auth, U-5). Se §5 for reststatus.
 
 > **Bemærkning om krydsreferencer:** Bilag 12 (`Bilag-12_Udbedringsplan.md` v3.0, 2026) er den tidssvarende udbedringsplan der dækker **alle 21 risici** (R-01…R-21) fra denne risikovurdering samt de 5 oprindelige compliance-punkter fra april 2026. Hver risiko er klassificeret i Kategori A (skal udbedres før indsendelse), Kategori B (indsendes med åbenhed, udbedres efter tidsplan) eller Kategori C (accepteret). Reststatus for hver risiko fremgår af §6 (restrisiko-fordeling) og §7 (accepterede risici) heri; konkret handlingsplan, ansvarlig, tidsramme og acceptkriterier fremgår af Bilag 12 §3-5.
 
@@ -685,3 +685,4 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 | **3.1** | **2026** | **AI-konsolidering (C2):** R-13 opdateret — 3 USA-AI-underbehandlere (OpenAI, OpenRouter, Anthropic) konsolideret til 1 (OpenRouter, Inc., som videresender til model-udbydere per GDPR Art. 28(4)). §1.2 scope: 15→13 integrationer. §2 kontekst: "Anthropic VLM" → "VLM via OpenRouter". §2.4 integrationstabel: 3 USA-rækker → 1. §3.1 trusselsaktører: OpenAI/Anthropic fjernet. §4.1 A9: `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` fjernet (de er OpenRouter-konfiguration). §4.2 sårbarhed 13 opdateret. §8.2 P1 R-13 afhjælpningsplan opdateret (DPA+SCC+TIA for OpenRouter, konsolideret). Restrisiko for R-13 bevaret som Mellem (DPA+SCC+TIA stadig påkrævet). Bilag A: ingen OpenAI/Anthropic-specifikke referencer at fjerne. | **AlphaAi Consult ApS — AI-konsolidering C2** |
 | **3.2** | **2026** | **Dokumentationsnøjaktighed:** RBAC permissions 18→23 i 7 kategorier (§2.2, §4.2, §4.3). SuperDev oversight nuance — admin-endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare (§2.2, §4.2, §4.3, R-08). AI-bankafstemning opdateret fra "sandbox-only" til "aktiv i produktion via OpenRouter" — §2.4 (13→12 integrationer, da z-ai-web-dev-sdk ikke er en selvstændig integration men en feature under OpenRouter); §4.2 sårbarhed #16 opdateret; R-16 omformuleret fra "sandbox-only" til "auto-match risiko" med nedjusteret risikoniveau (Lav–Mellem); R-16 flyttet fra Mellem-cell til Lav-cell i §6 risikomatrix; R-21 eksisterende afhjælpning og §7 accept opdateret — "tre advarsler + AI_CONSENT_ACCEPTED + fodnote på hver besked" erstattet af toggle-baseret aktivering (enable/disable + `dataAccessEnabled`) med audit `action: UPDATE`. | **AlphaAi Consult ApS — doc-editor G** |
 | **3.3** | **September 2026** | **Sproom-migrering:** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som e-faktura Access Point — dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1); live mod Sproom staging (https://staging.sproom.net), produktion via env-switch (https://sproom.net). §2: e-fakturering/bank-integration-tekst opdateret (Sproom; Tink aktiv — ikke "scaffolding"). §2.4 integrationstabel række 3: Storecove → Sproom (Danmark/EU). §3.1: Sproom tilføjet i underbehandler-kompromitterings-rækken. §4.1 A8: `STORECOVE_API_KEY+WEBHOOK_SECRET` → `SPROOM_API_TOKEN`+`SPROOM_WEBHOOK_PUBLIC_KEY`. §4.3 + R-11: webhook-verifikation opdateret — RSA-SHA256 (X-Signature, offentlig nøgle fra GET /api/webhooks key, `crypto.createVerify('RSA-SHA256')`) for Sproom ud over HMAC-SHA256 (Frisbii/TokenPay). Risiko ved manglende NemHandel-AP-aftale (Bilag 12 U-9) reduceret — Sproom-aftale indgået, staging aktiv, produktion via env-switch. §6: optælling rettet (Mellem 10→11) og R-21 tilføjet i risikomatrix-cell (Høj/Mellem-konsekvens). §8.2: "alle 20 risici" → "alle 21 risici". | **AlphaAi Consult ApS** |
+| **3.4** | **Oktober 2026** | **Dokumentationsnøjagtighed (Task 21-d):** R-04 (hash-chain på posteringer) opdateret fra "Ingen hash-chain — accepteret for nu" → "Udbedret (U-15, oktober 2026)" — SHA-256 hash-chain via `recordHash`/`previousHash`/`hashedAt` på `JournalEntry` og `Transaction` er nu implementeret (se Bilag-04 afsnit 2.10); R-04 fjernet fra §7 Accepterede risici (var accepteret, nu udbedret), tilføjet til §8.2 Udbedrede risici-liste; §6 Accepteret-count rettet 9→8. §1.3 — "20 risici (R-01..R-20)" rettet til "21 risici (R-01..R-21)" (indholdsfortegnelse var ikke opdateret da R-21 blev tilføjet i v3.3). Audit-tal rettet: "75+ API-routes" → 88 ruter (§4.3, R-04, R-08); "25 AuditAction-typer, 24 EntityType-typer" → 22 AuditAction-typer, 25 EntityType-typer (R-04) — faktisk `src/lib/audit.ts`. | **AlphaAi Consult ApS — doc-audit Task 21-d** |

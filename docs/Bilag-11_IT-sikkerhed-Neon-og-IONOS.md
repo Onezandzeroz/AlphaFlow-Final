@@ -4,7 +4,7 @@
 >
 > **Lovgrundlag:** Lov om bogføring (LOV nr. 700 af 24. maj 2022) §15; Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 4 — krav D5 (tredjeparts IT-sikkerhed), D6 (aftale med 3. part opbevaring), N23 (formel aftalegrundlag); GDPR Art. 28 og 32.
 >
-> **Dokument-version:** 2.2 — revideret September 2026
+> **Dokument-version:** 2.3 — revideret Oktober 2026
 >
 > **Ansvarlig:** AlphaAi Consult ApS
 
@@ -157,8 +157,6 @@ IONOS VPS fungerer som AlphaFlows **applikationsserver** og **lokal backup-lagri
 - **Applikationsserver:** Next.js (port 3000) + 5 mini-services (hermes-agent 3004, knowledge-service 3006, notification-ws 3001, scanner-service 3005, tokenpay-access 3100) + Caddy (reverse proxy/TLS) + PM2 (proces-manager).
 - **Lokal backup-lagring:** `Tenant-Backup/{companyName}/` — AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant.
 - **Fil-uploads:** `uploads/receipts/{companyId}/` + `uploads/documents/{userId}/` — ukrypteret på disk (afhænger af disk-encryption + adgangskontrol — se afsnit 9).
-
-> Note: `mini-services/pg-service` (embedded PostgreSQL 17 + pgvector) er et lokalt sandbox-hjælpeværktøj til udvikling og indgår **ikke** i produktions-setuppet — produktionsdatabasen er Neon PostgreSQL (afsnit 3).
 
 ### 4.2 Lokation
 
@@ -573,4 +571,4 @@ Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinf
 
 ---
 
-*Dette dokument opdateres årligt eller ved væsentlige ændringer i AlphaFlows infrastruktur eller udbydernes servicevilkår. Seneste revision: September 2026 (Sproom A/S har erstattet Storecove B.V. som e-faktura Access Point — udgående HTTPS-kald til Sproom samt DocumentReceived-webhook med RSA-SHA256-signaturverifikation, fail-closed i produktion; se afsnit 6).*
+*Dette dokument opdateres årligt eller ved væsentlige ændringer i AlphaFlows infrastruktur eller udbydernes servicevilkår. Seneste revision: Oktober 2026 (Task 21-d dokumentationsnøjagtighed: fjernet reference til ikke-eksisterende `mini-services/pg-service`. September 2026: Sproom A/S har erstattet Storecove B.V. som e-faktura Access Point — udgående HTTPS-kald til Sproom samt DocumentReceived-webhook med RSA-SHA256-signaturverifikation, fail-closed i produktion; se afsnit 6).*

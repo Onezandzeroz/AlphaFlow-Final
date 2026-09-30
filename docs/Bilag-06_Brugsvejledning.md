@@ -1,6 +1,6 @@
 # AlphaFlow — Brugsvejledning
 
-**Version 3.2 — September 2026**
+**Version 3.3 — Oktober 2026**
 
 > Komplet brugermanual for AlphaFlow, den danskudviklede cloud-baserede bogføringsplatform til små og mellemstore virksomheder. Udviklet af AlphaAi Consult ApS til overholdelse af Lov om bogføring (LOV nr. 700 af 24. maj 2022), BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen), BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen) og GDPR.
 
@@ -201,13 +201,13 @@ Nogle menupunkter er **feature-gated** efter dit abonnement (se afsnit 16):
 
 ### 3.2 Dashboard
 
-Dashboardet er dit finansielle kommandocenter. Det viser widgets i et **masonry-layout** (3 kolonner på stor desktop, 2 på tablet, 1 på mobil). Widgets er organiseret i 3 sektioner med i alt **27 widgets**:
+Dashboardet er dit finansielle kommandocenter. Det viser widgets i et **masonry-layout** (3 kolonner på stor desktop, 2 på tablet, 1 på mobil). Widgets er organiseret i 3 sektioner med i alt **29 widgets** (`DASHBOARD_WIDGETS`-kataloget i `src/lib/dashboard-widget-definitions.ts`):
 
 | Sektion | Antal | Indhold |
 |---------|-------|---------|
-| **Indikatorer** | 12 | Omsætning, Driftsresultat, Udgående/Indgående moms, Likviditetsoversigt, Resultat & Likviditet, Omsætnings-/Udgifts-/Nettoprofit-ændring, Økonomisk Sundhed, Hurtige Handlinger |
+| **Indikatorer** | 11 | Omsætning, Driftsresultat, Udgående/Indgående moms, Likviditetsoversigt, Resultat & Likviditet, Omsætnings-/Udgifts-/Nettoprofit-ændring, Økonomisk Sundhed, Hurtige Handlinger |
 | **Diagrammer** | 7 | Indtægter vs Omkostninger, Netto resultat pr. måned, Resultatopgørelse (vandfald), Likviditetsprognose, Omsætning vs Omkostninger (detaljeret), Udgiftsanalyse, Projektresultat |
-| **Detaljer** | 8 | Seneste aktivitet, Mest aktive konti, Fakturaoversigt, Budget vs faktisk, Seneste journalposter, SAF-T eksport, AI-kategorisering, Aktive projekter |
+| **Detaljer** | 11 | Seneste aktivitet, Mest aktive konti, Fakturaoversigt, Alle posteringer, Gentagende posteringer, Budget vs faktisk, Seneste journalposter, SAF-T eksport, AI-kategorisering, Økonomisk Sundhed (detalje), Aktive projekter |
 
 **Tilpasning af layout:**
 
@@ -273,6 +273,22 @@ Klik på klokke-ikonet i sidebjælken for at åbne notifikationscenteret. Her se
 - Seneste journalposter
 
 Klik på **Markér alle som læst** for at rydde listen.
+
+#### Realtids-toast ved modtagelse af e-faktura
+
+Når en e-faktura modtages via Sprooms DocumentReceived-webhook, vises der automatisk en **rich toast-notifikation** (`EInvoiceToast`-komponenten) øverst til højre i skærmen. Toasten viser:
+
+- Leverandørens navn (fra XML'ens SellerParty)
+- Fakturanummer (fra XML'ens InvoiceNumber)
+- Beløb (med valuta)
+- Dokumenttype (Peppol BIS 3.0, OIOUBL 2.1 eller kreditnota type 381)
+- Et ikon der dybdekæder til den modtagne faktura i E-faktura Indbakken
+
+Toasten forsvinder automatisk efter 8 sekunder, men kan også lukkes manuelt. Hvis brugeren klikker på toasten, åbnes faktura-preview-dialogen direkte.
+
+Denne funktion kræver, at **notification-ws-service** kører (port 3001) — den samme Socket.IO-service, der håndterer realtidssynkronisering (afsnit 3.8). Webhooken sender en `EINVOICE_EVENT`-besked til servicen, som udsender en `einvoice-event` socket-besked til alle klienter i virksomhedens rum. Frontend-komponenten `EInvoiceEventNotifier` lytter på denne socket-besked og renderer `EInvoiceToast`.
+
+> **Begrænsning:** Toasten kræver, at `HERMES_ADMIN_KEY` er sat (samme nøgle bruges til admin-API for notification-ws-service). Hvis servicen ikke kører, håndteres e-fakturaen stadig korrekt i backend'en (den vises i indbakken ved næste side-genindlæsning), men brugeren får ikke den øjeblikkelige toast.
 
 ### 3.8 Realtidssynkronisering
 
@@ -423,7 +439,7 @@ Gå til **Kontoplan** i sidebjælken (`/accounts`) for at se, oprette, redigere 
 - Søgning, type-filter, collapsible grupper.
 - Opret/rediger/slet-konti (med write-access-guard — systemkonti kan kun deaktiveres, ikke slettes).
 - **VATMappingPanel** — interne momskoder → offentlige SKAT-koder.
-- **StandardMappingPanel** — kobler dine konti til FSR-standardkonti (til SAF-T eksport).
+- **StandardMappingPanel** — kobler dine konti til FSR-standardkonti (til SAF-T eksport). Panelet bruger nu en **søgbar `StandardAccountCombobox`** (Popover + Command/cmdk) med alle 652 standardkonti (603 officielle 2026 Standardkontoplan + 69 legacy, hvoraf 20 er fælles → 652 unikke), type-badges pr. konto og et fritekstsøgefelt (kontonummer eller navn). Se afsnit 5.1.2 for detaljer om combobox og det AI-assisterede auto-map-flow.
 - **PostingGuideAssistant** — søgbar dansk konteringsvejledning.
 
 #### 5.1.1 Bogføringsguide og konteringsvejledning (PostingGuideAssistant)
@@ -471,7 +487,9 @@ Videnbasen er baseret på Bogføringsloven (Lov nr. 700 af 24. maj 2022) og stan
 
 Systemet indeholder to typer af konteringsvejledning, der tilsammen opfylder kravet:
 
-**1. Indbygget konteringsvejledning i standardkontoplanen.** Den Fællesoffentlige Standardkontoplan (`PUBLIC_STANDARD_CHART` i `src/lib/standard-chart-of-accounts.ts`) er Erhvervsstyrelsens officielle standardkontoplan (til brug for SAF-T-indberetning). Hver standardkonto har et indbygget `description`-felt (på dansk) samt et engelsk navn (`nameEn`) og forslag til tilsvarende FSR-konti (`suggestedFSR`). Eksempelvis er konto `5610 — Momsgæld til Skattestyrelsen` beskrevet som *"Skyldig udgående moms til Skattestyrelsen (netto)"*. Standardkontoplanen omfatter konti fordelt på driftsomkostninger (0xxx), driftsindtægter (1xxx), varelager/vareforbrug (2xxx), aktiver (3xxx), gæld (4xxx), egenkapital (5xxx), finansielle poster (6xxx), skat og moms (7xxx), årsafslutning (8xxx) og statistiske konti (9xxx).
+**1. Indbygget konteringsvejledning i standardkontoplanen.** Den Fællesoffentlige Standardkontoplan er repræsenteret af to konstanter i AlphaFlow: `PUBLIC_STANDARD_CHART` (69 legacy-konti med 0xxx–9xxx-nummerering) og `OFFICIAL_STANDARD_CHART` (603 konti — 21 hovedkonto + 97 gruppekonto + 485 underkonti fra Erhvervsstyrelsens officielle 2026 Standardkontoplan-JSON) i henholdsvis `src/lib/standard-chart-of-accounts.ts` og `src/lib/official-standard-chart.ts`. `OFFICIAL_STANDARD_CHART` er den primære kilde i mapping-UI'et og auto-mapping, mens `PUBLIC_STANDARD_CHART` stadig indgår som supplement (så legacy-virksomheder kan vælge gamle 0xxx-konti, der ikke findes i 2026-planen). Hver standardkonto har et indbygget `description`-felt (på dansk) samt et engelsk navn (`nameEn`) og forslag til tilsvarende FSR-konti (`suggestedFSR`). Eksempelvis er konto `5610 — Momsgæld til Skattestyrelsen` beskrevet som *"Skyldig udgående moms til Skattestyrelsen (netto)"*. Standardkontoplanen omfatter konti fordelt på driftsomkostninger (0xxx), driftsindtægter (1xxx), varelager/vareforbrug (2xxx), aktiver (3xxx), gæld (4xxx), egenkapital (5xxx), finansielle poster (6xxx), skat og moms (7xxx), årsafslutning (8xxx) og statistiske konti (9xxx).
+
+Auto-mapping har nu 4 faser: (0) hårdkodet FSR-til-officiel mapping-tabel (`FSR_TO_OFFICIAL_MAPPING` i `src/lib/fsr-official-mapping.ts` — dækker alle 64 standard AlphaFlow-konti, 100 % valideret mod `OFFICIAL_STANDARD_CHART`), (1) `suggestStandardMapping()` med validering (afviser forældede 0xxx-numre), (2) type-/gruppe-heuristikker for tilpassede konti og (3) LLM-assisteret semantisk mapping via Hermes/OpenRouter (`buildAiMapping()` i `src/lib/ai-standard-mapping.ts`) for konti, som heuristikken ikke kan placere. LLM-mappede konti markeres i UI'et med et lilla **AI**-badge (med `Sparkles`-ikon), mens heuristisk-mappede konti viser et gråt **Auto**-badge. Se detaljer i afsnit 5.1.2.
 
 **2. Links til officielle 3.-partskilder.** PostingGuideAssistant-komponenten indeholder en konstant `SKAT_REFERENCES` med direkte links til de officielle danske konteringsvejledninger. Links vises i et dedikeret kort mærket *"Officiel konteringsvejledning (3. part)"* med `ExternalLink`-ikoner, og åbner i en ny fane (`target="_blank"`, `rel="noopener noreferrer"`):
 
@@ -486,7 +504,12 @@ Systemet indeholder to typer af konteringsvejledning, der tilsammen opfylder kra
 > *(Vil blive indsat ved produktionsgennemgang — viser kortet med de fire officielle referencelinks)*
 
 **Filreferencer:**
-- Standardkontoplan med indbyggede beskrivelser: `src/lib/standard-chart-of-accounts.ts` (konstanten `PUBLIC_STANDARD_CHART`, type `StandardAccount`).
+- Legacy standardkontoplan med indbyggede beskrivelser: `src/lib/standard-chart-of-accounts.ts` (konstanten `PUBLIC_STANDARD_CHART`, type `StandardAccount`, og `buildAutoMapping()` med 4-fase pipeline).
+- Officiel 2026 Standardkontoplan (603 konti): `src/lib/official-standard-chart.ts` (konstanten `OFFICIAL_STANDARD_CHART`, genereret fra Erhvervsstyrelsens JSON).
+- Hårdkodet FSR-til-officiel mapping-tabel (64 konti): `src/lib/fsr-official-mapping.ts` (konstanterne `FSR_TO_OFFICIAL_MAPPING` og `VALIDATED_MAPPING`).
+- LLM-assisteret mapping: `src/lib/ai-standard-mapping.ts` (funktionen `buildAiMapping()` — OpenRouter/Hermes, validering mod `OFFICIAL_STANDARD_CHART`, max 80 konti pr. kald).
+- Søgbar combobox + type-badges: `src/components/chart-of-accounts/standard-account-combobox.tsx` og `src/components/chart-of-accounts/standard-mapping-data.ts` (flettet `MERGED_STANDARD_CHART` — 652 konti).
+- Auto-map-API: `src/app/api/accounts/standard-mapping/auto/route.ts` (kører 2 faser — heuristik + LLM — og returnerer `heuristicMapped`, `aiMapped`, `usedLlm` og per-konto LLM-begrundelse).
 - 3.-partslinks: `src/components/chart-of-accounts/posting-guide-assistant.tsx` (konstanten `SKAT_REFERENCES`).
 
 ##### c) Brugerdefineret konteringsvejledning pr. konto (Bilag 2, 5, c — Krav 41)
@@ -532,8 +555,63 @@ Begge endpoints validerer tenant-ejerskab (én virksomheds brugere kan ikke ænd
 | Krav | Opfyldt via | Fil-reference |
 |------|-------------|---------------|
 | Bilag 2, 5, a — indbygget bogføringsguide/assistent | `PostingGuideAssistant`-komponenten med indbygget `POSTING_RULES`-videnbase (4 kategorier, 12 standardregler) og søgefunktion | `src/components/chart-of-accounts/posting-guide-assistant.tsx` |
-| Bilag 2, 5, b — konteringsvejledning / link til 3. part | `PUBLIC_STANDARD_CHART` (indbyggede kontobeskrivelser) + `SKAT_REFERENCES` med 4 officielle links (Retsinformation, SKAT, Økonomistyrelsen) | `src/lib/standard-chart-of-accounts.ts`, `src/components/chart-of-accounts/posting-guide-assistant.tsx` |
+| Bilag 2, 5, b — konteringsvejledning / link til 3. part | `PUBLIC_STANDARD_CHART` (69 legacy-konti) + `OFFICIAL_STANDARD_CHART` (603 officielle 2026-konti) med indbyggede kontobeskrivelser + `SKAT_REFERENCES` med 4 officielle links (Retsinformation, SKAT, Økonomistyrelsen) | `src/lib/standard-chart-of-accounts.ts`, `src/lib/official-standard-chart.ts`, `src/components/chart-of-accounts/posting-guide-assistant.tsx` |
 | Bilag 2, 5, c — egen konteringsvejledning pr. konto | `Account.postingGuide`-kolonnen (Prisma) + Textarea-editor i konto-dialogen + PUT-endpoints med tenant-guard og audit-log | `prisma/schema.prisma`, `src/components/chart-of-accounts/chart-of-accounts-page.tsx`, `src/app/api/accounts/[id]/route.ts`, `src/app/api/accounts/posting-guide/route.ts` |
+
+#### 5.1.2 Standardkonto-mapping (StandardMappingPanel)
+
+Fanen **Standard mapping** i Kontoplan-siden (`StandardMappingPanel` i `src/components/chart-of-accounts/standard-mapping-panel.tsx`) lader dig koble virksomhedens egne FSR-konti til Erhvervsstyrelsens Fællesoffentlige Standardkontoplan, så konti kan eksporteres korrekt til SAF-T. Panelet viser en tabel med alle virksomhedens konti og deres nuværende standardkonto-mapping, med filter (Alle / Auto / AI / Manuel / Ikke-mappet), et søgefelt og en knap **Auto-map**.
+
+##### a) Søgbar StandardAccountCombobox med type-badges
+
+Tidligere var standardkonto-valget en almindelig `<Select>`-dropdown, men med 652 konti var det upraktisk at scrolle gennem listen. Panelet bruger nu en **søgbar `StandardAccountCombobox`** (`src/components/chart-of-accounts/standard-account-combobox.tsx`) baseret på shadcn's Popover + Command (cmdk) pattern:
+
+- **Fritekstsøgefelt** — skriv enten et kontonummer (f.eks. `1010`) eller en del af kontonavnet (f.eks. `salg`, `bank`, `husleje`), og combobox'en filtrerer listen live (case-insensitiv fuzzy matching via cmdk).
+- **To grupper i dropdownen:** "Ingen mapping" (rød gruppe øverst, til afmapping) og "Standardkontoplan (652)" (alle 652 konti sorteret numerisk).
+- **Type-badges** pr. konto — hver linje i dropdownen viser et lille farvet badge til højre med kontotype:
+
+  | Type | Badge-farve | Label (DA/EN) |
+  |------|-------------|----------------|
+  | EXPENSE | rød | Omkostning / Expense |
+  | REVENUE | grøn | Indtægt / Revenue |
+  | INVENTORY | lilla | Varelager / Inventory |
+  | ASSET | teal/cyan | Aktiv / Asset |
+  | LIABILITY | amber | Gæld / Liability |
+  | EQUITY | emerald | Egenkapital / Equity |
+  | FINANCIAL | blå | Finansielt / Financial |
+  | TAX | orange | Skat/moms / Tax/VAT |
+  | YEAR_END | grå | Årsafslutning / Year-end |
+  | STATISTICAL | pink | Statistik / Statistical |
+
+  Farverne matcher paletten i kontoplan-siden (`chart-of-accounts-page.tsx`) for visuel konsistens. Badget vises både i dropdown-listen og på trigger-knappen, så den valgte kontos type er synlig uden at åbne dropdownen.
+
+- **Trigger-knap** viser den valgte konto på formen `1010 — Salg af varer og ydelser [Indtægt]`. Hvis ingen konto er valgt, vises pladsholderen *"Vælg standardkonto…"*.
+
+Datagrundlaget er `MERGED_STANDARD_CHART` i `src/components/chart-of-accounts/standard-mapping-data.ts`, som fletter `OFFICIAL_STANDARD_CHART` (603 konti fra Erhvervsstyrelsens 2026 JSON) med `PUBLIC_STANDARD_CHART` (69 legacy-konti), de-deduplikerer efter kontonummer og sorterer numerisk — i alt 652 konti.
+
+##### b) Auto-map med 4 faser (inkl. AI)
+
+Klik på **Auto-map** for at lade systemet foreslå mapping for alle umappede konti. Auto-mappingen er implementeret i `buildAutoMapping()` (`src/lib/standard-chart-of-accounts.ts`) og API-ruten `/api/accounts/standard-mapping/auto` (`src/app/api/accounts/standard-mapping/auto/route.ts`) med 4 faser:
+
+| Fase | Metode | Beskrivelse |
+|------|--------|-------------|
+| 0 | Hårdkodet FSR-mapping | `FSR_TO_OFFICIAL_MAPPING` i `src/lib/fsr-official-mapping.ts` dækker alle 64 standard AlphaFlow-konti med korrekte 2026-numre (Bankkonto → 6480, Salg af varer → 1010, Varekøb → 1610, Lønninger → 2842, Husleje → 2030 osv.). 100 % valideret mod `OFFICIAL_STANDARD_CHART`. |
+| 1 | `suggestStandardMapping()` med validering | Foreslår mapping baseret på type/gruppe og kontonavn. Afviser forældede 0xxx-numre, der ikke findes i 2026-planen. |
+| 2 | Type-/gruppe-heuristikker | For tilpassede konti, der ikke er i FSR-tabellen: vælger en standardkonto ud fra kontotype (f.eks. ASSET → 6010 Anlægsaktiv, LIABILITY → 7330 Gæld til banker). |
+| 3 | LLM (Hermes/OpenRouter) | For konti, som heuristikken ikke kan placere: sender kontonavn + type + den fulde 603-konti officielle kontoplan som kontekst til Hermes-LLM'et, der semantisk forstår kontonavnet og foreslår den rette 2026-standardkonto. Maksimalt 80 konti pr. LLM-kald (token-sikkerhed). Hvert LLM-forslag valideres mod `OFFICIAL_STANDARD_CHART` — ukendte numre afvises. |
+
+**Status-badges i UI'et efter auto-map:**
+
+- **Auto** (gråt badge) — heuristisk-mappet (fase 0, 1 eller 2)
+- **AI** (lilla badge med `Sparkles`-ikon) — LLM-mappet (fase 3)
+- **Manuel** (gråt badge) — bruger-redigeret mapping
+- **Ikke-mappet** (rød tekst) — konto uden mapping (typisk custom-konti uden LLM-forslag)
+
+Per-konto LLM-begrundelse logges i audit-loggen (feltet `reason`), så det kan efterprøves af revisor. Hvis `OPENROUTER_API_KEY` ikke er sat, eller LLM-kaldet fejler (rate-limit, netværk), falder systemet graceful tilbage til heuristik-only — brugeren får stadig et brugbart resultat.
+
+##### c) Manuelt override og gem
+
+Uanset om en konto er auto-mappet eller AI-mappet, kan du altid klikke på combobox'en og vælge en anden konto manuelt. Klik på **Gem ændringer** for at persistere alle ændringer (med audit-log via `auditUpdate`).
 
 ### 5.2 Finansjournal (dobbelt bogføring)
 
@@ -765,6 +843,8 @@ Fra faktura-preview-dialogen klik på **Send e-faktura** (`SendEInvoiceDialog`):
 2. Har kunden et CVR-nummer, udfører systemet automatisk et pre-flight tjek af, at modtageren er tilmeldt netværket (participant-opslag via Sproom).
 3. Klik på **Send**.
 
+> **Kanal-validering (v3.3):** API'et (`/api/invoices/[id]/send-einvoice/route.ts`) accepterer nu både korte aliases og fulde enum-værdier for afsendelseskanalen. Tidligere blev den korte værdi `PEPPOL` afvist med fejlen *"Ugyldig kanal"*, fordi API'et kun accepterede den fulde enum-værdi `PEPPOL_BIS` (og tilsvarende `NEMHANDEL_OIOUBL`). Normaliseringsfunktionen `normalizeChannelToEnum()` (i `src/app/api/invoices/[id]/send-einvoice/route.ts`) mapper nu aliases til canonical enum-værdier: `OIOUBL → NEMHANDEL_OIOUBL`, `PEPPOL → PEPPOL_BIS` (case-insensitiv). Det betyder, at **Sproom (Peppol)**-kanalen i dropdownen nu virker korrekt. Gyldige kanal-værdier: `NEMHANDEL_OIOUBL`, `PEPPOL_BIS`, `STORECOVE` (legacy enum, der fungerer som alias for Sproom) — eller aliases `OIOUBL`, `PEPPOL`.
+
 Fakturaen konverteres til OIOUBL- eller Peppol BIS-XML (kreditnotaer som type 381 med reference til den oprindelige faktura) og sendes som rå XML til AlphaFlows integrerede Access Point **Sproom** (dansk selskab), som videresender i det valgte format. Sproom håndterer som Access Point den tekniske distribution: NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag samt schema/schematron-validering og MLR/AR-svar (Message Level Response/Application Response).
 
 Leveringsstatus spores pr. dokument i `EInvoiceSending`-tabellen (kanal, format, status, retry-count, messageId) med en komplet, append-only statushistorik (`EInvoiceSendEvent`). Status opdateres i realtid via Sprooms webhooks, og en outbox-poller (hver 10. minut) fungerer som sikkerhedsnet med automatisk genforsøg af fejlede afsendelser. Se leveringsstatusser i afsnit 6.5.
@@ -803,6 +883,38 @@ Under **Køb & Kvittering → E-faktura Indbakke** (`EInvoiceInbox`) ser du modt
 E-fakturaer modtages automatisk via Sprooms DocumentReceived-webhook, og en indbakke-poller (hver 5. minut) fungerer som sikkerhedsnet, så ingen dokumenter går tabt. Statusforløbet for en modtaget faktura er `RECEIVED → APPROVED/REJECTED → POSTED → SETTLED` (afregnet via bankafstemning).
 
 Systemet registrerer automatisk formatet (OIOUBL eller Peppol BIS) baseret på CustomizationID og ProfileID i XML-filen.
+
+#### 6.6.1 Købsfakturaer (bogførte e-fakturaer) og "Vis XML"
+
+Når en modtaget e-faktura er **bogført** (status `POSTED`), flyttes den automatisk fra E-faktura Indbakke til fanen **Købsfakturaer** på Posteringer-siden (`/transactions`). Listen renderer via komponenten `PostedEInvoicesList` (`src/components/invoices/posted-einvoices-list.tsx`) og viser:
+
+- Fakturanummer, leverandør, bogføringsdato, beløb
+- Status-badge (`POSTED` / `SETTLED`)
+- **Vis XML**-knap pr. faktura
+
+Klik på **Vis XML** åbner en dialog med to faner:
+
+| Fane | Indhold | Kilde |
+|------|---------|-------|
+| **Rå XML** | Den oprindelige XML, der blev modtaget fra Sproom — dvs. den ubehandlede Peppol BIS 3.0- eller OIOUBL 2.1-faktura, som afsenderen sendte. Anvendes til fejlfinding og afstemning. | `EInvoiceReceived.rawXml` (gemt ved modtagelse fra Sprooms DocumentReceived-webhook) |
+| **Svar XML** | Den XML, AlphaFlow genererede som svar ved bogføringen. For Peppol BIS-fakturaer er det en **InvoiceResponse** (UBL 2.1, namespace `urn:oasis:names:specification:ubl:schema:xsd:InvoiceResponse-2.1`) med per-line response codes. For OIOUBL-fakturaer genereres en **Application Response**, og for MLR (Message Level Response) genereres et MESSAGE_LEVEL_RESPONSE-dokument. | Genereret af `generateInvoiceResponse()` i `src/lib/einvoice-response.ts` (linje 193–282), kaldet fra API-ruten `/api/invoices/received/[id]` (linje 510–526) ved bogføring. |
+
+Svar XML'et har et badge der viser dokumenttypen: `INVOICE_RESPONSE` (Peppol BIS), `APPLICATION_RESPONSE` (OIOUBL) eller `MESSAGE_LEVEL_RESPONSE` (MLR) — dette gør det nemt at se, hvilken responsstandard der blev sendt tilbage til afsenderen.
+
+#### 6.6.2 InvoiceResponse ved bogføring (Peppol BIS)
+
+Når en Peppol BIS-faktura bogføres i AlphaFlow, genereres automatisk en **InvoiceResponse**-XML (UBL 2.1) og sendes tilbage til afsenderen via Sproom. Hver fakturalinje får en per-line response code:
+
+- **OK-respons** pr. linje med beskrivelsen *"Posted to journal: {kontonavn}"* — hvor `{kontonavn}` er navnet på den FSR-konto, linjen er blevet bogført på (f.eks. *"Posted to journal: Varekøb"*).
+- Dette giver afsenderen præcis viden om, hvilke fakturalinjer der er accepteret og bogført, og hvilken konto de er landet på.
+
+InvoiceResponse'en genereres af `generateInvoiceResponse()` i `src/lib/einvoice-response.ts` (linje 193–282) og kaldes fra bogførings-API-ruten `/api/invoices/received/[id]` (linje 510–526). Den rå XML gemmes på fakturaen og kan ses via "Vis XML"-knappen (se afsnit 6.6.1).
+
+> **Bemærkning:** For OIOUBL 2.1-fakturaer genereres en tilsvarende Application Response (samme struktur, andet namespace), og for MLR-svar genereres et MESSAGE_LEVEL_RESPONSE-dokument. Type-badgeet i "Vis XML"-dialogen viser, hvilken responsstandard der blev brugt.
+
+#### 6.6.3 Toast-notifikation ved modtagelse
+
+Når en e-faktura modtages via Sproom-webhooken, vises der automatisk en **rich toast-notifikation** (`EInvoiceToast`) med leverandørnavn, fakturanummer, beløb og dokumenttype. Se afsnit 3.7 for detaljer om toasten og kravene til notification-ws-service.
 
 ### 6.7 Tilbagevendende fakturaer?
 
@@ -1102,7 +1214,7 @@ Scoren vises med farvekoder: 🟢 God, 🟡 Advarsel, 🔴 Kritisk.
 
 ### 10.8 SAF-T eksport
 
-SAF-T (Standard Audit File for Tax) — Dansk Finansskema v1.0 — er et standardiseret XML-format, som Erhvervsstyrelsen og Skattestyrelsen kan kræve udleveret ved skattekontrol.
+SAF-T (Standard Audit File for Tax) — Dansk Finansskema v2.1 — er et standardiseret XML-format, som Erhvervsstyrelsen og Skattestyrelsen kan kræve udleveret ved skattekontrol.
 
 1. Gå til **Eksport** i sidebjælken (`/exports`).
 2. Vælg **SAF-T eksport**.
@@ -1110,7 +1222,7 @@ SAF-T (Standard Audit File for Tax) — Dansk Finansskema v1.0 — er et standar
 4. Klik på **Generér SAF-T**.
 5. Download XML-filen.
 
-Systemet validerer filen før eksport (obligatoriske felter, CVR-format, landekode DK, version 1.0, momssatser).
+Systemet validerer filen før eksport (obligatoriske felter, CVR-format, landekode DK, version 2.1, momssatser) via `src/lib/saft-validator.ts` mod `public/schemas/Danish_SAF-T_Financial_Schema_v_2_1.xsd`.
 
 > **Krav:** Dataeksport (SAF-T) kræver `DATA_EXPORT`-feature (Månedlig+).
 
@@ -1438,7 +1550,7 @@ Gå til **Eksport** i sidebjælken (`/exports`) for at få adgang til alle ekspo
 
 | Eksport-type | Format | Beskrivelse |
 |--------------|--------|-------------|
-| SAF-T | XML (Dansk Finansskema v1.0) | Komplet regnskab til Skat/Erhvervsstyrelse |
+| SAF-T | XML (Dansk Finansskema v2.1) | Komplet regnskab til Skat/Erhvervsstyrelse |
 | Posteringer | CSV | Alle transaktioner i regnearksformat |
 | Rapporter | PDF | Resultatopgørelse / balance |
 | OIOUBL | XML | E-fakturaer som OIOUBL 2.1-XML pr. faktura (manuel download/upload) |
@@ -1499,7 +1611,7 @@ AlphaFlow overholder GDPR via:
 
 ## 16. Indstillinger
 
-Gå til **Indstillinger** i sidebjælken (`/settings`). SettingsPage er en tab-baseret side med 8 tabs.
+Gå til **Indstillinger** i sidebjælken (`/settings`). SettingsPage er en tab-baseret side med 7 standard-faneblade (Virksomhed, Team, E-faktura, Standarder, Appearance, Adgang, Hermes AI) samt 2 betingede faneblade, der kun vises for SuperDev/AlphaAi-brugere (Systemmeddelelser og Tilsyn) — i alt op til 9 faneblade.
 
 ### 16.1 Virksomhedsprofil
 
@@ -1719,7 +1831,7 @@ AlphaFlow fører en uforanderlig (immutable) audit-log over alle væsentlige han
 2. **Database-niveau:** PostgreSQL BEFORE UPDATE/DELETE triggere blokerer mutationer.
 3. **Cascade-niveau:** `onDelete: Restrict` forhindrer sletning af refercerede rækker.
 
-Dette opfylder Bogføringslovens krav om uigendrkelig dokumentation (§10-12). Audit-loggen indeholder 25 forskellige AuditAction-typer, og 75+ API-routes logger automatisk.
+Dette opfylder Bogføringslovens krav om uigendrkelig dokumentation (§10-12). Audit-loggen indeholder 22 forskellige AuditAction-typer (defineret i `src/lib/audit.ts`), og 88 API-ruter logger automatisk via `auditCreate` / `auditUpdate` / `auditCancel` / `auditLog` / `auditAuth` / `auditDeleteAttempt`.
 
 ### 17.2 SuperDev oversight-mode
 
@@ -1845,6 +1957,7 @@ Disse begrænsninger er anført for at hjælpe dig med at vurdere, om AlphaFlow 
 
 | Version | Dato | Væsentlige ændringer |
 |---------|------|----------------------|
+| 3.3 | Oktober 2026 | **AI-assisteret standardkonto-mapping + e-faktura-forbedringer:** StandardMappingPanel bruger nu en **søgbar `StandardAccountCombobox`** (Popover + cmdk) med alle 652 standardkonti (603 officielle 2026 Standardkontoplan + 69 legacy, hvoraf 20 er fælles → 652 unikke) og farvede type-badges pr. konto (EXPENSE=Omkostning/rød, REVENUE=Indtægt/grøn, ASSET=Aktiv/teal, LIABILITY=Gæld/amber, EQUITY/INVENTORY/FINANCIAL/TAX/YEAR_END/STATISTICAL). Auto-map har nu 4 faser: (0) hårdkodet FSR-til-officiel mapping-tabel (64 konti, 100 % valideret mod `OFFICIAL_STANDARD_CHART`), (1) `suggestStandardMapping()` med validering, (2) type-/gruppe-heuristikker og (3) LLM via Hermes/OpenRouter for semantisk mapping. LLM-mappede konti markeres med lilla **AI**-badge, heuristisk-mappede med gråt **Auto**-badge. Bogførte e-fakturaer flyttes til ny fane **Købsfakturaer** på Posteringer-siden med en **Vis XML**-knap, der viser både rå modtaget XML og genereret svar XML (InvoiceResponse for Peppol BIS, Application Response for OIOUBL, MLR for Message Level Response) med type-badge. Ved bogføring af Peppol BIS-fakturaer genereres nu en **InvoiceResponse** (UBL 2.1, InvoiceResponse-2.1 namespace) med per-line OK-respons og beskrivelsen *"Posted to journal: {kontonavn}"* — så afsenderen får præcis viden om accepterede fakturalinjer. Ny rich **toast-notifikation** (`EInvoiceToast`) ved modtagelse af e-faktura via Sproom-webhook (kræver notification-ws-service på port 3001 og `HERMES_ADMIN_KEY`). Kanal-validering fix: API'et accepterer nu både korte aliases (`PEPPOL`, `OIOUBL`) og fulde enum-værdier (`PEPPOL_BIS`, `NEMHANDEL_OIOUBL`) — "Sproom (Peppol)"-kanalen virker nu korrekt (tidligere afvist med "Ugyldig kanal"). Legacy Storecove-kode (klient + 5 `/api/storecove/`-ruter) er fuldt fjernet — Sproom er nu eneste Access Point. |
 | 3.2 | September 2026 | **Sproom-migrering:** Sproom (dansk selskab, sproom.net) har erstattet Storecove som AlphaFlows eneste e-invoicing Access Point og dækker begge netværk — NemHandel (OIOUBL 2.1) og Peppol (BIS Billing 3.0). Automatisk Sproom-tilmelding pr. virksomhed (child company + registrering i begge netværk), afsendelse som rå XML, udvidet leveringsstatus pr. dokument (inkl. IN_TRANSIT, PENDING_APPROVAL, REJECTED, PAID) med fuld statushistorik og auto-retry, samt godkend/afvis i e-faktura-indbakken med Application Response tilbage til afsenderen. Afsendelse via Sproom kræver nu et betalende abonnement (alle betalende planer — tidligere Business+). Tilføjet månedlige forbrugskvoter (e-faktura 10/30/50/100/150; Hermes 0/0/200/500/1.000) med tilkøbspakker. Tink beskrevet som reel bankintegration (Tink Link-flow). |
 | 3.1 | 2026 | Forrige udgave — e-fakturering beskrevet med Storecove som aktivt Access Point. |
 

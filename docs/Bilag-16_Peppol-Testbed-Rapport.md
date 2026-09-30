@@ -267,11 +267,13 @@ verificeret mod Peppol TEST-netværket (Sproom staging).
    køre hver 10. min med auto-retry; inbox-polleren køre hver 5. min som
    safety-net.
 
-*Bemærk:* `X-Sproom-DocumentId` (GUID) regenereres pr. kørsel — nye kørsler
+* Bemærk:* `X-Sproom-DocumentId` (GUID) regenereres pr. kørsel — nye kørsler
 giver et nyt ID, mens valideringsresultatet (23+ kontroller) er deterministisk.
 Det tidligere Storecove-baserede test-script (`scripts/peppol-testbed-report.ts`)
-er supersederet legacy og anvendes ikke længere. Se Bilag 4 (Compliance-rapport)
-afsnit 2.1 og Bilag 6 (Brugsvejledning) afsnit 6.4 for fuld dokumentation.
+er **slettet** fra kodebasen (oktober 2026) — det refererede til den nu slettede
+`src/lib/storecove-client.ts`. Den aktuelle Peppol-test køres via Sproom-klienten.
+Se Bilag 4 (Compliance-rapport) afsnit 2.1 og Bilag 6 (Brugsvejledning) afsnit 6.4
+for fuld dokumentation.
 
 ---
 

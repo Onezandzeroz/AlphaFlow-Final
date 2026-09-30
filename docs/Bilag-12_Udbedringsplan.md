@@ -1,8 +1,8 @@
 # AlphaFlow — Udbedringsplan før indsendelse
 
 **AlphaAi Consult ApS** (CVR 46312058)
-**Dokumentversion:** 3.7
-**Dato:** September 2026
+**Dokumentversion:** 3.8
+**Dato:** Oktober 2026
 **Bilag 12 i anmeldelsespakken
 **Ansvarlig:** Jess Martin Christoffersen, Direktør
 
@@ -32,7 +32,6 @@ Tiltagene er inddelt i tre kategorier:
 | U-11 | Central Next.js middleware opsættes | B | BEK 97 §8 stk. 4 (D2) |
 | U-12 | Account-lockout ved gentagne fejlede login-forsøg | B | BEK 97 §8 stk. 4 (D2) |
 | U-13 | Password min. længde opjusteres | B | BEK 97 §8 stk. 4 (D2) |
-| U-15 | Eventuel hash-chain på posteringer — afhænger af Erhvervsstyrelsens fortolkning | B | BEK 97 Bilag 1 / Lov om bogføring §13 |
 | U-16 | Udvidet kryptering af persondata i DB | B | GDPR Art. 32; BEK 97 §8 stk. 4 (D7) |
 | U-17 | Backup-scheduler adskilles fra applikationsproces | B | BEK 97 §7 |
 | U-18 | Bank-API stubs (Nordea/Danske/Jyske) — kun Tink + Demo reelle | C | BEK 97 Bilag 4 pkt 3.b — delvist |
@@ -70,7 +69,7 @@ AI-ydelser (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service V
 **Acceptkriterier:** `hasSkatCredentials()` returnerer true; test-momsangivelse successfuld.
 
 ### U-9 — NemHandel Access Point-aftale (Sproom)
-**Status:** ✅ Aftalen er indgået. Sproom (dansk selskab — Sproom A/S, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker begge netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Integrationen er færdig og live mod Sproom staging (https://staging.sproom.net) via `src/lib/sproom-client.ts` (2.646 LOC) og `/api/sproom/*`-ruterne (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Som dansk selskab behandler Sproom data i Danmark/EU — ingen SCC påkrævet. (Den tidligere planlagte Storecove B.V.-aftale er supersederet; `src/lib/storecove-client.ts` + `/api/storecove/*` findes kun som legacy-kode.)
+**Status:** ✅ Aftalen er indgået. Sproom (dansk selskab — Sproom A/S, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker begge netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Integrationen er færdig og live mod Sproom staging (https://staging.sproom.net) via `src/lib/sproom-client.ts` (2.799 LOC) og `/api/sproom/*`-ruterne (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Som dansk selskab behandler Sproom data i Danmark/EU — ingen SCC påkrævet. (Den tidligere planlagte Storecove B.V.-aftale er supersederet; `src/lib/storecove-client.ts` + `/api/storecove/*` er **fuldt slettet** fra kodebasen — oktober 2026. Backward-compat DB-felter bevares for historiske rækker.)
 
 **Resterende handling (produktionsaktivering — env-switch):**
 - Sæt `SPROOM_API_URL=https://sproom.net` + `SPROOM_API_TOKEN` i produktions-`.env` (default er staging: `https://staging.sproom.net`).
@@ -92,7 +91,6 @@ AlphaAi Consult ApS indsender med åbenheds-erklæring (Bilag 1 afsnit 8) og for
 | U-11 | Next.js middleware.ts | Central auth + tenant-isolation som tillæg til `withGuard()` | 6 måneder |
 | U-12 | Account-lockout | Lås efter 10 fejlede forsøg pr. 24t + email-notifikation | 3 måneder |
 | U-13 | Password min. 8 tegn | Hæv fra 6 til 8 (NIST 800-63B) + strength-meter | 3 måneder |
-| U-15 | Hash-chain på posteringer | Afklar med Erhvervsstyrelsen om BEK 97 Bilag 1 kræver hash-chain udover AuditLog 3-niveau; implementér hvis krævet | Efter afklaring |
 | U-16 | Persondata-kryptering i DB (hvile) | Udvidet AES-256-GCM på udvalgte felter | 6 måneder |
 | U-17 | Backup-scheduler uafhængig | Adskil fra applikationsproces til separat PM2-app/systemd/crontab | 6 måneder |
 
@@ -114,7 +112,7 @@ Følgende er bevidste arkitektoniske og produktmæssige valg med kompenserende f
 
 ## 6. Tidsplan før indsendelse
 
-Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført. U-9 (NemHandel Access Point-aftale — Sproom) er ligeledes reelt gennemført: aftalen er indgået, og integrationen er færdig og live mod Sproom staging — resterer kun produktionsaktivering (env-switch + verifikation, jf. §3). Resterende tiltag der afhænger af eksterne parter: U-2 (OpenRouter DPA) og U-8 (SKAT credentials).
+Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført. U-15 (Hash-chain på posteringer) er ligeledes implementeret (SHA-256 chain via `recordHash`/`previousHash` på `JournalEntry` og `Transaction` — se Bilag 04 afsnit 2.10). U-9 (NemHandel Access Point-aftale — Sproom) er ligeledes reelt gennemført: aftalen er indgået, og integrationen er færdig og live mod Sproom staging — resterer kun produktionsaktivering (env-switch + verifikation, jf. §3). Resterende tiltag der afhænger af eksterne parter: U-2 (OpenRouter DPA) og U-8 (SKAT credentials).
 
 | Uge | Handlinger |
 |---|---|
@@ -132,6 +130,7 @@ Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført. 
 Før indsendelse bekræftes at:
 
 - [x] Tekniske Kategori A-tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) er gennemført.
+- [x] U-15 (Hash-chain på posteringer): implementeret (SHA-256 chain via `recordHash`/`previousHash` på `JournalEntry` og `Transaction` — se Bilag 04 afsnit 2.10).
 - [x] U-9 (NemHandel Access Point-aftale — Sproom): aftale indgået; integrationen er færdig og live mod Sproom staging (Peppol BIS Billing 3.0 + NemHandel OIOUBL 2.1). Produktionsaktivering (env-switch + verifikation) udføres som del af produktionssætningen — jf. §3 U-9.
 - [x] Bilag 1 afsnit 8 (åbenhedsliste) opdateret — implementerede punkter beskrevet som features.
 - [x] Bilag 8 (Bilag-08_Risikovurdering-DPIA.md) §6 restrisiko-fordeling opdateret for implementerede risici.
@@ -164,6 +163,7 @@ Før indsendelse bekræftes at:
 | 3.5 | 2026 | Dokumentationsnøjagtighed: rettet permissions 18→23, kreditnota nu implementeret, AI-bankafstemning nu i produktion via OpenRouter, Hermes-consent beskrevet korrekt (toggle-baseret), webhook fail-closed reflekteret, CVR konsolideret til 46312058. |
 | 3.6 | 2026 | Bilagsstruktur-konsolidering: underbehandler-DPA’er samlet til Bilag 14; Tjekliste renummereret fra Bilag 19 til Bilag 3. Krydsreferencer opdateret. |
 | 3.7 | September 2026 | Sproom (DK) har erstattet Storecove (NL) som Peppol+NemHandel Access Point; U-9 opdateret (aftale indgået, staging aktiv, produktion via env-switch). |
+| 3.8 | Oktober 2026 | U-15 (hash-chain på posteringer) markeret som gennemført — SHA-256 chain via `recordHash`/`previousHash` på `JournalEntry` og `Transaction` er implementeret (se Bilag 04 afsnit 2.10); fjernet U-15 fra §2/§4-tabeller. Sproom `sproom-client.ts` LOC rettet 2.646 → 2.799 (faktisk `wc -l`). |
 
 ---
 

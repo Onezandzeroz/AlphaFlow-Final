@@ -1,8 +1,8 @@
 # AlphaFlow — TokenPay Access & Miljøvariabler-guide
 
 **Dokumenttype:** Operationsguide for TokenPay-adgangssystemet + komplet miljøvariabel-reference
-**Version:** 2.2
-**Dato:** September 2026
+**Version:** 2.3
+**Dato:** Oktober 2026
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
 **Målgruppe:** DevOps / systemadministrator (AlphaAi Consult ApS)
 
@@ -134,7 +134,7 @@ Komplet tabel over alle environment variables fra `.env.example`, kategoriseret.
 | `CVR_API_BASE_URL` | CVR API URL. | Nej | `http://distribution.virk.dk` | — |
 | `CVR_SIMULATION_MODE` | `true` = mock-data, `false` = rigtige opslag. | Nej | `false` | Sæt `false` i prod med credentials. |
 
-> **Note (Sproom — eneste e-faktura Access Point):** Sproom (dansk selskab, https://sproom.net) dækker **både** Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) — én Sproom child company pr. tenant dækker begge netværk. Aktiv klient: `src/lib/sproom-client.ts` (2.646 LOC); aktive ruter: `/api/sproom/*` (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). Dokumenter sendes som raw XML (POST /api/documents, `Content-Type: application/octet-stream`, auto-detektion af OIOUBL/BIS 3); modtagelse sker via DocumentReceived-webhook + safety-net-pollers i `instrumentation.ts` (indbakke hver 5. min, outbox hver 10. min med auto-retry). Idempotens via `X-Request-Id`; dokument-ID returneres i `X-Sproom-DocumentId` (HTTP 201); statuspolling via GET /api/documents/{id}/state. E-faktura-simulering sker **automatisk** når `SPROOM_API_TOKEN` mangler (fallback) — Sproom staging (`https://staging.sproom.net`) er default-endpoint. NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE` og `src/lib/storecove-client.ts` + `/api/storecove/*` er supersederet legacy. Platformens Sproom-abonnement: 399 kr./md. inkl. 500 transaktioner samlet på tværs af alle tenants; overforbrug 0,8 kr./transaktion.
+> **Note (Sproom — eneste e-faktura Access Point):** Sproom (dansk selskab, https://sproom.net) dækker **både** Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) — én Sproom child company pr. tenant dækker begge netværk. Aktiv klient: `src/lib/sproom-client.ts` (2.799 LOC); aktive ruter: `/api/sproom/*` (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). Dokumenter sendes som raw XML (POST /api/documents, `Content-Type: application/octet-stream`, auto-detektion af OIOUBL/BIS 3); modtagelse sker via DocumentReceived-webhook + safety-net-pollers i `instrumentation.ts` (indbakke hver 5. min, outbox hver 10. min med auto-retry). Idempotens via `X-Request-Id`; dokument-ID returneres i `X-Sproom-DocumentId` (HTTP 201); statuspolling via GET /api/documents/{id}/state. E-faktura-simulering sker **automatisk** når `SPROOM_API_TOKEN` mangler (fallback) — Sproom staging (`https://staging.sproom.net`) er default-endpoint. NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE`, `src/lib/storecove-client.ts` og `/api/storecove/*`-ruterne er **fuldt slettet** fra kodebasen (oktober 2026) — kun backward-compat DB-felter (`storecoveSubmissionId`, `storecoveConnected`, `storecoveLegalEntityId`, `storecoveApiKeyId`, `storecoveConnectedAt`) bevares for historiske rækker. Platformens Sproom-abonnement: 399 kr./md. inkl. 500 transaktioner samlet på tværs af alle tenants; overforbrug 0,8 kr./transaktion.
 
 ### 2.6 Email / SMTP
 
@@ -543,6 +543,7 @@ pm2 restart tokenpay-access
 |---|---|---|
 | 2.1 | 2026 | Konsolideret AI-integration via OpenRouter (chat-LLM + RAG-embeddings + VLM); OpenAI som valgfri alternativ embedding-udbyder. |
 | 2.2 | September 2026 | Sproom (DK) har erstattet Storecove (NL) som eneste e-faktura Access Point (Peppol + NemHandel): `SPROOM_API_URL`/`SPROOM_API_TOKEN`/`SPROOM_WEBHOOK_PUBLIC_KEY`/`SPROOM_WEBHOOK_REQUIRE_SIGNATURE`; RSA-webhook-signatur (`X-Signature`, SHA256withRSA) i stedet for HMAC; simuleringsfallback automatisk når `SPROOM_API_TOKEN` mangler. Tink-afsnit opdateret (reel integration — sandbox/produktion via credentials). |
+| 2.3 | Oktober 2026 | Dokumentationsnøjagtighed (Task 21-d): `src/lib/sproom-client.ts` LOC rettet 2.646 → 2.799 (faktisk `wc -l`). Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE`, `src/lib/storecove-client.ts` og `/api/storecove/*`-ruter omformuleret fra "supersederet legacy" → "fuldt slettet fra kodebasen (oktober 2026) — kun backward-compat DB-felter bevares for historiske rækker" — code er faktisk DELETED, ikke "superseded". |
 
 ---
 

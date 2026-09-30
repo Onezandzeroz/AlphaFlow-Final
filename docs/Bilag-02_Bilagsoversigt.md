@@ -4,7 +4,9 @@
 >
 > **Lovgrundlag:** Lov om bogføring (LOV nr. 700 af 24. maj 2022); BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen); BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen).
 >
-> **Version:** 1.5 — september 2026 · **Ansvarlig:** AlphaAi Consult ApS
+> **Version:** 1.6 — oktober 2026 · **Ansvarlig:** AlphaAi Consult ApS
+>
+> **Opdateret v1.6 (oktober 2026):** Storecove legacy-kode (`storecove-client.ts` + 5 API-ruter) er fuldt slettet fra kodebasen — Sproom er nu eneste Access Point. Standardkonto-mapping er nu AI-assisteret med 4-fase pipeline (hårdkodet FSR-mapping → validering mod officiel 2026-kontoplan → type/group-heuristikker → Hermes LLM for semantisk mapping). InvoiceResponse genereres ved bogføring af Peppol BIS-fakturaer (per-line OK-respons). Købsfakturaer viser nu "Vis XML" dialog med både rå XML og svar XML. Toast-notifikationer ved e-faktura modtagelse er nu fungerende (notification-ws-service fix). Standardkonto UI har søgbar combobox med type badges.
 >
 > **Opdateret v1.5 (september 2026):** Sproom (DK) har erstattet Storecove (NL) som Peppol- og NemHandel Access Point og indgår nu som DPA-part i Bilag 14 (i stedet for Storecove — dataforarbejdering i Danmark/EU, ingen SCC nødvendig); bilagslisten udvidet med Bilag 15 (NemHandel-demo-endepunkter) og Bilag 16 (Peppol-Testbed-Rapport via Sproom staging).
 >
@@ -66,7 +68,7 @@ Bilag 14 udgøres af de underskrevne databehandleraftaler med AlphaFlows underbe
 
 ### IONOS SE
 - **Parter:** AlphaAi Consult ApS — IONOS SE
-- **Formål:** (a) Applikationsserver (Next.js + 5 produktions-mini-services + Caddy + PM2 — den sjette mini-service, pg-service, er et sandbox-hjælpeværktøj og indgår ikke i produktions-setup); (b) lokal backup-lagring (`Tenant-Backup/`)
+- **Formål:** (a) Applikationsserver (Next.js + 5 mini-services + Caddy + PM2); (b) lokal backup-lagring (`Tenant-Backup/`)
 - **Datakategorier:** Applikationsdata i transit, uploadede filer (`uploads/`), AES-256-GCM-krypterede backup-ZIP-filer, SQLite-filer for mini-services
 - **Behandlingslokation:** EU (Tyskland) — IONOS SE
 - **DPA-status:** Underskrevet. Kilde: IONOS DPA.
@@ -137,7 +139,7 @@ Følgende integrationer findes i koden, men er **ikke aktive i produktion** og u
 |---|---|---|
 | Bank-API'er (Nordea, Danske Bank, Jyske Bank) | Stub (implementeret, ikke aktiv) | `src/lib/bank-providers.ts` — returnerer fejl. Aktivering kræver reel PSD2-aftale pr. bank + DPA. |
 | Tink (bank) | Reel implementering | Aktiv når `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET` er sat. DPA med Tink indgås før aktivering. |
-| Storecove (legacy e-faktura-Access Point) | Supersederet — inaktiv | `src/lib/storecove-client.ts` + `/api/storecove/*` er supersederet legacy-kode, bevaret for bagudkompatibilitet — al e-fakturering foregår via Sproom (`src/lib/sproom-client.ts` + aktive ruter `/api/sproom/*`). Koden er inaktiv og udveksler ingen data; den tidligere Storecove DPA er afløst af Sproom DPA i Bilag 14. |
+| Storecove (legacy e-faktura-Access Point) | **Fjernet v1.6** — slettet fra kodebasen | `src/lib/storecove-client.ts` + `/api/storecove/*` routes (5 endpoints: connect, create-legal-entity, participants, status, webhook) er **fuldt slettet** fra kodebasen (oktober 2026). Al e-fakturering foregår udelukkende via Sproom (`src/lib/sproom-client.ts` + aktive ruter `/api/sproom/*`). Backward-compat DB-felter (`storecoveSubmissionId`, `storecoveConnected` etc.) er bevaret for historiske posteringer, men al kode der refererer til Storecove som aktiv integration er fjernet. Den tidligere Storecove DPA er afløst af Sproom DPA i Bilag 14. |
 | z-ai-web-dev-sdk (legacy AI-SDK) | Sandbox-only — inaktiv | Legacy sandbox-SDK; fejler graceful i produktion. AI-bankafstemning er nu implementeret i produktion via OpenRouter (`src/lib/matching-engine.ts`) og udveksler persondata via OpenRouter (Bilag 14) — se ikke denne række for AI-bankafstemning. SDK'et selv udveksler ingen data. |
 
 > Ved aktivering af Tink eller reelle bank-API'er indgås der DPA, og bilagslisten opdateres tilsvarende. Se Bilag 12 (UDBEDRINGSPLAN) for status.

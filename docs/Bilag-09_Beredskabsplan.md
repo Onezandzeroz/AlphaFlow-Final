@@ -41,7 +41,7 @@ Planen sikrer at:
 Denne plan dækker hele AlphaFlow-platformen:
 
 - AlphaFlow-applikationen (Next.js 16) på IONOS VPS.
-- 5 mini-services i produktion (hermes-agent, knowledge-service, tokenpay-access, notification-ws, scanner-service) — herudover findes `mini-services/pg-service` (embedded PostgreSQL 17 + pgvector), der udelukkende er et sandbox-hjælpeværktøj og **ikke** er en del af produktions-setuppet.
+- 5 mini-services i produktion (hermes-agent, knowledge-service, tokenpay-access, notification-ws, scanner-service).
 - Neon PostgreSQL-database (primær DB).
 - 2 SQLite mini-DBs (`scanner.db`, `access.db`).
 - Backup-system og backup-lagring (`Tenant-Backup/`, AES-256-GCM-krypterede ZIPs).
@@ -76,7 +76,7 @@ Denne plan dækker hele AlphaFlow-platformen:
 
 ### 1.5 Relaterede dokumenter
 
-- `Bilag-08_Risikovurdering-DPIA.md` — DPIA / IT-risikovurdering (20 risici R-01..R-20).
+- `Bilag-08_Risikovurdering-DPIA.md` — DPIA / IT-risikovurdering (21 risici R-01..R-21).
 - `Bilag-12_Udbedringsplan.md` — planlagte udviklingstiltag.
 - `Bilag-05_Krypteringsrapport.md` — krypteringsnøgler, algoritmer, key management.
 - `Bilag-10_Leverandørstyring.md` — underbehandler-oversigt + DPA-status.
@@ -953,3 +953,4 @@ pm2 list                                       # tabelleret status
 | **3.1** | **2026** | **AI-konsolidering (Task C3): Verificeret at OpenRouter er AlphaFlows eneste AI-underbehandler (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). Antal eksterne integrationer opdateret fra 15 til 13. Bilag 14 (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM) reference verificeret i §7.4.** | **AlphaAi Consult ApS — Task C3** |
 | **3.2** | **2026** | **Dokumentationsnøjaktighed:** Bilag C backup-API-endpoints rettet — `Permission.BACKUP_DELETE` og `Permission.BACKUP_READ` eksisterer ikke i koden; erstattet med korrekte permissions (`BACKUP_CREATE` for create/delete/download, `BACKUP_RESTORE` for restore/upload-restore, `DATA_READ` for list/scheduler-status). §4.5 og §5.1 trin 3 rettet tilsvarende. | **AlphaAi Consult ApS — doc-editor G** |
 | **3.3** | **September 2026** | **Sproom-migrering (e-fakturering):** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som AlphaFlows eneste e-faktura Access Point (Peppol BIS Billing 3.0/UBL 2.1 + NemHandel OIOUBL 2.1) — integreret og live mod Sproom staging; produktionsaktivering via env-switch. §2.1: scheduler-oversigt opdateret (6 baggrundsschedulere inkl. Sproom-indbakke/outbox-pollers). §2.4: Sproom tilføjet til afhængighedskort med failover-strategi. Ny genopretningsprocedure §5.9 (Sproom-nedetid — safety-net pollers, send-kø med retry, e-mail-PDF-fallback). §5.2/§6.2: env-vars opdateret (SPROOM_API_TOKEN/SPROOM_WEBHOOK_PUBLIC_KEY; RSA-SHA256-webhooksignatur i X-Signature). §6.5/§7.5: notifikations- og kontaktlister rettet til Sproom. | **AlphaAi Consult ApS — doc-agent (Task 2-e)** |
+| **3.4** | **Oktober 2026** | **Dokumentationsnøjagtighed (Task 21-d):** §1.2 — fjernet reference til ikke-eksisterende `mini-services/pg-service` (sandbox-hjælpeværktøj). §1.5 — "20 risici R-01..R-20" rettet til "21 risici R-01..R-21" (Bilag-08 inkluderer R-21). | **AlphaAi Consult ApS — doc-audit Task 21-d** |

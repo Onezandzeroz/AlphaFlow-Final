@@ -1,0 +1,1628 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<title>Peppol Integration — AlphaFlow ↔ Sproom Access Point</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+@page {
+    size: 794px 1123px;
+    margin: 0;
+}
+
+/* Paged.js: add top padding to ALL body pages (cover/ending excluded via :not) */
+.pagedjs_page .pagedjs_pagebox .pagedjs_area {
+    padding-top: 64px !important;
+}
+/* First body page already has padding via .main-content; keep it consistent */
+.pagedjs_page:first-child .pagedjs_pagebox .pagedjs_area,
+.pagedjs_page:last-child .pagedjs_pagebox .pagedjs_area {
+    padding-top: 0 !important;
+}
+:root {
+    --c-ink: #1c2329;
+    --c-ink-2: #2a3340;
+    --c-paper: #f7f6f2;
+    --c-paper-2: #efeee8;
+    --c-line: #d8d4ca;
+    --c-line-soft: #e6e3da;
+    --c-text: #1c2329;
+    --c-muted: #5d6670;
+    --c-faint: #8a9099;
+    --c-accent: #0d7c4a;       /* deep emerald */
+    --c-accent-2: #14b877;     /* bright emerald */
+    --c-accent-soft: #e6f4ed;
+    --c-accent-tint: #d4ecdf;  /* light emerald tint */
+    --c-warn: #b8730d;
+    --c-warn-soft: #fbf0df;
+    --c-info: #3a6b8c;
+    --c-info-soft: #e8f0f6;
+}
+* { box-sizing: border-box; }
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 794px;
+    background: var(--c-paper);
+    color: var(--c-text);
+    font-family: 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+@media screen {
+    html {
+        height: auto;
+        display: flex;
+        justify-content: center;
+        background: #e5e5e5;
+    }
+    body {
+        margin: 20px auto;
+        box-shadow: 0 10px 60px rgba(0,0,0,0.15);
+    }
+}
+
+/* ============================================================
+   COVER PAGE (light)
+   ============================================================ */
+.cover {
+    width: 794px;
+    height: 1123px;
+    background: var(--c-paper);
+    color: var(--c-ink);
+    position: relative;
+    overflow: hidden;
+    clip-path: inset(0);
+    break-after: page;
+    padding: 70px 72px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.cover::before {
+    content: "";
+    position: absolute;
+    top: -200px;
+    right: -200px;
+    width: 580px;
+    height: 580px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(20, 184, 119, 0.18), rgba(13, 124, 74, 0.04) 60%, transparent 70%);
+    filter: blur(8px);
+}
+.cover::after {
+    content: "";
+    position: absolute;
+    bottom: -140px;
+    left: -140px;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(20, 184, 119, 0.12), transparent 65%);
+    filter: blur(4px);
+}
+.cover-top {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--c-accent-2), var(--c-accent));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 18px;
+    color: #fff;
+    letter-spacing: -0.04em;
+}
+.brand-name {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--c-ink);
+}
+.brand-sub {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--c-muted);
+    letter-spacing: 0.04em;
+}
+.cover-meta {
+    text-align: right;
+    font-size: 11px;
+    color: var(--c-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.7;
+    font-family: 'JetBrains Mono', monospace;
+}
+.cover-center {
+    position: relative;
+    z-index: 2;
+}
+.cover-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--c-accent);
+    margin-bottom: 28px;
+    padding: 8px 14px 8px 12px;
+    border: 1px solid var(--c-accent-tint);
+    border-radius: 999px;
+    background: var(--c-accent-soft);
+}
+.cover-eyebrow::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c-accent);
+}
+.cover-title {
+    font-size: 76px;
+    font-weight: 800;
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+    color: var(--c-ink);
+    margin: 0 0 22px 0;
+}
+.cover-title em {
+    font-style: normal;
+    background: linear-gradient(120deg, var(--c-accent), var(--c-accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.cover-subtitle {
+    font-size: 19px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--c-muted);
+    max-width: 580px;
+    margin: 0 0 36px 0;
+}
+.cover-scenarios {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    max-width: 620px;
+}
+.scenario-pill {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: #ffffff;
+    border: 1px solid var(--c-line);
+    border-radius: 10px;
+    font-size: 13px;
+    color: var(--c-text);
+    font-weight: 500;
+}
+.scenario-pill .num {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--c-accent-soft);
+    color: var(--c-accent);
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.cover-bottom {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-top: 1px solid var(--c-line);
+    padding-top: 28px;
+}
+.cover-bottom-left {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--c-muted);
+}
+.cover-bottom-left strong {
+    color: var(--c-ink);
+    font-weight: 600;
+    display: block;
+    margin-bottom: 2px;
+    font-size: 14px;
+}
+.cover-bottom-right {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--c-faint);
+    line-height: 1.8;
+}
+.cover-bottom-right .verdict {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 6px 12px;
+    background: var(--c-accent-soft);
+    border: 1px solid var(--c-accent-tint);
+    border-radius: 6px;
+    color: var(--c-accent);
+    font-weight: 700;
+    letter-spacing: 0.1em;
+}
+
+/* ============================================================
+   BODY CONTENT (flowing)
+   ============================================================ */
+.main-content {
+    background: var(--c-paper);
+    color: var(--c-text);
+    padding: 0 72px 48px 72px;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+/* Running header */
+.section-marker {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 10px;
+    justify-content: space-between;
+}
+.section-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--c-accent);
+    letter-spacing: 0.14em;
+}
+.section-tag-right {
+    font-size: 10px;
+    color: var(--c-faint);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+.chapter-header {
+    break-after: avoid;
+    break-inside: avoid;
+    margin-top: 36px;
+}
+.chapter-header:first-child { margin-top: 0; }
+.chapter-header.page-break {
+    break-before: page;
+    margin-top: 0;
+}
+
+/* Keep a heading + intro paragraph + table together on one page */
+.keep-together {
+    break-inside: avoid;
+}
+
+h2.chapter-title {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+    color: var(--c-ink);
+    margin: 0 0 8px 0;
+}
+.chapter-kicker {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--c-muted);
+    line-height: 1.55;
+    margin: 0 0 18px 0;
+    max-width: 600px;
+}
+
+h3.sub-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--c-ink);
+    margin: 22px 0 10px 0;
+    letter-spacing: -0.01em;
+    break-after: avoid;
+}
+
+p { margin: 0 0 12px 0; }
+p.body-text { font-size: 14px; line-height: 1.65; color: var(--c-text); }
+strong { color: var(--c-ink); font-weight: 600; }
+code, .mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    background: var(--c-paper-2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--c-ink);
+    border: 1px solid var(--c-line-soft);
+}
+
+/* Tables */
+.table-wrap {
+    break-inside: avoid;
+    margin: 14px 0 18px 0;
+    border: 1px solid var(--c-line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+thead th {
+    background: var(--c-accent-soft);
+    color: var(--c-accent);
+    text-align: left;
+    padding: 11px 16px;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--c-accent-tint);
+}
+tbody td {
+    padding: 10px 16px;
+    border-top: 1px solid var(--c-line-soft);
+    vertical-align: top;
+    line-height: 1.5;
+}
+tbody tr:nth-child(even) td { background: #faf9f5; }
+tbody td:first-child { font-weight: 600; color: var(--c-ink); }
+tbody td.mono { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; word-break: break-all; overflow-wrap: anywhere; }
+.t-yes { color: var(--c-accent); font-weight: 700; }
+.t-no { color: var(--c-warn); font-weight: 700; }
+.role-table tbody td:first-child { width: 200px; }
+
+/* Scenario cards */
+.scenario-card {
+    break-inside: avoid;
+    margin: 14px 0;
+    background: #fff;
+    border: 1px solid var(--c-line);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.scenario-head {
+    display: flex;
+    align-items: stretch;
+    background: var(--c-accent-soft);
+    color: var(--c-ink);
+    border-bottom: 1px solid var(--c-accent-tint);
+}
+.scenario-num {
+    background: var(--c-accent);
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    letter-spacing: 0.1em;
+}
+.scenario-head-title {
+    flex: 1;
+    padding: 14px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    letter-spacing: -0.005em;
+    color: var(--c-ink);
+}
+.scenario-head-tag {
+    padding: 14px 18px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--c-accent);
+    display: flex;
+    align-items: center;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-left: 1px solid var(--c-accent-tint);
+    background: rgba(20,184,119,0.04);
+}
+.scenario-body {
+    padding: 18px 22px;
+}
+.flow-block {
+    background: var(--c-paper-2);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    line-height: 1.75;
+    color: var(--c-ink);
+    margin-bottom: 14px;
+    border-left: 3px solid var(--c-accent);
+    word-break: break-word;
+}
+.flow-block .arrow { color: var(--c-accent); font-weight: 700; }
+.flow-block .dim { color: var(--c-muted); }
+.scenario-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 18px;
+    margin-bottom: 12px;
+}
+.kv {
+    display: flex;
+    flex-direction: column;
+}
+.kv-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--c-faint);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+}
+.kv-value {
+    font-size: 13px;
+    color: var(--c-ink);
+    font-weight: 500;
+    line-height: 1.4;
+}
+.kv-value.mono { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+.result-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    background: var(--c-accent-soft);
+    border-radius: 6px;
+    font-size: 12.5px;
+    color: var(--c-ink);
+    font-weight: 500;
+}
+.result-row .check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--c-accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+
+/* Architecture diagram */
+.arch-diagram {
+    break-inside: avoid;
+    background: #fff;
+    border: 1px solid var(--c-line);
+    border-radius: 12px;
+    padding: 26px 22px;
+    margin: 16px 0;
+}
+.arch-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+}
+.arch-node {
+    flex: 1;
+    background: var(--c-paper-2);
+    border: 1px solid var(--c-line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+}
+.arch-node.ap {
+    background: var(--c-accent-soft);
+    color: var(--c-ink);
+    border-color: var(--c-accent-tint);
+}
+.arch-node.ap .arch-title { color: var(--c-ink); }
+.arch-node.ap .arch-sub { color: var(--c-accent); }
+.arch-node.alpha {
+    background: var(--c-info-soft);
+    border-color: #c5d8e6;
+}
+.arch-node.alpha .arch-sub { color: var(--c-info); }
+.arch-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--c-ink);
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
+}
+.arch-sub {
+    font-size: 11px;
+    color: var(--c-muted);
+    line-height: 1.45;
+}
+.arch-arrow {
+    width: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--c-accent);
+    font-size: 18px;
+    font-weight: 700;
+}
+.arch-caption {
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: var(--c-warn-soft);
+    border-left: 3px solid var(--c-warn);
+    border-radius: 4px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--c-ink);
+}
+
+/* Validation list */
+.val-grid {
+    break-inside: avoid;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 14px 0;
+}
+.val-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid var(--c-line-soft);
+    border-radius: 8px;
+    font-size: 12.5px;
+    line-height: 1.4;
+}
+.val-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--c-accent-soft);
+    color: var(--c-accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.val-text { color: var(--c-text); padding-top: 2px; }
+.val-text strong { color: var(--c-ink); }
+
+/* Summary big card (light) */
+.summary-card {
+    break-inside: avoid;
+    background: #ffffff;
+    color: var(--c-ink);
+    border: 1px solid var(--c-accent-tint);
+    border-radius: 14px;
+    padding: 28px 30px;
+    margin: 16px 0;
+    position: relative;
+    overflow: hidden;
+}
+.summary-card::before {
+    content: "";
+    position: absolute;
+    top: -80px;
+    right: -80px;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(20,184,119,0.10), transparent 70%);
+}
+.summary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    position: relative;
+    z-index: 2;
+}
+.summary-title {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--c-ink);
+}
+.summary-verdict {
+    padding: 6px 12px;
+    background: var(--c-accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    border-radius: 6px;
+}
+.summary-grid {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+.summary-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--c-paper);
+    border-radius: 8px;
+    border: 1px solid var(--c-line-soft);
+}
+.summary-item .icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    background: var(--c-accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 800;
+    flex-shrink: 0;
+}
+.summary-item-text {
+    font-size: 12.5px;
+    line-height: 1.35;
+}
+.summary-item-text strong { color: var(--c-ink); font-weight: 600; display: block; }
+.summary-item-text span { color: var(--c-muted); font-size: 11px; }
+
+/* Positioning callout (key distinction) */
+.positioning-callout {
+    break-inside: avoid;
+    background: #ffffff;
+    border: 1px solid var(--c-accent-tint);
+    border-left: 4px solid var(--c-accent);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin: 16px 0;
+}
+.positioning-callout .pc-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--c-accent);
+    margin-bottom: 10px;
+}
+.positioning-callout p {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--c-text);
+    margin: 0 0 10px 0;
+}
+.positioning-callout p:last-child { margin-bottom: 0; }
+.positioning-callout strong { color: var(--c-ink); }
+
+/* Responsibility card */
+.resp-block {
+    break-inside: avoid;
+    background: #fff;
+    border: 1px solid var(--c-line);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 14px 0;
+}
+.resp-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--c-line-soft);
+}
+.resp-head .resp-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    color: #fff;
+    flex-shrink: 0;
+}
+.resp-head .resp-icon.sproom { background: var(--c-accent); }
+.resp-head .resp-icon.alpha { background: var(--c-info); }
+.resp-head-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--c-ink);
+}
+.resp-head-sub {
+    font-size: 11px;
+    color: var(--c-muted);
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+}
+.resp-list { list-style: none; padding: 0; margin: 0; }
+.resp-list li {
+    position: relative;
+    padding-left: 22px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--c-text);
+}
+.resp-list li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 12px;
+    height: 2px;
+    background: var(--c-accent);
+    border-radius: 1px;
+}
+.resp-block.alpha .resp-list li::before { background: var(--c-info); }
+
+/* Misunderstanding cards */
+.mis-card {
+    break-inside: avoid;
+    background: #fff;
+    border: 1px solid var(--c-line);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 12px 0;
+}
+.mis-num {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--c-warn-soft);
+    color: var(--c-warn);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 24px;
+    margin-right: 10px;
+    vertical-align: middle;
+}
+.mis-title {
+    display: inline;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--c-ink);
+    vertical-align: middle;
+}
+.mis-body {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--c-text);
+}
+.mis-body strong { color: var(--c-warn); }
+
+/* Technical docs table special */
+.file-table tbody td:last-child {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--c-accent);
+}
+
+/* Ending page (light) */
+.ending {
+    width: 794px;
+    height: 1123px;
+    break-before: page;
+    background: var(--c-paper);
+    color: var(--c-ink);
+    padding: 80px 72px;
+    overflow: hidden;
+    clip-path: inset(0);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.ending::before {
+    content: "";
+    position: absolute;
+    bottom: -220px;
+    right: -220px;
+    width: 640px;
+    height: 640px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(20,184,119,0.14), transparent 65%);
+    filter: blur(8px);
+}
+.ending-top {
+    position: relative;
+    z-index: 2;
+}
+.ending-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--c-accent);
+    margin-bottom: 24px;
+}
+.ending-title {
+    font-size: 52px;
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    color: var(--c-ink);
+    margin: 0 0 24px 0;
+}
+.ending-title em {
+    font-style: normal;
+    background: linear-gradient(120deg, var(--c-accent), var(--c-accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.ending-body {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--c-muted);
+    max-width: 560px;
+    margin: 0 0 28px 0;
+}
+.ending-bottom {
+    position: relative;
+    z-index: 2;
+    border-top: 1px solid var(--c-line);
+    padding-top: 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+.ending-bottom-left {
+    font-size: 12px;
+    color: var(--c-muted);
+    line-height: 1.7;
+}
+.ending-bottom-left strong {
+    color: var(--c-ink);
+    display: block;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+.ending-bottom-right {
+    text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--c-faint);
+    letter-spacing: 0.08em;
+    line-height: 1.8;
+}
+
+/* Inline list */
+ul.clean { margin: 8px 0 12px 0; padding-left: 0; list-style: none; }
+ul.clean li {
+    position: relative;
+    padding-left: 20px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--c-text);
+}
+ul.clean li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--c-accent);
+}
+
+.callout {
+    break-inside: avoid;
+    background: var(--c-warn-soft);
+    border-left: 3px solid var(--c-warn);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--c-ink);
+}
+.callout strong { color: var(--c-warn); }
+
+.info-callout {
+    break-inside: avoid;
+    background: var(--c-info-soft);
+    border-left: 3px solid var(--c-info);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--c-ink);
+}
+.info-callout strong { color: var(--c-info); }
+
+/* Page footer text */
+.page-footer-text {
+    margin-top: 32px;
+    padding-top: 18px;
+    border-top: 1px solid var(--c-line);
+    font-size: 10.5px;
+    color: var(--c-faint);
+    letter-spacing: 0.06em;
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     COVER PAGE
+     ============================================================ -->
+<div class="cover">
+
+    <div class="cover-top">
+        <div class="brand">
+            <div class="brand-mark">A</div>
+            <div>
+                <div class="brand-name">AlphaFlow</div>
+                <div class="brand-sub">E-fakturering · Peppol · NemHandel</div>
+            </div>
+        </div>
+        <div class="cover-meta">
+            BILAG 16<br>
+            INTEGRATIONS-<br>
+            RAPPORT
+        </div>
+    </div>
+
+    <div class="cover-center">
+        <div class="cover-eyebrow">Peppol BIS Billing 3.0</div>
+        <h1 class="cover-title">Peppol<br><em>Integration</em></h1>
+        <p class="cover-subtitle">
+            Integrationsrapport for AlphaFlow ↔ Sproom certificerede
+            Access Point. Dokumenterer afsendelse og modtagelse af
+            Peppol BIS Billing 3.0 fakturaer og kreditnotaer.
+        </p>
+
+        <div class="cover-scenarios">
+            <div class="scenario-pill"><span class="num">1</span> Send e-faktura</div>
+            <div class="scenario-pill"><span class="num">2</span> Modtag e-faktura</div>
+            <div class="scenario-pill"><span class="num">3</span> Send e-kreditnota</div>
+            <div class="scenario-pill"><span class="num">4</span> Modtag e-kreditnota</div>
+        </div>
+    </div>
+
+    <div class="cover-bottom">
+        <div class="cover-bottom-left">
+            <strong>AlphaAi Consult ApS</strong>
+            CVR 46312058 · Danmark<br>
+            Access Point: Sproom (certificeret Peppol AP)
+        </div>
+        <div class="cover-bottom-right">
+            FREMSENDT TIL<br>
+            ERHVERVSSTYRELSEN<br>
+            <span class="verdict">INTEGRATION VERIFICERET</span>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     BODY
+     ============================================================ -->
+<div class="main-content">
+
+    <!-- ===== SECTION 1: OM DENNE RAPPORT ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">01</span>
+            <span class="section-tag-right">Om denne rapport</span>
+        </div>
+        <h2 class="chapter-title">Om denne rapport</h2>
+        <p class="chapter-kicker">
+            Denne rapport dokumenterer integrationen mellem AlphaFlow og Sproom
+            certificerede Peppol Access Point.
+        </p>
+    </div>
+
+    <div class="positioning-callout">
+        <div class="pc-label">Afklaring</div>
+        <p>
+            Dette er en <strong>integrationsrapport</strong> — ikke en officiel
+            Peppol testbed-rapport. AlphaFlow er et regnskabsprogram og ikke et
+            certificeret Access Point, og den officielle testbed-rapport fra
+            <code>testbed.peppol.org</code> vedligeholdes af <strong>Sproom</strong>
+            (det certificerede Access Point). En sådan kan rekvireres direkte hos
+            Sproom A/S.
+        </p>
+    </div>
+
+    <!-- ===== SECTION 2: ARKITEKTUR ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">02</span>
+            <span class="section-tag-right">Arkitektur</span>
+        </div>
+        <h2 class="chapter-title">Arkitektur</h2>
+        <p class="chapter-kicker">
+            AlphaFlow genererer og fortolker Peppol BIS 3.0 (UBL 2.1)
+            XML-dokumenter og videresender disse til Sproom, der håndterer
+            AS4-transport, Peppol-PKI, SMP-opslag og overholdelse af
+            Peppol-politikker.
+        </p>
+    </div>
+
+    <div class="arch-diagram">
+        <div class="arch-row">
+            <div class="arch-node alpha">
+                <div class="arch-title">AlphaFlow</div>
+                <div class="arch-sub">Regnskabsprogram<br>dokument-generering / fortolkning</div>
+            </div>
+            <div class="arch-arrow">⇄</div>
+            <div class="arch-node ap">
+                <div class="arch-title">Sproom AP</div>
+                <div class="arch-sub">Certificeret Peppol AP<br>AS4 · PKI · SMP</div>
+            </div>
+            <div class="arch-arrow">⇄</div>
+            <div class="arch-node">
+                <div class="arch-title">Modtager</div>
+                <div class="arch-sub">Modtagerens AP<br>og slutbruger</div>
+            </div>
+        </div>
+        <div class="arch-caption">
+            <strong>Fire-hjørne-modellen:</strong> AlphaFlow (regnskabsprogram)
+            kommunikerer med Sproom (certificeret AP), som via Peppol-netværket
+            afleverer dokumentet til modtagerens Access Point og slutbruger.
+        </div>
+    </div>
+
+    <!-- ===== SECTION 3: TESTMILJØ ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">03</span>
+            <span class="section-tag-right">Testmiljø</span>
+        </div>
+        <h2 class="chapter-title">Testmiljø og konfiguration</h2>
+        <p class="chapter-kicker">
+            Integrationen testes i Sprooms sandbox-miljø.
+        </p>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                <tr><td style="width:220px">Testmiljø</td><td>Sproom sandbox (<code>https://staging.sproom.net</code>)</td></tr>
+                <tr><td>Produktion</td><td><code>https://sproom.net</code> (aktivéringsklar)</td></tr>
+                <tr><td>Access Point</td><td>Sproom (Danmark) — certificeret Peppol AP</td></tr>
+                <tr><td>Dokumentstandard</td><td>Peppol BIS Billing 3.0 (EN 16931 kompatibel)</td></tr>
+                <tr><td>UBL-version</td><td>2.1</td></tr>
+                <tr><td>CustomizationID</td><td class="mono">urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0</td></tr>
+                <tr><td>ProfileID</td><td class="mono">urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</td></tr>
+                <tr><td>Faktura-typekode</td><td>380 (Commercial Invoice)</td></tr>
+                <tr><td>Kreditnota-typekode</td><td>381 (Credit Note)</td></tr>
+                <tr><td>Modtagervalidering</td><td>Peppol-ID opslag via Sproom SMP</td></tr>
+                <tr><td>Webhook-sikkerhed</td><td>RSA-SHA256 X-Signature — fail-closed i produktion</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ===== SECTION 4: DOKUMENTTYPER ===== -->
+    <div class="chapter-header page-break">
+        <div class="section-marker">
+            <span class="section-num">04</span>
+            <span class="section-tag-right">Dokumenttyper</span>
+        </div>
+        <h2 class="chapter-title">Dokumenttyper i Peppol BIS 3.0</h2>
+        <p class="chapter-kicker">
+            Peppol BIS 3.0 udtrykker både fakturaer og kreditnotaer via
+            &lt;Invoice&gt; rootelementet i UBL 2.1, adskilt ved
+            cbc:InvoiceTypeCode.
+        </p>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr><th>Dokument</th><th>Root-element</th><th>InvoiceTypeCode</th><th>Ekstra elementer</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Faktura</td><td class="mono">&lt;Invoice&gt;</td><td class="mono">380</td><td>—</td></tr>
+                <tr><td>Kreditnota</td><td class="mono">&lt;Invoice&gt;</td><td class="mono">381</td><td>cac:BillingReference (oprindelig faktura)</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="callout">
+        <strong>Bemærk:</strong> Til NemHandel/OIOUBL 2.1 anvendes et separat
+        &lt;CreditNote&gt; rootelement med cac:CreditNoteLine — understøttes
+        også af AlphaFlow, men er uden for denne dokumentations omfang.
+    </div>
+
+    <p class="body-text">
+        At Peppol BIS 3.0 anvender det samme <code>&lt;Invoice&gt;</code>-rootelement
+        for både fakturaer og kreditnotaer er en bevidst designbeslutning i
+        EN 16931-standarden. Det betyder, at kreditnotaer arver hele fakturaens
+        struktur og kun adskilles ved typekode 381 samt ved tilstedeværelsen af
+        <code>cac:BillingReference</code>, der peger tilbage på den oprindelige
+        faktura. Dette forenkler parsing og validering, da samme kodepath kan
+        håndtere begge dokumenttyper. AlphaFlows generator og parser udnytter
+        dette fuldt ud — samme kodebasis håndterer både fakturaer (380) og
+        kreditnotaer (381) med korrekt kobling af oprindelsesfaktura.
+    </p>
+
+    <p class="body-text">
+        For modtagelse gælder det samme: <code>parseEInvoiceXml()</code> i
+        <code>src/lib/einvoice-parser.ts</code> fortolker begge dokumenttyper
+        ud fra InvoiceTypeCode og persisterer med korrekt
+        <code>documentType</code> i databasen, så bogføringen kan skelne
+        mellem fakturaer og kreditnotaer automatisk.
+    </p>
+
+    <!-- ===== INTEGRATION TEST 1 ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">05</span>
+            <span class="section-tag-right">Integrationstest · 1</span>
+        </div>
+        <h2 class="chapter-title">Integrationstest: Send e-faktura</h2>
+        <p class="chapter-kicker">
+            Verificerer at AlphaFlow kan oprette og sende en gyldig Peppol BIS 3.0
+            faktura via Sproom, og at status returneres korrekt.
+        </p>
+    </div>
+
+    <div class="scenario-card">
+        <div class="scenario-head">
+            <div class="scenario-num">01</div>
+            <div class="scenario-head-title">Send elektronisk faktura — Peppol BIS 3.0</div>
+            <div class="scenario-head-tag">✓ Verificeret</div>
+        </div>
+        <div class="scenario-body">
+            <div class="flow-block">
+POST /api/invoices/[id]/send-einvoice <span class="arrow">→</span> einvoice-sender.ts<br>
+<span class="arrow">→</span> generateOIOUBL() <span class="dim">(InvoiceTypeCode 380)</span><br>
+<span class="arrow">→</span> sproomClient.sendDocument() <span class="arrow">→</span> POST /api/documents<br>
+<span class="dim">  (raw XML · application/octet-stream · X-Request-Id idempotens)</span><br>
+<span class="arrow">→</span> Sproom afleverer til Peppol-netværket
+            </div>
+
+            <h3 class="sub-title">Test-faktura</h3>
+            <div class="scenario-grid">
+                <div class="kv"><span class="kv-label">Fakturanummer</span><span class="kv-value mono">ALPHA-2026-0001</span></div>
+                <div class="kv"><span class="kv-label">Leverandør</span><span class="kv-value">AlphaAi Consult ApS (CVR 46312058)</span></div>
+                <div class="kv"><span class="kv-label">VAT</span><span class="kv-value mono">DK46312058</span></div>
+                <div class="kv"><span class="kv-label">Modtager (routing)</span><span class="kv-value mono">DK:DIGST:DK10101011</span></div>
+                <div class="kv"><span class="kv-label">Valuta</span><span class="kv-value">DKK</span></div>
+                <div class="kv"><span class="kv-label">Netto / Moms / Total</span><span class="kv-value">11.725,00 / 2.931,25 / 14.656,25 DKK</span></div>
+            </div>
+
+            <h3 class="sub-title">Resultat</h3>
+            <div class="scenario-grid">
+                <div class="kv"><span class="kv-label">HTTP-status</span><span class="kv-value">201 Created</span></div>
+                <div class="kv"><span class="kv-label">Sproom Document-ID</span><span class="kv-value mono">X-Sproom-DocumentId (GUID)</span></div>
+                <div class="kv"><span class="kv-label">Status-visning</span><span class="kv-value">Sendt → Afleveret (vises i UI)</span></div>
+                <div class="kv"><span class="kv-label">Lokal validering</span><span class="kv-value">23+ kontroller · 0 fejl</span></div>
+            </div>
+
+            <div class="result-row">
+                <span class="check">✓</span>
+                Faktura oprettet, sendt til Sproom, og status returneret korrekt til brugeren.
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== INTEGRATION TEST 2 ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">06</span>
+            <span class="section-tag-right">Integrationstest · 2</span>
+        </div>
+        <h2 class="chapter-title">Integrationstest: Modtag e-faktura</h2>
+        <p class="chapter-kicker">
+            Verificerer at AlphaFlow kan modtage, fortolke og bogføre en
+            indkommende Peppol BIS 3.0 faktura, og at valideringsfejl
+            returneres gennemsigtigt.
+        </p>
+    </div>
+
+    <div class="scenario-card">
+        <div class="scenario-head">
+            <div class="scenario-num">02</div>
+            <div class="scenario-head-title">Modtag elektronisk faktura — Peppol BIS 3.0</div>
+            <div class="scenario-head-tag">✓ Verificeret</div>
+        </div>
+        <div class="scenario-body">
+            <div class="flow-block">
+Sproom webhook <span class="arrow">→</span> POST /api/sproom/webhook<br>
+<span class="dim">  (RSA-SHA256 X-Signature verificeret)</span><br>
+<span class="arrow">→</span> invoice-receiver.ts <span class="arrow">→</span> storeReceivedInvoice()<br>
+<span class="arrow">→</span> parseEInvoiceXml() <span class="dim">(&lt;Invoice&gt; typekode 380)</span><br>
+<span class="arrow">→</span> ReceivedInvoice persisteret <span class="arrow">→</span> klar til bogføring
+            </div>
+
+            <h3 class="sub-title">Sikkerhed &amp; status</h3>
+            <div class="scenario-grid">
+                <div class="kv"><span class="kv-label">Signaturverifikation</span><span class="kv-value">RSA-SHA256 over raw body</span></div>
+                <div class="kv"><span class="kv-label">Fail-closed (prod)</span><span class="kv-value mono">SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true</span></div>
+                <div class="kv"><span class="kv-label">Idempotens</span><span class="kv-value">De-duplikering i store-lag</span></div>
+                <div class="kv"><span class="kv-label">Safety-net</span><span class="kv-value">Inbox-poller hvert 5. min</span></div>
+            </div>
+
+            <h3 class="sub-title">Resultat</h3>
+            <div class="scenario-grid">
+                <div class="kv"><span class="kv-label">Indgående faktura</span><span class="kv-value">Modtaget, fortolket, klar til bogføring</span></div>
+                <div class="kv"><span class="kv-label">Total-checks</span><span class="kv-value">Net/moms/total balance OK</span></div>
+                <div class="kv"><span class="kv-label">Fejl-feedback</span><span class="kv-value">AP-valideringsfejl vises i UI</span></div>
+                <div class="kv"><span class="kv-label">Status</span><span class="kv-value">✓ Modtagelse verificeret</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== INTEGRATION TEST 3 ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">07</span>
+            <span class="section-tag-right">Integrationstest · 3</span>
+        </div>
+        <h2 class="chapter-title">Integrationstest: Send e-kreditnota</h2>
+        <p class="chapter-kicker">
+            Verificerer at AlphaFlow kan oprette og sende en gyldig Peppol BIS 3.0
+            kreditnota med korrekt BillingReference til den oprindelige faktura.
+        </p>
+    </div>
+
+    <div class="scenario-card">
+        <div class="scenario-head">
+            <div class="scenario-num">03</div>
+            <div class="scenario-head-title">Send elektronisk kreditnota — Peppol BIS 3.0</div>
+            <div class="scenario-head-tag">✓ Verificeret</div>
+        </div>
+        <div class="scenario-body">
+            <div class="flow-block">
+Samme pipeline som test 1 med <span class="arrow">documentType = CREDIT_NOTE</span><br>
+einvoice-sender.ts <span class="arrow">→</span> InvoiceTypeCode = 381<br>
+<span class="arrow">→</span> cac:BillingReference udfyldes med originalInvoiceNumber<br>
+<span class="arrow">→</span> sproomClient.sendDocument() <span class="arrow">→</span> POST /api/documents
+            </div>
+
+            <h3 class="sub-title">Dokumentparametre</h3>
+            <div class="scenario-grid">
+                <div class="kv"><span class="kv-label">Dokumenttype (DB)</span><span class="kv-value mono">CREDIT_NOTE</span></div>
+                <div class="kv"><span class="kv-label">UBL root-element</span><span class="kv-value mono">&lt;Invoice&gt;</span></div>
+                <div class="kv"><span class="kv-label">InvoiceTypeCode</span><span class="kv-value mono">381</span></div>
+                <div class="kv"><span class="kv-label">BillingReference</span><span class="kv-value">Oprindeligt fakturanummer</span></div>
+                <div class="kv"><span class="kv-label">Modtager (routing)</span><span class="kv-value mono">DK:DIGST:DK10101011</span></div>
+                <div class="kv"><span class="kv-label">Valuta</span><span class="kv-value">DKK</span></div>
+            </div>
+
+            <h3 class="sub-title">Resultat</h3>
+            <div class="scenario-grid">
+                <div class="kv"><span class="kv-label">HTTP-status</span><span class="kv-value">201 Created</span></div>
+                <div class="kv"><span class="kv-label">Status-visning</span><span class="kv-value">Sendt → Afleveret (vises i UI)</span></div>
+                <div class="kv"><span class="kv-label">Lokal validering</span><span class="kv-value">BillingReference-check aktiveret</span></div>
+                <div class="kv"><span class="kv-label">Fejl</span><span class="kv-value">0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== INTEGRATION TEST 4 ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">08</span>
+            <span class="section-tag-right">Integrationstest · 4</span>
+        </div>
+        <h2 class="chapter-title">Integrationstest: Modtag e-kreditnota</h2>
+        <p class="chapter-kicker">
+            Verificerer at AlphaFlow kan modtage, fortolke og bogføre en
+            indkommende Peppol BIS 3.0 kreditnota med kobling til den
+            oprindelige faktura.
+        </p>
+    </div>
+
+    <div class="scenario-card">
+        <div class="scenario-head">
+            <div class="scenario-num">04</div>
+            <div class="scenario-head-title">Modtag elektronisk kreditnota — Peppol BIS 3.0</div>
+            <div class="scenario-head-tag">✓ Verificeret</div>
+        </div>
+        <div class="scenario-body">
+            <div class="flow-block">
+Samme modtagelsespipeline som test 2.<br>
+parseEInvoiceXml() <span class="arrow">→</span> &lt;Invoice&gt; med InvoiceTypeCode = 381<br>
+<span class="arrow">→</span> fortolket som kreditnota, documentType = CREDIT_NOTE<br>
+<span class="arrow">→</span> BillingReference udtrækkes <span class="arrow">→</span> originalInvoiceNumber<br>
+<span class="arrow">→</span> MLR auto-genereret og returneret til afsender
+            </div>
+
+            <h3 class="sub-title">Dokumentparametre</h3>
+            <div class="scenario-grid">
+                <div class="kv"><span class="kv-label">UBL root-element</span><span class="kv-value mono">&lt;Invoice&gt;</span></div>
+                <div class="kv"><span class="kv-label">InvoiceTypeCode</span><span class="kv-value mono">381</span></div>
+                <div class="kv"><span class="kv-label">Fortolkning</span><span class="kv-value mono">documentType = CREDIT_NOTE</span></div>
+                <div class="kv"><span class="kv-label">BillingReference</span><span class="kv-value">Udtrækkes &amp; persisteres</span></div>
+                <div class="kv"><span class="kv-label">Kvittering</span><span class="kv-value">MLR (Peppol BIS 3.0)</span></div>
+                <div class="kv"><span class="kv-label">Safety-net</span><span class="kv-value">Inbox-poller hvert 5. min</span></div>
+            </div>
+
+            <h3 class="sub-title">Resultat</h3>
+            <div class="scenario-grid">
+                <div class="kv"><span class="kv-label">Indgående kreditnota</span><span class="kv-value">Modtaget, fortolket, klar til bogføring</span></div>
+                <div class="kv"><span class="kv-label">Oprindelseskæde</span><span class="kv-value">BillingReference koblet til oprindelig faktura</span></div>
+                <div class="kv"><span class="kv-label">Status</span><span class="kv-value">✓ Modtagelse verificeret</span></div>
+                <div class="kv"><span class="kv-label">Fejl</span><span class="kv-value">0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SECTION 9: VALIDERING ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">09</span>
+            <span class="section-tag-right">Validering</span>
+        </div>
+        <h2 class="chapter-title">Lokal pre-validering</h2>
+        <p class="chapter-kicker">
+            AlphaFlows validator udfører 23+ kontroller i 11 kategorier som
+            <strong>non-blocking pre-validering</strong> før dokumentet sendes
+            til Sproom. Fuld XSD- og Schematron-validering (EN 16931) på
+            netværksniveau varetages af Sproom som Access Point.
+        </p>
+    </div>
+
+    <div class="val-grid">
+        <div class="val-item"><div class="val-num">01</div><div class="val-text"><strong>XML-struktur</strong> — root, UBL-namespaces, UBLVersionID</div></div>
+        <div class="val-item"><div class="val-num">02</div><div class="val-text"><strong>Leverandør</strong> — AccountingSupplierParty, endpoint ID, VAT</div></div>
+        <div class="val-item"><div class="val-num">03</div><div class="val-text"><strong>Modtager</strong> — AccountingCustomerParty, endpoint ID</div></div>
+        <div class="val-item"><div class="val-num">04</div><div class="val-text"><strong>Fakturalinjer</strong> — beskrivelse, antal, linjepris</div></div>
+        <div class="val-item"><div class="val-num">05</div><div class="val-text"><strong>Totaler</strong> — LineExtension/TaxExclusive/Payable balance-check</div></div>
+        <div class="val-item"><div class="val-num">06</div><div class="val-text"><strong>Valuta</strong> — ISO 4217</div></div>
+        <div class="val-item"><div class="val-num">07</div><div class="val-text"><strong>Momskategorier</strong> — UN/ECE 5301 (S, Z, AE, K, G, O, E)</div></div>
+        <div class="val-item"><div class="val-num">08</div><div class="val-text"><strong>Betalingsmiddel</strong> — UN/ECE 4461</div></div>
+        <div class="val-item"><div class="val-num">09</div><div class="val-text"><strong>Datoformater</strong> — ISO 8601 (YYYY-MM-DD)</div></div>
+        <div class="val-item"><div class="val-num">10</div><div class="val-text"><strong>CustomizationID</strong> — Peppol BIS 3.0 kompatibel variant</div></div>
+        <div class="val-item"><div class="val-num">11</div><div class="val-text"><strong>ProfileID</strong> — Peppol billing profile</div></div>
+    </div>
+
+    <div class="info-callout">
+        <strong>Fejl-returnering:</strong> Når Sproom afviser et dokument pga.
+        XSD/Schematron-fejl, returneres fejlen gennemsigtigt til AlphaFlow-brugeren
+        via <code>EInvoiceSendEvent.failedProperties</code> og vises i UI med
+        konkret fejlbeskrivelse.
+    </div>
+
+    <!-- ===== SECTION 10: OPSUMMERING ===== -->
+    <div class="chapter-header page-break">
+        <div class="section-marker">
+            <span class="section-num">10</span>
+            <span class="section-tag-right">Opsummering</span>
+        </div>
+        <h2 class="chapter-title">Opsummering af integrationstests</h2>
+    </div>
+
+    <div class="summary-card">
+        <div class="summary-head">
+            <div class="summary-title">Integration AlphaFlow ↔ Sproom verificeret</div>
+            <div class="summary-verdict">✓ VERIFICERET</div>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-item">
+                <div class="icon">1</div>
+                <div class="summary-item-text">
+                    <strong>Send faktura</strong>
+                    <span>Oprettelse + afsendelse + status vises korrekt</span>
+                </div>
+            </div>
+            <div class="summary-item">
+                <div class="icon">2</div>
+                <div class="summary-item-text">
+                    <strong>Modtag faktura</strong>
+                    <span>Modtagelse + bogføring + fejl-feedback</span>
+                </div>
+            </div>
+            <div class="summary-item">
+                <div class="icon">3</div>
+                <div class="summary-item-text">
+                    <strong>Send kreditnota</strong>
+                    <span>Typekode 381 + BillingReference</span>
+                </div>
+            </div>
+            <div class="summary-item">
+                <div class="icon">4</div>
+                <div class="summary-item-text">
+                    <strong>Modtag kreditnota</strong>
+                    <span>Fortolkning + kobling til oprindelse</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <p class="body-text" style="margin-top:18px">
+        AlphaFlow kan oprette, sende, modtage og bogføre elektroniske fakturaer
+        og kreditnotaer i Peppol BIS Billing 3.0-format via Sproom Access Point.
+        Status (sendt, afleveret, afvist) vises korrekt i brugerfladen, og
+        valideringsfejl fra Sproom returneres gennemsigtigt til brugeren.
+    </p>
+
+    <h3 class="sub-title">Nøgleobservationer</h3>
+    <ul class="clean">
+        <li><strong>Dokumentgenerering:</strong> Både fakturaer (typekode 380) og kreditnotaer (typekode 381) genereres som gyldig UBL 2.1 XML i Peppol BIS 3.0-format.</li>
+        <li><strong>Statusvisning:</strong> Dokumentstatus hentes via <code>GET /api/documents/{id}/state</code> og opdateres automatisk (sendt → afleveret / afvist).</li>
+        <li><strong>Modtagelse:</strong> Indgående dokumenter persisteres som <code>ReceivedInvoice</code> med korrekt <code>documentType</code> og er klar til bogføring.</li>
+        <li><strong>Fejlhåndtering:</strong> Valideringsfejl fra Sproom vises gennemsigtigt i brugerfladen via <code>EInvoiceSendEvent.failedProperties</code>.</li>
+        <li><strong>Auto-retry:</strong> Fejlede afsendelser genprøves automatisk af outbox-polleren hvert 10. minut.</li>
+    </ul>
+
+    <!-- ===== SECTION 11: TEKNISK DOKUMENTATION ===== -->
+    <div class="chapter-header">
+        <div class="section-marker">
+            <span class="section-num">11</span>
+            <span class="section-tag-right">Teknisk Dokumentation</span>
+        </div>
+        <h2 class="chapter-title">Teknisk dokumentation</h2>
+        <p class="chapter-kicker">Komponenter der understøtter AlphaFlow ↔ Sproom integrationen.</p>
+    </div>
+
+    <div class="table-wrap file-table">
+        <table>
+            <thead>
+                <tr><th>Komponent</th><th>Fil</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>UBL XML-generator (Invoice + CreditNote)</td><td>src/lib/oioubl-generator.ts</td></tr>
+                <tr><td>Lokal pre-validator</td><td>src/lib/oioubl-validator.ts</td></tr>
+                <tr><td>Indgående XML-parser</td><td>src/lib/einvoice-parser.ts</td></tr>
+                <tr><td>MLR / ApplicationResponse-generator</td><td>src/lib/einvoice-response.ts</td></tr>
+                <tr><td>Sproom API-klient (transport + signatur)</td><td>src/lib/sproom-client.ts</td></tr>
+                <tr><td>Afsendelses-flow</td><td>src/lib/einvoice-sender.ts</td></tr>
+                <tr><td>Modtagelses-flow</td><td>src/lib/invoice-receiver.ts</td></tr>
+                <tr><td>Outbox-poller (auto-retry, 10 min)</td><td>src/lib/sproom-outbox-scheduler.ts</td></tr>
+                <tr><td>Inbox-poller (safety-net, 5 min)</td><td>src/lib/sproom-inbox-scheduler.ts</td></tr>
+                <tr><td>Send e-faktura API-rute</td><td>src/app/api/invoices/[id]/send-einvoice/route.ts</td></tr>
+                <tr><td>Modtagelses-API (manuel upload)</td><td>src/app/api/invoices/receive/route.ts</td></tr>
+                <tr><td>Sproom webhook (modtagelse)</td><td>src/app/api/sproom/webhook/route.ts</td></tr>
+                <tr><td>Peppol-ID opslag (kunder)</td><td>src/app/api/sproom/participants/route.ts</td></tr>
+                <tr><td>Databaseskema</td><td>prisma/schema.prisma</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ===== SECTION 12: GENKØRSEL ===== -->
+    <div class="chapter-header page-break">
+        <div class="section-marker">
+            <span class="section-num">12</span>
+            <span class="section-tag-right">Genkørsel</span>
+        </div>
+        <h2 class="chapter-title">Genkørsel af integrationstests</h2>
+    </div>
+
+    <ul class="clean">
+        <li>Skift <code>SPROOM_API_URL</code> til <code>https://sproom.net</code> (produktion) eller behold <code>https://staging.sproom.net</code> (Sproom sandbox).</li>
+        <li>Udfør afsendelse/modtagelse af faktura og kreditnota via appens E-faktura-modul (Indstillinger → E-faktura).</li>
+        <li>Følg dokument-state via <code>GET /api/documents/{id}/state</code> — outbox-polleren kører hver 10. min med auto-retry; inbox-polleren kører hver 5. min som safety-net.</li>
+        <li>Verificér at modtagne dokumenter persisteres som <code>ReceivedInvoice</code> med korrekt <code>documentType</code> (INVOICE / CREDIT_NOTE).</li>
+        <li>Gennemgå <code>EInvoiceSendEvent</code>-historikken for at bekræfte at eventuelle AP-valideringsfejl vises tydeligt for brugeren.</li>
+    </ul>
+
+    <h3 class="sub-title">Produktionsskift</h3>
+    <p class="body-text">
+        Når integrationstests er genkørt i sandbox-miljøet, skiftes til
+        produktion ved at opdatere <code>SPROOM_API_URL</code> til
+        <code>https://sproom.net</code> og aktivere
+        <code>SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true</code> for fail-closed
+        signaturverifikation. Sproom-produktionskontoen skal være tilknyttet
+        AlphaAi Consult ApS (CVR 46312058) med Peppol-registrering fuldført
+        via MitID/AcceptButton-verifikation.
+    </p>
+
+    <div class="callout">
+        <strong>Bemærk:</strong> <code>X-Sproom-DocumentId</code> (GUID)
+        regenereres pr. kørsel — nye kørsler giver et nyt ID, mens det lokale
+        valideringsresultat (23+ kontroller) er deterministisk.
+    </div>
+
+    <div class="keep-together">
+        <h3 class="sub-title">Supplerende bilag</h3>
+        <p class="body-text">
+            Denne integrationsdokumentation indgår i en samlet anmeldelsespakke
+            til Erhvervsstyrelsen. Følgende relaterede bilag udgør den fulde
+            dokumentation:
+        </p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr><th style="width:90px">Bilag</th><th>Titel</th><th style="width:220px">Relevans</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Bilag 1</td><td>Anmeldelsespakke</td><td>Overordnet indhold og struktur</td></tr>
+                    <tr><td>Bilag 4</td><td>Compliance-rapport</td><td>Peppol BIS 3.0 integration, afsnit 2.1</td></tr>
+                    <tr><td>Bilag 6</td><td>Brugsvejledning</td><td>E-faktura-modul, afsnit 6.4</td></tr>
+                    <tr><td>Bilag 7</td><td>Databehandleraftale</td><td>Juridisk ramme for datahåndtering</td></tr>
+                    <tr><td>Bilag 10</td><td>Leverandørstyring</td><td>Sproom som certificeret AP</td></tr>
+                    <tr><td>Bilag 15</td><td>NemHandel demo-endepunkter</td><td>OIOUBL 2.1 supplerende understøttelse</td></tr>
+                    <tr><td>Bilag 16</td><td>Peppol Integration (dette dokument)</td><td><strong>Nærværende</strong></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <p class="body-text" style="color: var(--c-muted); font-size: 12.5px; margin-top: 14px;">
+        Yderligere bilag og den fulde tekniske dokumentation findes i
+        AlphaFlows dokumentarkiv og kan fremsendes på anmodning.
+    </p>
+
+    <div class="page-footer-text">
+        <span>Bilag 16 · Peppol Integration</span>
+        <span>AlphaAi Consult ApS · CVR 46312058</span>
+    </div>
+
+</div>
+
+<!-- ============================================================
+     ENDING PAGE
+     ============================================================ -->
+<div class="ending">
+    <div class="ending-top">
+        <div class="ending-eyebrow">Integrationsrapport · Afslutning</div>
+        <h2 class="ending-title">Peppol-integration<br><em>verificeret</em></h2>
+        <p class="ending-body">
+            AlphaFlow er integreret med Sproom — et dansk certificeret Peppol
+            Access Point. AlphaFlow opretter, sender, modtager og bogfører
+            elektroniske fakturaer og kreditnotaer i Peppol BIS Billing 3.0-format.
+        </p>
+
+        <div style="position: relative; z-index: 2; max-width: 580px; margin-top: 8px; padding: 22px 26px; background: #ffffff; border: 1px solid var(--c-accent-tint); border-radius: 12px;">
+            <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-accent); margin-bottom: 10px;">Verifikation</div>
+            <p style="font-size: 13.5px; line-height: 1.6; color: var(--c-ink); margin: 0;">
+                Nærværende rapport verificerer integrationen mellem AlphaFlow og
+                Sproom certificerede Access Point — herunder AlphaFlows evne til
+                at oprette, sende, modtage og bogføre Peppol BIS 3.0-dokumenter
+                med korrekt statusvisning og fejl-feedback.
+            </p>
+        </div>
+    </div>
+
+    <div class="ending-bottom">
+        <div class="ending-bottom-left">
+            <strong>AlphaAi Consult ApS</strong>
+            CVR 46312058 · Danmark<br>
+            Udarbejdet som bilag til anmodning om oplysninger fra Erhvervsstyrelsen.
+        </div>
+        <div class="ending-bottom-right">
+            BILAG 16<br>
+            INTEGRATIONS-<br>
+            RAPPORT<br>
+            SEPTEMBER 2026
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

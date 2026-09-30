@@ -34,7 +34,7 @@ Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den f
 - Hvordan krypteringsnøgler administreres.
 
 **Ansvarlig:** AlphaAi Consult ApS (CVR-oplysninger for AlphaAi Consult ApS (CVR 46312058, Skelagervej 124C, 8200 Aarhus N) fremgår af Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 18.2 og Bilag 1 (Bilag-01_Anmeldelsespakke.md) afsnit 2).
-**Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) + 5 mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL. (`pg-service` — embedded PostgreSQL 17 + pgvector — er et sandbox-hjælpeværktøj og indgår ikke i produktions-setup.)
+**Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) + 5 mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL.
 
 ---
 

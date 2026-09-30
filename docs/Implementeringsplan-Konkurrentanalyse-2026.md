@@ -49,7 +49,7 @@ Alle 7 huller er grep-verificeret i kodebasen (Task 7, worklog):
 | 2 | Tilbud → ordre → faktura-pipeline | Billy, e-conomic | Faktura findes; tilbud/ordre eksisterer ikke |
 | 3 | Betalingslink/kortbetaling på fakturaer | Billy (MobilePay m.m.) | MobilePay optræder kun som demo-banktransaktion |
 | 4 | Abonnementsfakturering til kunder | Billy | `recurring-entries` er interne bilag — faktura-ruten har ingen recurrence |
-| 5 | Offentlig API / integrationsmarkedsplads | Billy 60+, e-conomic 300+ | ~179 ruter, alle lukket til eget frontend |
+| 5 | Offentlig API / integrationsmarkedsplads | Billy 60+, e-conomic 300+ | 176 ruter (alle lukket til eget frontend) |
 | 6 | Lønsystem | Alle tre | "Løn" er kun kontonavne (konto 60800) og hjælpetekst |
 | 7 | Faktura-branding/designer (logo, farver) | Billy | PDF-template er fast — ingen branding-felter i koden |
 
