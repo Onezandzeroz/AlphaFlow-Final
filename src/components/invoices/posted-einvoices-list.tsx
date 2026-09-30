@@ -1,10 +1,23 @@
 'use client';
 
+import { useState } from 'react';
 import { useLanguageStore } from '@/lib/language-store';
 import { useTranslation } from '@/lib/use-translation';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from '@/components/ui/collapsible';
 import {
   Table,
   TableBody,
@@ -13,7 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Inbox, FileMinus, CheckCircle, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Inbox, FileMinus, CheckCircle, ArrowDownCircle, ArrowUpCircle, ChevronDown, Code2, FileCode2 } from 'lucide-react';
 
 export interface ReceivedInvoice {
   id: string;
@@ -33,6 +46,12 @@ export interface ReceivedInvoice {
   postedAt: string | null;
   settledAt: string | null; // when bank recon matched the payment
   createdAt: string;
+  /** Raw XML received from Sproom (Peppol BIS / OIOUBL). Shown in "Rå XML" dialog. */
+  rawXml?: string | null;
+  /** Generated response XML (InvoiceResponse / ApplicationResponse / MLR). Shown in "Svar XML" dialog. */
+  responseXml?: string | null;
+  /** Type of the generated response: INVOICE_RESPONSE | APPLICATION_RESPONSE | MESSAGE_LEVEL_RESPONSE */
+  responseType?: string | null;
 }
 
 interface PostedEInvoicesListProps {
@@ -55,6 +74,9 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
   const { language } = useLanguageStore();
   const { tc, td } = useTranslation();
   const isDa = language === 'da';
+
+  // State for the XML dialog — when set, shows a modal with Raw XML + Response XML
+  const [xmlDialogInvoice, setXmlDialogInvoice] = useState<ReceivedInvoice | null>(null);
 
   // Sort by issue date descending
   const sorted = [...invoices].sort(
@@ -99,6 +121,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                   <TableHead className="text-right">{isDa ? 'Beløb' : 'Amount'}</TableHead>
                   <TableHead>{isDa ? 'Format' : 'Format'}</TableHead>
                   <TableHead>{isDa ? 'Status' : 'Status'}</TableHead>
+                  <TableHead className="w-[80px] text-right">{isDa ? 'XML' : 'XML'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -107,6 +130,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                     ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED';
                   const amount = Number(ri.payableAmount) || 0;
                   const signedAmount = isCreditNote ? -amount : amount;
+                  const hasAnyXml = ri.rawXml || ri.responseXml;
                   return (
                     <TableRow key={ri.id} className="border-b border-gray-50/50 table-row-teal-hover">
                       <TableCell>
@@ -155,6 +179,21 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                           )}
                         </div>
                       </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs gap-1"
+                          disabled={!hasAnyXml}
+                          onClick={() => setXmlDialogInvoice(ri)}
+                          title={hasAnyXml
+                            ? (isDa ? 'Vis XML' : 'View XML')
+                            : (isDa ? 'Ingen XML tilgængelig' : 'No XML available')}
+                        >
+                          <Code2 className="h-3.5 w-3.5" />
+                          XML
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -169,6 +208,7 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                 ri.documentType === 'CREDIT_NOTE' || ri.documentType === 'SELF_BILLED';
               const amount = Number(ri.payableAmount) || 0;
               const signedAmount = isCreditNote ? -amount : amount;
+              const hasAnyXml = ri.rawXml || ri.responseXml;
               return (
                 <div
                   key={ri.id}
@@ -222,12 +262,111 @@ export function PostedEInvoicesList({ invoices }: PostedEInvoicesListProps) {
                       </p>
                     </div>
                   </div>
+                  {hasAnyXml && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs gap-1 w-full"
+                        onClick={() => setXmlDialogInvoice(ri)}
+                      >
+                        <Code2 className="h-3.5 w-3.5" />
+                        {isDa ? 'Vis XML' : 'View XML'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </CardContent>
       </Card>
+
+      {/* XML Dialog — shows Raw XML + Response XML collapsibles */}
+      <Dialog open={!!xmlDialogInvoice} onOpenChange={(open) => { if (!open) setXmlDialogInvoice(null); }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          {xmlDialogInvoice && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 flex-wrap">
+                  <FileCode2 className="h-5 w-5 text-emerald-600" />
+                  <span>{xmlDialogInvoice.supplierName}</span>
+                  <Badge variant="outline" className="text-[10px] font-mono">
+                    {xmlDialogInvoice.invoiceNumber}
+                  </Badge>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-3">
+                {/* Meta info */}
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Badge variant="outline" className="text-[10px]">
+                    {xmlDialogInvoice.format === 'PEPPOL_BIS' ? 'Peppol BIS 3.0' : 'OIOUBL 2.1'}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px]">
+                    {xmlDialogInvoice.documentType === 'CREDIT_NOTE'
+                      ? (isDa ? 'Kreditnota' : 'Credit note')
+                      : (isDa ? 'Faktura' : 'Invoice')}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {td(new Date(xmlDialogInvoice.issueDate))}
+                  </span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="font-semibold tabular-nums">
+                    {tc(Number(xmlDialogInvoice.payableAmount) || 0)} {xmlDialogInvoice.currencyCode}
+                  </span>
+                </div>
+
+                {/* Raw XML (received from Sproom) */}
+                {xmlDialogInvoice.rawXml && (
+                  <Collapsible defaultOpen={false}>
+                    <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                      <ChevronDown className="h-3 w-3" />
+                      {isDa ? 'Rå XML (modtaget)' : 'Raw XML (received)'}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <pre className="mt-2 text-xs bg-muted rounded-lg p-3 overflow-auto max-h-64 font-mono whitespace-pre-wrap break-all">
+                        {xmlDialogInvoice.rawXml}
+                      </pre>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
+                {/* Response XML (generated by AlphaFlow after posting) */}
+                {xmlDialogInvoice.responseXml && (
+                  <Collapsible defaultOpen={true}>
+                    <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                      <ChevronDown className="h-3 w-3" />
+                      {isDa ? 'Svar XML' : 'Response XML'}
+                      {xmlDialogInvoice.responseType && (
+                        <Badge variant="outline" className="text-[10px] ml-1 font-mono">
+                          {xmlDialogInvoice.responseType}
+                        </Badge>
+                      )}
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <pre className="mt-2 text-xs bg-muted rounded-lg p-3 overflow-auto max-h-96 font-mono whitespace-pre-wrap break-all">
+                        {xmlDialogInvoice.responseXml}
+                      </pre>
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        {isDa
+                          ? 'Genereret af AlphaFlow ved bogføring (se src/lib/einvoice-response.ts).'
+                          : 'Generated by AlphaFlow on posting (see src/lib/einvoice-response.ts).'}
+                      </p>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+
+                {!xmlDialogInvoice.rawXml && !xmlDialogInvoice.responseXml && (
+                  <p className="text-sm text-muted-foreground py-4 text-center">
+                    {isDa ? 'Ingen XML tilgængelig for denne faktura.' : 'No XML available for this invoice.'}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
