@@ -396,45 +396,45 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
         />
       </div>
 
-      {/* Rules as readable articles */}
-      <div className="space-y-4">
+      {/* Rules — grid layout (3 per row on desktop, 2 on tablet, 1 on mobile) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {filteredRules
           .filter(cat => searchQuery.trim() === '' || cat.category === activeCategory || cat.rules.length > 0)
           .flatMap(cat => cat.rules.map((rule, idx) => (
-            <Card key={`${cat.category}-${idx}`} className="stat-card border-0 shadow-sm dark:border dark:border-white/5 overflow-hidden">
-              <CardContent className="p-5 sm:p-6">
+            <Card key={`${cat.category}-${idx}`} className="stat-card border-0 shadow-sm dark:border dark:border-white/5 overflow-hidden flex flex-col">
+              <CardContent className="p-4 flex flex-col flex-1">
                 {/* Title */}
-                <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
                   {isDanish ? rule.title : rule.titleEn}
                 </h4>
 
                 {/* Description — main focus, readable */}
-                <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300 mb-3">
+                <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300 mb-3 flex-1">
                   {isDanish ? rule.description : rule.descriptionEn}
                 </p>
 
-                {/* Inline accounts — compact, not a T-diagram */}
-                <div className="flex items-center gap-2 text-xs flex-wrap">
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400">
+                {/* Inline accounts — compact */}
+                <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400">
                     <span className="font-mono font-bold">{rule.debitAccount}</span>
-                    <span className="text-green-600 dark:text-green-500">{rule.debitAccountName}</span>
+                    <span className="text-green-600 dark:text-green-500 hidden sm:inline">{rule.debitAccountName}</span>
                   </span>
                   <ArrowRight className="h-3 w-3 text-gray-400 shrink-0" />
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400">
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400">
                     <span className="font-mono font-bold">{rule.creditAccount}</span>
-                    <span className="text-red-600 dark:text-red-500">{rule.creditAccountName}</span>
+                    <span className="text-red-600 dark:text-red-500 hidden sm:inline">{rule.creditAccountName}</span>
                   </span>
                 </div>
               </CardContent>
             </Card>
           )))
         }
-        {filteredRules.flatMap(cat => cat.rules).length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-8">
-            {isDanish ? 'Ingen regler fundet for din søgning' : 'No rules found for your search'}
-          </p>
-        )}
       </div>
+      {filteredRules.flatMap(cat => cat.rules).length === 0 && (
+        <p className="text-sm text-gray-400 text-center py-8">
+          {isDanish ? 'Ingen regler fundet for din søgning' : 'No rules found for your search'}
+        </p>
+      )}
 
       {/* External links */}
       <Card className="stat-card border-0 shadow-sm dark:border dark:border-white/5">
