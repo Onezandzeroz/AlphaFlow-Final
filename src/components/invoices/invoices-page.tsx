@@ -2264,7 +2264,8 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
                 </Button>
               </div>
             )}
-
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Two-column: Customer Info + Live Invoice Preview ── */}
@@ -3156,8 +3157,6 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               </div>
             </MobileFilterDropdown>
           </div>
-        </CardContent>
-      </Card>
       )}
 
       {/* Mobile Card List */}

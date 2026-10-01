@@ -448,7 +448,8 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
               <Skeleton className="h-10 w-36" />
               <Skeleton className="h-10 w-36" />
             </div>
-
+          </CardContent>
+        </Card>
 
         {/* Table skeleton */}
         <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
@@ -564,6 +565,7 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
 
       {/* Filters */}
       {logs.length > 0 && (
+      <>
       <div className="flex flex-col sm:flex-row gap-2 items-center">
             {/* Search - always visible */}
             <div className="relative flex-1 min-w-[140px]">
@@ -624,6 +626,7 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
               </span>
             )}
           </div>
+      </>
       )}
 
       {/* Audit Log Table */}

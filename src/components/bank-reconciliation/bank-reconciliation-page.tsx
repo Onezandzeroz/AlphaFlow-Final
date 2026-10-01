@@ -893,7 +893,8 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
               <Skeleton className="h-10 flex-1" />
               <Skeleton className="h-10 w-40" />
             </div>
-
+          </CardContent>
+        </Card>
 
         {/* Statements list skeleton */}
         <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">

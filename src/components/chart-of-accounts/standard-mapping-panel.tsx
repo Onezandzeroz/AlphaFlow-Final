@@ -305,6 +305,8 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
                 <ArrowRightLeft className="h-4 w-4 text-[#0d9488]" />
               </div>
             </div>
+          </CardContent>
+        </Card>
 
         <Card className="stat-card">
           <CardContent className="p-3">
@@ -370,8 +372,6 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
 
       {/* Mapping Table */}
       <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">

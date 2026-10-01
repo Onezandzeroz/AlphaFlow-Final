@@ -1069,6 +1069,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
 
           {/* Filter Bar */}
           {accounts.length > 0 && (
+          <>
           <div className="flex flex-col sm:flex-row gap-2 items-center">
                 {/* Search - always visible */}
                 <div className="relative flex-1 min-w-[140px]">
@@ -1127,6 +1128,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
                   </span>
                 )}
               </div>
+          </>
           )}
 
           {/* No filtered results */}

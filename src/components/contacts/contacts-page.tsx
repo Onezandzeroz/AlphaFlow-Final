@@ -605,7 +605,8 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
               <Skeleton className="h-10 flex-1" />
               <Skeleton className="h-10 w-40" />
             </div>
-
+          </CardContent>
+        </Card>
 
         {/* Contact cards skeleton */}
         <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
@@ -738,6 +739,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
 
       {/* Filter Bar */}
       {contacts.length > 0 && (
+      <>
       <div className="flex flex-col sm:flex-row gap-2 items-center">
             {/* Search input - always visible */}
             <div className="relative flex-1 min-w-[140px]">
@@ -872,6 +874,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
               </span>
             )}
           </div>
+      </>
       )}
 
       {/* Contacts List */}

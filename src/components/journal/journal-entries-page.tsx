@@ -740,7 +740,8 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
               <Skeleton className="h-10 w-36" />
               <Skeleton className="h-10 w-36" />
             </div>
-
+          </CardContent>
+        </Card>
 
         {/* List skeleton */}
         <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
@@ -863,6 +864,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
 
       {/* Filter Bar */}
       {entries.length > 0 && (
+      <>
       <div className="flex flex-col sm:flex-row gap-2 items-center">
             {/* Search - always visible */}
             <div className="relative flex-1 min-w-[140px]">
@@ -922,8 +924,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
               </span>
             )}
           </div>
-        </CardContent>
-      </Card>
+      </>
       )}
 
       {/* Entries List */}
