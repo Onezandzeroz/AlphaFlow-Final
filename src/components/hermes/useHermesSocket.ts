@@ -31,8 +31,10 @@ interface UseHermesSocketReturn {
   sendMessage: (content: string, options?: SendMessageOptions) => void;
   dismissNotification: (id: string) => void;
   /** Start a fresh chat session: clears visible messages and tells the server
-   *  to drop the previous session's in-memory history so the LLM starts blank. */
-  startNewSession: () => void;
+   *  to drop the previous session's in-memory history so the LLM starts blank.
+   *  When `silent` is true, the server skips generating a welcome message —
+   *  used by "Spørg Hermes" entry points where a prompt follows immediately. */
+  startNewSession: (options?: { silent?: boolean }) => void;
   /** Toggle between 'complex' and 'simplified' response modes (persisted server-side). */
   toggleResponseMode: () => void;
 }
@@ -373,28 +375,34 @@ export function useHermesSocket(options: {
     [isConnected, agentEnabled, tenantId, ensureSessionId]
   );
 
-  const startNewSession = useCallback(() => {
-    const previousSessionId = sessionIdRef.current;
-    // Rotate to a fresh session id and persist it.
-    const fresh = crypto.randomUUID();
-    sessionIdRef.current = fresh;
-    setSessionId(fresh);
-    try { localStorage.setItem(SESSION_STORAGE_KEY, fresh); } catch { /* ignore */ }
-    // Clear the visible conversation immediately for instant UI feedback,
-    // and reset any in-flight streaming state.
-    setMessages([]);
-    setIsTyping(false);
-    streamingIdRef.current = null;
-    // Clear old session's localStorage messages
-    if (previousSessionId) {
-      try { localStorage.removeItem(`hermes:messages:${tenantId}:${previousSessionId}`); } catch { /* ignore */ }
-    }
-    // Tell the server to drop the old session's in-memory history and
-    // generate a dynamic welcome for the new session.
-    if (socketRef.current && isConnected) {
-      socketRef.current.emit('new-session', { previousSessionId, newSessionId: fresh });
-    }
-  }, [isConnected, SESSION_STORAGE_KEY, tenantId]);
+  const startNewSession = useCallback(
+    (options?: { silent?: boolean }) => {
+      const { silent = false } = options || {}
+      const previousSessionId = sessionIdRef.current;
+      // Rotate to a fresh session id and persist it.
+      const fresh = crypto.randomUUID();
+      sessionIdRef.current = fresh;
+      setSessionId(fresh);
+      try { localStorage.setItem(SESSION_STORAGE_KEY, fresh); } catch { /* ignore */ }
+      // Clear the visible conversation immediately for instant UI feedback,
+      // and reset any in-flight streaming state.
+      setMessages([]);
+      setIsTyping(false);
+      streamingIdRef.current = null;
+      // Clear old session's localStorage messages
+      if (previousSessionId) {
+        try { localStorage.removeItem(`hermes:messages:${tenantId}:${previousSessionId}`); } catch { /* ignore */ }
+      }
+      // Tell the server to drop the old session's in-memory history.
+      // `silent` tells the server to SKIP generating a dynamic welcome —
+      // used by "Spørg Hermes" card clicks where a prompt follows immediately
+      // and the user doesn't want a greeting cluttering the panel.
+      if (socketRef.current && isConnected) {
+        socketRef.current.emit('new-session', { previousSessionId, newSessionId: fresh, silent });
+      }
+    },
+    [isConnected, SESSION_STORAGE_KEY, tenantId]
+  );
 
   const toggleResponseMode = useCallback(() => {
     const next: ResponseMode = responseMode === 'complex' ? 'simplified' : 'complex';

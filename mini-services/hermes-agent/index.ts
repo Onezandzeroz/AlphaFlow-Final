@@ -1101,20 +1101,35 @@ io.on('connection', async (socket) => {
 
   // ----- new-session -----
   // Client requests a fresh chat session. We drop the in-memory history cache
-  // for the given (previous) sessionId, then generate a fresh dynamic LLM
-  // welcome for the new session so the user is greeted personally (not with
-  // a static string). The welcome is stored as the first AgentMessage of the
-  // new session so it's retained across reopens.
-  socket.on('new-session', async (data: { previousSessionId?: string; newSessionId?: string }) => {
+  // for the given (previous) sessionId, then — UNLESS `silent` is set —
+  // generate a fresh dynamic LLM welcome for the new session so the user is
+  // greeted personally (not with a static string). The welcome is stored as
+  // the first AgentMessage of the new session so it's retained across reopens.
+  //
+  // SILENT new-session: used by "Spørg Hermes" entry points (posting guide
+  // cards) where a pre-filled prompt is about to be sent immediately. In that
+  // case the welcome would clutter the panel — the user wants to go straight
+  // from card click → Hermes's answer, with no greeting in between. The session
+  // is still rotated (fresh LLM context, cleared history) but no welcome is
+  // generated or emitted.
+  socket.on('new-session', async (data: { previousSessionId?: string; newSessionId?: string; silent?: boolean }) => {
     const meta = connectedSockets.get(socket.id)
     if (!meta) return
     const { tenantId, userName } = meta
+    const { silent = false } = data
 
     tenantProvider.clearSessionCache(tenantId, data?.previousSessionId)
-    console.log(`[Hermes] New chat session started by "${userName}" (tenant ${tenantId}, prev=${data?.previousSessionId ?? 'none'})`)
+    console.log(`[Hermes] New chat session started by "${userName}" (tenant ${tenantId}, prev=${data?.previousSessionId ?? 'none'}${silent ? ', silent' : ''})`)
 
     // Ack immediately so the client can clear its UI
     socket.emit('new-session-ack', { ok: true })
+
+    // Silent session (e.g. "Spørg Hermes" card click): skip the welcome
+    // entirely — the pending prompt will be sent right after this, and the
+    // user only wants to see Hermes's answer, not a greeting.
+    if (silent) {
+      return
+    }
 
     // Generate a dynamic welcome for the new session
     const newSessionId = data?.newSessionId

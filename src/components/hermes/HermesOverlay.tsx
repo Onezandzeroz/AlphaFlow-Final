@@ -169,6 +169,13 @@ export function HermesOverlay({
 
     // If already connected, send immediately. Otherwise poll briefly until
     // the socket lands — reading the LIVE flag from the ref each tick.
+    //
+    // For each "Spørg Hermes" request we FIRST start a fresh silent session
+    // (clears history + skips the welcome message) so the LLM sees ONLY this
+    // prompt — no prior conversation context, no greeting. Then the prompt is
+    // sent with `silent: true` so it's not shown as a user bubble either;
+    // only Hermes's answer appears.
+    //
     // `silent: true` so the pre-filled prompt is NOT shown as a user chat
     // bubble — only Hermes's answer should be visible (per user request:
     // "spørgsmålet skal ikke vises, kun svaret").
@@ -176,8 +183,19 @@ export function HermesOverlay({
     const maxAttempts = 40; // up to ~4s @ 100ms
     const trySend = () => {
       if (isConnectedRef.current) {
-        sendMessage(promptToSend, { silent: true });
-        consumePendingPrompt();
+        // 1) Rotate to a fresh silent session (clears history server-side,
+        //    skips the welcome so the panel stays empty until the answer
+        //    streams in).
+        startNewSession({ silent: true });
+        // 2) Send the prompt on the new session. Defer one tick so the
+        //    'new-session' emit is flushed before the 'chat' emit — otherwise
+        //    socket.io may coalesce them and the server could process the
+        //    chat before the session rotation lands, attaching the prompt to
+        //    the OLD session's history.
+        setTimeout(() => {
+          sendMessage(promptToSend, { silent: true });
+          consumePendingPrompt();
+        }, 0);
         return;
       }
       attempts += 1;
@@ -190,7 +208,7 @@ export function HermesOverlay({
       }
     };
     trySend();
-  }, [openRequestNonce, isConnected, sendMessage, pendingPrompt, consumePendingPrompt, setFabHidden]);
+  }, [openRequestNonce, isConnected, sendMessage, startNewSession, pendingPrompt, consumePendingPrompt, setFabHidden]);
 
   if (!visible) return null;
 
