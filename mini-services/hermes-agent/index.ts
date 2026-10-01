@@ -855,8 +855,8 @@ io.on('connection', async (socket) => {
   })
 
   // ----- chat -----
-  socket.on('chat', async (data: { message: string; sessionId?: string }) => {
-    const { message, sessionId } = data
+  socket.on('chat', async (data: { message: string; sessionId?: string; silent?: boolean }) => {
+    const { message, sessionId, silent = false } = data
     const meta = connectedSockets.get(socket.id)
 
     // meta was set during the verified connection handshake. If it's missing
@@ -968,7 +968,16 @@ io.on('connection', async (socket) => {
 
       // Persist the user message now that the LLM context is built (avoids
       // the duplicate-message bug — see note above). Tagged with sessionId.
-      tenantProvider.addMessage(tenantId, { role: 'user', content: message }, sessionId)
+      //
+      // SILENT PROMPTS: When `silent` is true (e.g. a "Spørg Hermes" card link
+      // sent a pre-filled prompt), we SKIP persisting the user turn. The LLM
+      // still sees it (it's in the `messages` array above) and answers it,
+      // but the prompt doesn't reappear in session-history on reload — only
+      // the assistant's answer is stored and shown. This matches the user's
+      // expectation: "spørgsmålet skal ikke vises, kun svaret".
+      if (!silent) {
+        tenantProvider.addMessage(tenantId, { role: 'user', content: message }, sessionId)
+      }
 
       // Call OpenRouter LLM — with tools if source-code-explorer skill is active.
       // The model uses tool_choice='auto' so it will ONLY call tools when
@@ -1001,7 +1010,12 @@ io.on('connection', async (socket) => {
           (delta) => {
             socket.emit('chat-response', { chunk: delta, done: false })
           },
-          { maxTokens: 2048 },
+          // 4096 tokens ≈ ~3000 words. Detailed accounting answers with markdown
+          // tables, formulas, and 2-3 worked examples can easily exceed the old
+          // 2048 limit and get cut off mid-sentence. 4096 matches the tool-
+          // calling last-iteration budget and comfortably fits a full guide
+          // answer without truncation.
+          { maxTokens: 4096 },
         ) || 'Beklager, jeg kunne ikke generere et svar.'
         const elapsed = Date.now() - streamStart
         console.log(`[Hermes] Stream complete: ${fullResponse.length} chars in ${elapsed}ms (${(fullResponse.length / 4).toFixed(0)} approx tokens)`)
