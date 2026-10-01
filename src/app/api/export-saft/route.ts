@@ -420,6 +420,21 @@ export const GET = withGuard(
         ),
       );
 
+      // Build a lookup map: lowercase contact name → CustomerID, so we can
+      // match journal entry descriptions against customer names.
+      // SAF-T requires that <CustomerID> in <Invoice> references a <CustomerID>
+      // defined in <MasterFiles><Customers>. Without this, the XSD's xs:keyref
+      // constraint fails (DANGLING_CUSTOMER_REF validation error).
+      const customerNameToId = new Map<string, string>();
+      for (const c of customerContacts) {
+        customerNameToId.set(c.name.toLowerCase(), c.id);
+      }
+      // Fallback CustomerID: the placeholder "GEN-001" is always defined in
+      // MasterFiles/Customers (either as a real customer or the placeholder).
+      const FALLBACK_CUSTOMER_ID = customerContacts.length > 0
+        ? customerContacts[0].id
+        : 'GEN-001';
+
       if (salesRelatedEntries.length > 0) {
         const sourceDocuments = root.ele('SourceDocuments');
         const salesInvoices = sourceDocuments.ele('SalesInvoices');
@@ -434,10 +449,23 @@ export const GET = withGuard(
 
           if (salesLines.length === 0) return;
 
+          // Resolve CustomerID: try to match the entry description/reference
+          // against a known customer name. If no match, fall back to the
+          // placeholder customer so the xs:keyref constraint still passes.
+          const descLower = (entry.description || '').toLowerCase();
+          const refLower = (entry.reference || '').toLowerCase();
+          let resolvedCustomerId = FALLBACK_CUSTOMER_ID;
+          for (const [name, id] of customerNameToId) {
+            if (descLower.includes(name) || refLower.includes(name)) {
+              resolvedCustomerId = id;
+              break;
+            }
+          }
+
           const invoice = salesInvoices.ele('Invoice');
           invoice.ele('InvoiceNo').txt(entry.reference || `JE-${(index + 1).toString().padStart(6, '0')}`);
           invoice.ele('InvoiceDate').txt(formatDate(new Date(entry.date)));
-          invoice.ele('CustomerID').txt(entry.reference || `JE-${(index + 1).toString().padStart(6, '0')}`);
+          invoice.ele('CustomerID').txt(resolvedCustomerId);
           invoice.ele('InvoiceType').txt('Invoice');
 
           const invLines = invoice.ele('Lines');

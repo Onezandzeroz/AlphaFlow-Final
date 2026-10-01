@@ -150,17 +150,20 @@ export function validateSAFT(xmlContent: string): ValidationResult {
     });
 
     // Validate AuditFileVersion
+    // v2.1 is the current Danish SAF-T standard (Erhvervsstyrelsen 2026-07-03).
+    // The earlier "warn if not 1.0" check was obsolete and always fired for
+    // valid v2.1 files — removed.
     totalChecks++;
     const versionMatch = xmlContent.match(/<AuditFileVersion>([^<]*)<\/AuditFileVersion>/);
     if (versionMatch) {
       const version = versionMatch[1].trim();
-      if (version !== '1.0') {
+      if (version !== '2.1' && version !== '1.0') {
         warnings.push({
           code: 'VERSION_WARNING',
           message: `SAF-T version ${version} may not be compatible with Danish requirements`,
           path: 'Header/AuditFileVersion',
           severity: 'warning',
-          suggestion: 'Use version 1.0 for Danish SAF-T compliance',
+          suggestion: 'Use version "2.1" for Danish SAF-T Financial DK compliance',
         });
       } else {
         passed++;
