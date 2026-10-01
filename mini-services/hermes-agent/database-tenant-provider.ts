@@ -18,7 +18,22 @@
 //
 // ============================================================
 
-import { PrismaClient } from '@prisma/client'
+// ─── Prisma client import — #main-entry-point workaround ───────────
+// Prisma 6.x's generated `@prisma/client` wrapper sets `"main": "default.js"`,
+// and `default.js` contains `module.exports = { ...require('#main-entry-point') }`.
+// The `#main-entry-point` is a Node "subpath import" defined in the generated
+// `.prisma/client/package.json` under `"imports"`.
+//
+// Under Bun this resolves correctly when imported via ESM `import`, BUT when
+// PM2's `ProcessContainerForkBun.js` loads `boot.ts` via CommonJS `require()`,
+// Bun's CJS interop picks up `default.js` (the `main` field) and fails to
+// resolve the `#main-entry-point` subpath import — producing:
+//   "Cannot find package '#main-entry-point' from '.../default.js'"
+//
+// Fix: import from the `./index` subpath of `@prisma/client`, which maps
+// directly to the generated `index.js` (no `#main-entry-point` indirection).
+// This works under both Bun ESM and PM2's CJS fork container.
+import { PrismaClient } from '@prisma/client/index'
 import type {
   TenantProvider,
   TenantData,

@@ -81,6 +81,29 @@ if (clientAlreadyExists) {
   console.log('[Hermes Boot] Prisma client generated successfully')
 }
 
+// ── Verify the Prisma client actually loads under CJS require() ─────
+// The generated `@prisma/client` wrapper sets `"main": "default.js"`, and
+// `default.js` does `require('#main-entry-point')` — a Node subpath import
+// that Bun's CJS interop (used by PM2's ProcessContainerForkBun.js) sometimes
+// fails to resolve. database-tenant-provider.ts imports from `@prisma/client/index`
+// to sidestep this, but we verify here too — failing fast with a clear message
+// is far better than a cryptic runtime crash on the first DB query.
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- intentional CJS require to verify the client loads under PM2's ProcessContainerForkBun.js (which uses require(), not import)
+  const { PrismaClient } = require('@prisma/client/index')
+  if (typeof PrismaClient !== 'function') {
+    throw new Error('PrismaClient is not a constructor (got typeof ' + typeof PrismaClient + ')')
+  }
+  console.log('[Hermes Boot] Prisma client import verified ✓')
+} catch (err: any) {
+  console.error('[Hermes Boot] Prisma client failed to load via require():')
+  console.error('[Hermes Boot]   ' + (err?.message || err))
+  console.error('[Hermes Boot] This is typically the #main-entry-point subpath import issue.')
+  console.error('[Hermes Boot] database-tenant-provider.ts should import from "@prisma/client/index".')
+  console.error('[Hermes Boot] If that already is the case, run: bunx prisma generate --schema=../../prisma/schema.prisma')
+  process.exit(1)
+}
+
 // Import and start the real service.
 // CRITICAL: Use an IIFE, NOT top-level await.
 // PM2's ProcessContainerForkBun.js uses require() to load this file,
