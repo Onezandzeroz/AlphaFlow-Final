@@ -10,8 +10,16 @@ export interface HermesConfig {
   agentName: string               // "Hermes"
   defaultLanguage: string        // "da"
   maxConversationHistory: number // 6 — prior messages replayed to the LLM
+  // ── Streaming ────────────────────────────────────────────────
+  // streamingChunkSize: only used by the tool-calling path (fake-streaming
+  // a complete response for UI consistency). The plain-chat path uses real
+  // SSE streaming and ignores this.
+  // streamingChunkDelay: was 30ms — added visible latency on long answers
+  // (4096 tokens × 30ms ≈ 8-12s extra). Set to 0 so chunks are emitted the
+  // instant they arrive from OpenRouter. The client renders them just fine
+  // without artificial throttling.
   streamingChunkSize: number     // 20
-  streamingChunkDelay: number    // 30 (ms)
+  streamingChunkDelay: number    // 0 (ms) — no artificial throttle
 
   // ── Chat retention ────────────────────────────────────────────
   // Chat sessions are NOT preserved indefinitely. After each message
@@ -39,7 +47,7 @@ export const defaultConfig: HermesConfig = {
   defaultLanguage: 'da',
   maxConversationHistory: 6,
   streamingChunkSize: 20,
-  streamingChunkDelay: 30,
+  streamingChunkDelay: 0,
   retentionKeepCount: 20,
   retentionKeepCountSuperDev: 40,
   reminderCheckInterval: 60_000,

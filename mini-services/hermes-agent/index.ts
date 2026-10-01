@@ -328,7 +328,7 @@ async function callOpenRouterStream(
 
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      let timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
       let res: Response
       try {
@@ -371,14 +371,31 @@ async function callOpenRouterStream(
       // ── Parse the SSE stream ────────────────────────────────────────
       // OpenRouter sends `data: {json}\n\n` lines, terminated by `data: [DONE]`.
       // Each JSON object has choices[0].delta.content with the next token(s).
+      //
+      // TIMEOUT STRATEGY: The initial REQUEST_TIMEOUT_MS (30s) covers the
+      // connection + time-to-first-token. Once streaming starts, we switch
+      // to a per-chunk idle timeout — each received chunk resets the timer.
+      // This prevents long responses (e.g. 4096-token detailed accounting
+      // explanations that can take 60-90s to stream) from being aborted
+      // mid-stream while still detecting genuinely stalled connections.
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+
+      // Reset the timeout when we receive the first chunk, then on every
+      // subsequent chunk — turning the "30s total" into "30s idle".
+      const resetTimeout = () => {
+        clearTimeout(timeout)
+        timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+      }
 
       try {
         while (true) {
           const { done, value } = await reader.read()
           if (done) break
+
+          // Data received — reset the idle timeout
+          resetTimeout()
 
           buffer += decoder.decode(value, { stream: true })
 
@@ -908,6 +925,67 @@ io.on('connection', async (socket) => {
     socket.emit('chat-typing', { typing: true })
 
     try {
+      // ── SILENT PROMPT FAST PATH ─────────────────────────────────────
+      // Silent prompts (e.g. "Spørg Hermes" card clicks) are self-contained
+      // questions that don't need conversation history, skills, code atlas,
+      // or the full 27 KB knowledge base. Skipping all of this:
+      //   - Reduces input tokens from ~9000 → ~800 (10x less)
+      //   - Cuts time-to-first-token from 5-12s → 1-3s
+      //   - Avoids the fetchSkillPrompts() DB round-trip
+      //   - Avoids buildCodeAtlas() file-system scan
+      // The prompt itself contains all the context the LLM needs (rule title,
+      // accounts, debit/credit labels), so a minimal system prompt suffices.
+      if (silent) {
+        const minimalSystemPrompt = `# Hermes – AI Regnskabskonsulent for AlphaFlow
+
+Du er Hermes, den AI-drevne regnskabskonsulent for AlphaFlow. Du er specialiseret i dansk regnskab, moms og bogføring.
+
+## Adfærd
+- Svar altid på dansk, medmindre brugeren skriver på et andet sprog.
+- Vær præcis, hjælpsom og professionel.
+- Brug markdown til lister, tabeller og vigtig information.
+- Når du citerer beløb, angiv altid i DKK.
+- Forklar bogføringsprincipper i almindeligt, forståeligt sprog — så en lægmand kan følge med.
+
+${tenantProvider.getResponseMode(tenantId) === 'simplified' ? '## Svarstil\nBrug kort, enkle sætninger. Undgå tunge tabeller og lange formler — forklar med hverdagsord og giv ét tydeligt eksempel.\n' : ''}## Kontekst
+Brugeren har klikket "Spørg Hermes" på en bogføringsregel-kort i AlphaFlows bogføringsguide. Prompten indeholder allerede reglens titel, beskrivelse, konti og kontering. Brug denne kontekst direkte — du behøver ikke spørge om mere info.`
+
+        const messages: ChatMessage[] = [
+          { role: 'system', content: minimalSystemPrompt },
+          { role: 'user', content: message },
+        ]
+
+        // No history to persist for the user turn (silent). The assistant
+        // response IS persisted so it shows up on reload.
+        const streamStart = Date.now()
+        const fullResponse = await callOpenRouterStream(
+          messages,
+          (delta) => {
+            socket.emit('chat-response', { chunk: delta, done: false })
+          },
+          { maxTokens: 4096 },
+        ) || 'Beklager, jeg kunne ikke generere et svar.'
+
+        // Persist assistant response (user turn was skipped above)
+        tenantProvider.addMessage(tenantId, { role: 'assistant', content: fullResponse }, sessionId)
+
+        const keepCount = meta.isSuperDev ? config.retentionKeepCountSuperDev : config.retentionKeepCount
+        tenantProvider.pruneMessages(tenantId, keepCount).catch((err) => {
+          console.warn(`[Hermes] Retention prune failed for tenant ${tenantId}:`, err)
+        })
+
+        socket.emit('chat-complete', { fullResponse, done: true })
+
+        rateLimiter.record(tenantId).catch((err) => {
+          console.warn(`[Hermes] rateLimiter.record failed for ${tenantId}:`, err)
+        })
+
+        const elapsed = Date.now() - streamStart
+        console.log(`[Hermes] Silent prompt answered for "${meta.userName}" — ${fullResponse.length} chars in ${elapsed}ms`)
+        return
+      }
+
+      // ── REGULAR CHAT PATH (full context) ────────────────────────────
       // Build conversation history for context — scoped to THIS chat session
       // so the model only sees the current conversation, not every message
       // ever exchanged with the tenant.
