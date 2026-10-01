@@ -184,10 +184,9 @@ html.dark {
   border-radius: var(--radius-lg);
   box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   transition: all 0.2s ease;
-  /* Override Card component's default py-4 sm:py-6 and gap-4 sm:gap-6
-     which makes stat cards unnecessarily tall. */
-  padding-top: 0;
-  padding-bottom: 0;
+  /* Use compact padding matching E-faktura Center style */
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
   gap: 0;
 }
 
@@ -1451,9 +1450,9 @@ select:focus {
   border-radius: var(--radius-lg);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.03);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  /* Override Card component's default py-4 sm:py-6 and gap-4 sm:gap-6 */
-  padding-top: 0;
-  padding-bottom: 0;
+  /* Use compact padding matching E-faktura Center style */
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
   gap: 0;
 }
 .stat-card-refined:hover {

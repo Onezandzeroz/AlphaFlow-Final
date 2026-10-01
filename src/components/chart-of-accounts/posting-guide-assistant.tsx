@@ -676,12 +676,12 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
 
       {/* Search */}
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder={isDanish ? 'Søg i bogføringsregler...' : 'Search posting rules...'}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 bg-gray-50 dark:bg-white/[0.04] border-0 h-10"
+          className="pl-9"
         />
       </div>
 

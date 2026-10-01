@@ -757,12 +757,12 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
           <div className="flex flex-wrap gap-2 items-center mt-2 lg:mt-3">
             {/* Search - always visible */}
             <div className="relative flex-1 min-w-[140px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={t('searchDescription')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-gray-50 dark:bg-white/5 border-0"
+                className="pl-9"
               />
             </div>
 

@@ -744,7 +744,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
           <div className="flex flex-wrap gap-2 items-center">
             {/* Search input - always visible */}
             <div className="relative flex-1 min-w-[140px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={
                   isDanish
@@ -753,7 +753,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-gray-50 dark:bg-white/[0.04] border-0"
+                className="pl-9"
                 autoComplete="off"
                 data-form-type="other"
               />
