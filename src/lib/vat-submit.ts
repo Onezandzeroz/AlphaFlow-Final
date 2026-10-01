@@ -1,24 +1,27 @@
 /**
- * VAT Submission Module — Skattestyrelsen Moms-API Integration
+ * VAT Submission Module — Skattestyrelsen RSU B2B SOAP Integration
  *
  * Handles VAT report preparation and submission to Skattestyrelsen
- * (Danish Tax Authority) via their REST API (NemVirksomhed).
+ * (Danish Tax Authority) via the RSU B2B SOAP web service gateway (NemVirksomhed).
  *
- * Features:
- *   - OAuth2 token management (client_credentials grant)
- *   - Prepare VAT submission data from computeVATRegister()
- *   - Submit to Skattestyrelsen Moms-API
- *   - Quarterly reporting periods (Q1-Q4) and YEARLY
- *   - Store submissions in VATSubmission model (Prisma)
- *   - Audit logging
+ * Architecture:
+ *   - 3 SOAP services: VirksomhedKalenderHent, ModtagMomsangivelseForeloebig,
+ *     MomsangivelseKvitteringHent
+ *   - Authentication: mutual TLS (mTLS) with VOCES3 System (S1) certificate
+ *     + WS-Security XML signature
+ *   - Format: SOAP 1.1 document/literal XML
+ *   - Flow: submit DRAFT → user approves via MitID on TastSelv → fetch receipt
  *
- * NOTE: Since Skattestyrelsen API requires real OAuth credentials,
- * the module includes a simulated response path when no credentials are
- * configured, returning a structured mock response.
+ * The RSU (AlphaFlow) submits a DRAFT. The legal entity (customer company)
+ * must approve it via MitID on TastSelv Erhverv through the returned deep link.
+ *
+ * When SKAT mTLS credentials are not configured, the module runs in simulation
+ * mode so the full UI flow can be tested.
  *
  * Exports:
  *   - prepareVATSubmission(companyId, year, period, userId)
  *   - submitVATToSkat(submissionId, userId)
+ *   - fetchVATReceipt(submissionId, userId)   — poll for receipt after approval
  *   - getVATSubmissions(companyId, year?)
  *   - getQuarterDates(year, period)
  */
@@ -27,80 +30,17 @@ import { db } from '@/lib/db';
 import { computeVATRegister, r2 } from '@/lib/vat-utils';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { logger } from '@/lib/logger';
+import {
+  submitModtagMomsangivelseForeloebig,
+  getMomsangivelseKvitteringHent,
+  mapVatRegisterToSkatFields,
+  hasSkatCredentials,
+  SkatApiError,
+} from '@/lib/skat-soap-client';
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export type VATReportingPeriod = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEARLY';
-
-// ─── Skattestyrelsen API Configuration ───────────────────────────────────
-
-const SKAT_API_BASE = process.env.SKAT_API_BASE || 'https://api.skat.dk/moms';
-const SKAT_CLIENT_ID = process.env.SKAT_CLIENT_ID || '';
-const SKAT_CLIENT_SECRET = process.env.SKAT_CLIENT_SECRET || '';
-
-/** Check if Skattestyrelsen API credentials are configured */
-function hasSkatCredentials(): boolean {
-  return !!(SKAT_CLIENT_ID && SKAT_CLIENT_SECRET);
-}
-
-// ─── OAuth2 Token Management ──────────────────────────────────────────────
-
-/** In-memory token cache */
-let cachedToken: { accessToken: string; expiresAt: Date } | null = null;
-
-/**
- * Get an OAuth2 access token from Skattestyrelsen.
- * Uses client_credentials grant with token caching.
- *
- * When no credentials are configured, throws an error.
- */
-async function getSkatAccessToken(): Promise<string> {
-  if (!hasSkatCredentials()) {
-    throw new Error(
-      'SKAT_API_CREDENTIALS_MISSING: Skattestyrelsen API credentials are not configured. ' +
-      'Set SKAT_CLIENT_ID and SKAT_CLIENT_SECRET environment variables to enable live VAT submission.',
-    );
-  }
-
-  // Return cached token if still valid
-  if (cachedToken && cachedToken.expiresAt > new Date()) {
-    return cachedToken.accessToken;
-  }
-
-  // Request new token
-  const tokenUrl = `${SKAT_API_BASE}/oauth/token`;
-
-  const response = await fetch(tokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: SKAT_CLIENT_ID,
-      client_secret: SKAT_CLIENT_SECRET,
-      scope: 'moms:indberet',
-    }),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => 'Unknown error');
-    throw new Error(`SKAT_OAUTH_FAILED: Failed to obtain access token (${response.status}): ${errorBody}`);
-  }
-
-  const tokenData = await response.json();
-  const accessToken = tokenData.access_token as string;
-  const expiresIn = (tokenData.expires_in as number) || 3600;
-
-  // Cache the token (expire 5 minutes early for safety)
-  cachedToken = {
-    accessToken,
-    expiresAt: new Date(Date.now() + (expiresIn - 300) * 1000),
-  };
-
-  logger.info('[VAT-Submit] Obtained new Skattestyrelsen access token');
-  return accessToken;
-}
 
 // ─── Quarter Date Helpers ──────────────────────────────────────────────────
 
@@ -141,21 +81,21 @@ export function getQuarterDates(
         from: new Date(year, 0, 1),
         to: new Date(year, 11, 31, 23, 59, 59, 999),
       };
+    default:
+      throw new Error(`Invalid period: ${period}`);
   }
 }
 
 // ─── Core: Prepare VAT Submission ──────────────────────────────────────────
 
 /**
- * Prepare a VAT submission draft from the VAT register data.
- *
- * Computes the VAT register for the given period, creates a VATSubmission
- * record with status DRAFT, and stores the full VAT data snapshot.
+ * Prepare a VAT submission record by computing the VAT register for the
+ * given period and storing it as a DRAFT.
  *
  * @param companyId - Company database ID
  * @param year - Fiscal year
  * @param period - Q1, Q2, Q3, Q4, or YEARLY
- * @param userId - User performing the action
+ * @param userId - User preparing the submission
  * @returns The created VATSubmission record
  */
 export async function prepareVATSubmission(
@@ -164,35 +104,27 @@ export async function prepareVATSubmission(
   period: VATReportingPeriod,
   userId: string,
 ) {
-  // Check for existing submission for this period
+  const { from, to } = getQuarterDates(year, period);
+  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+  // Compute the VAT register for the period
+  const vatRegister = await computeVATRegister(companyId, formatDate(from), formatDate(to));
+
+  // Check for existing submission
   const existing = await db.vATSubmission.findUnique({
-    where: {
-      companyId_year_period: { companyId, year, period },
-    },
+    where: { companyId_year_period: { companyId, year, period } },
   });
 
-  if (existing) {
+  if (existing && existing.status === 'SUBMITTED') {
     throw new Error(
-      `VAT_SUBMISSION_EXISTS: A VAT submission for ${year} ${period} already exists (status: ${existing.status}). ` +
-      `Use getVATSubmissions() to check the existing submission.`,
+      `VAT_SUBMISSION_EXISTS: A submission for ${year} ${period} already exists with status ${existing.status}.`,
     );
   }
 
-  // Get period dates
-  const { from, to } = getQuarterDates(year, period);
-
-  // Compute VAT register
-  const vatRegister = await computeVATRegister({
-    companyId,
-    status: 'POSTED',
-    cancelled: false,
-    date: { gte: from, lte: to },
-  });
-
-  // Create the submission record
-  const submission = await db.vATSubmission.create({
-    data: {
-      companyId,
+  // Create or update the submission record
+  const submission = await db.vATSubmission.upsert({
+    where: { companyId_year_period: { companyId, year, period } },
+    create: {
       year,
       period,
       periodFrom: from,
@@ -213,6 +145,36 @@ export async function prepareVATSubmission(
         periodTo: to.toISOString(),
       },
       status: 'DRAFT',
+      companyId,
+    },
+    update: {
+      periodFrom: from,
+      periodTo: to,
+      totalOutputVAT: vatRegister.totalOutputVAT,
+      totalInputVAT: vatRegister.totalInputVAT,
+      netVATPayable: vatRegister.netVATPayable,
+      vatDataJson: {
+        outputVAT: vatRegister.outputVAT,
+        inputVAT: vatRegister.inputVAT,
+        totalOutputVAT: vatRegister.totalOutputVAT,
+        totalInputVAT: vatRegister.totalInputVAT,
+        netVATPayable: vatRegister.netVATPayable,
+        totalRevenue: vatRegister.totalRevenue,
+        totalExpenses: vatRegister.totalExpenses,
+        computedAt: new Date().toISOString(),
+        periodFrom: from.toISOString(),
+        periodTo: to.toISOString(),
+      },
+      status: 'DRAFT',
+      // Clear any previous submission artifacts when re-preparing
+      referenceId: null,
+      responseXml: null,
+      errorMessage: null,
+      errorCode: null,
+      transactionIdentifier: null,
+      deepLink: null,
+      receiptPdfBase64: null,
+      advisoryCode: null,
     },
   });
 
@@ -244,17 +206,26 @@ export async function prepareVATSubmission(
   return submission;
 }
 
-// ─── Core: Submit VAT to Skattestyrelsen ───────────────────────────────────
+// ─── Core: Submit VAT to Skattestyrelsen via SOAP ─────────────────────────
 
 /**
- * Submit a VAT report draft to Skattestyrelsen.
+ * Submit a VAT report DRAFT to Skattestyrelsen via the RSU B2B SOAP gateway.
  *
- * If Skattestyrelsen API credentials are configured, submits via their
- * REST API. Otherwise, returns a simulated response.
+ * Calls ModtagMomsangivelseForeloebig with the 17 VAT field values mapped
+ * from AlphaFlow's VAT register. Returns a deep link to TastSelv Erhverv
+ * where the user must approve the draft with MitID.
+ *
+ * Flow:
+ *   1. Validate submission is in DRAFT status
+ *   2. Get company SE-number (CVR)
+ *   3. Map VAT register data to the 17 SKAT MomsAngivelse fields
+ *   4. Call ModtagMomsangivelseForeloebig via SOAP (or simulation mode)
+ *   5. Store transactionIdentifier + deepLink + advisoryCode
+ *   6. Update status to SUBMITTED (awaiting user approval)
  *
  * @param submissionId - The VATSubmission database ID
  * @param userId - User performing the action
- * @returns Updated VATSubmission record
+ * @returns Updated VATSubmission record with deepLink
  */
 export async function submitVATToSkat(
   submissionId: string,
@@ -276,89 +247,76 @@ export async function submitVATToSkat(
     );
   }
 
-  // Build submission payload
-  const payload = {
-    cvrNumber: '', // Will be filled from company data
-    period: {
-      year: submission.year,
-      periodType: submission.period,
-      from: submission.periodFrom.toISOString().split('T')[0],
-      to: submission.periodTo.toISOString().split('T')[0],
-    },
-    vatData: {
-      totalOutputVAT: submission.totalOutputVAT,
-      totalInputVAT: submission.totalInputVAT,
-      netVATPayable: submission.netVATPayable,
-      outputVATBreakdown: (submission.vatDataJson as Record<string, unknown>)?.outputVAT || [],
-      inputVATBreakdown: (submission.vatDataJson as Record<string, unknown>)?.inputVAT || [],
-    },
-  };
-
-  // Get company CVR
+  // Get company CVR (used as SE-number for SKAT)
   const company = await db.company.findUnique({
     where: { id: submission.companyId },
     select: { cvrNumber: true, name: true },
   });
 
-  if (company) {
-    payload.cvrNumber = company.cvrNumber;
+  const seNumber = company?.cvrNumber || '';
+  if (!seNumber) {
+    throw new Error(
+      'COMPANY_SE_NUMBER_MISSING: The company has no CVR/SE-number. ' +
+      'A valid SE-number is required to submit VAT to Skattestyrelsen.',
+    );
   }
 
-  let referenceId: string | null = null;
-  let responseXml: string | null = null;
+  // Map VAT register data to the 17 SKAT MomsAngivelse fields
+  const vatFields = mapVatRegisterToSkatFields({
+    totalOutputVAT: Number(submission.totalOutputVAT),
+    totalInputVAT: Number(submission.totalInputVAT),
+    netVATPayable: Number(submission.netVATPayable),
+    outputVAT: (submission.vatDataJson as Record<string, unknown>)?.outputVAT as Array<{ code: string; netAmount: number }> | undefined,
+    inputVAT: (submission.vatDataJson as Record<string, unknown>)?.inputVAT as Array<{ code: string; netAmount: number }> | undefined,
+  });
+
+  const formatDate = (d: Date) => d.toISOString().split('T')[0];
+  const periodFrom = formatDate(submission.periodFrom);
+  const periodTo = formatDate(submission.periodTo);
+
   let newStatus: 'SUBMITTED' | 'ERROR' = 'SUBMITTED';
   let errorMessage: string | null = null;
   let errorCode: string | null = null;
+  let transactionIdentifier: string | null = null;
+  let deepLink: string | null = null;
+  let advisoryCode: string | null = null;
+  let responseXml: string | null = null;
+  let referenceId: string | null = null;
 
-  if (hasSkatCredentials()) {
-    // ── Live submission path ──
-    try {
-      const accessToken = await getSkatAccessToken();
+  try {
+    // Call ModtagMomsangivelseForeloebig via SOAP (or simulation mode)
+    const result = await submitModtagMomsangivelseForeloebig(
+      seNumber,
+      periodFrom,
+      periodTo,
+      vatFields,
+    );
 
-      const response = await fetch(`${SKAT_API_BASE}/v1/indberet`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => 'Unknown error');
-        newStatus = 'ERROR';
-        errorMessage = `Skattestyrelsen API returned ${response.status}`;
-        errorCode = `SKAT_API_${response.status}`;
-
-        logger.error(
-          `[VAT-Submit] Skattestyrelsen API error: ${response.status} — ${errorBody}`,
-        );
-      } else {
-        const result = await response.json();
-        referenceId = result.referenceId || result.id || `SKAT-${Date.now()}`;
-        responseXml = result.responseXml || JSON.stringify(result);
-        newStatus = 'SUBMITTED';
-      }
-    } catch (error) {
-      newStatus = 'ERROR';
-      errorMessage = error instanceof Error ? error.message : 'Unknown error during submission';
-      errorCode = 'SUBMISSION_FAILED';
-
-      logger.error(`[VAT-Submit] Submission error:`, error);
-    }
-  } else {
-    // ── Simulated submission path (no credentials configured) ──
-    referenceId = `SIMULATED-${submission.year}-${submission.period}-${Date.now()}`;
-    responseXml = JSON.stringify({
-      type: 'simulated',
-      message: 'VAT submission simulated. No Skattestyrelsen API credentials configured.',
-      payload,
-      simulatedAt: new Date().toISOString(),
-    });
+    transactionIdentifier = result.transactionIdentifier;
+    deepLink = result.deepLink;
+    advisoryCode = result.advisoryCode;
+    responseXml = result.responseXml;
+    // referenceId = transactionIdentifier (for backward compat with UI)
+    referenceId = result.transactionIdentifier;
 
     logger.info(
-      `[VAT-Submit] SIMULATED submission (no API credentials configured): ` +
-      `${submission.year} ${submission.period}`,
+      `[VAT-Submit] DRAFT submitted to SKAT: ${submission.year} ${submission.period}, ` +
+      `txId=${transactionIdentifier}, advisory=${advisoryCode}, ` +
+      `deepLink=${deepLink ? 'yes' : 'no'}, simulated=${!hasSkatCredentials()}`,
+    );
+  } catch (error) {
+    newStatus = 'ERROR';
+    if (error instanceof SkatApiError) {
+      errorCode = error.code;
+      errorMessage = error.message;
+    } else {
+      errorCode = 'SUBMISSION_FAILED';
+      errorMessage = error instanceof Error ? error.message : 'Unknown error during submission';
+    }
+
+    logger.error(
+      `[VAT-Submit] Submission error [${errorCode}]: ${errorMessage}`,
+      error,
     );
   }
 
@@ -373,6 +331,9 @@ export async function submitVATToSkat(
       responseXml,
       errorMessage,
       errorCode,
+      transactionIdentifier,
+      deepLink,
+      advisoryCode,
     },
   });
 
@@ -385,20 +346,148 @@ export async function submitVATToSkat(
     companyId: submission.companyId,
     changes: {
       status: { old: 'DRAFT', new: newStatus },
-      referenceId: { old: null, new: referenceId },
+      transactionIdentifier: { old: null, new: transactionIdentifier },
+      deepLink: { old: null, new: deepLink ? '[URL]' : null },
     },
     metadata: {
       year: submission.year,
       period: submission.period,
       netVATPayable: submission.netVATPayable,
+      seNumber,
       simulated: !hasSkatCredentials(),
+      advisoryCode,
     },
   });
 
   logger.info(
     `[VAT-Submit] VAT submission ${newStatus}: ${submission.year} ${submission.period}, ` +
-    `Ref: ${referenceId}, Net: ${submission.netVATPayable}`,
+    `txId: ${transactionIdentifier}, Net: ${submission.netVATPayable}`,
   );
+
+  return updatedSubmission;
+}
+
+// ─── Core: Fetch VAT Receipt (after user approval) ─────────────────────────
+
+/**
+ * Fetch the VAT receipt from Skattestyrelsen via MomsangivelseKvitteringHent.
+ *
+ * This should be called AFTER the user has approved the draft in TastSelv
+ * Erhverv via the deep link. If the draft has not yet been approved, SKAT
+ * returns error code 4810 and this function returns the submission with
+ * status still SUBMITTED.
+ *
+ * @param submissionId - The VATSubmission database ID
+ * @param userId - User fetching the receipt
+ * @returns Updated VATSubmission record with receiptPdfBase64 if approved
+ */
+export async function fetchVATReceipt(
+  submissionId: string,
+  userId: string,
+) {
+  const submission = await db.vATSubmission.findUnique({
+    where: { id: submissionId },
+  });
+
+  if (!submission) {
+    throw new Error(`VAT_SUBMISSION_NOT_FOUND: Submission ${submissionId} not found.`);
+  }
+
+  if (!submission.transactionIdentifier) {
+    throw new Error(
+      'VAT_SUBMISSION_NO_TRANSACTION_ID: This submission has no transactionIdentifier. ' +
+      'Cannot fetch receipt — the draft was not successfully submitted.',
+    );
+  }
+
+  if (submission.status !== 'SUBMITTED' && submission.status !== 'ACCEPTED') {
+    throw new Error(
+      `VAT_SUBMISSION_NOT_SUBMITTED: Submission ${submissionId} has status ${submission.status}. ` +
+      `Receipt can only be fetched for SUBMITTED submissions.`,
+    );
+  }
+
+  let newStatus: 'SUBMITTED' | 'ACCEPTED' | 'REJECTED' | 'ERROR' = submission.status;
+  let errorMessage: string | null = submission.errorMessage;
+  let errorCode: string | null = submission.errorCode;
+  let receiptPdfBase64: string | null = submission.receiptPdfBase64;
+
+  try {
+    const result = await getMomsangivelseKvitteringHent(submission.transactionIdentifier);
+
+    if (result.approved) {
+      newStatus = 'ACCEPTED';
+      receiptPdfBase64 = result.receiptPdfBase64;
+      logger.info(
+        `[VAT-Submit] Receipt fetched: ${submission.year} ${submission.period}, ` +
+        `txId=${submission.transactionIdentifier}, hasPdf=${!!result.receiptPdfBase64}`,
+      );
+    } else if (result.errorCode === '4810') {
+      // Not yet approved — keep status as SUBMITTED
+      newStatus = 'SUBMITTED';
+      logger.info(
+        `[VAT-Submit] Receipt not yet available (4810 — user has not approved yet): ` +
+        `${submission.year} ${submission.period}`,
+      );
+    } else if (result.errorCode === '4811') {
+      // Rejected
+      newStatus = 'REJECTED';
+      errorMessage = 'VAT submission was rejected in TastSelv Erhverv.';
+      errorCode = '4811';
+      logger.warn(
+        `[VAT-Submit] Receipt rejected (4811): ${submission.year} ${submission.period}`,
+      );
+    } else {
+      // Other error
+      newStatus = 'ERROR';
+      errorMessage = `SKAT receipt error: ${result.errorCode}`;
+      errorCode = result.errorCode;
+      logger.error(
+        `[VAT-Submit] Receipt error [${result.errorCode}]: ${submission.year} ${submission.period}`,
+      );
+    }
+  } catch (error) {
+    newStatus = 'ERROR';
+    if (error instanceof SkatApiError) {
+      errorCode = error.code;
+      errorMessage = error.message;
+    } else {
+      errorCode = 'RECEIPT_FETCH_FAILED';
+      errorMessage = error instanceof Error ? error.message : 'Unknown error during receipt fetch';
+    }
+
+    logger.error(`[VAT-Submit] Receipt fetch error:`, error);
+  }
+
+  // Update the submission record
+  const updatedSubmission = await db.vATSubmission.update({
+    where: { id: submissionId },
+    data: {
+      status: newStatus,
+      receiptPdfBase64,
+      errorMessage,
+      errorCode,
+    },
+  });
+
+  // Audit log
+  await auditLog({
+    action: 'UPDATE',
+    entityType: 'VATSubmission',
+    entityId: submissionId,
+    userId,
+    companyId: submission.companyId,
+    changes: {
+      status: { old: submission.status, new: newStatus },
+      receiptFetched: { old: !!submission.receiptPdfBase64, new: !!receiptPdfBase64 },
+    },
+    metadata: {
+      year: submission.year,
+      period: submission.period,
+      transactionIdentifier: submission.transactionIdentifier,
+      simulated: !hasSkatCredentials(),
+    },
+  });
 
   return updatedSubmission;
 }

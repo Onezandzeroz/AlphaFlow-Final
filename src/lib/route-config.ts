@@ -278,6 +278,9 @@ export const routeConfig: RouteConfigMap = {
     GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_CREATE] },
   },
+  '/api/vat-report/receipt': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_CREATE] },
+  },
   '/api/vat-report/submissions': {
     GET: { auth: true, requireCompany: true, permissions: [Permission.REPORTS_VIEW] },
   },

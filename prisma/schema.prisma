@@ -1553,13 +1553,17 @@ model ReceivedInvoice {
 
 // ─── VAT SUBMISSION (FASE 5) ──────────────────────────────────
 // Tracks VAT report submissions to Skattestyrelsen (Danish Tax Authority).
-// Supports quarterly reporting with OAuth2 authentication.
+// Uses the RSU B2B SOAP web service gateway (NemVirksomhed):
+//   1. VirksomhedKalenderHent        — verify delegation + get periods
+//   2. ModtagMomsangivelseForeloebig — submit DRAFT VAT return (17 fields)
+//   3. MomsangivelseKvitteringHent   — fetch receipt after user approval
+// Auth: mutual TLS (mTLS) with VOCES3 System (S1) certificate + WS-Security XML signature.
 
 enum VATSubmissionStatus {
   DRAFT // Prepared but not yet submitted
-  SUBMITTED // Successfully sent to Skattestyrelsen
-  ACCEPTED // Acknowledged by Skattestyrelsen
-  REJECTED // Rejected by Skattestyrelsen
+  SUBMITTED // Draft sent to Skattestyrelsen — awaiting user approval via TastSelv
+  ACCEPTED // User approved in TastSelv — receipt available
+  REJECTED // Rejected by Skattestyrelsen or user
   ERROR // Transmission error
 }
 
@@ -1590,10 +1594,30 @@ model VATSubmission {
   status       VATSubmissionStatus @default(DRAFT)
   submittedAt  DateTime?
   submittedBy  String? // userId who submitted
-  referenceId  String? // Skattestyrelsen reference/receipt number
-  responseXml  String? // Response from Skattestyrelsen
+  referenceId  String? // Legacy field — kept for backward compat
+  responseXml  String? // Full SOAP response from Skattestyrelsen
   errorMessage String?
   errorCode    String?
+
+  // SKAT RSU B2B SOAP integration fields
+  // transactionIdentifier: returned by ModtagMomsangivelseForeloebig, needed
+  //   for MomsangivelseKvitteringHent (receipt retrieval). This is SKAT's
+  //   internal transaction ID, NOT the same as our submission ID.
+  transactionIdentifier String?
+
+  // deepLink: the Dybtlink URL returned by ModtagMomsangivelseForeloebig.
+  //   The user clicks this to go to TastSelv Erhverv and approve the draft
+  //   with MitID. Stored so we can re-display it until the user approves.
+  deepLink              String?
+
+  // receiptPdfBase64: the receipt PDF (base64-encoded) fetched via
+  //   MomsangivelseKvitteringHent after the user has approved. Null until
+  //   the receipt has been retrieved.
+  receiptPdfBase64      String?
+
+  // advisoryCode: 5001 = ordinary draft, 5002 = subsequent declaration.
+  //   Helps the UI distinguish between a regular filing and an "efterangivelse".
+  advisoryCode          String?
 
   // Meta
   createdAt       DateTime @default(now())
@@ -1606,6 +1630,7 @@ model VATSubmission {
   @@index([companyId, status])
   @@index([companyId, year])
   @@index([submittedAt])
+  @@index([transactionIdentifier])
 }
 
 // ─── E-INVOICE SENDINGS (FASE 4) ──────────────────────────────
