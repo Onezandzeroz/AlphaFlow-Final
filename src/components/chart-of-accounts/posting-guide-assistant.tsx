@@ -61,6 +61,10 @@ interface PostingRule {
   followUp?: string;
   followUpEn?: string;
   icon: string;
+  /** Relevant SKAT/Erhvervsstyrelsen link for this specific rule */
+  linkUrl?: string;
+  linkLabel?: string;
+  linkLabelEn?: string;
 }
 
 interface PostingCategory {
@@ -88,6 +92,9 @@ const POSTING_RULES: PostingCategory[] = [
         creditLabel: 'Salgsindtægt (excl. moms) + udgående moms 25%',
         creditLabelEn: 'Sales revenue (excl. VAT) + output VAT 25%',
         icon: 'Banknote',
+        linkUrl: 'https://skat.dk/moms/salg-af-varer-og-ydelser',
+        linkLabel: 'Læs mere om moms ved salg',
+        linkLabelEn: 'Read more about VAT on sales',
       },
       {
         title: 'Salg på kredit (25% moms)',
@@ -105,6 +112,9 @@ const POSTING_RULES: PostingCategory[] = [
         followUp: 'Når kunden betaler: Debet bank, kredit tilgodehavender',
         followUpEn: 'When customer pays: Debit bank, credit receivables',
         icon: 'CreditCard',
+        linkUrl: 'https://xn--bogfringsguide-tqb.skat.dk/#/PMV',
+        linkLabel: 'Bogføring af kreditssalg',
+        linkLabelEn: 'Booking credit sales',
       },
       {
         title: 'EU-salg af varer (IGS, 0% moms)',
@@ -122,6 +132,9 @@ const POSTING_RULES: PostingCategory[] = [
         followUp: 'Køberen skal oplyse gyldigt udenlandsk CVR/VAT-nummer',
         followUpEn: 'Buyer must provide valid foreign VAT number',
         icon: 'Globe',
+        linkUrl: 'https://skat.dk/moms/handel-med-lande-i-eu',
+        linkLabel: 'EU-handel og omvendt betalingspligt',
+        linkLabelEn: 'EU trade and reverse charge',
       },
       {
         title: 'Salg af tjenesteydelser',
@@ -137,6 +150,49 @@ const POSTING_RULES: PostingCategory[] = [
         creditLabel: 'Salgsindtægt + udgående moms (hvis momspligtig)',
         creditLabelEn: 'Sales revenue + output VAT (if VAT-liable)',
         icon: 'Briefcase',
+        linkUrl: 'https://skat.dk/moms/momspligtige-og-momsfrie-ydelser',
+        linkLabel: 'Momspligtige og momsfrie ydelser',
+        linkLabelEn: 'VAT-liable and VAT-exempt services',
+      },
+      {
+        title: 'Eksport til lande udenfor EU (0% moms)',
+        titleEn: 'Export to non-EU countries (0% VAT)',
+        debitAccount: '1200',
+        debitAccountName: 'Tilgodehavender fra salg',
+        creditAccount: '4300',
+        creditAccountName: 'Salg af varer udenfor EU',
+        intro: 'Salg af varer til kunder i lande udenfor EU (tredjelande):',
+        introEn: 'Sale of goods to customers in non-EU countries:',
+        debitLabel: 'Tilgodehavender — kunden skylder dig',
+        debitLabelEn: 'Receivables — customer owes you',
+        creditLabel: 'Eksportsalg (0% moms) — dokumenter eksporten',
+        creditLabelEn: 'Export sale (0% VAT) — document the export',
+        followUp: 'Ved vareeksport skal du kunne dokumentere at varerne har forladt EU',
+        followUpEn: 'For goods export you must document that goods left the EU',
+        icon: 'Truck',
+        linkUrl: 'https://skat.dk/moms/eksport-af-varer',
+        linkLabel: 'Eksport af varer',
+        linkLabelEn: 'Export of goods',
+      },
+      {
+        title: 'Rabatter og kreditnotaer',
+        titleEn: 'Discounts and credit notes',
+        debitAccount: '1210',
+        debitAccountName: 'Salgsrabatter',
+        creditAccount: '1200',
+        creditAccountName: 'Tilgodehavender fra salg',
+        intro: 'Når du giver en rabat eller udsteder en kreditnota efter et salg:',
+        introEn: 'When giving a discount or issuing a credit note after a sale:',
+        debitLabel: 'Salgsrabat (modposterer salget) + momsregulering',
+        debitLabelEn: 'Sales discount (offsets the sale) + VAT adjustment',
+        creditLabel: 'Tilgodehavender — reducerer det kunden skylder',
+        creditLabelEn: 'Receivables — reduces what customer owes',
+        followUp: 'Kreditnotaer skal have reference til den oprindelige faktura',
+        followUpEn: 'Credit notes must reference the original invoice',
+        icon: 'Receipt',
+        linkUrl: 'https://skat.dk/moms/kreditnotaer-og-rabatter',
+        linkLabel: 'Kreditnotaer og rabatter',
+        linkLabelEn: 'Credit notes and discounts',
       },
     ],
   },
@@ -160,6 +216,9 @@ const POSTING_RULES: PostingCategory[] = [
         followUp: 'Når du betaler: Debet leverandørgæld, kredit bank',
         followUpEn: 'When paying: Debit payables, credit bank',
         icon: 'Package',
+        linkUrl: 'https://skat.dk/moms/kob-af-varer-og-ydelser',
+        linkLabel: 'Køb af varer og ydelser',
+        linkLabelEn: 'Purchase of goods and services',
       },
       {
         title: 'Lønudbetaling',
@@ -177,6 +236,9 @@ const POSTING_RULES: PostingCategory[] = [
         followUp: 'Husk også at bogføre arbejdsgiverbidrag (ATP, pension)',
         followUpEn: 'Remember to also post employer contributions (ATP, pension)',
         icon: 'Users',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/lon-og-mennesker',
+        linkLabel: 'Løn og personale',
+        linkLabelEn: 'Salaries and personnel',
       },
       {
         title: 'Husleje',
@@ -194,6 +256,9 @@ const POSTING_RULES: PostingCategory[] = [
         followUp: 'Husleje er momsfritaget hvis udlejer er momsregistreret',
         followUpEn: 'Rent is VAT-exempt if landlord is VAT-registered',
         icon: 'Home',
+        linkUrl: 'https://skat.dk/moms/momsfri-aktiviteter',
+        linkLabel: 'Momsfrie aktiviteter',
+        linkLabelEn: 'VAT-exempt activities',
       },
       {
         title: 'EU-indkøb (omvendt betalingspligt)',
@@ -211,6 +276,9 @@ const POSTING_RULES: PostingCategory[] = [
         followUp: 'Leverandøren fakturerer uden moms — du beregner selv dansk moms (KEU)',
         followUpEn: 'Supplier invoices without VAT — you self-assess Danish VAT (KEU)',
         icon: 'Truck',
+        linkUrl: 'https://skat.dk/moms/kob-fra-lande-i-eu',
+        linkLabel: 'Køb fra EU-lande',
+        linkLabelEn: 'Purchases from EU countries',
       },
       {
         title: 'Kontorartikler og drift',
@@ -226,6 +294,49 @@ const POSTING_RULES: PostingCategory[] = [
         creditLabel: 'Bank',
         creditLabelEn: 'Bank',
         icon: 'Receipt',
+        linkUrl: 'https://skat.dk/moms/fradragsberettigede-omkostninger',
+        linkLabel: 'Fradragsberettigede omkostninger',
+        linkLabelEn: 'Deductible expenses',
+      },
+      {
+        title: 'Repræsentation og gaver',
+        titleEn: 'Representation and gifts',
+        debitAccount: '1990',
+        debitAccountName: 'Repræsentation, fuldt fradrag',
+        creditAccount: '1100',
+        creditAccountName: 'Bankkonto',
+        intro: 'Udgifter til repræsentation, gaver til kunder/forretningsforbindelser:',
+        introEn: 'Expenses for representation, gifts to customers/business contacts:',
+        debitLabel: 'Repræsentationsomkostning (kun 25% af moms er fradragsberettiget)',
+        debitLabelEn: 'Representation expense (only 25% of VAT is deductible)',
+        creditLabel: 'Bank',
+        creditLabelEn: 'Bank',
+        followUp: 'Virksomhedsjulegaver og repræsentation har særlige fradragsregler',
+        followUpEn: 'Corporate Christmas gifts and representation have special deduction rules',
+        icon: 'Briefcase',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/kost-og-repraesentation',
+        linkLabel: 'Kost og repræsentation',
+        linkLabelEn: 'Meals and representation',
+      },
+      {
+        title: 'Anlægsaktiver og investeringer',
+        titleEn: 'Fixed assets and investments',
+        debitAccount: '1700',
+        debitAccountName: 'Kørende maskiner og udstyr',
+        creditAccount: '1100',
+        creditAccountName: 'Bankkonto',
+        intro: 'Køb af anlægsaktiver (maskiner, IT-udstyr, køretøjer, inventar):',
+        introEn: 'Purchase of fixed assets (machinery, IT equipment, vehicles):',
+        debitLabel: 'Anlægsaktiv (kapitaliseres, afskrives over tid) + indgående moms',
+        debitLabelEn: 'Fixed asset (capitalized, depreciated over time) + input VAT',
+        creditLabel: 'Bank',
+        creditLabelEn: 'Bank',
+        followUp: 'Anlægsaktiver skal afskrives årligt — brug EDB-lignende afskrivning',
+        followUpEn: 'Fixed assets must be depreciated annually — use EDB-like depreciation',
+        icon: 'Package',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/afskrivninger',
+        linkLabel: 'Afskrivninger',
+        linkLabelEn: 'Depreciation',
       },
     ],
   },
@@ -249,6 +360,9 @@ const POSTING_RULES: PostingCategory[] = [
         followUp: 'Gælder når udgående moms (salgsmoms) > indgående moms (købsmoms)',
         followUpEn: 'Applies when output VAT > input VAT',
         icon: 'Landmark',
+        linkUrl: 'https://skat.dk/moms/momsangivelse',
+        linkLabel: 'Momsangivelse og betaling',
+        linkLabelEn: 'VAT return and payment',
       },
       {
         title: 'Momsafregning — du får refusion',
@@ -264,6 +378,29 @@ const POSTING_RULES: PostingCategory[] = [
         creditLabel: 'Momsgæld — nulstil udgående og indgående moms',
         creditLabelEn: 'VAT payable — clear output and input VAT accounts',
         icon: 'HandCoins',
+        linkUrl: 'https://skat.dk/moms/refusion-af-moms',
+        linkLabel: 'Refusion af moms',
+        linkLabelEn: 'VAT refund',
+      },
+      {
+        title: 'Moms ved opstart og nedlæggelse',
+        titleEn: 'VAT during startup and closure',
+        debitAccount: '5410',
+        debitAccountName: 'Indgående moms',
+        creditAccount: '1100',
+        creditAccountName: 'Bankkonto',
+        intro: 'Ved virksomhedsopstart kan du fratrække moms af varer købt før registreringen:',
+        introEn: 'At business startup you can deduct VAT on goods purchased before registration:',
+        debitLabel: 'Indgående moms — forudgående køb (op til 3 år før registrering)',
+        debitLabelEn: 'Input VAT — prior purchases (up to 3 years before registration)',
+        creditLabel: 'Bank — moms refunderes via første momsangivelse',
+        creditLabelEn: 'Bank — VAT refunded via first VAT return',
+        followUp: 'Ved nedlæggelse skal der afregnes moms af varelager og anlægsaktiver',
+        followUpEn: 'At closure, VAT must be settled on inventory and fixed assets',
+        icon: 'Calculator',
+        linkUrl: 'https://skat.dk/moms/registrering-og-afregistrering',
+        linkLabel: 'Registrering og afregistrering',
+        linkLabelEn: 'Registration and deregistration',
       },
     ],
   },
@@ -285,6 +422,9 @@ const POSTING_RULES: PostingCategory[] = [
         creditLabel: 'Alle indtægtskonti (4000-4999) og omkostningskonti (6000-8999) nulstilles',
         creditLabelEn: 'All revenue (4000-4999) and expense accounts (6000-8999) are zeroed',
         icon: 'BookMarked',
+        linkUrl: 'https://xn--bogfringsguide-tqb.skat.dk/#/PMV',
+        linkLabel: 'Årsafslutning i bogføringsguiden',
+        linkLabelEn: 'Year-end in the posting guide',
       },
       {
         title: 'Overførsel til overført resultat',
@@ -302,6 +442,49 @@ const POSTING_RULES: PostingCategory[] = [
         followUp: 'Dette forbereder den nye regnskabsperiode',
         followUpEn: 'This prepares the new accounting period',
         icon: 'CalendarDays',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/aarsregnskab',
+        linkLabel: 'Årsregnskab',
+        linkLabelEn: 'Annual accounts',
+      },
+      {
+        title: 'Varelageropgørelse',
+        titleEn: 'Inventory valuation',
+        debitAccount: '1300',
+        debitAccountName: 'Varelager',
+        creditAccount: '6000',
+        creditAccountName: 'Vareforbrug',
+        intro: 'Ved årsafslutning skal varelageret opgøres til laveste værdi (kostpris eller dagspris):',
+        introEn: 'At year-end, inventory must be valued at the lower of cost or market price:',
+        debitLabel: 'Varelager (opdateres til årets optælling)',
+        debitLabelEn: 'Inventory (updated to the year\'s count)',
+        creditLabel: 'Vareforbrug — regulering af årets forbrug',
+        creditLabelEn: 'Cost of goods — adjustment of the year\'s consumption',
+        followUp: 'Værdiansættelse skal følge FIFO- eller gennemsnitsmetoden konsekvent',
+        followUpEn: 'Valuation must consistently follow FIFO or average cost method',
+        icon: 'Package',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/varelager',
+        linkLabel: 'Varelager og værdiansættelse',
+        linkLabelEn: 'Inventory and valuation',
+      },
+      {
+        title: 'Afskrivning af anlægsaktiver',
+        titleEn: 'Depreciation of fixed assets',
+        debitAccount: '1700',
+        debitAccountName: 'Afskrivning på anlægsaktiver',
+        creditAccount: '1700',
+        creditAccountName: 'Akumulerede afskrivninger',
+        intro: 'Anlægsaktiver (maskiner, inventar, IT) afskrives årligt over deres levetid:',
+        introEn: 'Fixed assets (machinery, furniture, IT) are depreciated annually over their useful life:',
+        debitLabel: 'Afskrivningsomkostning — årets fordeling af anlægsaktivets kostpris',
+        debitLabelEn: 'Depreciation expense — the year\'s allocation of the asset\'s cost',
+        creditLabel: 'Akkumulerede afskrivninger — reducerer anlægsaktivets bogførte værdi',
+        creditLabelEn: 'Accumulated depreciation — reduces the asset\'s book value',
+        followUp: 'Standard afskrivningssatser: 25% (inventar/IT), 15% (maskiner), 6% (bygninger)',
+        followUpEn: 'Standard rates: 25% (furniture/IT), 15% (machinery), 6% (buildings)',
+        icon: 'Calculator',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/afskrivninger',
+        linkLabel: 'Afskrivningsregler',
+        linkLabelEn: 'Depreciation rules',
       },
     ],
   },
@@ -556,16 +739,30 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
 
                 {/* Inline accounts — subtle */}
                 <div className="px-4 pb-3 pt-1 border-t border-gray-50 dark:border-white/5">
-                  <div className="flex items-center gap-1.5 text-[11px] flex-wrap pt-2">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
-                      {rule.debitAccount}
-                      <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.debitAccountName}</span>
-                    </span>
-                    <ArrowRight className="h-3 w-3 text-gray-300 dark:text-gray-600 shrink-0" />
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
-                      {rule.creditAccount}
-                      <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.creditAccountName}</span>
-                    </span>
+                  <div className="flex items-center justify-between gap-2 pt-2">
+                    <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
+                        {rule.debitAccount}
+                        <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.debitAccountName}</span>
+                      </span>
+                      <ArrowRight className="h-3 w-3 text-gray-300 dark:text-gray-600 shrink-0" />
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
+                        {rule.creditAccount}
+                        <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.creditAccountName}</span>
+                      </span>
+                    </div>
+                    {/* Relevant link — clean, doesn't take up much space */}
+                    {rule.linkUrl && (
+                      <a
+                        href={rule.linkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium shrink-0 transition-colors"
+                      >
+                        {isDanish ? rule.linkLabel : rule.linkLabelEn}
+                        <ArrowUpRight className="h-3 w-3" />
+                      </a>
+                    )}
                   </div>
                 </div>
               </Card>
