@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useHermesSocket } from './useHermesSocket';
 import { HermesFab } from './HermesFab';
@@ -8,6 +8,7 @@ import { HermesPanel } from './HermesPanel';
 import { HermesNotificationCard } from './HermesNotificationCard';
 import { HermesRevealTab } from './HermesRevealTab';
 import { useHermesOwlStore } from '@/lib/hermes-owl-store';
+import { useHermesChatStore } from '@/lib/hermes-chat-store';
 import type { HermesOverlayProps } from './types';
 
 const DEFAULT_TENANT_ID = 'alphaflow-aps';
@@ -31,6 +32,20 @@ export function HermesOverlay({
   visible = true,
 }: HermesOverlayProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  // ── External "open with prompt" mechanism ──────────────────────────
+  // Components across the app (e.g. posting guide cards' "Spørg Hermes"
+  // links) call `useHermesChatStore.getState().requestOpenWithPrompt(prompt)`
+  // to ask the overlay to open the chat and immediately send a context-rich
+  // prompt. We watch `openRequestNonce` — a monotonic counter bumped on each
+  // request — so even two identical prompts in a row both fire.
+  const openRequestNonce = useHermesChatStore((s) => s.openRequestNonce);
+  const pendingPrompt = useHermesChatStore((s) => s.pendingPrompt);
+  const consumePendingPrompt = useHermesChatStore((s) => s.consumePendingPrompt);
+
+  // Track whether the socket is ready to send. `sendMessage` is a no-op when
+  // disconnected, so we retry shortly after connect lands.
+  const lastHandledNonceRef = useRef(0);
 
   // ── First-activation tracking (localStorage) ───────────────────────
   // On the user's FIRST ever encounter with Hermes, the owl stays visible
@@ -118,6 +133,61 @@ export function HermesOverlay({
     startNewSession,
     toggleResponseMode,
   } = useHermesSocket({ tenantId, userId, userName, servicePort });
+
+  // ── External "open with prompt" handler ─────────────────────────────
+  // When `openRequestNonce` bumps (a component called
+  // `requestOpenWithPrompt`), open the panel and — once the socket is
+  // connected — deliver the pending prompt as a user message, then clear it.
+  //
+  // We keep an `isConnectedRef` so the polling closure below always reads the
+  // LIVE connection state rather than the value captured at effect-run time
+  // (which would go stale while we wait for the socket to come up). The ref
+  // is synced in a passive effect (never read during render) to comply with
+  // React 19's "no refs during render" rule.
+  const isConnectedRef = useRef(isConnected);
+  useEffect(() => {
+    isConnectedRef.current = isConnected;
+  }, [isConnected]);
+
+  useEffect(() => {
+    if (openRequestNonce === 0) return;
+    if (openRequestNonce === lastHandledNonceRef.current) return;
+    // Claim this request immediately so a later re-render doesn't double-fire.
+    lastHandledNonceRef.current = openRequestNonce;
+
+    // Open the panel right away (also un-hides the owl FAB so it doesn't
+    // slide off while the chat is open).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate sync: external "open with prompt" store signal → local UI state
+    setIsOpen(true);
+    setFabHidden(false);
+
+    const promptToSend = pendingPrompt;
+    if (!promptToSend) {
+      consumePendingPrompt();
+      return;
+    }
+
+    // If already connected, send immediately. Otherwise poll briefly until
+    // the socket lands — reading the LIVE flag from the ref each tick.
+    let attempts = 0;
+    const maxAttempts = 40; // up to ~4s @ 100ms
+    const trySend = () => {
+      if (isConnectedRef.current) {
+        sendMessage(promptToSend);
+        consumePendingPrompt();
+        return;
+      }
+      attempts += 1;
+      if (attempts < maxAttempts) {
+        setTimeout(trySend, 100);
+      } else {
+        // Gave up waiting for the socket — still consume so it doesn't
+        // haunt the next manual open. The user can type manually.
+        consumePendingPrompt();
+      }
+    };
+    trySend();
+  }, [openRequestNonce, isConnected, sendMessage, pendingPrompt, consumePendingPrompt, setFabHidden]);
 
   if (!visible) return null;
 

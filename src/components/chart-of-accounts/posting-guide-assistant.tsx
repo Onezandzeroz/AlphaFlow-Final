@@ -8,7 +8,7 @@
  * ikke som tunge T-diagrammer.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,9 +39,12 @@ import {
   HandCoins,
   BookMarked,
   CalendarDays,
+  Sparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { PUBLIC_STANDARD_CHART } from '@/lib/standard-chart-of-accounts';
+import { useHermesEnabled } from '@/components/hermes/hermes-context';
+import { useHermesChatStore } from '@/lib/hermes-chat-store';
 
 // ─── Posting Guide Rules ────────────────────────────────────────────────
 
@@ -595,6 +598,65 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
   const [activeCategory, setActiveCategory] = useState<string>('salg');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Hermes integration — only render the "Spørg Hermes" links when the
+  // company has the assistant enabled. The overlay itself is mounted at the
+  // app root by HermesProvider, so we just need to fire a prompt request.
+  const hermesEnabled = useHermesEnabled();
+  const requestOpenWithPrompt = useHermesChatStore((s) => s.requestOpenWithPrompt);
+
+  /**
+   * Build a context-rich prompt from a posting rule and hand it to Hermes.
+   * The prompt is written in the active UI language and asks Hermes to
+   * explain the rule, advise on when to apply it, and give concrete numeric
+   * examples — exactly as the user requested ("så han kan svare, rådgive og
+   * give eksempler").
+   */
+  const askHermesAboutRule = useCallback((rule: PostingRule) => {
+    const title = isDanish ? rule.title : rule.titleEn;
+    const intro = isDanish ? rule.intro : rule.introEn;
+    const debitLabel = isDanish ? rule.debitLabel : rule.debitLabelEn;
+    const creditLabel = isDanish ? rule.creditLabel : rule.creditLabelEn;
+    const followUp = isDanish ? rule.followUp : rule.followUpEn;
+
+    if (isDanish) {
+      const lines = [
+        `Jeg kigger på bogføringsreglen "${title}" fra AlphaFlows bogføringsguide og vil gerne have din hjælp:`,
+        '',
+        `Beskrivelse: ${intro}`,
+        '',
+        'Kontering:',
+        `• Debet ${rule.debitAccount} ${rule.debitAccountName} — ${debitLabel}`,
+        `• Kredit ${rule.creditAccount} ${rule.creditAccountName} — ${creditLabel}`,
+      ];
+      if (followUp) {
+        lines.push('', `Opfølgning: ${followUp}`);
+      }
+      lines.push(
+        '',
+        'Forklar venligst reglen nærmere, rådgiv om hvornår og hvordan den anvendes i praksis, og giv 2-3 konkrete eksempler med beløb (inkl. moms) så jeg forstår konteringen helt.',
+      );
+      requestOpenWithPrompt(lines.join('\n'));
+    } else {
+      const lines = [
+        `I'm looking at the posting rule "${title}" from AlphaFlow's posting guide and would like your help:`,
+        '',
+        `Description: ${intro}`,
+        '',
+        'Entry:',
+        `• Debit ${rule.debitAccount} ${rule.debitAccountName} — ${debitLabel}`,
+        `• Credit ${rule.creditAccount} ${rule.creditAccountName} — ${creditLabel}`,
+      ];
+      if (followUp) {
+        lines.push('', `Follow-up: ${followUp}`);
+      }
+      lines.push(
+        '',
+        'Please explain this rule in more detail, advise on when and how to apply it in practice, and give 2-3 concrete examples with amounts (incl. VAT) so I fully understand the booking.',
+      );
+      requestOpenWithPrompt(lines.join('\n'));
+    }
+  }, [isDanish, requestOpenWithPrompt]);
+
   const filteredRules = useMemo(() =>
     POSTING_RULES.map(cat => ({
       ...cat,
@@ -751,18 +813,33 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
                         <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.creditAccountName}</span>
                       </span>
                     </div>
-                    {/* Relevant link — clean, doesn't take up much space */}
-                    {rule.linkUrl && (
-                      <a
-                        href={rule.linkUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium shrink-0 transition-colors"
-                      >
-                        {isDanish ? rule.linkLabel : rule.linkLabelEn}
-                        <ArrowUpRight className="h-3 w-3" />
-                      </a>
-                    )}
+                    {/* Links — SKAT reference + "Spørg Hermes" (same teal color) */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      {/* Ask Hermes — opens chat with this card's content prefilled */}
+                      {hermesEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => askHermesAboutRule(rule)}
+                          className="inline-flex items-center gap-1 text-[11px] text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium transition-colors cursor-pointer"
+                          title={isDanish ? 'Spørg Hermes om denne bogføringsregel' : 'Ask Hermes about this posting rule'}
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          {isDanish ? 'Spørg Hermes' : 'Ask Hermes'}
+                        </button>
+                      )}
+                      {/* Relevant SKAT/Erhvervsstyrelsen link */}
+                      {rule.linkUrl && (
+                        <a
+                          href={rule.linkUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium transition-colors"
+                        >
+                          {isDanish ? rule.linkLabel : rule.linkLabelEn}
+                          <ArrowUpRight className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </Card>
