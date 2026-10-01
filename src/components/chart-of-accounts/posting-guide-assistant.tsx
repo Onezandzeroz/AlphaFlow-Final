@@ -526,14 +526,14 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
                 </div>
 
                 {/* Structured body */}
-                <div className="px-4 pb-3 flex-1 space-y-1.5">
+                <div className="px-4 pb-3 flex-1">
                   {/* Intro */}
-                  <p className="text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 font-medium">
+                  <p className="text-[14px] leading-relaxed text-gray-700 dark:text-gray-300 font-medium mb-3">
                     {isDanish ? rule.intro : rule.introEn}
                   </p>
 
                   {/* Debet line */}
-                  <div className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+                  <div className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400 pl-2 border-l-2 border-gray-200 dark:border-gray-700 mb-1">
                     <span className="font-semibold text-gray-700 dark:text-gray-300">Debet</span>
                     <span className="mx-1 text-gray-400">—</span>
                     {isDanish ? rule.debitLabel : rule.debitLabelEn}
@@ -548,7 +548,7 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
 
                   {/* Follow-up (optional) */}
                   {rule.followUp && (
-                    <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-500 italic pt-0.5">
+                    <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-500 italic mt-3">
                       {isDanish ? rule.followUp : rule.followUpEn}
                     </p>
                   )}
