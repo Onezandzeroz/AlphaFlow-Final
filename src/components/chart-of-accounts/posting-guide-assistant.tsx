@@ -428,7 +428,12 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
       {/* Rules — grid layout (3 per row on desktop, 2 on tablet, 1 on mobile) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredRules
-          .filter(cat => searchQuery.trim() === '' || cat.category === activeCategory || cat.rules.length > 0)
+          .filter(cat => {
+            // When searching, show results from ALL categories
+            if (searchQuery.trim() !== '') return cat.rules.length > 0;
+            // When not searching, show only the active category
+            return cat.category === activeCategory;
+          })
           .flatMap(cat => cat.rules.map((rule, idx) => {
             const Icon = (Icons as Record<string, LucideIcon>)[rule.icon] ?? BookOpen;
             return (
