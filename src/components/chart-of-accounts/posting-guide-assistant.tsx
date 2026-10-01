@@ -26,7 +26,21 @@ import {
   Building2,
   Calculator,
   ArrowRight,
+  Banknote,
+  CreditCard,
+  Globe,
+  Briefcase,
+  Package,
+  Users,
+  Home,
+  Truck,
+  Receipt,
+  Landmark,
+  HandCoins,
+  BookMarked,
+  CalendarDays,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { PUBLIC_STANDARD_CHART } from '@/lib/standard-chart-of-accounts';
 
 // ─── Posting Guide Rules ────────────────────────────────────────────────
@@ -40,12 +54,12 @@ interface PostingRule {
   creditAccountName: string;
   description: string;
   descriptionEn: string;
+  icon: string; // lucide icon name
 }
 
 interface PostingCategory {
   category: string;
   categoryDa: string;
-  icon: string;
   rules: PostingRule[];
 }
 
@@ -53,7 +67,6 @@ const POSTING_RULES: PostingCategory[] = [
   {
     category: 'salg',
     categoryDa: 'Salg og indtægter',
-    icon: 'trending-up',
     rules: [
       {
         title: 'Kontantsalg (25% moms)',
@@ -64,6 +77,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Salg af varer',
         description: 'Når du sælger varer eller ydelser og modtager betaling med det samme (kontant, MobilePay, kreditkort). Bogfør beløbet inkl. moms. Debet bank (du modtager penge), kredit salgsindtægt (excl. moms) + udgående moms 25%.',
         descriptionEn: 'When selling goods/services and receiving payment immediately.',
+        icon: 'Banknote',
       },
       {
         title: 'Salg på kredit (25% moms)',
@@ -74,6 +88,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Salg af varer',
         description: 'Når du sælger varer eller ydelser på kredit (faktura med betalingsfrist). Debet tilgodehavender (kunden skylder dig), kredit salgsindtægt + udgående moms. Når kunden betaler: debet bank, kredit tilgodehavender.',
         descriptionEn: 'When selling on credit.',
+        icon: 'CreditCard',
       },
       {
         title: 'EU-salg af varer (IGS, 0% moms)',
@@ -84,6 +99,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Salg af varer EU',
         description: 'Salg af varer til en momsregistreret virksomhed i et andet EU-land. Der faktureres uden dansk moms (0%). Køberen skal oplyse gyldigt udenlandsk CVR/VAT-nummer. Bogføres som EU-salg (SEU).',
         descriptionEn: 'Sale of goods to VAT-registered business in another EU country.',
+        icon: 'Globe',
       },
       {
         title: 'Salg af tjenesteydelser',
@@ -94,13 +110,13 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Salg af tjenesteydelser',
         description: 'Salg af konsulentydelser, rådgivning, håndværkerarbejde etc. Debet tilgodehavender, kredit salgsindtægt + udgående moms (hvis momspligtig).',
         descriptionEn: 'Sale of consulting, advisory, craft services.',
+        icon: 'Briefcase',
       },
     ],
   },
   {
     category: 'indkob',
     categoryDa: 'Indkøb og udgifter',
-    icon: 'shopping-cart',
     rules: [
       {
         title: 'Indkøb af varer (25% moms)',
@@ -111,6 +127,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Leverandørgæld',
         description: 'Når du køber varer til videresalg eller drift. Du modtager en leverandørfaktura med moms. Debet vareforbrug (excl. moms) + indgående moms, kredit leverandørgæld (inkl. moms). Når du betaler: debet leverandørgæld, kredit bank.',
         descriptionEn: 'Purchase goods for resale or operations.',
+        icon: 'Package',
       },
       {
         title: 'Lønudbetaling',
@@ -121,6 +138,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Bankkonto',
         description: 'Udbetaling af løn til ansatte. Debet lønomkostning (bruttoløn), kredit bank (nettoudbetaling) + personalegæld (A-skat, AM-bidrag, ATP, feriepenge). Husk også at bogføre arbejdsgiverbidrag.',
         descriptionEn: 'Payment of salary to employees.',
+        icon: 'Users',
       },
       {
         title: 'Husleje',
@@ -131,6 +149,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Bankkonto',
         description: 'Månedlig husleje for erhvervslokaler. Husleje er momsfritaget hvis udlejer er momsregistreret — ellers er der moms. Debet husleje, kredit bank.',
         descriptionEn: 'Monthly rent for business premises.',
+        icon: 'Home',
       },
       {
         title: 'EU-indkøb (omvendt betalingspligt)',
@@ -141,6 +160,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Leverandørgæld',
         description: 'Indkøb af varer fra en momsregistreret virksomhed i et andet EU-land. Leverandøren fakturerer uden moms. Du beregner selv dansk moms (både udgående og indgående = omvendt betalingspligt). Brug momskode KEU.',
         descriptionEn: 'Purchase from EU-registered business. Self-assess VAT.',
+        icon: 'Truck',
       },
       {
         title: 'Kontorartikler og drift',
@@ -151,13 +171,13 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Bankkonto',
         description: 'Køb af kontorartikler, telefon, internet, forsikring etc. Debet den relevante omkostningskonto (f.eks. 8600 Telefon, 8400 Forsikring), kredit bank + indgående moms 25%.',
         descriptionEn: 'Purchase of office supplies, phone, internet, insurance.',
+        icon: 'Receipt',
       },
     ],
   },
   {
     category: 'moms',
     categoryDa: 'Momsafregning',
-    icon: 'calculator',
     rules: [
       {
         title: 'Momsafregning — du skal betale',
@@ -168,6 +188,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Bankkonto',
         description: 'Hver kvartal (eller måned) skal du afregne moms med Skattestyrelsen. Når udgående moms (salgsmoms) > indgående moms (købsmoms), skal du betale differencen. Nulstil momskontiene og betal skyldigt beløb.',
         descriptionEn: 'When output VAT > input VAT. Pay the difference to SKAT.',
+        icon: 'Landmark',
       },
       {
         title: 'Momsafregning — du får refusion',
@@ -178,13 +199,13 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Momsgæld',
         description: 'Når indgående moms (købsmoms) > udgående moms (salgsmoms) — typisk ved store investeringer eller opstart — får du moms tilbage. Skattestyrelsen refunderer differencen.',
         descriptionEn: 'When input VAT > output VAT. SKAT refunds the difference.',
+        icon: 'HandCoins',
       },
     ],
   },
   {
     category: 'period',
     categoryDa: 'Årsafslutning',
-    icon: 'calendar',
     rules: [
       {
         title: 'Lukning af resultatopgørelse',
@@ -195,6 +216,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Alle indtægts-/omkostningskonti',
         description: 'Ved årsafslutning lukkes alle indtægtskonti (4000-4999) og omkostningskonti (6000-8999) mod "Årets resultat" (konto 3300). Resultatet viser årets overskud/underskud.',
         descriptionEn: 'At year-end, all revenue and expense accounts are closed.',
+        icon: 'BookMarked',
       },
       {
         title: 'Overførsel til overført resultat',
@@ -205,6 +227,7 @@ const POSTING_RULES: PostingCategory[] = [
         creditAccountName: 'Overført resultat',
         description: 'Efter at årets resultat er opgjort, overføres beløbet fra "Årets resultat" (3300) til "Overført resultat" (3400). Dette lukker årets resultat-konto og forbereder den nye regnskabsperiode.',
         descriptionEn: 'Net income transferred to retained earnings.',
+        icon: 'CalendarDays',
       },
     ],
   },
@@ -295,6 +318,12 @@ const REFERENCE_LINKS: ReferenceLink[] = [
     icon: Scale,
   },
 ];
+
+// Icon lookup table — maps string names to Lucide components
+const Icons = {
+  Banknote, CreditCard, Globe, Briefcase, Package, Users, Home,
+  Truck, Receipt, Landmark, HandCoins, BookMarked, CalendarDays,
+};
 
 // ─── Component ───────────────────────────────────────────────────────────
 
@@ -397,37 +426,47 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
       </div>
 
       {/* Rules — grid layout (3 per row on desktop, 2 on tablet, 1 on mobile) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredRules
           .filter(cat => searchQuery.trim() === '' || cat.category === activeCategory || cat.rules.length > 0)
-          .flatMap(cat => cat.rules.map((rule, idx) => (
-            <Card key={`${cat.category}-${idx}`} className="stat-card border-0 shadow-sm dark:border dark:border-white/5 overflow-hidden flex flex-col">
-              <CardContent className="p-4 flex flex-col flex-1">
-                {/* Title */}
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1.5">
-                  {isDanish ? rule.title : rule.titleEn}
-                </h4>
+          .flatMap(cat => cat.rules.map((rule, idx) => {
+            const Icon = (Icons as Record<string, LucideIcon>)[rule.icon] ?? BookOpen;
+            return (
+              <Card key={`${cat.category}-${idx}`} className="stat-card border shadow-sm dark:border dark:border-white/5 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+                {/* Icon + title header */}
+                <div className="flex items-center gap-2.5 px-4 pt-4 pb-2">
+                  <div className="h-9 w-9 rounded-lg bg-[#0d9488]/10 flex items-center justify-center shrink-0">
+                    <Icon className="h-4 w-4 text-[#0d9488]" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">
+                    {isDanish ? rule.title : rule.titleEn}
+                  </h4>
+                </div>
 
                 {/* Description — main focus, readable */}
-                <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300 mb-3 flex-1">
-                  {isDanish ? rule.description : rule.descriptionEn}
-                </p>
-
-                {/* Inline accounts — compact */}
-                <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-green-50 dark:bg-green-500/10 text-green-700 dark:text-green-400">
-                    <span className="font-mono font-bold">{rule.debitAccount}</span>
-                    <span className="text-green-600 dark:text-green-500 hidden sm:inline">{rule.debitAccountName}</span>
-                  </span>
-                  <ArrowRight className="h-3 w-3 text-gray-400 shrink-0" />
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-400">
-                    <span className="font-mono font-bold">{rule.creditAccount}</span>
-                    <span className="text-red-600 dark:text-red-500 hidden sm:inline">{rule.creditAccountName}</span>
-                  </span>
+                <div className="px-4 pb-3 flex-1">
+                  <p className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-300">
+                    {isDanish ? rule.description : rule.descriptionEn}
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          )))
+
+                {/* Inline accounts — subtle colors */}
+                <div className="px-4 pb-3 pt-1 border-t border-gray-50 dark:border-white/5">
+                  <div className="flex items-center gap-1.5 text-[11px] flex-wrap pt-2">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
+                      {rule.debitAccount}
+                      <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.debitAccountName}</span>
+                    </span>
+                    <ArrowRight className="h-3 w-3 text-gray-300 dark:text-gray-600 shrink-0" />
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
+                      {rule.creditAccount}
+                      <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.creditAccountName}</span>
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            );
+          }))
         }
       </div>
       {filteredRules.flatMap(cat => cat.rules).length === 0 && (
