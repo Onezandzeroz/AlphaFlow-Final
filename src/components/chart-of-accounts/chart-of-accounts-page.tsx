@@ -1127,8 +1127,6 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
                   </span>
                 )}
               </div>
-            </CardContent>
-          </Card>
           )}
 
           {/* No filtered results */}

@@ -535,8 +535,6 @@ export function ProjectsPage({ user }: ProjectsPageProps) {
                 </SelectContent>
               </Select>
             </div>
-          </CardContent>
-        </Card>
       )}
 
       {/* Project Cards Grid */}

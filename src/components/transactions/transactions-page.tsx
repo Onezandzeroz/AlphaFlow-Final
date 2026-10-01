@@ -746,8 +746,9 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
       </div>
       )}
 
-      {/* Filters Card */}
+      {/* Filters */}
       {transactions.length > 0 && (
+      <>
       {/* Results count */}
       <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
         {t('showingOf')} {filteredTransactions.length} {t('of')} {transactions.length} {t('transactionsWord')}
@@ -797,7 +798,7 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                 </Select>
             </MobileFilterDropdown>
           </div>
-
+      </>
       )}
 
       {/* Transactions Table */}

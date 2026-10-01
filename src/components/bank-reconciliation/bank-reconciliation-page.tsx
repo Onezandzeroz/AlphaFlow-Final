@@ -1137,8 +1137,6 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                 </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
       )}
 
       {/* ── Empty state ── */}

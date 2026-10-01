@@ -872,8 +872,6 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
               </span>
             )}
           </div>
-        </CardContent>
-      </Card>
       )}
 
       {/* Contacts List */}

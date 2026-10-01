@@ -624,8 +624,6 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
               </span>
             )}
           </div>
-        </CardContent>
-      </Card>
       )}
 
       {/* Audit Log Table */}
