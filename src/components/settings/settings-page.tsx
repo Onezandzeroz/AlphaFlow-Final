@@ -247,7 +247,13 @@ export function SettingsPage({ user, onNavigate }: SettingsPageProps) {
       />
 
       {/* ── Tabs ── */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4 lg:space-y-6">
+      <Tabs value={activeTab} onValueChange={(val) => {
+        setActiveTab(val);
+        // Persist tab in URL so refresh keeps the same tab
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', val);
+        window.history.replaceState({}, '', url.toString());
+      }} className="space-y-4 lg:space-y-6">
         <TabsList className="bg-white/80 dark:bg-[#1a1f1e]/80 backdrop-blur-sm border border-gray-200 dark:border-white/10 rounded-xl p-1">
           <TabsTrigger
             value="company"

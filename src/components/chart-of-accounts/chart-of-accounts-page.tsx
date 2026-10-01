@@ -340,7 +340,23 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'accounts' | 'mapping' | 'vat' | 'guide'>('accounts');
+  const [activeTab, setActiveTabState] = useState<'accounts' | 'mapping' | 'vat' | 'guide'>(() => {
+    if (typeof window === 'undefined') return 'accounts';
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab && ['accounts', 'mapping', 'vat', 'guide'].includes(tab)) {
+      return tab as 'accounts' | 'mapping' | 'vat' | 'guide';
+    }
+    return 'accounts';
+  });
+
+  // Wrapper that persists tab in URL on change
+  const setActiveTab = useCallback((tab: 'accounts' | 'mapping' | 'vat' | 'guide') => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url.toString());
+  }, []);
 
   // ── Draft persistence (add + edit account forms) ──
   const { clearDraft: clearAddDraft } = useDraftSync(

@@ -104,7 +104,18 @@ export function AgingReportsPage({ user }: { user: User }) {
   const isDanish = language === 'da';
 
   // ── State ──
-  const [activeTab, setActiveTab] = useState<string>('receivables');
+  const [activeTab, setActiveTabState] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'receivables';
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    return tab || 'receivables';
+  });
+  const setActiveTab = useCallback((tab: string) => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url.toString());
+  }, []);
   // ── Project Mode: default as-of date to project end date (or today) ──
   const { projectToDate } = useProjectDateDefaults();
   const [asOfDate, setAsOfDate] = useState(projectToDate || todayStr());
