@@ -185,19 +185,10 @@ html.dark {
   box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   transition: all 0.2s ease;
   /* Override Card component's default py-4 sm:py-6 and gap-4 sm:gap-6
-     which makes stat cards unnecessarily tall. Stat cards should be
-     compact — their height is determined by their content, not by
-     the Card component's default padding. */
-  padding-top: 0.75rem;
-  padding-bottom: 0.75rem;
+     which makes stat cards unnecessarily tall. */
+  padding-top: 0;
+  padding-bottom: 0;
   gap: 0;
-}
-
-@media (min-width: 640px) {
-  .stat-card {
-    padding-top: 0.75rem;
-    padding-bottom: 0.75rem;
-  }
 }
 
 .stat-card:hover {
@@ -1461,8 +1452,8 @@ select:focus {
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.03);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   /* Override Card component's default py-4 sm:py-6 and gap-4 sm:gap-6 */
-  padding-top: 0.75rem;
-  padding-bottom: 0.75rem;
+  padding-top: 0;
+  padding-bottom: 0;
   gap: 0;
 }
 .stat-card-refined:hover {
