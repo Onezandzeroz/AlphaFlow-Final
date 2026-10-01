@@ -806,7 +806,7 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
 
                 {/* Inline accounts — subtle */}
                 <div className="px-4 pb-3 pt-1 border-t border-gray-50 dark:border-white/5">
-                  <div className="flex items-center justify-between gap-2 pt-2">
+                  <div className="flex items-start justify-between gap-2 pt-2">
                     <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
                         {rule.debitAccount}
@@ -818,20 +818,9 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
                         <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.creditAccountName}</span>
                       </span>
                     </div>
-                    {/* Links — SKAT reference + "Spørg Hermes" (same teal color) */}
-                    <div className="flex items-center gap-3 shrink-0">
-                      {/* Ask Hermes — opens chat with this card's content prefilled */}
-                      {hermesEnabled && (
-                        <button
-                          type="button"
-                          onClick={() => askHermesAboutRule(rule)}
-                          className="inline-flex items-center gap-1 text-[11px] text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium transition-colors cursor-pointer"
-                          title={isDanish ? 'Spørg Hermes om denne bogføringsregel' : 'Ask Hermes about this posting rule'}
-                        >
-                          <Sparkles className="h-3 w-3" />
-                          {isDanish ? 'Spørg Hermes' : 'Ask Hermes'}
-                        </button>
-                      )}
+                    {/* Links — SKAT reference on top, "Spørg Hermes" below it
+                        (same teal color, right-aligned stack) */}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
                       {/* Relevant SKAT/Erhvervsstyrelsen link */}
                       {rule.linkUrl && (
                         <a
@@ -843,6 +832,18 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
                           {isDanish ? rule.linkLabel : rule.linkLabelEn}
                           <ArrowUpRight className="h-3 w-3" />
                         </a>
+                      )}
+                      {/* Ask Hermes — opens chat with this card's content prefilled */}
+                      {hermesEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => askHermesAboutRule(rule)}
+                          className="inline-flex items-center gap-1 text-[11px] text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium transition-colors cursor-pointer"
+                          title={isDanish ? 'Spørg Hermes om denne bogføringsregel' : 'Ask Hermes about this posting rule'}
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          {isDanish ? 'Spørg Hermes' : 'Ask Hermes'}
+                        </button>
                       )}
                     </div>
                   </div>
