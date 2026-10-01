@@ -297,7 +297,7 @@ export const GET = withGuard(
         taxCodeDetails.ele('TaxCode').txt(vc.alphaFlowCode!);
         // StandardTaxCode = official code from Momskoder-Bruttoliste (f.eks. "S01")
         taxCodeDetails.ele('StandardTaxCode').txt(vc.standardCode);
-        taxCodeDetails.ele('Description').txt(vc.description);
+        taxCodeDetails.ele('Description').txt(vc.heading);
         taxCodeDetails.ele('TaxPercentage').txt(vc.rate.toString());
         taxCodeDetails.ele('Country').txt('DK');
       });
@@ -527,7 +527,7 @@ function getVatCodeDescription(code: string): string {
   // Use the official SAF-T VAT code description if available
   const saftVatCode = getSaftVatCode(code);
   if (saftVatCode) {
-    return saftVatCode.description;
+    return saftVatCode.heading;
   }
 
   // Fallback for codes without an official mapping

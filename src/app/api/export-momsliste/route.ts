@@ -81,7 +81,7 @@ export const GET = withGuard(
         return {
           alphaFlowCode: v.code,
           standardCode: saftCode?.standardCode || '',
-          description: saftCode?.description || v.code,
+          description: saftCode?.heading || v.code,
           rate: v.rate,
           group: saftCode?.group || '',
           deductible: saftCode?.deductible || '',

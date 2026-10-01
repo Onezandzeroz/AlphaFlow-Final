@@ -86,7 +86,8 @@ export type EntityType =
   | 'ReceivedInvoice'
   | 'VATSubmission'
   | 'Project'
-  | 'Payment';
+  | 'Payment'
+  | 'CustomVatCode';
 
 interface AuditOptions {
   action: AuditAction;

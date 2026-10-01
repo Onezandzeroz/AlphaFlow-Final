@@ -68,7 +68,7 @@ export const POST = withGuard({
     }
 
     // Validate rate
-    const rateNum = parseInt(rate, 10);
+    const rateNum = typeof rate === 'number' ? rate : parseInt(String(rate), 10);
     if (isNaN(rateNum) || rateNum < 0 || rateNum > 100) {
       return NextResponse.json(
         { error: 'Momssats skal være et heltal mellem 0 og 100' },
@@ -171,7 +171,7 @@ export const PUT = withGuard({
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name.trim();
     if (rate !== undefined) {
-      const rateNum = parseInt(rate, 10);
+      const rateNum = typeof rate === 'number' ? rate : parseInt(String(rate), 10);
       if (isNaN(rateNum) || rateNum < 0 || rateNum > 100) {
         return NextResponse.json(
           { error: 'Momssats skal være et heltal mellem 0 og 100' },
@@ -253,8 +253,7 @@ export const DELETE = withGuard({
       ctx.id,
       'CustomVatCode',
       id,
-      { code: existing.code, name: existing.name },
-      meta,
+      { ...meta, code: existing.code, name: existing.name },
       ctx.activeCompanyId!
     );
 
