@@ -52,9 +52,15 @@ interface PostingRule {
   debitAccountName: string;
   creditAccount: string;
   creditAccountName: string;
-  description: string;
-  descriptionEn: string;
-  icon: string; // lucide icon name
+  intro: string;
+  introEn: string;
+  debitLabel: string;
+  debitLabelEn: string;
+  creditLabel: string;
+  creditLabelEn: string;
+  followUp?: string;
+  followUpEn?: string;
+  icon: string;
 }
 
 interface PostingCategory {
@@ -75,8 +81,12 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Bankkonto',
         creditAccount: '4000',
         creditAccountName: 'Salg af varer',
-        description: 'Når du sælger varer eller ydelser og modtager betaling med det samme (kontant, MobilePay, kreditkort). Bogfør beløbet inkl. moms. Debet bank (du modtager penge), kredit salgsindtægt (excl. moms) + udgående moms 25%.',
-        descriptionEn: 'When selling goods/services and receiving payment immediately.',
+        intro: 'Når du sælger varer eller ydelser og modtager betaling med det samme (kontant, MobilePay, kreditkort):',
+        introEn: 'When selling goods/services and receiving payment immediately:',
+        debitLabel: 'Bank — du modtager det fulde beløb inkl. moms',
+        debitLabelEn: 'Bank — you receive the full amount incl. VAT',
+        creditLabel: 'Salgsindtægt (excl. moms) + udgående moms 25%',
+        creditLabelEn: 'Sales revenue (excl. VAT) + output VAT 25%',
         icon: 'Banknote',
       },
       {
@@ -86,8 +96,14 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Tilgodehavender fra salg',
         creditAccount: '4000',
         creditAccountName: 'Salg af varer',
-        description: 'Når du sælger varer eller ydelser på kredit (faktura med betalingsfrist). Debet tilgodehavender (kunden skylder dig), kredit salgsindtægt + udgående moms. Når kunden betaler: debet bank, kredit tilgodehavender.',
-        descriptionEn: 'When selling on credit.',
+        intro: 'Når du sælger varer eller ydelser på kredit med en faktura og betalingsfrist:',
+        introEn: 'When selling goods/services on credit with an invoice:',
+        debitLabel: 'Tilgodehavender — kunden skylder dig',
+        debitLabelEn: 'Receivables — customer owes you',
+        creditLabel: 'Salgsindtægt (excl. moms) + udgående moms 25%',
+        creditLabelEn: 'Sales revenue (excl. VAT) + output VAT 25%',
+        followUp: 'Når kunden betaler: Debet bank, kredit tilgodehavender',
+        followUpEn: 'When customer pays: Debit bank, credit receivables',
         icon: 'CreditCard',
       },
       {
@@ -97,8 +113,14 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Tilgodehavender fra salg',
         creditAccount: '4200',
         creditAccountName: 'Salg af varer EU',
-        description: 'Salg af varer til en momsregistreret virksomhed i et andet EU-land. Der faktureres uden dansk moms (0%). Køberen skal oplyse gyldigt udenlandsk CVR/VAT-nummer. Bogføres som EU-salg (SEU).',
-        descriptionEn: 'Sale of goods to VAT-registered business in another EU country.',
+        intro: 'Salg af varer til en momsregistreret virksomhed i et andet EU-land:',
+        introEn: 'Sale of goods to a VAT-registered business in another EU country:',
+        debitLabel: 'Tilgodehavender — kunden skylder dig (uden moms)',
+        debitLabelEn: 'Receivables — customer owes you (no VAT)',
+        creditLabel: 'EU-salg (0% moms) — brug momskode SEU',
+        creditLabelEn: 'EU sale (0% VAT) — use VAT code SEU',
+        followUp: 'Køberen skal oplyse gyldigt udenlandsk CVR/VAT-nummer',
+        followUpEn: 'Buyer must provide valid foreign VAT number',
         icon: 'Globe',
       },
       {
@@ -108,8 +130,12 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Tilgodehavender fra salg',
         creditAccount: '4100',
         creditAccountName: 'Salg af tjenesteydelser',
-        description: 'Salg af konsulentydelser, rådgivning, håndværkerarbejde etc. Debet tilgodehavender, kredit salgsindtægt + udgående moms (hvis momspligtig).',
-        descriptionEn: 'Sale of consulting, advisory, craft services.',
+        intro: 'Salg af konsulentydelser, rådgivning, håndværkerarbejde etc.:',
+        introEn: 'Sale of consulting, advisory, craft services:',
+        debitLabel: 'Tilgodehavender — kunden skylder dig',
+        debitLabelEn: 'Receivables — customer owes you',
+        creditLabel: 'Salgsindtægt + udgående moms (hvis momspligtig)',
+        creditLabelEn: 'Sales revenue + output VAT (if VAT-liable)',
         icon: 'Briefcase',
       },
     ],
@@ -125,8 +151,14 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Indkøb af varer',
         creditAccount: '2000',
         creditAccountName: 'Leverandørgæld',
-        description: 'Når du køber varer til videresalg eller drift. Du modtager en leverandørfaktura med moms. Debet vareforbrug (excl. moms) + indgående moms, kredit leverandørgæld (inkl. moms). Når du betaler: debet leverandørgæld, kredit bank.',
-        descriptionEn: 'Purchase goods for resale or operations.',
+        intro: 'Når du køber varer til videresalg eller drift:',
+        introEn: 'When purchasing goods for resale or operations:',
+        debitLabel: 'Vareforbrug (excl. moms) + indgående moms 25%',
+        debitLabelEn: 'Cost of goods (excl. VAT) + input VAT 25%',
+        creditLabel: 'Leverandørgæld (inkl. moms)',
+        creditLabelEn: 'Accounts payable (incl. VAT)',
+        followUp: 'Når du betaler: Debet leverandørgæld, kredit bank',
+        followUpEn: 'When paying: Debit payables, credit bank',
         icon: 'Package',
       },
       {
@@ -136,8 +168,14 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Lønninger',
         creditAccount: '1100',
         creditAccountName: 'Bankkonto',
-        description: 'Udbetaling af løn til ansatte. Debet lønomkostning (bruttoløn), kredit bank (nettoudbetaling) + personalegæld (A-skat, AM-bidrag, ATP, feriepenge). Husk også at bogføre arbejdsgiverbidrag.',
-        descriptionEn: 'Payment of salary to employees.',
+        intro: 'Udbetaling af løn til ansatte:',
+        introEn: 'Paying salaries to employees:',
+        debitLabel: 'Lønomkostning (bruttoløn)',
+        debitLabelEn: 'Salary expense (gross salary)',
+        creditLabel: 'Bank (nettoudbetaling) + personalegæld (A-skat, AM-bidrag, ATP, feriepenge)',
+        creditLabelEn: 'Bank (net pay) + payroll liabilities (tax, AM, ATP, holiday pay)',
+        followUp: 'Husk også at bogføre arbejdsgiverbidrag (ATP, pension)',
+        followUpEn: 'Remember to also post employer contributions (ATP, pension)',
         icon: 'Users',
       },
       {
@@ -147,8 +185,14 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Husleje',
         creditAccount: '1100',
         creditAccountName: 'Bankkonto',
-        description: 'Månedlig husleje for erhvervslokaler. Husleje er momsfritaget hvis udlejer er momsregistreret — ellers er der moms. Debet husleje, kredit bank.',
-        descriptionEn: 'Monthly rent for business premises.',
+        intro: 'Månedlig husleje for erhvervslokaler:',
+        introEn: 'Monthly rent for business premises:',
+        debitLabel: 'Husleje',
+        debitLabelEn: 'Rent expense',
+        creditLabel: 'Bank',
+        creditLabelEn: 'Bank',
+        followUp: 'Husleje er momsfritaget hvis udlejer er momsregistreret',
+        followUpEn: 'Rent is VAT-exempt if landlord is VAT-registered',
         icon: 'Home',
       },
       {
@@ -158,8 +202,14 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Indkøb af varer',
         creditAccount: '2000',
         creditAccountName: 'Leverandørgæld',
-        description: 'Indkøb af varer fra en momsregistreret virksomhed i et andet EU-land. Leverandøren fakturerer uden moms. Du beregner selv dansk moms (både udgående og indgående = omvendt betalingspligt). Brug momskode KEU.',
-        descriptionEn: 'Purchase from EU-registered business. Self-assess VAT.',
+        intro: 'Indkøb fra en momsregistreret virksomhed i et andet EU-land:',
+        introEn: 'Purchase from a VAT-registered business in another EU country:',
+        debitLabel: 'Vareforbrug (excl. moms) + indgående moms 25%',
+        debitLabelEn: 'Cost of goods (excl. VAT) + input VAT 25%',
+        creditLabel: 'Leverandørgæld (uden moms) + udgående moms 25%',
+        creditLabelEn: 'Accounts payable (no VAT) + output VAT 25%',
+        followUp: 'Leverandøren fakturerer uden moms — du beregner selv dansk moms (KEU)',
+        followUpEn: 'Supplier invoices without VAT — you self-assess Danish VAT (KEU)',
         icon: 'Truck',
       },
       {
@@ -169,8 +219,12 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Kontorartikler',
         creditAccount: '1100',
         creditAccountName: 'Bankkonto',
-        description: 'Køb af kontorartikler, telefon, internet, forsikring etc. Debet den relevante omkostningskonto (f.eks. 8600 Telefon, 8400 Forsikring), kredit bank + indgående moms 25%.',
-        descriptionEn: 'Purchase of office supplies, phone, internet, insurance.',
+        intro: 'Køb af kontorartikler, telefon, internet, forsikring etc.:',
+        introEn: 'Purchase of office supplies, phone, internet, insurance:',
+        debitLabel: 'Den relevante omkostningskonto (f.eks. 8600 Telefon, 8400 Forsikring) + indgående moms 25%',
+        debitLabelEn: 'The relevant expense account + input VAT 25%',
+        creditLabel: 'Bank',
+        creditLabelEn: 'Bank',
         icon: 'Receipt',
       },
     ],
@@ -186,8 +240,14 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Momsgæld',
         creditAccount: '1100',
         creditAccountName: 'Bankkonto',
-        description: 'Hver kvartal (eller måned) skal du afregne moms med Skattestyrelsen. Når udgående moms (salgsmoms) > indgående moms (købsmoms), skal du betale differencen. Nulstil momskontiene og betal skyldigt beløb.',
-        descriptionEn: 'When output VAT > input VAT. Pay the difference to SKAT.',
+        intro: 'Hver kvartal (eller måned) afregner du moms med Skattestyrelsen:',
+        introEn: 'Every quarter (or month) you settle VAT with SKAT:',
+        debitLabel: 'Momsgæld — nulstil udgående og indgående moms',
+        debitLabelEn: 'VAT payable — clear output and input VAT accounts',
+        creditLabel: 'Bank — betal det skyldige beløb',
+        creditLabelEn: 'Bank — pay the due amount',
+        followUp: 'Gælder når udgående moms (salgsmoms) > indgående moms (købsmoms)',
+        followUpEn: 'Applies when output VAT > input VAT',
         icon: 'Landmark',
       },
       {
@@ -197,8 +257,12 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Bankkonto',
         creditAccount: '2200',
         creditAccountName: 'Momsgæld',
-        description: 'Når indgående moms (købsmoms) > udgående moms (salgsmoms) — typisk ved store investeringer eller opstart — får du moms tilbage. Skattestyrelsen refunderer differencen.',
-        descriptionEn: 'When input VAT > output VAT. SKAT refunds the difference.',
+        intro: 'Når indgående moms > udgående moms — typisk ved store investeringer eller opstart:',
+        introEn: 'When input VAT > output VAT — typically during large investments or startup:',
+        debitLabel: 'Bank — du får moms tilbage fra Skattestyrelsen',
+        debitLabelEn: 'Bank — you receive VAT refund from SKAT',
+        creditLabel: 'Momsgæld — nulstil udgående og indgående moms',
+        creditLabelEn: 'VAT payable — clear output and input VAT accounts',
         icon: 'HandCoins',
       },
     ],
@@ -214,8 +278,12 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Årets resultat',
         creditAccount: '—',
         creditAccountName: 'Alle indtægts-/omkostningskonti',
-        description: 'Ved årsafslutning lukkes alle indtægtskonti (4000-4999) og omkostningskonti (6000-8999) mod "Årets resultat" (konto 3300). Resultatet viser årets overskud/underskud.',
-        descriptionEn: 'At year-end, all revenue and expense accounts are closed.',
+        intro: 'Ved årsafslutning lukkes alle indtægts- og omkostningskonti:',
+        introEn: 'At year-end, all revenue and expense accounts are closed:',
+        debitLabel: 'Årets resultat — samler årets overskud/underskud',
+        debitLabelEn: 'Net income — accumulates the year\'s profit/loss',
+        creditLabel: 'Alle indtægtskonti (4000-4999) og omkostningskonti (6000-8999) nulstilles',
+        creditLabelEn: 'All revenue (4000-4999) and expense accounts (6000-8999) are zeroed',
         icon: 'BookMarked',
       },
       {
@@ -225,8 +293,14 @@ const POSTING_RULES: PostingCategory[] = [
         debitAccountName: 'Årets resultat',
         creditAccount: '3400',
         creditAccountName: 'Overført resultat',
-        description: 'Efter at årets resultat er opgjort, overføres beløbet fra "Årets resultat" (3300) til "Overført resultat" (3400). Dette lukker årets resultat-konto og forbereder den nye regnskabsperiode.',
-        descriptionEn: 'Net income transferred to retained earnings.',
+        intro: 'Efter årets resultat er opgjort, overføres beløbet:',
+        introEn: 'After net income is determined, the amount is transferred:',
+        debitLabel: 'Årets resultat — lukkes (nulstilles)',
+        debitLabelEn: 'Net income — closed (zeroed)',
+        creditLabel: 'Overført resultat — årets overskud/underskud føres videre',
+        creditLabelEn: 'Retained earnings — the year\'s profit/loss is carried forward',
+        followUp: 'Dette forbereder den nye regnskabsperiode',
+        followUpEn: 'This prepares the new accounting period',
         icon: 'CalendarDays',
       },
     ],
@@ -345,7 +419,10 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
         searchQuery.trim() === '' ||
         r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         r.titleEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.intro.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.debitLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.creditLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.followUp?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
         r.debitAccountName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         r.creditAccountName.toLowerCase().includes(searchQuery.toLowerCase())
       ),
@@ -448,14 +525,36 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
                   </h4>
                 </div>
 
-                {/* Description — main focus, readable */}
-                <div className="px-4 pb-3 flex-1">
-                  <p className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-300">
-                    {isDanish ? rule.description : rule.descriptionEn}
+                {/* Structured body */}
+                <div className="px-4 pb-3 flex-1 space-y-1.5">
+                  {/* Intro */}
+                  <p className="text-[13px] leading-relaxed text-gray-700 dark:text-gray-300 font-medium">
+                    {isDanish ? rule.intro : rule.introEn}
                   </p>
+
+                  {/* Debet line */}
+                  <div className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Debet</span>
+                    <span className="mx-1 text-gray-400">—</span>
+                    {isDanish ? rule.debitLabel : rule.debitLabelEn}
+                  </div>
+
+                  {/* Kredit line */}
+                  <div className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Kredit</span>
+                    <span className="mx-1 text-gray-400">—</span>
+                    {isDanish ? rule.creditLabel : rule.creditLabelEn}
+                  </div>
+
+                  {/* Follow-up (optional) */}
+                  {rule.followUp && (
+                    <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-500 italic pt-0.5">
+                      {isDanish ? rule.followUp : rule.followUpEn}
+                    </p>
+                  )}
                 </div>
 
-                {/* Inline accounts — subtle colors */}
+                {/* Inline accounts — subtle */}
                 <div className="px-4 pb-3 pt-1 border-t border-gray-50 dark:border-white/5">
                   <div className="flex items-center gap-1.5 text-[11px] flex-wrap pt-2">
                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
