@@ -50,6 +50,32 @@ const formatDate = (date: Date) => date.toISOString().substring(0, 10);
 const formatDateTime = (date: Date) => date.toISOString();
 const formatNumber = (num: number) => num.toFixed(2);
 
+/**
+ * Normalize a country value to ISO 3166-1 alpha-2 (2-letter code).
+ * SAF-T XSD requires exactly 2 characters (e.g. "DK", "DE", "SE").
+ * Contacts may store full country names ("Danmark", "Germany") — we map
+ * the common Danish ones and default to "DK" for anything unrecognized.
+ */
+const COUNTRY_NAME_TO_CODE: Record<string, string> = {
+  'danmark': 'DK', 'denmark': 'DK',
+  'tyskland': 'DE', 'germany': 'DE',
+  'sverige': 'SE', 'sweden': 'SE',
+  'norge': 'NO', 'norway': 'NO',
+  'finland': 'FI',
+  'england': 'GB', 'uk': 'GB', 'united kingdom': 'GB',
+  'usa': 'US', 'united states': 'US',
+};
+
+function normalizeCountry(country: string | null | undefined): string {
+  if (!country) return 'DK';
+  const trimmed = country.trim();
+  // Already a 2-letter code?
+  if (/^[A-Za-z]{2}$/.test(trimmed)) return trimmed.toUpperCase();
+  // Try mapping from full name
+  const code = COUNTRY_NAME_TO_CODE[trimmed.toLowerCase()];
+  return code || 'DK';
+}
+
 // ─── GET Handler ────────────────────────────────────────────────────
 
 export const GET = withGuard(
@@ -342,7 +368,7 @@ export const GET = withGuard(
           addressNode.ele('StreetName').txt(contact.address || 'Unknown');
           addressNode.ele('City').txt(contact.city || 'Unknown');
           addressNode.ele('PostalCode').txt(contact.postalCode || '0000');
-          addressNode.ele('Country').txt(contact.country || 'DK');
+          addressNode.ele('Country').txt(normalizeCountry(contact.country));
         });
       } else {
         // MIFU = Mandatory If Filing Used — provide a placeholder so the
@@ -372,7 +398,7 @@ export const GET = withGuard(
           addressNode.ele('StreetName').txt(contact.address || 'Unknown');
           addressNode.ele('City').txt(contact.city || 'Unknown');
           addressNode.ele('PostalCode').txt(contact.postalCode || '0000');
-          addressNode.ele('Country').txt(contact.country || 'DK');
+          addressNode.ele('Country').txt(normalizeCountry(contact.country));
         });
       }
 
@@ -456,7 +482,10 @@ export const GET = withGuard(
 
         entry.lines.forEach((line, lineIndex) => {
           const lineNode = transaction.ele('Line');
-          lineNode.ele('RecordID').txt(`${entry.id}-${lineIndex + 1}`);
+          // XSD: RecordID type is SAFshorttextType (max 18 chars).
+          // entry.id (Prisma cuid) is 25 chars — use a short hash-based ID instead.
+          const recordId = `${entry.id.slice(-8)}-${(lineIndex + 1).toString().padStart(2, '0')}`;
+          lineNode.ele('RecordID').txt(recordId);
           lineNode.ele('AccountID').txt(line.account?.number || line.accountId);
           lineNode.ele('Description').txt(
             line.description || entry.description || '',
@@ -473,7 +502,18 @@ export const GET = withGuard(
           }
 
           if (line.vatCode && line.vatCode !== 'NONE') {
-            lineNode.ele('TaxPointDate').txt(entryDateStr);
+            // XSD: TaxInformation wrapper (not TaxPointDate) for VAT on transaction lines.
+            // TaxInformationStructure requires TaxCode (M) + TaxAmount (M, AmountStructure).
+            const lineTaxInfo = lineNode.ele('TaxInformation');
+            lineTaxInfo.ele('TaxType').txt('VAT');
+            lineTaxInfo.ele('TaxCode').txt(line.vatCode);
+            // TaxAmount is mandatory — for a sales line, the tax amount is the
+            // corresponding OUTPUT_VAT credit on the same entry (if any).
+            const vatLine = entry.lines.find(
+              (l) => l.account?.group === 'OUTPUT_VAT' && Number(l.credit) > 0,
+            );
+            const lineTaxAmount = lineTaxInfo.ele('TaxAmount');
+            emitAmount(lineTaxAmount, Number(vatLine?.credit) || 0);
           }
         });
       });
@@ -646,16 +686,16 @@ export const GET = withGuard(
             .filter((l) => l.account?.group === 'OUTPUT_VAT' && Number(l.credit) > 0)
             .reduce((sum, l) => sum + Number(l.credit) || 0, 0);
 
-          // TaxInformationTotals (mandatory) — TaxBase is xs:decimal (simple), TaxAmount is AmountStructure
+          // TaxInformationTotals (mandatory) — must always have TaxType + TaxCode
+          // per XSD (at least one of TaxType/TaxCode is required).
+          // TaxBase is xs:decimal (simple text), TaxAmount is AmountStructure.
           const taxInfoTotals = docTotals.ele('TaxInformationTotals');
-          if (salesLines.some(l => l.vatCode && l.vatCode !== 'NONE')) {
-            taxInfoTotals.ele('TaxType').txt('VAT');
-            taxInfoTotals.ele('TaxCode').txt(salesLines.find(l => l.vatCode && l.vatCode !== 'NONE')?.vatCode || 'S25');
-            // XSD: TaxBase is xs:decimal (simple text, NOT AmountStructure)
-            taxInfoTotals.ele('TaxBase').txt(formatNumber(salesNetTotal));
-            const taxAmountTotals = taxInfoTotals.ele('TaxAmount');
-            emitAmount(taxAmountTotals, vatTotal);
-          }
+          const firstVatCode = salesLines.find(l => l.vatCode && l.vatCode !== 'NONE')?.vatCode || 'S25';
+          taxInfoTotals.ele('TaxType').txt('VAT');
+          taxInfoTotals.ele('TaxCode').txt(firstVatCode);
+          taxInfoTotals.ele('TaxBase').txt(formatNumber(salesNetTotal));
+          const taxAmountTotals = taxInfoTotals.ele('TaxAmount');
+          emitAmount(taxAmountTotals, vatTotal);
           docTotals.ele('NetTotal').txt(formatNumber(salesNetTotal));
           docTotals.ele('GrossTotal').txt(formatNumber(salesNetTotal + vatTotal));
         });
