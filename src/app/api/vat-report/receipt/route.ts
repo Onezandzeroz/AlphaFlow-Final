@@ -36,7 +36,7 @@ export const POST = withGuard(
         `[API] Fetching VAT receipt: submissionId=${submissionId}, company=${ctx.activeCompanyId}`,
       );
 
-      const submission = await fetchVATReceipt(submissionId, ctx.userId);
+      const submission = await fetchVATReceipt(submissionId, ctx.id);
 
       // Notify data change so the UI updates
       notifyDataChanges(ctx.activeCompanyId!, 'vat-report');
