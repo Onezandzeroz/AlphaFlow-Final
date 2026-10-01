@@ -839,9 +839,9 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
           <div className="flex items-center gap-1 overflow-x-auto">
             {([
               { id: 'accounts' as const, icon: BookOpen, label: isDanish ? 'Kontoplan' : 'Accounts' },
-              { id: 'mapping' as const, icon: ArrowRightLeft, label: isDanish ? 'Standard Mapping' : 'Standard Mapping' },
-              { id: 'vat' as const, icon: Percent, label: isDanish ? 'Momskoder' : 'VAT Codes' },
-              { id: 'guide' as const, icon: Lightbulb, label: isDanish ? 'Bogføringsguide' : 'Posting Guide' },
+              { id: 'mapping' as const, icon: ArrowRightLeft, label: isDanish ? 'Mapping til standardkontoplan' : 'Standard Account Mapping' },
+              { id: 'vat' as const, icon: Percent, label: isDanish ? 'Mapping af momskoder' : 'VAT Code Mapping' },
+              { id: 'guide' as const, icon: Lightbulb, label: isDanish ? 'Bogførings- og konteringsvejledning' : 'Posting & Accounting Guide' },
             ]).map((tab) => {
               const TabIcon = tab.icon;
               const isActive = activeTab === tab.id;
