@@ -606,10 +606,11 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
 
   /**
    * Build a context-rich prompt from a posting rule and hand it to Hermes.
-   * The prompt is written in the active UI language and asks Hermes to
-   * explain the rule, advise on when to apply it, and give concrete numeric
-   * examples — exactly as the user requested ("så han kan svare, rådgive og
-   * give eksempler").
+   * The prompt is written in the active UI language and asks Hermes to:
+   *   1. Forklare bogføringsprincippet så en lægmand forstår det (ikke
+   *      tung fagterminologi, men hverdagsprog der gør princippet tydeligt).
+   *   2. Give ét tydeligt eksempel med beløb (ikke tre) der viser
+   *      konteringen i praksis.
    */
   const askHermesAboutRule = useCallback((rule: PostingRule) => {
     const title = isDanish ? rule.title : rule.titleEn;
@@ -633,7 +634,9 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
       }
       lines.push(
         '',
-        'Forklar venligst reglen nærmere, rådgiv om hvornår og hvordan den anvendes i praksis, og giv 2-3 konkrete eksempler med beløb (inkl. moms) så jeg forstår konteringen helt.',
+        'Forklar venligst bogføringsprincippet bag denne regel i almindeligt og forståeligt sprog — så en lægmand uden bogføringskendskab kan følge med. Brug hverdagsord og undgå tung fagterminologi hvor det er muligt.',
+        '',
+        'Giv derefter ét tydeligt eksempel med konkrete beløb (inkl. moms) der trin-for-trin viser hvordan konteringen foregår — fra beløbet modtages til posteringslinjerne sættes.',
       );
       requestOpenWithPrompt(lines.join('\n'));
     } else {
@@ -651,7 +654,9 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
       }
       lines.push(
         '',
-        'Please explain this rule in more detail, advise on when and how to apply it in practice, and give 2-3 concrete examples with amounts (incl. VAT) so I fully understand the booking.',
+        'Please explain the bookkeeping principle behind this rule in plain, understandable language — so a layperson with no accounting background can follow along. Use everyday words and avoid heavy technical jargon where possible.',
+        '',
+        'Then give one clear example with concrete amounts (incl. VAT) that step-by-step shows how the booking works — from receiving the amount to setting the posting lines.',
       );
       requestOpenWithPrompt(lines.join('\n'));
     }

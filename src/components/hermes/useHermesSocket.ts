@@ -6,6 +6,20 @@ import type { ChatMessage, HermesNotification } from './types';
 
 export type ResponseMode = 'complex' | 'simplified';
 
+/** Options for sending a chat message to Hermes. */
+export interface SendMessageOptions {
+  /**
+   * When true, the message is sent to the LLM but NOT displayed as a user
+   * chat bubble in the panel. Used by "Spørg Hermes" entry points (e.g.
+   * posting guide cards) where the prompt is pre-filled from a card the
+   * user already clicked — echoing it back as a question bubble would be
+   * redundant. The server still processes it (LLM sees it, assistant
+   * response streams back as normal) but skips persisting the user turn
+   * so it doesn't reappear on reload.
+   */
+  silent?: boolean
+}
+
 interface UseHermesSocketReturn {
   isConnected: boolean;
   agentEnabled: boolean;
@@ -14,7 +28,7 @@ interface UseHermesSocketReturn {
   isTyping: boolean;
   /** Current chat response mode ('complex' or 'simplified'). */
   responseMode: ResponseMode;
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string, options?: SendMessageOptions) => void;
   dismissNotification: (id: string) => void;
   /** Start a fresh chat session: clears visible messages and tells the server
    *  to drop the previous session's in-memory history so the LLM starts blank. */
@@ -325,25 +339,35 @@ export function useHermesSocket(options: {
   }, [tenantId, userId, userName, servicePort]);
 
   const sendMessage = useCallback(
-    (content: string) => {
+    (content: string, options?: SendMessageOptions) => {
       if (!socketRef.current || !isConnected || !agentEnabled) return;
 
-      // Add user message locally
-      const userMsg: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, userMsg]);
+      const { silent = false } = options || {}
+
+      // Add user message locally — UNLESS this is a "silent" prompt (e.g.
+      // from a "Spørg Hermes" card link). Silent prompts are sent to the
+      // LLM but not shown as a chat bubble, since the user already knows
+      // what they asked (they clicked the link on that specific card).
+      if (!silent) {
+        const userMsg: ChatMessage = {
+          id: crypto.randomUUID(),
+          role: 'user',
+          content,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, userMsg]);
+      }
 
       // Emit to server (event name is 'chat')
       // SECURITY (U-5): tenantId is no longer sent — the server uses the
       // verified session meta. The message text + chat sessionId are sent.
+      // `silent` tells the server to skip persisting the user turn so it
+      // doesn't reappear in session-history on reload.
       const sid = ensureSessionId();
       socketRef.current.emit('chat', {
         message: content,
         sessionId: sid,
+        silent,
       });
     },
     [isConnected, agentEnabled, tenantId, ensureSessionId]

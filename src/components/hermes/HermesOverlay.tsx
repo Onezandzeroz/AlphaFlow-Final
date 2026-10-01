@@ -169,11 +169,14 @@ export function HermesOverlay({
 
     // If already connected, send immediately. Otherwise poll briefly until
     // the socket lands — reading the LIVE flag from the ref each tick.
+    // `silent: true` so the pre-filled prompt is NOT shown as a user chat
+    // bubble — only Hermes's answer should be visible (per user request:
+    // "spørgsmålet skal ikke vises, kun svaret").
     let attempts = 0;
     const maxAttempts = 40; // up to ~4s @ 100ms
     const trySend = () => {
       if (isConnectedRef.current) {
-        sendMessage(promptToSend);
+        sendMessage(promptToSend, { silent: true });
         consumePendingPrompt();
         return;
       }
