@@ -403,6 +403,17 @@ export const GET = withGuard(
       //    Contains NumberOfEntries, TotalDebit, TotalCredit DIRECTLY
       //    (NOT in a separate <Totals> element — that doesn't exist in XSD)
       // ═══════════════════════════════════════════════════════════════
+
+      // Helper: emit an AmountStructure (Amount + CurrencyCode + CurrencyAmount + ExchangeRate).
+      // Defined at the GeneralLedgerEntries scope so it's available to both
+      // Transaction lines AND Invoice lines (which also use AmountStructure).
+      const emitAmount = (parent: any, amount: number) => {
+        parent.ele('Amount').txt(formatNumber(amount));
+        parent.ele('CurrencyCode').txt('DKK');
+        parent.ele('CurrencyAmount').txt(formatNumber(amount));
+        parent.ele('ExchangeRate').txt('1.0000');
+      };
+      // ═══════════════════════════════════════════════════════════════
       const generalLedgerEntries = root.ele('GeneralLedgerEntries');
       generalLedgerEntries.ele('NumberOfEntries').txt(transactionCount.toString());
       generalLedgerEntries.ele('TotalDebit').txt(formatNumber(totalDebit));
@@ -441,14 +452,7 @@ export const GET = withGuard(
         // XSD: <Line> elements are DIRECT children of <Transaction> —
         // there is NO <Lines> wrapper in the SAF-T XSD.
         // Each Line has a CHOICE of DebitAmount OR CreditAmount (not both),
-        // and they use AmountStructure (requires <Amount> child + CurrencyCode +
-        // CurrencyAmount + ExchangeRate).
-        const emitAmount = (parent: any, amount: number) => {
-          parent.ele('Amount').txt(formatNumber(amount));
-          parent.ele('CurrencyCode').txt('DKK');
-          parent.ele('CurrencyAmount').txt(formatNumber(amount));
-          parent.ele('ExchangeRate').txt('1.0000');
-        };
+        // and they use AmountStructure (emitAmount helper defined above).
 
         entry.lines.forEach((line, lineIndex) => {
           const lineNode = transaction.ele('Line');
