@@ -397,6 +397,7 @@ model Company {
   oversightSessions       Session[]                @relation("OversightCompany")
   hermesAgent             HermesAgent?
   standardAccountMappings StandardAccountMapping[]
+  customVatCodes           CustomVatCode[]
   receivedInvoices        ReceivedInvoice[]
   eInvoiceSendings        EInvoiceSending[]
   vatSubmissions          VATSubmission[]
@@ -815,6 +816,49 @@ model StandardAccountMapping {
   @@index([companyId])
   @@index([companyId, standardAccountNumber])
   @@index([accountId])
+}
+
+// ─── CUSTOM VAT CODES (brugerdefinerede momssatser) ──────────────
+// Ladér brugere oprette egne momssatser (udover de 10 indbyggede)
+// og mappe dem til officielle SKAT momskoder fra Momskoder Bruttoliste.
+// Dette muliggør f.eks. special-satser som 5% (kunstneres førstegangssalg),
+// 20% (leasingbiler), eller brugerspecifikke delvise fradrags-koder.
+
+model CustomVatCode {
+  id              String   @id @default(cuid())
+  companyId       String
+
+  // Brugerdefineret kode (f.eks. "S5", "K33", "REVERSE")
+  // Skal være unik pr. virksomhed. Må IKKE kollidere med indbyggede
+  // koder (S25, S12, S0, SEU, K25, K12, K0, KEU, KUF, NONE).
+  code            String
+
+  // Visningsnavn (f.eks. "Kunstneres førstegangssalg 5%")
+  name            String
+
+  // Momssats som heltal (0, 5, 12, 20, 25)
+  rate            Int
+
+  // Retning: "output" (salg) eller "input" (køb)
+  direction       String   @default("output") // "output" | "input"
+
+  // Mapping til officiel SKAT momskode fra Momskoder Bruttoliste
+  // (f.eks. "S87" for kunstneres førstegangssalg, "K040" for fastnettelefon 50%)
+  // Null = ikke mappet endnu (brugeren skal vælge en officiel kode)
+  standardVatCode String?  // Officiel kode (f.eks. "S87", "K040")
+
+  // Beskrivelse / vejledning (valgfrit)
+  description     String?
+
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([companyId, isActive])
 }
 
 // ─── JOURNAL ENTRIES ──────────────────────────────────────────────
