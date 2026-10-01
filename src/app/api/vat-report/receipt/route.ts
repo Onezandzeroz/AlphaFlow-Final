@@ -39,7 +39,9 @@ export const POST = withGuard(
       const submission = await fetchVATReceipt(submissionId, ctx.id);
 
       // Notify data change so the UI updates
-      notifyDataChanges(ctx.activeCompanyId!, 'vat-report');
+      notifyDataChanges([
+        { scope: 'vat-report', companyId: ctx.activeCompanyId!, action: 'update' },
+      ]).catch(() => {});
 
       return NextResponse.json({
         success: true,
