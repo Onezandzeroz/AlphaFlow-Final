@@ -27,8 +27,8 @@
  */
 
 import { db } from '@/lib/db';
-import { computeVATRegister, r2 } from '@/lib/vat-utils';
-import { auditLog, requestMetadata } from '@/lib/audit';
+import { computeVATRegister } from '@/lib/vat-utils';
+import { auditLog } from '@/lib/audit';
 import { logger } from '@/lib/logger';
 import {
   submitModtagMomsangivelseForeloebig,
@@ -105,10 +105,15 @@ export async function prepareVATSubmission(
   userId: string,
 ) {
   const { from, to } = getQuarterDates(year, period);
-  const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
   // Compute the VAT register for the period
-  const vatRegister = await computeVATRegister(companyId, formatDate(from), formatDate(to));
+  // computeVATRegister takes a whereClause (same shape as db.journalEntry.findMany)
+  const vatRegister = await computeVATRegister({
+    companyId,
+    status: 'POSTED',
+    cancelled: false,
+    date: { gte: from, lte: to },
+  });
 
   // Check for existing submission
   const existing = await db.vATSubmission.findUnique({
