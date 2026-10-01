@@ -488,8 +488,8 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
               </p>
               <p>
                 {isDanish
-                  ? 'SKATs fællesoffentlige standardkontoplan bruges af det offentlige Danmark til rapportering. Mappingen sikrer, at dine konti kan rapporteres i et format som SKAT, Erhvervsstyrelsen og NemHandel forstår. Krav N14, N15, N16.'
-                  : 'SKAT\'s public standard chart of accounts is used by the Danish public sector for reporting. The mapping ensures your accounts can be reported in a format understood by SKAT, Erhvervsstyrelsen, and NemHandel. Requirements N14, N15, N16.'}
+                  ? 'SKATs fællesoffentlige standardkontoplan bruges af det offentlige Danmark til rapportering. Mappingen sikrer, at dine konti kan rapporteres i et format som SKAT, Erhvervsstyrelsen og NemHandel forstår.'
+                  : 'SKAT\'s public standard chart of accounts is used by the Danish public sector for reporting. The mapping ensures your accounts can be reported in a format understood by SKAT, Erhvervsstyrelsen, and NemHandel.'}
               </p>
             </div>
           </div>

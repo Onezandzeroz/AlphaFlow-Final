@@ -829,8 +829,8 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
       <PageHeader
         title={isDanish ? 'Kontoplan & Standardkontoplan' : 'Chart of Accounts & Standard Mapping'}
         description={isDanish
-          ? 'Kontoplan, standard mapping, momskoder og konteringsvejledning (Krav N14-N18, D13, D14)'
-          : 'Chart of accounts, standard mapping, VAT codes and posting guide (Requirements N14-N18, D13, D14)'}
+          ? 'Kontoplan, standard mapping, momskoder og konteringsvejledning'
+          : 'Chart of accounts, standard mapping, VAT codes and posting guide'}
       />
 
       {/* Tab Navigation */}
@@ -1776,12 +1776,11 @@ function AccountFormDialog({
             />
           </div>
 
-          {/* Posting Guide (Konteringsvejledning) — Krav N18 */}
+          {/* Posting Guide (Konteringsvejledning) */}
           <div className="space-y-2">
             <Label htmlFor={`${mode}-postingGuide`} className="dark:text-gray-300 flex items-center gap-1.5">
               <Lightbulb className="h-3.5 w-3.5 text-[#0d9488]" />
               {isDanish ? 'Konteringsvejledning' : 'Posting Guide'}
-              <span className="text-[10px] text-gray-400 font-normal">(Krav N18)</span>
             </Label>
             <Textarea
               id={`${mode}-postingGuide`}

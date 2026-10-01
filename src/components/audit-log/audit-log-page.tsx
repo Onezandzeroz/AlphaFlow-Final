@@ -485,7 +485,7 @@ export function AuditLogPage({ user }: AuditLogPageProps) {
         {total} {isDanish ? 'logposter i alt' : 'log entries total'}
       </div>
 
-      {/* Security Alerts Panel — automated log-monitor scan (Krav 18).
+      {/* Security Alerts Panel — automated log-monitor scan.
           Surfaced at the top so admins see critical/high alerts before
           scrolling through the raw AuditLog table. */}
       <SecurityAlertsPanel />
