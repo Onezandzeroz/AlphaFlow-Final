@@ -213,9 +213,23 @@ export function VATMappingPanel() {
     setFormDescription('');
   };
 
-  // ─── Group official codes ──────────────────────────────────────────
+  // ─── Group official codes — ONLY show mapped (active) codes ────────
+  // Unmapped/inactive official codes are hidden from the user. The full
+  // list of 72 codes is still available in the "Mapping til officiel
+  // momskode" dropdown in the create/edit dialog (with guidance tooltips).
   const groupedCodes = useMemo(() => {
-    let codes = SAFT_VAT_CODES;
+    // Only show codes that have an alphaFlowCode mapping (i.e. the 7
+    // built-in codes that AlphaFlow actually uses) PLUS any official
+    // codes that custom codes are mapped to.
+    const mappedOfficialCodes = new Set(
+      customCodes
+        .filter((c) => c.standardVatCode)
+        .map((c) => c.standardVatCode!)
+    );
+
+    let codes = SAFT_VAT_CODES.filter(
+      (c) => c.alphaFlowCode !== null || mappedOfficialCodes.has(c.standardCode)
+    );
 
     if (filter === 'OUTPUT') {
       codes = codes.filter((c) => c.group.toLowerCase().includes('salg'));
@@ -246,10 +260,10 @@ export function VATMappingPanel() {
       groups[code.group].push(code);
     }
     return groups;
-  }, [searchQuery, filter]);
+  }, [searchQuery, filter, customCodes]);
 
   const mappedCount = SAFT_VAT_CODES.filter((c) => c.alphaFlowCode !== null).length;
-  const totalCount = SAFT_VAT_CODES.length;
+  const activeOfficialCount = mappedCount + customCodes.filter(c => c.standardVatCode).length;
 
   const renderOfficialCode = (code: SaftVatCode) => {
     const isMapped = code.alphaFlowCode !== null;
@@ -422,8 +436,8 @@ export function VATMappingPanel() {
           </h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             {isDanish
-              ? `${totalCount} officielle momskoder + ${customCodes.length} brugerdefinerede — ${mappedCount + customCodes.filter(c => c.standardVatCode).length} mappet`
-              : `${totalCount} official VAT codes + ${customCodes.length} custom — ${mappedCount + customCodes.filter(c => c.standardVatCode).length} mapped`}
+              ? `${activeOfficialCount} aktive momskoder + ${customCodes.length} brugerdefinerede`
+              : `${activeOfficialCount} active VAT codes + ${customCodes.length} custom`}
           </p>
         </div>
         <Button
@@ -466,10 +480,9 @@ export function VATMappingPanel() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-white dark:bg-[#1a1f1e]">
-            <SelectItem value="ALL">{isDanish ? 'Alle' : 'All'}</SelectItem>
+            <SelectItem value="ALL">{isDanish ? 'Alle aktive' : 'All active'}</SelectItem>
             <SelectItem value="OUTPUT">{isDanish ? 'Salg (output)' : 'Sales (output)'}</SelectItem>
             <SelectItem value="INPUT">{isDanish ? 'Køb (input)' : 'Purchases (input)'}</SelectItem>
-            <SelectItem value="MAPPED">{isDanish ? 'Kun mappet' : 'Mapped only'}</SelectItem>
             <SelectItem value="CUSTOM">{isDanish ? 'Brugerdefinerede' : 'Custom codes'}</SelectItem>
           </SelectContent>
         </Select>
@@ -610,12 +623,31 @@ export function VATMappingPanel() {
                       {isDanish ? '— Ikke mappet —' : '— Unmapped —'}
                     </SelectItem>
                     {SAFT_VAT_CODES.map((code) => (
-                      <SelectItem key={code.standardCode} value={code.standardCode}>
-                        <span className="font-mono">{code.standardCode}</span>
-                        <span className="mx-1.5 text-gray-300">—</span>
-                        <span className="truncate">{code.heading}</span>
-                        {code.rate > 0 && <span className="ml-2 text-gray-400 text-[10px]">{code.rate}%</span>}
-                      </SelectItem>
+                      <TooltipProvider key={code.standardCode}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div>
+                              <SelectItem value={code.standardCode}>
+                                <span className="font-mono">{code.standardCode}</span>
+                                <span className="mx-1.5 text-gray-300">—</span>
+                                <span className="truncate">{code.heading}</span>
+                                {code.rate > 0 && <span className="ml-2 text-gray-400 text-[10px]">{code.rate}%</span>}
+                              </SelectItem>
+                            </div>
+                          </TooltipTrigger>
+                          {code.guidance && (
+                            <TooltipContent side="left" className="max-w-sm">
+                              <p className="text-xs font-medium mb-1">{code.heading}</p>
+                              <p className="text-xs text-gray-500">{code.guidance}</p>
+                              {code.reportingRule && (
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                  {isDanish ? 'Angivelse: ' : 'Reporting: '}{code.reportingRule}
+                                </p>
+                              )}
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      </TooltipProvider>
                     ))}
                   </SelectContent>
                 </Select>
