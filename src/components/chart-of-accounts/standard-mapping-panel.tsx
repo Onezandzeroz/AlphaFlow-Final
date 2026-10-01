@@ -305,8 +305,7 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
                 <ArrowRightLeft className="h-4 w-4 text-[#0d9488]" />
               </div>
             </div>
-          </CardContent>
-        </Card>
+
         <Card className="stat-card">
           <CardContent className="p-3">
             <div className="flex items-center justify-between">
@@ -349,9 +348,7 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
       </div>
 
       {/* Filter */}
-      <Card className="stat-card">
-        <CardContent className="p-4 pb-2 lg:pb-4">
-          <div className="flex flex-wrap gap-2 items-center">
+      <div className="flex flex-col sm:flex-row gap-2 items-center">
             <div className="relative flex-1 min-w-[140px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input

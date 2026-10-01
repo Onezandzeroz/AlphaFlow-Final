@@ -748,13 +748,11 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
 
       {/* Filters Card */}
       {transactions.length > 0 && (
-      <Card className="stat-card">
-        <CardContent className="p-4 pb-2 lg:pb-4">
-          {/* Results count — above search on mobile, below on desktop */}
-          <div className="text-sm text-gray-500 dark:text-gray-400 lg:mt-0">
-            {t('showingOf')} {filteredTransactions.length} {t('of')} {transactions.length} {t('transactionsWord')}
-          </div>
-          <div className="flex flex-wrap gap-2 items-center mt-2 lg:mt-3">
+      {/* Results count */}
+      <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+        {t('showingOf')} {filteredTransactions.length} {t('of')} {transactions.length} {t('transactionsWord')}
+      </div>
+      <div className="flex flex-col sm:flex-row gap-2 items-center">
             {/* Search - always visible */}
             <div className="relative flex-1 min-w-[140px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -800,8 +798,6 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
             </MobileFilterDropdown>
           </div>
 
-        </CardContent>
-      </Card>
       )}
 
       {/* Transactions Table */}
