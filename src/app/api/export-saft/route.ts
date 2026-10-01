@@ -331,11 +331,12 @@ export const GET = withGuard(
         customerContacts.forEach(contact => {
           const customerNode = customers.ele('Customer');
           customerNode.ele('CustomerID').txt(contact.id);
-          // XSD: CompanyStructureContent group uses Name, not CompanyName
-          customerNode.ele('Name').txt(contact.name);
+          // XSD CompanyStructureContent: CVR|RegistrationNumber, then EntityType,
+          // then SE-nr, then Name, then Address. RegistrationNumber BEFORE Name.
           if (contact.cvrNumber) {
             customerNode.ele('RegistrationNumber').txt(contact.cvrNumber);
           }
+          customerNode.ele('Name').txt(contact.name);
           // XSD: Address requires StreetName, City, PostalCode, Country
           const addressNode = customerNode.ele('Address');
           addressNode.ele('StreetName').txt(contact.address || 'Unknown');
@@ -362,11 +363,11 @@ export const GET = withGuard(
         supplierContacts.forEach(contact => {
           const supplierNode = suppliers.ele('Supplier');
           supplierNode.ele('SupplierID').txt(contact.id);
-          // XSD: CompanyStructureContent group uses Name, not CompanyName
-          supplierNode.ele('Name').txt(contact.name);
+          // XSD CompanyStructureContent: RegistrationNumber BEFORE Name
           if (contact.cvrNumber) {
             supplierNode.ele('RegistrationNumber').txt(contact.cvrNumber);
           }
+          supplierNode.ele('Name').txt(contact.name);
           const addressNode = supplierNode.ele('Address');
           addressNode.ele('StreetName').txt(contact.address || 'Unknown');
           addressNode.ele('City').txt(contact.city || 'Unknown');
@@ -422,22 +423,20 @@ export const GET = withGuard(
 
         const transaction = journal.ele('Transaction');
         transaction.ele('TransactionID').txt(entry.id);
-        // XSD requires Period (month 1-12) and PeriodYear BEFORE TransactionDate
+        // XSD Transaction order: TransactionID, Period, PeriodYear, TransactionDate,
+        // SourceID, TransactionType, Description, BatchID, SystemEntryDate,
+        // GLPostingDate, CustomerID, SupplierID, SystemID, Line.
+        // NOTE: Transaction has NO SourceDocumentID — that's an Invoice element.
+        // In Transaction, use SourceID (optional) for the person/app that entered.
         transaction.ele('Period').txt(entryMonth.toString());
         transaction.ele('PeriodYear').txt(entryYear.toString());
         transaction.ele('TransactionDate').txt(entryDateStr);
-        // XSD: Description is mandatory
         transaction.ele('Description').txt(entry.description || entry.reference || 'Journal entry');
-        // XSD: SystemEntryDate and GLPostingDate are mandatory (xs:date).
         const systemDate = entry.createdAt ? formatDate(new Date(entry.createdAt)) : entryDateStr;
         transaction.ele('SystemEntryDate').txt(systemDate);
         transaction.ele('GLPostingDate').txt(entryDateStr);
         // XSD: SystemID is mandatory (maxOccurs unbounded → at least 1)
         transaction.ele('SystemID').txt('AlphaFlow');
-
-        if (entry.reference) {
-          transaction.ele('SourceDocumentID').txt(entry.reference);
-        }
 
         // XSD: <Line> elements are DIRECT children of <Transaction> —
         // there is NO <Lines> wrapper in the SAF-T XSD.
@@ -559,40 +558,102 @@ export const GET = withGuard(
           const invoice = salesInvoices.ele('Invoice');
           invoiceIndex++;
           invoice.ele('InvoiceNo').txt(entry.reference || `JE-${invoiceIndex.toString().padStart(6, '0')}`);
+          // XSD InvoiceStructure: InvoiceNo, then CustomerInfo (choice, contains
+          // CustomerID/Name + BillingAddress), then AccountID, Period, PeriodYear,
+          // InvoiceDate, InvoiceType.
+          // CustomerID must be wrapped in <CustomerInfo>, not a direct child.
+          const customerInfo = invoice.ele('CustomerInfo');
+          customerInfo.ele('CustomerID').txt(resolvedCustomerId);
+          // BillingAddress is mandatory inside CustomerInfo
+          const billingAddr = customerInfo.ele('BillingAddress');
+          billingAddr.ele('StreetName').txt('Unknown');
+          billingAddr.ele('City').txt('Unknown');
+          billingAddr.ele('PostalCode').txt('0000');
+          billingAddr.ele('Country').txt('DK');
           invoice.ele('InvoiceDate').txt(formatDate(new Date(entry.date)));
-          invoice.ele('CustomerID').txt(resolvedCustomerId);
           invoice.ele('InvoiceType').txt('Invoice');
 
-          const invLines = invoice.ele('Lines');
+          // XSD InvoiceStructure requires GLPostingDate (M) and TransactionID (M)
+          // before <Line> elements. Line is a DIRECT child of Invoice (no <Lines> wrapper).
+          invoice.ele('GLPostingDate').txt(formatDate(new Date(entry.date)));
+          invoice.ele('TransactionID').txt(entry.id);
 
+          // XSD: <Line> elements are DIRECT children of <Invoice> — no <Lines> wrapper.
+          // XSD Invoice Line order: LineNumber, AccountID, [Analysis, OrderReferences,
+          // ShipTo, ShipFrom], GoodsServicesID (M!), [ProductCode, ProductDescription,
+          // Delivery], Quantity, InvoiceUOM, ..., UnitPrice (M), [InvoiceDate, References],
+          // Description (M), InvoiceLineAmount (M), DebitCreditIndicator (M, 'D'|'C'),
+          // [ShippingCostsAmount], TaxInformation.
+          // NOTE: Settlement is a child of INVOICE (after all Lines), not of Line.
           salesLines.forEach((line, lineIdx) => {
             if (line.account?.group === 'OUTPUT_VAT') return;
 
-            const invLine = invLines.ele('Line');
+            const invLine = invoice.ele('Line');
             invLine.ele('LineNumber').txt((lineIdx + 1).toString());
-            invLine.ele('Description').txt(line.description || entry.description || '');
+            invLine.ele('AccountID').txt(line.account?.number || line.accountId);
+            // XSD: GoodsServicesID is mandatory
+            invLine.ele('GoodsServicesID').txt(`GS-${lineIdx + 1}`);
             invLine.ele('Quantity').txt('1');
             invLine.ele('UnitPrice').txt(formatNumber(Number(line.credit) || Number(line.debit) || 0));
-            invLine.ele('TaxBaseAmount').txt(formatNumber(Number(line.credit) || Number(line.debit) || 0));
+            invLine.ele('Description').txt(line.description || entry.description || '');
+
+            // InvoiceLineAmount (AmountStructure)
+            const lineAmount = invLine.ele('InvoiceLineAmount');
+            emitAmount(lineAmount, Number(line.credit) || Number(line.debit) || 0);
+
+            // DebitCreditIndicator — XSD enum: 'D' (Debit) or 'C' (Credit)
+            invLine.ele('DebitCreditIndicator').txt('C');
 
             const vatCode = line.vatCode || 'NONE';
             if (vatCode !== 'NONE') {
-              const invTax = invLine.ele('Tax');
+              const invTax = invLine.ele('TaxInformation');
+              invTax.ele('TaxType').txt('VAT');
               invTax.ele('TaxCode').txt(vatCode);
 
               const vatLine = entry.lines.find(
                 (l) => l.account?.group === 'OUTPUT_VAT' && Number(l.credit) > 0,
               );
-              invTax.ele('TaxAmount').txt(formatNumber(Number(vatLine?.credit) || 0));
+              const taxAmount = invTax.ele('TaxAmount');
+              emitAmount(taxAmount, Number(vatLine?.credit) || 0);
             }
-
-            const lineTotal = (Number(line.credit) || Number(line.debit) || 0) + (Number(entry.lines.find(
-              (l) => l.account?.group === 'OUTPUT_VAT' && Number(l.credit) > 0,
-            )?.credit) || 0);
-
-            const settlement = invoice.ele('Settlement');
-            settlement.ele('SettlementAmount').txt(formatNumber(lineTotal));
           });
+
+          // XSD: Settlement is a child of INVOICE (after all Line elements).
+          // SettlementDiscount (M) comes before SettlementAmount.
+          const invoiceTotal = salesLines.reduce((sum, line) => {
+            if (line.account?.group === 'OUTPUT_VAT') return sum;
+            const vatLine = entry.lines.find(
+              (l) => l.account?.group === 'OUTPUT_VAT' && Number(l.credit) > 0,
+            );
+            return sum + (Number(line.credit) || Number(line.debit) || 0) + (Number(vatLine?.credit) || 0);
+          }, 0);
+          const settlement = invoice.ele('Settlement');
+          settlement.ele('SettlementDiscount').txt('0');
+          const settlementAmount = settlement.ele('SettlementAmount');
+          emitAmount(settlementAmount, invoiceTotal);
+
+          // XSD: DocumentTotals is mandatory — TaxInformationTotals, NetTotal, GrossTotal
+          const docTotals = invoice.ele('DocumentTotals');
+          const salesNetTotal = salesLines.reduce((sum, line) => {
+            if (line.account?.group === 'OUTPUT_VAT') return sum;
+            return sum + (Number(line.credit) || Number(line.debit) || 0);
+          }, 0);
+          const vatTotal = entry.lines
+            .filter((l) => l.account?.group === 'OUTPUT_VAT' && Number(l.credit) > 0)
+            .reduce((sum, l) => sum + Number(l.credit) || 0, 0);
+
+          // TaxInformationTotals (mandatory) — TaxBase is xs:decimal (simple), TaxAmount is AmountStructure
+          const taxInfoTotals = docTotals.ele('TaxInformationTotals');
+          if (salesLines.some(l => l.vatCode && l.vatCode !== 'NONE')) {
+            taxInfoTotals.ele('TaxType').txt('VAT');
+            taxInfoTotals.ele('TaxCode').txt(salesLines.find(l => l.vatCode && l.vatCode !== 'NONE')?.vatCode || 'S25');
+            // XSD: TaxBase is xs:decimal (simple text, NOT AmountStructure)
+            taxInfoTotals.ele('TaxBase').txt(formatNumber(salesNetTotal));
+            const taxAmountTotals = taxInfoTotals.ele('TaxAmount');
+            emitAmount(taxAmountTotals, vatTotal);
+          }
+          docTotals.ele('NetTotal').txt(formatNumber(salesNetTotal));
+          docTotals.ele('GrossTotal').txt(formatNumber(salesNetTotal + vatTotal));
         });
       }
 
