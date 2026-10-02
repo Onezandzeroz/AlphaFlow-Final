@@ -7,11 +7,8 @@
  * of being enrolled in the NemHandelsregisteret (NemHandel Register).
  *
  * Erhvervsstyrelsen compliance:
- *   Bilag 2, Row 47 (Krav 8) — the system MUST notify customers about the
- *     possibility of being registered in NemHandelsregisteret.
- *   Bilag 2, Row 48 (Krav 9) — the system MUST at setup, or via direct
- *     message, be able to show information about and enrollment
- *     functionality for the NemHandelsregisteret.
+ *   The system notifies customers about the possibility of being
+ *   enrolled in NemHandelsregisteret, and provides enrollment functionality.
  *
  * Visibility rules:
  *   - Shown only for companies where `einvoiceEnabled === false`
@@ -132,7 +129,7 @@ export function NemHandelRegistrationNotice({
 
   // Hide when:
   //   - company ID is missing
-  //   - e-invoicing is already enabled (Krav 9 already fulfilled)
+  //   - e-invoicing is already enabled (registration already fulfilled)
   //   - dismissal is in effect for this company
   //   - before hydration to avoid SSR/CSR mismatch flicker
   if (!hydrated) return null;
@@ -157,8 +154,8 @@ export function NemHandelRegistrationNotice({
   const dismissLabel = isDa ? 'Skjul meddelelse' : 'Dismiss notice';
 
   const legalTag = isDa
-    ? 'Erhvervsstyrelsen — Bilag 2, punkt 8 & 9'
-    : 'Danish Business Authority — Bilag 2, items 8 & 9';
+    ? 'Erhvervsstyrelsen — registreringskrav'
+    : 'Danish Business Authority — registration requirement';
 
   return (
     <Card

@@ -1099,11 +1099,9 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
 
       {/* ── Filter Bar ── */}
       {data && data.bankStatements.length > 0 && (
-      <Card className="stat-card">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-2 items-center">
+      <div className="flex flex-col sm:flex-row gap-2 items-center">
             <div className="relative flex-1 min-w-[140px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -1112,7 +1110,7 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                     ? 'Søg på tekst eller reference...'
                     : 'Search by description or reference...'
                 }
-                className="pl-9 bg-gray-50 dark:bg-white/5 border-0"
+                className="pl-9"
               />
               {searchQuery && (
                 <button
@@ -1140,8 +1138,6 @@ export function BankReconciliationPage({ user }: BankReconciliationPageProps) {
                 </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
       )}
 
       {/* ── Empty state ── */}

@@ -1,63 +1,82 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+/**
+ * PostingGuideAssistant — AlphaFlows bogføringsguide og konteringsvejledning.
+ *
+ * Design: Magazin/Guide layout — læsbart, overskueligt, beskrivende.
+ * Konteringsregler præsenteres som læsbare artikler medinline konti,
+ * ikke som tunge T-diagrammer.
+ */
+
+import { useState, useMemo, useCallback } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
-import { toast } from '@/lib/hermes-toast';
-import { useAccessErrorHandler } from '@/hooks/use-access-error-handler';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Input } from '@/components/ui/input';
 import {
   BookOpen,
   Lightbulb,
-  Save,
-  Loader2,
-  ChevronRight,
-  ExternalLink,
   Search,
-  RefreshCw,
-  FileText,
+  ExternalLink,
   HelpCircle,
   ArrowUpRight,
+  GraduationCap,
+  Scale,
+  Building2,
+  Calculator,
+  ArrowRight,
+  Banknote,
+  CreditCard,
+  Globe,
+  Briefcase,
+  Package,
+  Users,
+  Home,
+  Truck,
+  Receipt,
+  Landmark,
+  HandCoins,
+  BookMarked,
+  CalendarDays,
+  Sparkles,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { PUBLIC_STANDARD_CHART } from '@/lib/standard-chart-of-accounts';
+import { useHermesEnabled } from '@/components/hermes/hermes-context';
+import { useHermesChatStore } from '@/lib/hermes-chat-store';
 
-// ─── Posting Guide Rules (built-in konteringsvejledning) ────────────────
+// ─── Posting Guide Rules ────────────────────────────────────────────────
 
 interface PostingRule {
-  category: string;
-  categoryDa: string;
-  rules: Array<{
-    title: string;
-    titleEn: string;
-    debitAccount: string;
-    debitAccountName: string;
-    creditAccount: string;
-    creditAccountName: string;
-    description: string;
-    descriptionEn: string;
-  }>;
+  title: string;
+  titleEn: string;
+  debitAccount: string;
+  debitAccountName: string;
+  creditAccount: string;
+  creditAccountName: string;
+  intro: string;
+  introEn: string;
+  debitLabel: string;
+  debitLabelEn: string;
+  creditLabel: string;
+  creditLabelEn: string;
+  followUp?: string;
+  followUpEn?: string;
+  icon: string;
+  /** Relevant SKAT/Erhvervsstyrelsen link for this specific rule */
+  linkUrl?: string;
+  linkLabel?: string;
+  linkLabelEn?: string;
 }
 
-const POSTING_RULES: PostingRule[] = [
+interface PostingCategory {
+  category: string;
+  categoryDa: string;
+  rules: PostingRule[];
+}
+
+const POSTING_RULES: PostingCategory[] = [
   {
     category: 'salg',
     categoryDa: 'Salg og indtægter',
@@ -67,60 +86,116 @@ const POSTING_RULES: PostingRule[] = [
         titleEn: 'Cash sale (25% VAT)',
         debitAccount: '1100',
         debitAccountName: 'Bankkonto',
-        creditAccount: '1100',
+        creditAccount: '4000',
         creditAccountName: 'Salg af varer',
-        description: 'Ved salg af varer kontant. Debet bank, kredit salgsindtægt + udgående moms.',
-        descriptionEn: 'When selling goods for cash. Debit bank, credit sales revenue + output VAT.',
+        intro: 'Når du sælger varer eller ydelser og modtager betaling med det samme (kontant, MobilePay, kreditkort):',
+        introEn: 'When selling goods/services and receiving payment immediately:',
+        debitLabel: 'Bank — du modtager det fulde beløb inkl. moms',
+        debitLabelEn: 'Bank — you receive the full amount incl. VAT',
+        creditLabel: 'Salgsindtægt (excl. moms) + udgående moms 25%',
+        creditLabelEn: 'Sales revenue (excl. VAT) + output VAT 25%',
+        icon: 'Banknote',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Læs mere om moms ved salg',
+        linkLabelEn: 'Read more about VAT on sales',
       },
       {
         title: 'Salg på kredit (25% moms)',
         titleEn: 'Credit sale (25% VAT)',
         debitAccount: '1200',
         debitAccountName: 'Tilgodehavender fra salg',
-        creditAccount: '1100',
+        creditAccount: '4000',
         creditAccountName: 'Salg af varer',
-        description: 'Ved salg på kredit. Debet tilgodehavender, kredit salgsindtægt + udgående moms.',
-        descriptionEn: 'When selling on credit. Debit receivables, credit sales revenue + output VAT.',
+        intro: 'Når du sælger varer eller ydelser på kredit med en faktura og betalingsfrist:',
+        introEn: 'When selling goods/services on credit with an invoice:',
+        debitLabel: 'Tilgodehavender — kunden skylder dig',
+        debitLabelEn: 'Receivables — customer owes you',
+        creditLabel: 'Salgsindtægt (excl. moms) + udgående moms 25%',
+        creditLabelEn: 'Sales revenue (excl. VAT) + output VAT 25%',
+        followUp: 'Når kunden betaler: Debet bank, kredit tilgodehavender',
+        followUpEn: 'When customer pays: Debit bank, credit receivables',
+        icon: 'CreditCard',
+        linkUrl: 'https://skat.dk/erhverv/guides-og-webinarer-til-start-ups/start-up-med-skat/for-selskaber/bogfoering',
+        linkLabel: 'Bogføring af kreditssalg',
+        linkLabelEn: 'Booking credit sales',
       },
       {
-        title: 'EU-salg (IGS, 0% moms)',
-        titleEn: 'EU sale (reverse charge)',
+        title: 'EU-salg af varer (IGS, 0% moms)',
+        titleEn: 'EU sale of goods (reverse charge)',
         debitAccount: '1200',
         debitAccountName: 'Tilgodehavender fra salg',
         creditAccount: '4200',
         creditAccountName: 'Salg af varer EU',
-        description: 'Salg til EU-land med CVR. Udgående EU (SEU). Ingen dansk moms.',
-        descriptionEn: 'Sale to EU country with VAT. Output EU (SEU). No Danish VAT.',
+        intro: 'Salg af varer til en momsregistreret virksomhed i et andet EU-land:',
+        introEn: 'Sale of goods to a VAT-registered business in another EU country:',
+        debitLabel: 'Tilgodehavender — kunden skylder dig (uden moms)',
+        debitLabelEn: 'Receivables — customer owes you (no VAT)',
+        creditLabel: 'EU-salg (0% moms) — brug momskode SEU',
+        creditLabelEn: 'EU sale (0% VAT) — use VAT code SEU',
+        followUp: 'Køberen skal oplyse gyldigt udenlandsk CVR/VAT-nummer',
+        followUpEn: 'Buyer must provide valid foreign VAT number',
+        icon: 'Globe',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'EU-handel og omvendt betalingspligt',
+        linkLabelEn: 'EU trade and reverse charge',
       },
       {
-        title: 'Tjenesteydelsessalg',
+        title: 'Salg af tjenesteydelser',
         titleEn: 'Service revenue',
         debitAccount: '1200',
         debitAccountName: 'Tilgodehavender fra salg',
         creditAccount: '4100',
         creditAccountName: 'Salg af tjenesteydelser',
-        description: 'Salg af konsulentydelser, rådgivning etc.',
-        descriptionEn: 'Sale of consulting, advisory services etc.',
+        intro: 'Salg af konsulentydelser, rådgivning, håndværkerarbejde etc.:',
+        introEn: 'Sale of consulting, advisory, craft services:',
+        debitLabel: 'Tilgodehavender — kunden skylder dig',
+        debitLabelEn: 'Receivables — customer owes you',
+        creditLabel: 'Salgsindtægt + udgående moms (hvis momspligtig)',
+        creditLabelEn: 'Sales revenue + output VAT (if VAT-liable)',
+        icon: 'Briefcase',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Momspligtige og momsfrie ydelser',
+        linkLabelEn: 'VAT-liable and VAT-exempt services',
       },
       {
         title: 'Eksport til lande udenfor EU (0% moms)',
         titleEn: 'Export to non-EU countries (0% VAT)',
-        debitAccount: '1100',
-        debitAccountName: 'Bankkonto',
+        debitAccount: '1200',
+        debitAccountName: 'Tilgodehavender fra salg',
         creditAccount: '4300',
         creditAccountName: 'Salg af varer udenfor EU',
-        description: 'Salg af varer til lande uden for EU — eksport uden moms.',
-        descriptionEn: 'Sale of goods to non-EU countries — export without VAT.',
+        intro: 'Salg af varer til kunder i lande udenfor EU (tredjelande):',
+        introEn: 'Sale of goods to customers in non-EU countries:',
+        debitLabel: 'Tilgodehavender — kunden skylder dig',
+        debitLabelEn: 'Receivables — customer owes you',
+        creditLabel: 'Eksportsalg (0% moms) — dokumenter eksporten',
+        creditLabelEn: 'Export sale (0% VAT) — document the export',
+        followUp: 'Ved vareeksport skal du kunne dokumentere at varerne har forladt EU',
+        followUpEn: 'For goods export you must document that goods left the EU',
+        icon: 'Truck',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Eksport af varer',
+        linkLabelEn: 'Export of goods',
       },
       {
         title: 'Rabatter og kreditnotaer',
         titleEn: 'Discounts and credit notes',
-        debitAccount: '4900',
+        debitAccount: '1210',
         debitAccountName: 'Salgsrabatter',
         creditAccount: '1200',
         creditAccountName: 'Tilgodehavender fra salg',
-        description: 'Kreditnota eller salgsrabat til kunde.',
-        descriptionEn: 'Credit note or sales discount to customer.',
+        intro: 'Når du giver en rabat eller udsteder en kreditnota efter et salg:',
+        introEn: 'When giving a discount or issuing a credit note after a sale:',
+        debitLabel: 'Salgsrabat (modposterer salget) + momsregulering',
+        debitLabelEn: 'Sales discount (offsets the sale) + VAT adjustment',
+        creditLabel: 'Tilgodehavender — reducerer det kunden skylder',
+        creditLabelEn: 'Receivables — reduces what customer owes',
+        followUp: 'Kreditnotaer skal have reference til den oprindelige faktura',
+        followUpEn: 'Credit notes must reference the original invoice',
+        icon: 'Receipt',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Kreditnotaer og rabatter',
+        linkLabelEn: 'Credit notes and discounts',
       },
     ],
   },
@@ -135,8 +210,18 @@ const POSTING_RULES: PostingRule[] = [
         debitAccountName: 'Indkøb af varer',
         creditAccount: '2000',
         creditAccountName: 'Leverandørgæld',
-        description: 'Indkøb af varer til videresalg. Debet vareforbrug, kredit leverandørgæld.',
-        descriptionEn: 'Purchase goods for resale. Debit purchases, credit payables.',
+        intro: 'Når du køber varer til videresalg eller drift:',
+        introEn: 'When purchasing goods for resale or operations:',
+        debitLabel: 'Vareforbrug (excl. moms) + indgående moms 25%',
+        debitLabelEn: 'Cost of goods (excl. VAT) + input VAT 25%',
+        creditLabel: 'Leverandørgæld (inkl. moms)',
+        creditLabelEn: 'Accounts payable (incl. VAT)',
+        followUp: 'Når du betaler: Debet leverandørgæld, kredit bank',
+        followUpEn: 'When paying: Debit payables, credit bank',
+        icon: 'Package',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Køb af varer og ydelser',
+        linkLabelEn: 'Purchase of goods and services',
       },
       {
         title: 'Lønudbetaling',
@@ -145,8 +230,18 @@ const POSTING_RULES: PostingRule[] = [
         debitAccountName: 'Lønninger',
         creditAccount: '1100',
         creditAccountName: 'Bankkonto',
-        description: 'Udbetaling af løn. Debet lønomkostning, kredit bank.',
-        descriptionEn: 'Payment of salary. Debit salary expense, credit bank.',
+        intro: 'Udbetaling af løn til ansatte:',
+        introEn: 'Paying salaries to employees:',
+        debitLabel: 'Lønomkostning (bruttoløn)',
+        debitLabelEn: 'Salary expense (gross salary)',
+        creditLabel: 'Bank (nettoudbetaling) + personalegæld (A-skat, AM-bidrag, ATP, feriepenge)',
+        creditLabelEn: 'Bank (net pay) + payroll liabilities (tax, AM, ATP, holiday pay)',
+        followUp: 'Husk også at bogføre arbejdsgiverbidrag (ATP, pension)',
+        followUpEn: 'Remember to also post employer contributions (ATP, pension)',
+        icon: 'Users',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/fradrag-for-virksomhedens-udgifter',
+        linkLabel: 'Løn og personale',
+        linkLabelEn: 'Salaries and personnel',
       },
       {
         title: 'Husleje',
@@ -155,8 +250,18 @@ const POSTING_RULES: PostingRule[] = [
         debitAccountName: 'Husleje',
         creditAccount: '1100',
         creditAccountName: 'Bankkonto',
-        description: 'Månedlig husleje betaling.',
-        descriptionEn: 'Monthly rent payment.',
+        intro: 'Månedlig husleje for erhvervslokaler:',
+        introEn: 'Monthly rent for business premises:',
+        debitLabel: 'Husleje',
+        debitLabelEn: 'Rent expense',
+        creditLabel: 'Bank',
+        creditLabelEn: 'Bank',
+        followUp: 'Husleje er momsfritaget hvis udlejer er momsregistreret',
+        followUpEn: 'Rent is VAT-exempt if landlord is VAT-registered',
+        icon: 'Home',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Momsfrie aktiviteter',
+        linkLabelEn: 'VAT-exempt activities',
       },
       {
         title: 'EU-indkøb (omvendt betalingspligt)',
@@ -165,38 +270,76 @@ const POSTING_RULES: PostingRule[] = [
         debitAccountName: 'Indkøb af varer',
         creditAccount: '2000',
         creditAccountName: 'Leverandørgæld',
-        description: 'Indkøb fra EU.registreret virksomhed. Købsmoms = udgående moms (omvendt betalingspligt).',
-        descriptionEn: 'Purchase from EU-registered business. Input VAT = output VAT (reverse charge).',
+        intro: 'Indkøb fra en momsregistreret virksomhed i et andet EU-land:',
+        introEn: 'Purchase from a VAT-registered business in another EU country:',
+        debitLabel: 'Vareforbrug (excl. moms) + indgående moms 25%',
+        debitLabelEn: 'Cost of goods (excl. VAT) + input VAT 25%',
+        creditLabel: 'Leverandørgæld (uden moms) + udgående moms 25%',
+        creditLabelEn: 'Accounts payable (no VAT) + output VAT 25%',
+        followUp: 'Leverandøren fakturerer uden moms — du beregner selv dansk moms (KEU)',
+        followUpEn: 'Supplier invoices without VAT — you self-assess Danish VAT (KEU)',
+        icon: 'Truck',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Køb fra EU-lande',
+        linkLabelEn: 'Purchases from EU countries',
       },
       {
         title: 'Kontorartikler og drift',
         titleEn: 'Office supplies and operations',
         debitAccount: '8700',
         debitAccountName: 'Kontorartikler',
-        creditAccount: '2000',
-        creditAccountName: 'Leverandørgæld',
-        description: 'Køb af kontorartikler, tryksager og øvrige driftsomkostninger med 25% moms.',
-        descriptionEn: 'Purchase of office supplies and operating expenses with 25% VAT.',
+        creditAccount: '1100',
+        creditAccountName: 'Bankkonto',
+        intro: 'Køb af kontorartikler, telefon, internet, forsikring etc.:',
+        introEn: 'Purchase of office supplies, phone, internet, insurance:',
+        debitLabel: 'Den relevante omkostningskonto (f.eks. 8600 Telefon, 8400 Forsikring) + indgående moms 25%',
+        debitLabelEn: 'The relevant expense account + input VAT 25%',
+        creditLabel: 'Bank',
+        creditLabelEn: 'Bank',
+        icon: 'Receipt',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/fradrag-for-virksomhedens-udgifter',
+        linkLabel: 'Fradragsberettigede omkostninger',
+        linkLabelEn: 'Deductible expenses',
       },
       {
         title: 'Repræsentation og gaver',
         titleEn: 'Representation and gifts',
-        debitAccount: '8800',
-        debitAccountName: 'Reklame og markedsføring',
-        creditAccount: '2000',
-        creditAccountName: 'Leverandørgæld',
-        description: 'Repræsentation, gaver og markedsføringsudgifter med 25% moms.',
-        descriptionEn: 'Representation, gifts and marketing expenses with 25% VAT.',
+        debitAccount: '1990',
+        debitAccountName: 'Repræsentation, fuldt fradrag',
+        creditAccount: '1100',
+        creditAccountName: 'Bankkonto',
+        intro: 'Udgifter til repræsentation, gaver til kunder/forretningsforbindelser:',
+        introEn: 'Expenses for representation, gifts to customers/business contacts:',
+        debitLabel: 'Repræsentationsomkostning (kun 25% af moms er fradragsberettiget)',
+        debitLabelEn: 'Representation expense (only 25% of VAT is deductible)',
+        creditLabel: 'Bank',
+        creditLabelEn: 'Bank',
+        followUp: 'Virksomhedsjulegaver og repræsentation har særlige fradragsregler',
+        followUpEn: 'Corporate Christmas gifts and representation have special deduction rules',
+        icon: 'Briefcase',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/fradrag-for-virksomhedens-udgifter',
+        linkLabel: 'Kost og repræsentation',
+        linkLabelEn: 'Meals and representation',
       },
       {
         title: 'Anlægsaktiver og investeringer',
         titleEn: 'Fixed assets and investments',
-        debitAccount: '1800',
-        debitAccountName: 'IT-udstyr',
-        creditAccount: '2000',
-        creditAccountName: 'Leverandørgæld',
-        description: 'Køb af anlægsaktiver (IT-udstyr, maskiner, inventar) med 25% moms.',
-        descriptionEn: 'Purchase of fixed assets (IT equipment, machinery, furniture) with 25% VAT.',
+        debitAccount: '1700',
+        debitAccountName: 'Kørende maskiner og udstyr',
+        creditAccount: '1100',
+        creditAccountName: 'Bankkonto',
+        intro: 'Køb af anlægsaktiver (maskiner, IT-udstyr, køretøjer, inventar):',
+        introEn: 'Purchase of fixed assets (machinery, IT equipment, vehicles):',
+        debitLabel: 'Anlægsaktiv (kapitaliseres, afskrives over tid) + indgående moms',
+        debitLabelEn: 'Fixed asset (capitalized, depreciated over time) + input VAT',
+        creditLabel: 'Bank',
+        creditLabelEn: 'Bank',
+        followUp: 'Anlægsaktiver skal afskrives årligt — brug EDB-lignende afskrivning',
+        followUpEn: 'Fixed assets must be depreciated annually — use EDB-like depreciation',
+        icon: 'Package',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/fradrag-for-virksomhedens-udgifter',
+        linkLabel: 'Afskrivninger',
+        linkLabelEn: 'Depreciation',
       },
     ],
   },
@@ -205,34 +348,62 @@ const POSTING_RULES: PostingRule[] = [
     categoryDa: 'Momsafregning',
     rules: [
       {
-        title: 'Momsafregning — netto til betaling',
+        title: 'Momsafregning — du skal betale',
         titleEn: 'VAT settlement — net payable',
         debitAccount: '2200',
         debitAccountName: 'Momsgæld',
         creditAccount: '1100',
         creditAccountName: 'Bankkonto',
-        description: 'Når udgående moms > indgående moms. Betal skyldig moms til Skattestyrelsen.',
-        descriptionEn: 'When output VAT > input VAT. Pay due VAT to SKAT.',
+        intro: 'Hver kvartal (eller måned) afregner du moms med Skattestyrelsen:',
+        introEn: 'Every quarter (or month) you settle VAT with SKAT:',
+        debitLabel: 'Momsgæld — nulstil udgående og indgående moms',
+        debitLabelEn: 'VAT payable — clear output and input VAT accounts',
+        creditLabel: 'Bank — betal det skyldige beløb',
+        creditLabelEn: 'Bank — pay the due amount',
+        followUp: 'Gælder når udgående moms (salgsmoms) > indgående moms (købsmoms)',
+        followUpEn: 'Applies when output VAT > input VAT',
+        icon: 'Landmark',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Momsangivelse og betaling',
+        linkLabelEn: 'VAT return and payment',
       },
       {
-        title: 'Momsafregning — refusion',
+        title: 'Momsafregning — du får refusion',
         titleEn: 'VAT settlement — refund',
         debitAccount: '1100',
         debitAccountName: 'Bankkonto',
         creditAccount: '2200',
         creditAccountName: 'Momsgæld',
-        description: 'Når indgående moms > udgående moms. Skattestyrelsen refunderer.',
-        descriptionEn: 'When input VAT > output VAT. SKAT refunds the difference.',
+        intro: 'Når indgående moms > udgående moms — typisk ved store investeringer eller opstart:',
+        introEn: 'When input VAT > output VAT — typically during large investments or startup:',
+        debitLabel: 'Bank — du får moms tilbage fra Skattestyrelsen',
+        debitLabelEn: 'Bank — you receive VAT refund from SKAT',
+        creditLabel: 'Momsgæld — nulstil udgående og indgående moms',
+        creditLabelEn: 'VAT payable — clear output and input VAT accounts',
+        icon: 'HandCoins',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Refusion af moms',
+        linkLabelEn: 'VAT refund',
       },
       {
         title: 'Moms ved opstart og nedlæggelse',
-        titleEn: 'VAT at startup and closure',
-        debitAccount: '5600',
-        debitAccountName: 'Moms af køb',
-        creditAccount: '2200',
-        creditAccountName: 'Momsgæld',
-        description: 'Momsafregning ved virksomheds opstart eller nedlæggelse.',
-        descriptionEn: 'VAT settlement at company startup or closure.',
+        titleEn: 'VAT during startup and closure',
+        debitAccount: '5410',
+        debitAccountName: 'Indgående moms',
+        creditAccount: '1100',
+        creditAccountName: 'Bankkonto',
+        intro: 'Ved virksomhedsopstart kan du fratrække moms af varer købt før registreringen:',
+        introEn: 'At business startup you can deduct VAT on goods purchased before registration:',
+        debitLabel: 'Indgående moms — forudgående køb (op til 3 år før registrering)',
+        debitLabelEn: 'Input VAT — prior purchases (up to 3 years before registration)',
+        creditLabel: 'Bank — moms refunderes via første momsangivelse',
+        creditLabelEn: 'Bank — VAT refunded via first VAT return',
+        followUp: 'Ved nedlæggelse skal der afregnes moms af varelager og anlægsaktiver',
+        followUpEn: 'At closure, VAT must be settled on inventory and fixed assets',
+        icon: 'Calculator',
+        linkUrl: 'https://skat.dk/moms',
+        linkLabel: 'Registrering og afregistrering',
+        linkLabelEn: 'Registration and deregistration',
       },
     ],
   },
@@ -241,24 +412,42 @@ const POSTING_RULES: PostingRule[] = [
     categoryDa: 'Årsafslutning',
     rules: [
       {
-        title: 'Årsafslutning — resultat',
-        titleEn: 'Year-end — net income',
-        debitAccount: '1100',
-        debitAccountName: 'Salg af varer/tjenesteydelser',
-        creditAccount: '3300',
-        creditAccountName: 'Årets resultat',
-        description: 'Alle indtægts- og omkostningskonti lukkes mod "Årets resultat".',
-        descriptionEn: 'All revenue and expense accounts are closed against "Net Income for the Year".',
+        title: 'Lukning af resultatopgørelse',
+        titleEn: 'Closing income statement',
+        debitAccount: '3300',
+        debitAccountName: 'Årets resultat',
+        creditAccount: '—',
+        creditAccountName: 'Alle indtægts-/omkostningskonti',
+        intro: 'Ved årsafslutning lukkes alle indtægts- og omkostningskonti:',
+        introEn: 'At year-end, all revenue and expense accounts are closed:',
+        debitLabel: 'Årets resultat — samler årets overskud/underskud',
+        debitLabelEn: 'Net income — accumulates the year\'s profit/loss',
+        creditLabel: 'Alle indtægtskonti (4000-4999) og omkostningskonti (6000-8999) nulstilles',
+        creditLabelEn: 'All revenue (4000-4999) and expense accounts (6000-8999) are zeroed',
+        icon: 'BookMarked',
+        linkUrl: 'https://skat.dk/erhverv/guides-og-webinarer-til-start-ups/start-up-med-skat/for-selskaber/bogfoering',
+        linkLabel: 'Årsafslutning i bogføringsguiden',
+        linkLabelEn: 'Year-end in the posting guide',
       },
       {
-        title: 'Årets resultat → Overført resultat',
-        titleEn: 'Net income → Retained earnings',
+        title: 'Overførsel til overført resultat',
+        titleEn: 'Transfer to retained earnings',
         debitAccount: '3300',
         debitAccountName: 'Årets resultat',
         creditAccount: '3400',
         creditAccountName: 'Overført resultat',
-        description: 'Årets resultat overføres til overskud/underskud.',
-        descriptionEn: 'Net income transferred to retained earnings.',
+        intro: 'Efter årets resultat er opgjort, overføres beløbet:',
+        introEn: 'After net income is determined, the amount is transferred:',
+        debitLabel: 'Årets resultat — lukkes (nulstilles)',
+        debitLabelEn: 'Net income — closed (zeroed)',
+        creditLabel: 'Overført resultat — årets overskud/underskud føres videre',
+        creditLabelEn: 'Retained earnings — the year\'s profit/loss is carried forward',
+        followUp: 'Dette forbereder den nye regnskabsperiode',
+        followUpEn: 'This prepares the new accounting period',
+        icon: 'CalendarDays',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/bogfoering-regnskab-og-oplysningsskema',
+        linkLabel: 'Årsregnskab',
+        linkLabelEn: 'Annual accounts',
       },
       {
         title: 'Varelageropgørelse',
@@ -267,53 +456,136 @@ const POSTING_RULES: PostingRule[] = [
         debitAccountName: 'Varelager',
         creditAccount: '6000',
         creditAccountName: 'Vareforbrug',
-        description: 'Opsættelse af varelager ved årets begyndelse.',
-        descriptionEn: 'Inventory setup at beginning of year.',
+        intro: 'Ved årsafslutning skal varelageret opgøres til laveste værdi (kostpris eller dagspris):',
+        introEn: 'At year-end, inventory must be valued at the lower of cost or market price:',
+        debitLabel: 'Varelager (opdateres til årets optælling)',
+        debitLabelEn: 'Inventory (updated to the year\'s count)',
+        creditLabel: 'Vareforbrug — regulering af årets forbrug',
+        creditLabelEn: 'Cost of goods — adjustment of the year\'s consumption',
+        followUp: 'Værdiansættelse skal følge FIFO- eller gennemsnitsmetoden konsekvent',
+        followUpEn: 'Valuation must consistently follow FIFO or average cost method',
+        icon: 'Package',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/bogfoering-regnskab-og-oplysningsskema',
+        linkLabel: 'Varelager og værdiansættelse',
+        linkLabelEn: 'Inventory and valuation',
       },
       {
         title: 'Afskrivning af anlægsaktiver',
         titleEn: 'Depreciation of fixed assets',
-        debitAccount: '8900',
-        debitAccountName: 'Afskrivninger',
+        debitAccount: '1700',
+        debitAccountName: 'Afskrivning på anlægsaktiver',
         creditAccount: '1700',
-        creditAccountName: 'Kørende maskiner og udstyr',
-        description: 'Årlig afskrivning på anlægsaktiver.',
-        descriptionEn: 'Annual depreciation of fixed assets.',
+        creditAccountName: 'Akumulerede afskrivninger',
+        intro: 'Anlægsaktiver (maskiner, inventar, IT) afskrives årligt over deres levetid:',
+        introEn: 'Fixed assets (machinery, furniture, IT) are depreciated annually over their useful life:',
+        debitLabel: 'Afskrivningsomkostning — årets fordeling af anlægsaktivets kostpris',
+        debitLabelEn: 'Depreciation expense — the year\'s allocation of the asset\'s cost',
+        creditLabel: 'Akkumulerede afskrivninger — reducerer anlægsaktivets bogførte værdi',
+        creditLabelEn: 'Accumulated depreciation — reduces the asset\'s book value',
+        followUp: 'Standard afskrivningssatser: 25% (inventar/IT), 15% (maskiner), 6% (bygninger)',
+        followUpEn: 'Standard rates: 25% (furniture/IT), 15% (machinery), 6% (buildings)',
+        icon: 'Calculator',
+        linkUrl: 'https://skat.dk/erhverv/egen-virksomhed/fradrag-for-virksomhedens-udgifter',
+        linkLabel: 'Afskrivningsregler',
+        linkLabelEn: 'Depreciation rules',
       },
     ],
   },
 ];
 
-// ─── SKAT Reference Links ────────────────────────────────────────────────
+// ─── Reference Links ────────────────────────────────────────────────────
 
-const SKAT_REFERENCES = [
+interface ReferenceLink {
+  title: string;
+  url: string;
+  description: string;
+  descriptionEn: string;
+  type: 'guide' | 'authority' | 'law';
+  icon: typeof GraduationCap;
+}
+
+const REFERENCE_LINKS: ReferenceLink[] = [
   {
-    title: 'Bogføringsloven (Lov nr. 700 af 2022)',
-    url: 'https://www.retsinformation.dk/eli/lta/2022/700',
-    description: 'Lov om bogføring — dansk bogføringslov',
-    descriptionEn: 'Danish Bookkeeping Act (Lov om bogføring)',
+    title: 'SKATs Bogføringsguide',
+    url: 'https://xn--bogfringsguide-tqb.skat.dk/#/',
+    description: 'Skattestyrelsens interaktive bogføringsguide — praktisk guide til bogføring med eksempler og forklaringer.',
+    descriptionEn: 'SKAT interactive bookkeeping guide with examples.',
+    type: 'guide',
+    icon: GraduationCap,
   },
   {
-    title: 'Kravbekendtgørelsen (BEK nr. 97 af 2023)',
-    url: 'https://www.retsinformation.dk/eli/lta/2023/97',
-    description: 'Bekendtgørelse om krav til digitale standard bogføringssystemer',
-    descriptionEn: 'Executive Order on requirements for digital standard bookkeeping systems',
+    title: 'SKATs Bogføringsguide — Erhvervsdrivende uden moms',
+    url: 'https://xn--bogfringsguide-tqb.skat.dk/#/EMV',
+    description: 'Specifik guide til virksomheder der ikke er momsregistreret (eller kun har momsfri aktivitet).',
+    descriptionEn: 'Guide for businesses without VAT registration.',
+    type: 'guide',
+    icon: GraduationCap,
+  },
+  {
+    title: 'SKATs Bogføringsguide — Personer med momspligtig virksomhed',
+    url: 'https://skat.dk/erhverv/guides-og-webinarer-til-start-ups/start-up-med-skat/for-selskaber/bogfoering',
+    description: 'Specifik guide til momsregistrerede virksomheder — bogføring af moms, køb, salg og momsafregning.',
+    descriptionEn: 'Guide for VAT-registered businesses.',
+    type: 'guide',
+    icon: GraduationCap,
+  },
+  {
+    title: 'SKAT — Guide til start-ups: Bogføring for selskaber',
+    url: 'https://skat.dk/erhverv/guides-og-webinarer-til-start-ups/start-up-med-skat/for-selskaber/bogfoering',
+    description: 'Skattestyrelsens guide til bogføring specielt for nystartede selskaber (ApS, A/S). Indeholder også webinarer.',
+    descriptionEn: 'SKAT guide to bookkeeping for start-up companies.',
+    type: 'guide',
+    icon: GraduationCap,
+  },
+  {
+    title: 'SKAT — Bogføring, regnskab og oplysningsskema',
+    url: 'https://skat.dk/erhverv/egen-virksomhed/bogfoering-regnskab-og-oplysningsskema',
+    description: 'Skattestyrelsens hovedside om bogføring og regnskab — krav til regnskab, opbevaring, digitale systemer og indberetninger.',
+    descriptionEn: 'SKAT main page on bookkeeping and accounting requirements.',
+    type: 'guide',
+    icon: GraduationCap,
   },
   {
     title: 'SKAT — Moms',
     url: 'https://skat.dk/moms',
-    description: 'Skattestyrelsens momsguide',
-    descriptionEn: 'SKAT VAT guide',
+    description: 'Skattestyrelsens samlede vejledning om moms — registrering, afregning, satser, angivelse og refusion.',
+    descriptionEn: 'SKAT comprehensive VAT guide.',
+    type: 'guide',
+    icon: Calculator,
   },
   {
     title: 'Fællesoffentlig Standardkontoplan',
     url: 'https://erhvervsstyrelsen.dk/standardkontoplan-saf-t',
-    description: 'Erhvervsstyrelsens fællesoffentlige standardkontoplan og SAF-T',
-    descriptionEn: 'Danish Business Authority common standard chart of accounts and SAF-T',
+    description: 'Erhvervsstyrelsens officielle fællesoffentlige standardkontoplan — bruges til SAF-T-indberetning. AlphaFlow har alle 603 konti indbygget.',
+    descriptionEn: 'Danish Business Authority official standard chart of accounts for SAF-T.',
+    type: 'authority',
+    icon: Building2,
+  },
+  {
+    title: 'Bogføringsloven (Lov nr. 700 af 2022)',
+    url: 'https://www.retsinformation.dk/eli/lta/2022/700',
+    description: 'Lov om bogføring — den fulde lovtekst på Retsinformation. Fastlægger krav til bogføring, opbevaring og arkivering.',
+    descriptionEn: 'Danish Bookkeeping Act — full legal text.',
+    type: 'law',
+    icon: Scale,
+  },
+  {
+    title: 'Kravbekendtgørelsen (BEK nr. 97 af 2023)',
+    url: 'https://www.retsinformation.dk/eli/lta/2023/97',
+    description: 'Bekendtgørelse om krav til digitale standard bogføringssystemer — fastlægger de tekniske krav som AlphaFlow skal opfylde.',
+    descriptionEn: 'Executive Order on requirements for digital standard bookkeeping systems.',
+    type: 'law',
+    icon: Scale,
   },
 ];
 
-// ─── PostingGuideAssistant Component ──────────────────────────────────────
+// Icon lookup table — maps string names to Lucide components
+const Icons = {
+  Banknote, CreditCard, Globe, Briefcase, Package, Users, Home,
+  Truck, Receipt, Landmark, HandCoins, BookMarked, CalendarDays,
+};
+
+// ─── Component ───────────────────────────────────────────────────────────
 
 interface PostingGuideAssistantProps {
   user: User;
@@ -323,172 +595,315 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
   const { language } = useTranslation();
   const isDanish = language === 'da';
 
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>('salg');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredRules = POSTING_RULES.map(cat => ({
-    ...cat,
-    rules: cat.rules.filter(r =>
-      searchQuery.trim() === '' ||
-      r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.titleEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.debitAccountName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.creditAccountName.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-  })).filter(cat => cat.rules.length > 0);
+  // Hermes integration — only render the "Spørg Hermes" links when the
+  // company has the assistant enabled. The overlay itself is mounted at the
+  // app root by HermesProvider, so we just need to fire a prompt request.
+  const hermesEnabled = useHermesEnabled();
+  const requestOpenWithPrompt = useHermesChatStore((s) => s.requestOpenWithPrompt);
+
+  /**
+   * Build a context-rich prompt from a posting rule and hand it to Hermes.
+   * The prompt is written in the active UI language and asks Hermes to:
+   *   1. Forklare bogføringsprincippet så en lægmand forstår det (ikke
+   *      tung fagterminologi, men hverdagsprog der gør princippet tydeligt).
+   *   2. Give ét tydeligt eksempel med beløb (ikke tre) der viser
+   *      konteringen i praksis.
+   */
+  const askHermesAboutRule = useCallback((rule: PostingRule) => {
+    const title = isDanish ? rule.title : rule.titleEn;
+    const intro = isDanish ? rule.intro : rule.introEn;
+    const debitLabel = isDanish ? rule.debitLabel : rule.debitLabelEn;
+    const creditLabel = isDanish ? rule.creditLabel : rule.creditLabelEn;
+    const followUp = isDanish ? rule.followUp : rule.followUpEn;
+
+    if (isDanish) {
+      const lines = [
+        `Jeg kigger på bogføringsreglen "${title}" fra AlphaFlows bogføringsguide og vil gerne have din hjælp:`,
+        '',
+        `Beskrivelse: ${intro}`,
+        '',
+        'Kontering:',
+        `• Debet ${rule.debitAccount} ${rule.debitAccountName} — ${debitLabel}`,
+        `• Kredit ${rule.creditAccount} ${rule.creditAccountName} — ${creditLabel}`,
+      ];
+      if (followUp) {
+        lines.push('', `Opfølgning: ${followUp}`);
+      }
+      lines.push(
+        '',
+        'Forklar venligst bogføringsprincippet bag denne regel i almindeligt og forståeligt sprog — så en lægmand uden bogføringskendskab kan følge med. Brug hverdagsord og undgå tung fagterminologi hvor det er muligt.',
+        '',
+        'Giv derefter ét tydeligt eksempel med konkrete beløb (inkl. moms) der trin-for-trin viser hvordan konteringen foregår — fra beløbet modtages til posteringslinjerne sættes.',
+      );
+      requestOpenWithPrompt(lines.join('\n'));
+    } else {
+      const lines = [
+        `I'm looking at the posting rule "${title}" from AlphaFlow's posting guide and would like your help:`,
+        '',
+        `Description: ${intro}`,
+        '',
+        'Entry:',
+        `• Debit ${rule.debitAccount} ${rule.debitAccountName} — ${debitLabel}`,
+        `• Credit ${rule.creditAccount} ${rule.creditAccountName} — ${creditLabel}`,
+      ];
+      if (followUp) {
+        lines.push('', `Follow-up: ${followUp}`);
+      }
+      lines.push(
+        '',
+        'Please explain the bookkeeping principle behind this rule in plain, understandable language — so a layperson with no accounting background can follow along. Use everyday words and avoid heavy technical jargon where possible.',
+        '',
+        'Then give one clear example with concrete amounts (incl. VAT) that step-by-step shows how the booking works — from receiving the amount to setting the posting lines.',
+      );
+      requestOpenWithPrompt(lines.join('\n'));
+    }
+  }, [isDanish, requestOpenWithPrompt]);
+
+  const filteredRules = useMemo(() =>
+    POSTING_RULES.map(cat => ({
+      ...cat,
+      rules: cat.rules.filter(r =>
+        searchQuery.trim() === '' ||
+        r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.titleEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.intro.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.debitLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.creditLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (r.followUp?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false) ||
+        r.debitAccountName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        r.creditAccountName.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    })).filter(cat => cat.rules.length > 0),
+  [searchQuery]);
+
+  const guideLinks = REFERENCE_LINKS.filter(l => l.type === 'guide');
+  const authorityLinks = REFERENCE_LINKS.filter(l => l.type === 'authority');
+  const lawLinks = REFERENCE_LINKS.filter(l => l.type === 'law');
+
+  const renderReferenceLink = (ref: ReferenceLink) => {
+    const Icon = ref.icon;
+    return (
+      <a
+        key={ref.title}
+        href={ref.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-start gap-3 p-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors group"
+      >
+        <div className="h-7 w-7 rounded-md bg-[#0d9488]/10 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#0d9488]/20 transition-colors">
+          <Icon className="h-3.5 w-3.5 text-[#0d9488]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-[#0d9488] dark:group-hover:text-[#2dd4bf] transition-colors">
+            {isDanish ? ref.title : ref.descriptionEn}
+          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
+            {isDanish ? ref.description : ref.descriptionEn}
+          </p>
+        </div>
+        <ArrowUpRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-[#0d9488] shrink-0 mt-1 transition-colors" />
+      </a>
+    );
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Header */}
       <div>
-        <h3 className="text-base font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-[#0d9488]" />
-          {isDanish ? 'Bogføringsguide & Konteringsvejledning' : 'Posting Guide & Chart of Accounts Guide'}
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+          <Lightbulb className="h-5 w-5 text-[#0d9488]" />
+          {isDanish ? 'Bogføringsguide' : 'Posting Guide'}
         </h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           {isDanish
-            ? 'Hjælp til korrekt bogføring og kontering (Krav D14, N17, N18)'
-            : 'Help with correct bookkeeping and posting (Requirements D14, N17, N18)'}
+            ? 'Praktisk hjælp til korrekt bogføring og kontering med forklaringer og officielle links.'
+            : 'Practical help with correct bookkeeping and account selection with official links.'}
         </p>
       </div>
 
-      {/* Search */}
-      <Card className="stat-card">
-        <CardContent className="p-4 pb-2 lg:pb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder={isDanish ? 'Søg i bogføringsregler (f.eks. "salg", "moms", "løn")...' : 'Search posting rules (e.g. "sale", "VAT", "salary")...'}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-gray-50 dark:bg-white/[0.04] border-0"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Posting Rules by Category */}
-      <div className="space-y-3">
-        {filteredRules.map((category) => (
-          <Card key={category.category} className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
-            <CardContent className="p-0">
-              <button
-                className="w-full"
-                onClick={() => setActiveCategory(activeCategory === category.category ? null : category.category)}
-              >
-                <div className="flex items-center justify-between p-4 hover:bg-gray-50/50 dark:hover:bg-white/[0.02] transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-[#0d9488]/10 flex items-center justify-center">
-                      <BookOpen className="h-4 w-4 text-[#0d9488]" />
-                    </div>
-                    <div className="text-left">
-                      <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {isDanish ? category.categoryDa : category.category}
-                      </h4>
-                      <p className="text-xs text-gray-400">
-                        {category.rules.length} {isDanish ? 'regler' : 'rules'}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${activeCategory === category.category ? 'rotate-90' : ''}`} />
-                </div>
-              </button>
-
-              {activeCategory === category.category && (
-                <div className="border-t border-gray-100/50 dark:border-white/5">
-                  <div className="divide-y divide-gray-50 dark:divide-white/5">
-                    {category.rules.map((rule, idx) => (
-                      <div key={idx} className="p-4 hover:bg-gray-50/30 dark:hover:bg-white/[0.02] transition-colors">
-                        <h5 className="text-sm font-medium text-gray-900 dark:text-white mb-2">
-                          {isDanish ? rule.title : rule.titleEn}
-                        </h5>
-
-                        {/* T-diagram */}
-                        <div className="flex items-center gap-3 mb-2">
-                          {/* Debit */}
-                          <div className="flex-1 bg-green-50 dark:bg-green-500/5 rounded-lg p-2.5 border border-green-200 dark:border-green-500/20">
-                            <p className="text-[10px] font-semibold text-green-600 dark:text-green-400 uppercase mb-1">
-                              {isDanish ? 'Debet' : 'Debit'}
-                            </p>
-                            <p className="text-xs font-mono font-bold text-green-700 dark:text-green-300">
-                              {rule.debitAccount}
-                            </p>
-                            <p className="text-xs text-green-600 dark:text-green-400">
-                              {rule.debitAccountName}
-                            </p>
-                          </div>
-
-                          {/* Credit */}
-                          <div className="flex-1 bg-red-50 dark:bg-red-500/5 rounded-lg p-2.5 border border-red-200 dark:border-red-500/20">
-                            <p className="text-[10px] font-semibold text-red-600 dark:text-red-400 uppercase mb-1">
-                              {isDanish ? 'Kredit' : 'Credit'}
-                            </p>
-                            <p className="text-xs font-mono font-bold text-red-700 dark:text-red-300">
-                              {rule.creditAccount}
-                            </p>
-                            <p className="text-xs text-red-600 dark:text-red-400">
-                              {rule.creditAccountName}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Description */}
-                        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                          {isDanish ? rule.description : rule.descriptionEn}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      {/* Category pills */}
+      <div className="flex flex-wrap gap-2">
+        {POSTING_RULES.map((cat) => (
+          <button
+            key={cat.category}
+            onClick={() => { setActiveCategory(cat.category); setSearchQuery(''); }}
+            className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              activeCategory === cat.category
+                ? 'bg-[#0d9488] text-white'
+                : 'bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10'
+            }`}
+          >
+            {isDanish ? cat.categoryDa : cat.category}
+          </button>
         ))}
       </div>
 
-      {/* SKAT Reference Links (N17 — 3. part konteringsvejledning) */}
-      <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
-        <CardHeader className="pb-2 pt-4 px-4">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder={isDanish ? 'Søg i bogføringsregler...' : 'Search posting rules...'}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {/* Rules — grid layout (3 per row on desktop, 2 on tablet, 1 on mobile) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredRules
+          .filter(cat => {
+            // When searching, show results from ALL categories
+            if (searchQuery.trim() !== '') return cat.rules.length > 0;
+            // When not searching, show only the active category
+            return cat.category === activeCategory;
+          })
+          .flatMap(cat => cat.rules.map((rule, idx) => {
+            const Icon = (Icons as Record<string, LucideIcon>)[rule.icon] ?? BookOpen;
+            return (
+              <Card key={`${cat.category}-${idx}`} className="stat-card border shadow-sm dark:border dark:border-white/5 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+                {/* Icon + title header */}
+                <div className="flex items-center gap-2.5 px-4 pt-4 pb-2">
+                  <div className="h-9 w-9 rounded-lg bg-[#0d9488]/10 flex items-center justify-center shrink-0">
+                    <Icon className="h-4 w-4 text-[#0d9488]" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">
+                    {isDanish ? rule.title : rule.titleEn}
+                  </h4>
+                </div>
+
+                {/* Structured body */}
+                <div className="px-4 pb-3 flex-1">
+                  {/* Intro */}
+                  <p className="text-[14px] leading-relaxed text-gray-700 dark:text-gray-300 font-medium mb-3">
+                    {isDanish ? rule.intro : rule.introEn}
+                  </p>
+
+                  {/* Debet line */}
+                  <div className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400 pl-2 border-l-2 border-gray-200 dark:border-gray-700 mb-1">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Debet</span>
+                    <span className="mx-1 text-gray-400">—</span>
+                    {isDanish ? rule.debitLabel : rule.debitLabelEn}
+                  </div>
+
+                  {/* Kredit line */}
+                  <div className="text-[12px] leading-relaxed text-gray-600 dark:text-gray-400 pl-2 border-l-2 border-gray-200 dark:border-gray-700">
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">Kredit</span>
+                    <span className="mx-1 text-gray-400">—</span>
+                    {isDanish ? rule.creditLabel : rule.creditLabelEn}
+                  </div>
+
+                  {/* Follow-up (optional) */}
+                  {rule.followUp && (
+                    <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-500 italic mt-3">
+                      {isDanish ? rule.followUp : rule.followUpEn}
+                    </p>
+                  )}
+                </div>
+
+                {/* Inline accounts — subtle */}
+                <div className="px-4 pb-3 pt-1 border-t border-gray-50 dark:border-white/5">
+                  <div className="flex items-start justify-between gap-2 pt-2">
+                    <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
+                        {rule.debitAccount}
+                        <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.debitAccountName}</span>
+                      </span>
+                      <ArrowRight className="h-3 w-3 text-gray-300 dark:text-gray-600 shrink-0" />
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-400 font-mono">
+                        {rule.creditAccount}
+                        <span className="font-sans text-gray-500 dark:text-gray-500 hidden sm:inline">{rule.creditAccountName}</span>
+                      </span>
+                    </div>
+                    {/* Links — SKAT reference on top, "Spørg Hermes" below it
+                        (same teal color, right-aligned stack) */}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {/* Relevant SKAT/Erhvervsstyrelsen link */}
+                      {rule.linkUrl && (
+                        <a
+                          href={rule.linkUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium transition-colors"
+                        >
+                          {isDanish ? rule.linkLabel : rule.linkLabelEn}
+                          <ArrowUpRight className="h-3 w-3" />
+                        </a>
+                      )}
+                      {/* Ask Hermes — opens chat with this card's content prefilled */}
+                      {hermesEnabled && (
+                        <button
+                          type="button"
+                          onClick={() => askHermesAboutRule(rule)}
+                          className="inline-flex items-center gap-1 text-[11px] text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium transition-colors cursor-pointer"
+                          title={isDanish ? 'Spørg Hermes om denne bogføringsregel' : 'Ask Hermes about this posting rule'}
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          {isDanish ? 'Spørg Hermes' : 'Ask Hermes'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            );
+          }))
+        }
+      </div>
+      {filteredRules.flatMap(cat => cat.rules).length === 0 && (
+        <p className="text-sm text-gray-400 text-center py-8">
+          {isDanish ? 'Ingen regler fundet for din søgning' : 'No rules found for your search'}
+        </p>
+      )}
+
+      {/* External links */}
+      <Card className="stat-card border-0 shadow-sm dark:border dark:border-white/5">
+        <CardHeader className="pb-2 pt-4 px-5">
           <CardTitle className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <FileText className="h-4 w-4 text-[#0d9488]" />
-            {isDanish ? 'Officiel konteringsvejledning (3. part)' : 'Official posting guide (3rd party)'}
+            <ExternalLink className="h-4 w-4 text-[#0d9488]" />
+            {isDanish ? 'Officiel konteringsvejledning' : 'Official posting guide'}
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            {isDanish
-              ? 'Reference til officielle danske konteringsvejledninger og standarder. Disse links åbner i en ny fane.'
-              : 'References to official Danish posting guides and standards. These links open in a new tab.'}
-          </p>
-          <div className="space-y-2">
-            {SKAT_REFERENCES.map((ref) => (
-              <a
-                key={ref.title}
-                href={ref.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-start gap-2.5 p-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors group"
-              >
-                <div className="h-8 w-8 rounded-lg bg-[#0d9488]/10 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-[#0d9488]/20 transition-colors">
-                  <ExternalLink className="h-3.5 w-3.5 text-[#0d9488]" />
+        <CardContent className="px-5 pb-4">
+          <div className="space-y-3">
+            {guideLinks.length > 0 && (
+              <div>
+                <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                  {isDanish ? 'Guider og vejledninger' : 'Guides and tutorials'}
+                </h5>
+                <div className="space-y-0.5">
+                  {guideLinks.map(renderReferenceLink)}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-gray-900 dark:text-white group-hover:text-[#0d9488] dark:group-hover:text-[#2dd4bf] transition-colors">
-                    {isDanish ? ref.title : ref.descriptionEn}
-                  </p>
-                  <p className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
-                    {isDanish ? ref.description : ref.descriptionEn}
-                  </p>
+              </div>
+            )}
+            {authorityLinks.length > 0 && (
+              <div>
+                <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                  {isDanish ? 'Standarder og myndigheder' : 'Standards and authorities'}
+                </h5>
+                <div className="space-y-0.5">
+                  {authorityLinks.map(renderReferenceLink)}
                 </div>
-                <ArrowUpRight className="h-3 w-3 text-gray-300 group-hover:text-[#0d9488] shrink-0 mt-1 transition-colors" />
-              </a>
-            ))}
+              </div>
+            )}
+            {lawLinks.length > 0 && (
+              <div>
+                <h5 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                  {isDanish ? 'Lovgivning' : 'Legislation'}
+                </h5>
+                <div className="space-y-0.5">
+                  {lawLinks.map(renderReferenceLink)}
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Standardkontoplan Reference */}
+      {/* Custom guide note */}
       <Card className="stat-card bg-[#0d9488]/5 border-[#0d9488]/20">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
@@ -497,17 +912,12 @@ export function PostingGuideAssistant({ user }: PostingGuideAssistantProps) {
             </div>
             <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
               <p className="font-medium text-[#0d9488] dark:text-[#2dd4bf]">
-                {isDanish ? 'Om bogføringsguiden' : 'About the posting guide'}
+                {isDanish ? 'Tilføj din egen konteringsvejledning' : 'Add your own posting guide'}
               </p>
               <p>
                 {isDanish
-                  ? 'Denne guide indeholder de mest almindelige bogføringsregler for dansk regnskab. Den er baseret på Bogføringsloven (Lov nr. 700 af 24. maj 2022) og standard dansk regnskabspraksis. Hvert regelsæt viser dekontokonto og kreditkonto med forklaring.'
-                  : 'This guide contains the most common posting rules for Danish accounting. It is based on the Danish Bookkeeping Act (Lov nr. 700 of 24 May 2022) and standard Danish accounting practice. Each rule set shows debit and credit accounts with explanation.'}
-              </p>
-              <p>
-                {isDanish
-                  ? 'Brugervejledningen (krav N17) refererer til SKATs officielle vejledninger. Den brugerdefinerede konteringsvejledning (krav N18) kan tilføjes direkte på hver konto i Kontoplan under "Konteringsvejledning".'
-                  : 'The user guide (requirement N17) references SKAT\'s official guides. Custom posting guides (requirement N18) can be added directly to each account in the Chart of Accounts under "Posting Guide".'}
+                  ? 'Du kan tilføje en personlig konteringsvejledning direkte på hver konto i Kontoplan. Vælg en konto → "Konteringsvejledning" feltet.'
+                  : 'Add a custom posting guide directly on each account in the Chart of Accounts.'}
               </p>
             </div>
           </div>

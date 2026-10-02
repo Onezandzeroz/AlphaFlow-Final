@@ -1119,8 +1119,8 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                       </li>
                       <li>
                         {isDa
-                          ? 'Krav N21 + N22 fra Erhvervsstyrelsens compliance-tjekliste'
-                          : 'Requirements N21 + N22 from the Danish Business Authority compliance checklist'}
+                          ? 'NemHandel-registrering og Peppol-registrering kræves for at sende og modtage e-fakturaer'
+                          : 'NemHandel registration and Peppol registration are required to send and receive e-invoices'}
                       </li>
                       <li>
                         {isDa

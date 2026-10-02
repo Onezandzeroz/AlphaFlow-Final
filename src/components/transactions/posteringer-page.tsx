@@ -34,7 +34,19 @@ export function PosteringerPage({ user, defaultTab = 'kobs-fakturaer' }: Posteri
   const { t } = useTranslation();
   const isDa = language === 'da';
   const { guardWriteAccess } = useWriteAccessGuard(user);
-  const [activeTab, setActiveTab] = useState<'kobs-fakturaer' | 'kobs-kreditnota'>(defaultTab);
+  const [activeTab, setActiveTabState] = useState<'kobs-fakturaer' | 'kobs-kreditnota'>(() => {
+    if (typeof window === 'undefined') return defaultTab;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab === 'kobs-fakturaer' || tab === 'kobs-kreditnota') return tab;
+    return defaultTab;
+  });
+  const setActiveTab = useCallback((tab: 'kobs-fakturaer' | 'kobs-kreditnota') => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url.toString());
+  }, []);
   const [currentView, setCurrentView] = useState<PageView>('list');
   const [isMobileDialogOpen, setIsMobileDialogOpen] = useState(false);
   // ── Received e-invoices (ALL statuses) for stats + tab counts ──

@@ -3046,17 +3046,15 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
 
       {/* Filters Section */}
       {tabInvoices.length > 0 && (
-      <Card className="stat-card">
-        <CardContent className="p-4 pb-2 lg:pb-4">
-          <div className="flex flex-wrap gap-2 items-center">
+      <div className="flex flex-col sm:flex-row gap-2 items-center">
             {/* Search bar - always visible */}
             <div className="relative flex-1 min-w-[140px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder={t('searchInvoices')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-gray-50 dark:bg-white/5 border-0"
+                className="pl-9"
               />
             </div>
             {/* Status filters — mobile: dropdown menu / desktop: inline pills */}
@@ -3159,8 +3157,6 @@ export function InvoicesPage({ user, initialView, onInitialViewConsumed }: Invoi
               </div>
             </MobileFilterDropdown>
           </div>
-        </CardContent>
-      </Card>
       )}
 
       {/* Mobile Card List */}

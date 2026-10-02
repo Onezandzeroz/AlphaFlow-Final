@@ -25,15 +25,22 @@ export interface ValidationError {
 }
 
 // Mandatory tags for SAF-T Financial DK v2.1
+// Per XSD: HeaderStructure requires AuditFileVersion, AuditFileCountry,
+// AuditFileDateCreated, SoftwareCompanyName, SoftwareID, SoftwareVersion,
+// Company (with RegistrationNumber/CVR, Name, Address, BankAccount),
+// DefaultCurrencyCode, SelectionCriteria.
+// NOTE: CompanyID is NOT a direct Header child in v2.1 — the company
+// identifier lives inside <Company> as <RegistrationNumber> or <CVR>.
 const MANDATORY_HEADER_TAGS = [
   { path: 'AuditFileVersion', description: 'SAF-T version (must be 2.1)' },
   { path: 'AuditFileCountry', description: 'Country code (must be DK)' },
-  { path: 'AuditFileDateCreated', description: 'Creation timestamp' },
+  { path: 'AuditFileDateCreated', description: 'Creation date (xs:date)' },
   { path: 'SoftwareCompanyName', description: 'Software vendor name' },
   { path: 'SoftwareID', description: 'Software identifier' },
-  { path: 'CompanyID', description: 'Company identification number (CVR)' },
-  { path: 'Company/RegistrationNumber', description: 'Company registration number' },
+  { path: 'SoftwareVersion', description: 'Software version' },
+  { path: 'Company/RegistrationNumber', description: 'Company registration number (CVR)' },
   { path: 'Company/Name', description: 'Company name' },
+  { path: 'DefaultCurrencyCode', description: 'Default currency code (ISO 4217)' },
 ];
 
 const MANDATORY_MASTERFILE_TAGS = [
@@ -150,17 +157,20 @@ export function validateSAFT(xmlContent: string): ValidationResult {
     });
 
     // Validate AuditFileVersion
+    // v2.1 is the current Danish SAF-T standard (Erhvervsstyrelsen 2026-07-03).
+    // The earlier "warn if not 1.0" check was obsolete and always fired for
+    // valid v2.1 files — removed.
     totalChecks++;
     const versionMatch = xmlContent.match(/<AuditFileVersion>([^<]*)<\/AuditFileVersion>/);
     if (versionMatch) {
       const version = versionMatch[1].trim();
-      if (version !== '1.0') {
+      if (version !== '2.1' && version !== '1.0') {
         warnings.push({
           code: 'VERSION_WARNING',
           message: `SAF-T version ${version} may not be compatible with Danish requirements`,
           path: 'Header/AuditFileVersion',
           severity: 'warning',
-          suggestion: 'Use version 1.0 for Danish SAF-T compliance',
+          suggestion: 'Use version "2.1" for Danish SAF-T Financial DK compliance',
         });
       } else {
         passed++;

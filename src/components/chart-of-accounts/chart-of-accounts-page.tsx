@@ -340,7 +340,23 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<'accounts' | 'mapping' | 'vat' | 'guide'>('accounts');
+  const [activeTab, setActiveTabState] = useState<'accounts' | 'mapping' | 'vat' | 'guide'>(() => {
+    if (typeof window === 'undefined') return 'accounts';
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab && ['accounts', 'mapping', 'vat', 'guide'].includes(tab)) {
+      return tab as 'accounts' | 'mapping' | 'vat' | 'guide';
+    }
+    return 'accounts';
+  });
+
+  // Wrapper that persists tab in URL on change
+  const setActiveTab = useCallback((tab: 'accounts' | 'mapping' | 'vat' | 'guide') => {
+    setActiveTabState(tab);
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tab);
+    window.history.replaceState({}, '', url.toString());
+  }, []);
 
   // ── Draft persistence (add + edit account forms) ──
   const { clearDraft: clearAddDraft } = useDraftSync(
@@ -829,8 +845,8 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
       <PageHeader
         title={isDanish ? 'Kontoplan & Standardkontoplan' : 'Chart of Accounts & Standard Mapping'}
         description={isDanish
-          ? 'Kontoplan, standard mapping, momskoder og konteringsvejledning (Krav N14-N18, D13, D14)'
-          : 'Chart of accounts, standard mapping, VAT codes and posting guide (Requirements N14-N18, D13, D14)'}
+          ? 'Kontoplan, standard mapping, momskoder og konteringsvejledning'
+          : 'Chart of accounts, standard mapping, VAT codes and posting guide'}
       />
 
       {/* Tab Navigation */}
@@ -839,9 +855,9 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
           <div className="flex items-center gap-1 overflow-x-auto">
             {([
               { id: 'accounts' as const, icon: BookOpen, label: isDanish ? 'Kontoplan' : 'Accounts' },
-              { id: 'mapping' as const, icon: ArrowRightLeft, label: isDanish ? 'Standard Mapping' : 'Standard Mapping' },
-              { id: 'vat' as const, icon: Percent, label: isDanish ? 'Momskoder' : 'VAT Codes' },
-              { id: 'guide' as const, icon: Lightbulb, label: isDanish ? 'Bogføringsguide' : 'Posting Guide' },
+              { id: 'mapping' as const, icon: ArrowRightLeft, label: isDanish ? 'Mapping til standardkontoplan' : 'Standard Account Mapping' },
+              { id: 'vat' as const, icon: Percent, label: isDanish ? 'Mapping af momskoder' : 'VAT Code Mapping' },
+              { id: 'guide' as const, icon: Lightbulb, label: isDanish ? 'Bogførings- og konteringsvejledning' : 'Posting & Accounting Guide' },
             ]).map((tab) => {
               const TabIcon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1053,17 +1069,16 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
 
           {/* Filter Bar */}
           {accounts.length > 0 && (
-          <Card className="stat-card">
-            <CardContent className="p-4 pb-2 lg:pb-4">
-              <div className="flex flex-wrap gap-2 items-center">
+          <>
+          <div className="flex flex-col sm:flex-row gap-2 items-center">
                 {/* Search - always visible */}
                 <div className="relative flex-1 min-w-[140px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder={isDanish ? 'Søg efter kontonummer eller navn...' : 'Search by account number or name...'}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 bg-gray-50 dark:bg-white/[0.04] border-0"
+                    className="pl-9"
                   />
                 </div>
 
@@ -1113,8 +1128,7 @@ export function ChartOfAccountsPage({ user, onNavigate }: ChartOfAccountsPagePro
                   </span>
                 )}
               </div>
-            </CardContent>
-          </Card>
+          </>
           )}
 
           {/* No filtered results */}
@@ -1776,12 +1790,11 @@ function AccountFormDialog({
             />
           </div>
 
-          {/* Posting Guide (Konteringsvejledning) — Krav N18 */}
+          {/* Posting Guide (Konteringsvejledning) */}
           <div className="space-y-2">
             <Label htmlFor={`${mode}-postingGuide`} className="dark:text-gray-300 flex items-center gap-1.5">
               <Lightbulb className="h-3.5 w-3.5 text-[#0d9488]" />
               {isDanish ? 'Konteringsvejledning' : 'Posting Guide'}
-              <span className="text-[10px] text-gray-400 font-normal">(Krav N18)</span>
             </Label>
             <Textarea
               id={`${mode}-postingGuide`}

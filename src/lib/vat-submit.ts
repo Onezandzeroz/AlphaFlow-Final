@@ -44,21 +44,43 @@ export type VATReportingPeriod = 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'YEARLY';
 
 // ─── Quarter Date Helpers ──────────────────────────────────────────────────
 
+/**
+ * Returns the date range for a given reporting period.
+ *
+ * @param year - Fiscal year
+ * @param period - Q1, Q2, Q3, Q4, or YEARLY
+ * @returns Object with from and to dates
+ */
 export function getQuarterDates(
   year: number,
   period: VATReportingPeriod,
 ): { from: Date; to: Date } {
   switch (period) {
     case 'Q1':
-      return { from: new Date(year, 0, 1), to: new Date(year, 2, 31, 23, 59, 59, 999) };
+      return {
+        from: new Date(year, 0, 1),
+        to: new Date(year, 2, 31, 23, 59, 59, 999),
+      };
     case 'Q2':
-      return { from: new Date(year, 3, 1), to: new Date(year, 5, 30, 23, 59, 59, 999) };
+      return {
+        from: new Date(year, 3, 1),
+        to: new Date(year, 5, 30, 23, 59, 59, 999),
+      };
     case 'Q3':
-      return { from: new Date(year, 6, 1), to: new Date(year, 8, 30, 23, 59, 59, 999) };
+      return {
+        from: new Date(year, 6, 1),
+        to: new Date(year, 8, 30, 23, 59, 59, 999),
+      };
     case 'Q4':
-      return { from: new Date(year, 9, 1), to: new Date(year, 11, 31, 23, 59, 59, 999) };
+      return {
+        from: new Date(year, 9, 1),
+        to: new Date(year, 11, 31, 23, 59, 59, 999),
+      };
     case 'YEARLY':
-      return { from: new Date(year, 0, 1), to: new Date(year, 11, 31, 23, 59, 59, 999) };
+      return {
+        from: new Date(year, 0, 1),
+        to: new Date(year, 11, 31, 23, 59, 59, 999),
+      };
     default:
       throw new Error(`Invalid period: ${period}`);
   }
@@ -66,12 +88,34 @@ export function getQuarterDates(
 
 // ─── Core: Prepare VAT Submission ──────────────────────────────────────────
 
+/**
+ * Prepare a VAT submission record by computing the VAT register for the
+ * given period and storing it as a DRAFT.
+ *
+ * @param companyId - Company database ID
+ * @param year - Fiscal year
+ * @param period - Q1, Q2, Q3, Q4, or YEARLY
+ * @param userId - User preparing the submission
+ * @returns The created VATSubmission record
+ */
 export async function prepareVATSubmission(
   companyId: string,
   year: number,
   period: VATReportingPeriod,
   userId: string,
 ) {
+  const { from, to } = getQuarterDates(year, period);
+
+  // Compute the VAT register for the period
+  // computeVATRegister takes a whereClause (same shape as db.journalEntry.findMany)
+  const vatRegister = await computeVATRegister({
+    companyId,
+    status: 'POSTED',
+    cancelled: false,
+    date: { gte: from, lte: to },
+  });
+
+  // Check for existing submission
   const existing = await db.vATSubmission.findUnique({
     where: { companyId_year_period: { companyId, year, period } },
   });
@@ -82,15 +126,7 @@ export async function prepareVATSubmission(
     );
   }
 
-  const { from, to } = getQuarterDates(year, period);
-
-  const vatRegister = await computeVATRegister({
-    companyId,
-    status: 'POSTED',
-    cancelled: false,
-    date: { gte: from, lte: to },
-  });
-
+  // Create or update the submission record
   const submission = await db.vATSubmission.upsert({
     where: { companyId_year_period: { companyId, year, period } },
     create: {
@@ -135,6 +171,7 @@ export async function prepareVATSubmission(
         periodTo: to.toISOString(),
       },
       status: 'DRAFT',
+      // Clear any previous submission artifacts when re-preparing
       referenceId: null,
       responseXml: null,
       errorMessage: null,
@@ -146,6 +183,7 @@ export async function prepareVATSubmission(
     },
   });
 
+  // Audit log
   await auditLog({
     action: 'CREATE',
     entityType: 'VATSubmission',
@@ -175,10 +213,30 @@ export async function prepareVATSubmission(
 
 // ─── Core: Submit VAT to Skattestyrelsen via SOAP ─────────────────────────
 
+/**
+ * Submit a VAT report DRAFT to Skattestyrelsen via the RSU B2B SOAP gateway.
+ *
+ * Calls ModtagMomsangivelseForeloebig with the 17 VAT field values mapped
+ * from AlphaFlow's VAT register. Returns a deep link to TastSelv Erhverv
+ * where the user must approve the draft with MitID.
+ *
+ * Flow:
+ *   1. Validate submission is in DRAFT status
+ *   2. Get company SE-number (CVR)
+ *   3. Map VAT register data to the 17 SKAT MomsAngivelse fields
+ *   4. Call ModtagMomsangivelseForeloebig via SOAP (or simulation mode)
+ *   5. Store transactionIdentifier + deepLink + advisoryCode
+ *   6. Update status to SUBMITTED (awaiting user approval)
+ *
+ * @param submissionId - The VATSubmission database ID
+ * @param userId - User performing the action
+ * @returns Updated VATSubmission record with deepLink
+ */
 export async function submitVATToSkat(
   submissionId: string,
   userId: string,
 ) {
+  // Fetch the submission
   const submission = await db.vATSubmission.findUnique({
     where: { id: submissionId },
   });
@@ -194,6 +252,7 @@ export async function submitVATToSkat(
     );
   }
 
+  // Get company CVR (used as SE-number for SKAT)
   const company = await db.company.findUnique({
     where: { id: submission.companyId },
     select: { cvrNumber: true, name: true },
@@ -207,6 +266,7 @@ export async function submitVATToSkat(
     );
   }
 
+  // Map VAT register data to the 17 SKAT MomsAngivelse fields
   const vatFields = mapVatRegisterToSkatFields({
     totalOutputVAT: Number(submission.totalOutputVAT),
     totalInputVAT: Number(submission.totalInputVAT),
@@ -229,6 +289,7 @@ export async function submitVATToSkat(
   let referenceId: string | null = null;
 
   try {
+    // Call ModtagMomsangivelseForeloebig via SOAP (or simulation mode)
     const result = await submitModtagMomsangivelseForeloebig(
       seNumber,
       periodFrom,
@@ -240,6 +301,7 @@ export async function submitVATToSkat(
     deepLink = result.deepLink;
     advisoryCode = result.advisoryCode;
     responseXml = result.responseXml;
+    // referenceId = transactionIdentifier (for backward compat with UI)
     referenceId = result.transactionIdentifier;
 
     logger.info(
@@ -263,6 +325,7 @@ export async function submitVATToSkat(
     );
   }
 
+  // Update the submission record
   const updatedSubmission = await db.vATSubmission.update({
     where: { id: submissionId },
     data: {
@@ -279,6 +342,7 @@ export async function submitVATToSkat(
     },
   });
 
+  // Audit log
   await auditLog({
     action: 'UPDATE',
     entityType: 'VATSubmission',
@@ -310,6 +374,18 @@ export async function submitVATToSkat(
 
 // ─── Core: Fetch VAT Receipt (after user approval) ─────────────────────────
 
+/**
+ * Fetch the VAT receipt from Skattestyrelsen via MomsangivelseKvitteringHent.
+ *
+ * This should be called AFTER the user has approved the draft in TastSelv
+ * Erhverv via the deep link. If the draft has not yet been approved, SKAT
+ * returns error code 4810 and this function returns the submission with
+ * status still SUBMITTED.
+ *
+ * @param submissionId - The VATSubmission database ID
+ * @param userId - User fetching the receipt
+ * @returns Updated VATSubmission record with receiptPdfBase64 if approved
+ */
 export async function fetchVATReceipt(
   submissionId: string,
   userId: string,
@@ -352,12 +428,14 @@ export async function fetchVATReceipt(
         `txId=${submission.transactionIdentifier}, hasPdf=${!!result.receiptPdfBase64}`,
       );
     } else if (result.errorCode === '4810') {
+      // Not yet approved — keep status as SUBMITTED
       newStatus = 'SUBMITTED';
       logger.info(
         `[VAT-Submit] Receipt not yet available (4810 — user has not approved yet): ` +
         `${submission.year} ${submission.period}`,
       );
     } else if (result.errorCode === '4811') {
+      // Rejected
       newStatus = 'REJECTED';
       errorMessage = 'VAT submission was rejected in TastSelv Erhverv.';
       errorCode = '4811';
@@ -365,6 +443,7 @@ export async function fetchVATReceipt(
         `[VAT-Submit] Receipt rejected (4811): ${submission.year} ${submission.period}`,
       );
     } else {
+      // Other error
       newStatus = 'ERROR';
       errorMessage = `SKAT receipt error: ${result.errorCode}`;
       errorCode = result.errorCode;
@@ -385,6 +464,7 @@ export async function fetchVATReceipt(
     logger.error(`[VAT-Submit] Receipt fetch error:`, error);
   }
 
+  // Update the submission record
   const updatedSubmission = await db.vATSubmission.update({
     where: { id: submissionId },
     data: {
@@ -395,6 +475,7 @@ export async function fetchVATReceipt(
     },
   });
 
+  // Audit log
   await auditLog({
     action: 'UPDATE',
     entityType: 'VATSubmission',
@@ -418,6 +499,13 @@ export async function fetchVATReceipt(
 
 // ─── Core: Get VAT Submissions ───────────────────────────────────────────
 
+/**
+ * List VAT submissions for a company, optionally filtered by year.
+ *
+ * @param companyId - Company database ID
+ * @param year - Optional year filter
+ * @returns Array of VATSubmission records, ordered by most recent first
+ */
 export async function getVATSubmissions(
   companyId: string,
   year?: number,
