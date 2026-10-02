@@ -746,22 +746,23 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
       </div>
       )}
 
-      {/* Filters */}
+      {/* Filters Card */}
       {transactions.length > 0 && (
-      <>
-      {/* Results count */}
-      <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">
-        {t('showingOf')} {filteredTransactions.length} {t('of')} {transactions.length} {t('transactionsWord')}
-      </div>
-      <div className="flex flex-col sm:flex-row gap-2 items-center">
+      <Card className="stat-card">
+        <CardContent className="p-4 pb-2 lg:pb-4">
+          {/* Results count — above search on mobile, below on desktop */}
+          <div className="text-sm text-gray-500 dark:text-gray-400 lg:mt-0">
+            {t('showingOf')} {filteredTransactions.length} {t('of')} {transactions.length} {t('transactionsWord')}
+          </div>
+          <div className="flex flex-wrap gap-2 items-center mt-2 lg:mt-3">
             {/* Search - always visible */}
             <div className="relative flex-1 min-w-[140px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder={t('searchDescription')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-9 bg-gray-50 dark:bg-white/5 border-0"
               />
             </div>
 
@@ -798,7 +799,9 @@ export function TransactionsPage({ user, hideHeader, defaultTypeFilter }: Transa
                 </Select>
             </MobileFilterDropdown>
           </div>
-      </>
+
+        </CardContent>
+      </Card>
       )}
 
       {/* Transactions Table */}

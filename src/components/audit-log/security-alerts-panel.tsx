@@ -6,7 +6,7 @@
  * Displays security-relevant alerts aggregated from the AuditLog by the
  * automated log-monitor scan (`src/lib/log-monitor.ts`).
  *
- * Automated security log monitor that scans the audit log for critical events:
+ * Required by Danish Business Authority compliance review (Krav 18, row 18):
  *   "Er der advarsler vedr. logs" — this panel surfaces them in the UI
  *   alongside the immutable AuditLog table.
  *

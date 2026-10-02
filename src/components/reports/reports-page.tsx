@@ -128,18 +128,7 @@ function valueColor(value: number): string {
 
 export function ReportsPage({ user }: ReportsPageProps) {
   const reportsVersion = useDataVersion('reports');
-  const [activeTab, setActiveTabState] = useState<string>(() => {
-    if (typeof window === 'undefined') return 'income-statement';
-    const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab');
-    return tab || 'income-statement';
-  });
-  const setActiveTab = useCallback((tab: string) => {
-    setActiveTabState(tab);
-    const url = new URL(window.location.href);
-    url.searchParams.set('tab', tab);
-    window.history.replaceState({}, '', url.toString());
-  }, []);
+  const [activeTab, setActiveTab] = useState<string>('income-statement');
   const [incomeData, setIncomeData] = useState<IncomeStatementData | null>(null);
   const [balanceData, setBalanceData] = useState<BalanceSheetData | null>(null);
   const [isLoadingIncome, setIsLoadingIncome] = useState(true);

@@ -307,7 +307,6 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
             </div>
           </CardContent>
         </Card>
-
         <Card className="stat-card">
           <CardContent className="p-3">
             <div className="flex items-center justify-between">
@@ -350,14 +349,16 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
       </div>
 
       {/* Filter */}
-      <div className="flex flex-col sm:flex-row gap-2 items-center">
+      <Card className="stat-card">
+        <CardContent className="p-4 pb-2 lg:pb-4">
+          <div className="flex flex-wrap gap-2 items-center">
             <div className="relative flex-1 min-w-[140px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder={isDanish ? 'Søg...' : 'Search...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-9 bg-gray-50 dark:bg-white/[0.04] border-0"
               />
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -372,6 +373,8 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
               </SelectContent>
             </Select>
           </div>
+        </CardContent>
+      </Card>
 
       {/* Mapping Table */}
       <Card className="stat-card border-0 shadow-lg dark:border dark:border-white/5">
@@ -485,8 +488,8 @@ export function StandardMappingPanel({ user }: StandardMappingPanelProps) {
               </p>
               <p>
                 {isDanish
-                  ? 'SKATs fællesoffentlige standardkontoplan bruges af det offentlige Danmark til rapportering. Mappingen sikrer, at dine konti kan rapporteres i et format som SKAT, Erhvervsstyrelsen og NemHandel forstår.'
-                  : 'SKAT\'s public standard chart of accounts is used by the Danish public sector for reporting. The mapping ensures your accounts can be reported in a format understood by SKAT, Erhvervsstyrelsen, and NemHandel.'}
+                  ? 'SKATs fællesoffentlige standardkontoplan bruges af det offentlige Danmark til rapportering. Mappingen sikrer, at dine konti kan rapporteres i et format som SKAT, Erhvervsstyrelsen og NemHandel forstår. Krav N14, N15, N16.'
+                  : 'SKAT\'s public standard chart of accounts is used by the Danish public sector for reporting. The mapping ensures your accounts can be reported in a format understood by SKAT, Erhvervsstyrelsen, and NemHandel. Requirements N14, N15, N16.'}
               </p>
             </div>
           </div>

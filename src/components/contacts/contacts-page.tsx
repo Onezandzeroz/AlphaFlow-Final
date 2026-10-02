@@ -739,11 +739,12 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
 
       {/* Filter Bar */}
       {contacts.length > 0 && (
-      <>
-      <div className="flex flex-col sm:flex-row gap-2 items-center">
+      <Card className="stat-card">
+        <CardContent className="p-4 pb-2 lg:pb-4">
+          <div className="flex flex-wrap gap-2 items-center">
             {/* Search input - always visible */}
             <div className="relative flex-1 min-w-[140px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
                 placeholder={
                   isDanish
@@ -752,7 +753,7 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-9 bg-gray-50 dark:bg-white/[0.04] border-0"
                 autoComplete="off"
                 data-form-type="other"
               />
@@ -874,7 +875,8 @@ export function ContactsPage({ user, autoOpenCreate, onAutoCreateConsumed }: Con
               </span>
             )}
           </div>
-      </>
+        </CardContent>
+      </Card>
       )}
 
       {/* Contacts List */}

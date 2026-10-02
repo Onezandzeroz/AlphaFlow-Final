@@ -467,12 +467,12 @@ export function VATMappingPanel() {
       {/* Search + Filter */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[140px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             placeholder={isDanish ? 'Søg momskode, beskrivelse eller vejledning…' : 'Search VAT code, description or guidance…'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 bg-gray-50 dark:bg-white/[0.04] border-0"
           />
         </div>
         <Select value={filter} onValueChange={setFilter}>

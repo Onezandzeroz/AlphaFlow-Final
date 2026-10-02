@@ -25,7 +25,7 @@ interface EInvoiceSettingsPageProps {
  *
  * Mounts the NemHandelRegistrationNotice banner above the settings card
  * for companies that have NOT yet enabled e-invoicing (Erhvervsstyrelsen
- * compliance).
+ * Bilag 2, Row 47/48 compliance).
  */
 export function EInvoiceSettingsPage({ user, onNavigate }: EInvoiceSettingsPageProps) {
   const { language } = useTranslation();

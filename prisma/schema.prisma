@@ -1561,9 +1561,9 @@ model ReceivedInvoice {
 
 enum VATSubmissionStatus {
   DRAFT // Prepared but not yet submitted
-  SUBMITTED // Draft sent to Skattestyrelsen — awaiting user approval via TastSelv
-  ACCEPTED // User approved in TastSelv — receipt available
-  REJECTED // Rejected by Skattestyrelsen or user
+  SUBMITTED // Successfully sent to Skattestyrelsen
+  ACCEPTED // Acknowledged by Skattestyrelsen
+  REJECTED // Rejected by Skattestyrelsen
   ERROR // Transmission error
 }
 
@@ -1600,24 +1600,10 @@ model VATSubmission {
   errorCode    String?
 
   // SKAT RSU B2B SOAP integration fields
-  // transactionIdentifier: returned by ModtagMomsangivelseForeloebig, needed
-  //   for MomsangivelseKvitteringHent (receipt retrieval). This is SKAT's
-  //   internal transaction ID, NOT the same as our submission ID.
-  transactionIdentifier String?
-
-  // deepLink: the Dybtlink URL returned by ModtagMomsangivelseForeloebig.
-  //   The user clicks this to go to TastSelv Erhverv and approve the draft
-  //   with MitID. Stored so we can re-display it until the user approves.
-  deepLink              String?
-
-  // receiptPdfBase64: the receipt PDF (base64-encoded) fetched via
-  //   MomsangivelseKvitteringHent after the user has approved. Null until
-  //   the receipt has been retrieved.
-  receiptPdfBase64      String?
-
-  // advisoryCode: 5001 = ordinary draft, 5002 = subsequent declaration.
-  //   Helps the UI distinguish between a regular filing and an "efterangivelse".
-  advisoryCode          String?
+  transactionIdentifier String? // SKAT's transaction ID for receipt retrieval
+  deepLink              String? // Dybtlink URL to TastSelv Erhverv for MitID approval
+  receiptPdfBase64      String? // Receipt PDF (base64) after user approval
+  advisoryCode          String? // 5001=ordinary, 5002=subsequent declaration
 
   // Meta
   createdAt       DateTime @default(now())
