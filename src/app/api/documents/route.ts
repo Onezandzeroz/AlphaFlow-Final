@@ -16,6 +16,7 @@ const ALLOWED_TYPES = [
   'image/gif',
   'image/webp',
   'image/bmp',
+  'image/tiff',
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
