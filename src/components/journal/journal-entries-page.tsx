@@ -86,6 +86,7 @@ interface AccountOption {
   number: string;
   name: string;
   type: string;
+  postingGuide?: string | null;
 }
 
 interface JournalLine {

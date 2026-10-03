@@ -243,8 +243,8 @@ export function analyzeForDryRun(
       seenUnmapped.add(tc.taxCode);
       unmappedVatCodes.push({
         sourceCode: tc.taxCode,
-        standardCode: tc.standardTaxCode,
-        suggestedAlphaFlowCode: mapped,
+        standardCode: tc.standardTaxCode ?? undefined,
+        suggestedAlphaFlowCode: mapped ?? null,
       });
     }
   }
