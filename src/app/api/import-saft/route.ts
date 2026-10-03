@@ -194,7 +194,15 @@ export const POST = withGuard(
           const transformed = transformTransaction(saftTx, vatCodeMap);
 
           // Resolve account IDs and skip lines with unknown accounts
-          const resolvedLines = [];
+          const resolvedLines: Array<{
+            accountId: string;
+            companyId: string;
+            accountNumber: string;
+            debit: number;
+            credit: number;
+            vatCode: string | null;
+            description: string | null;
+          }> = [];
           for (const line of transformed.lines) {
             const accountId = accountMap.get(line.accountNumber);
             if (!accountId) {
