@@ -644,8 +644,8 @@ export async function sendNemHandelNoticeEmail(
   metadata?: Record<string, unknown>,
 ): Promise<{ success: boolean; logId: string }> {
   const subject = language === 'da'
-    ? 'AlphaFlow er nu registreret som digitalt bogføringssystem — tilmeld NemHandel'
-    : 'AlphaFlow is now a registered digital bookkeeping system — enroll in NemHandel';
+    ? 'Tilmeld NemHandelsregisteret via AlphaFlow'
+    : 'Enroll in the NemHandel Register via AlphaFlow';
 
   return sendEmail({
     to,

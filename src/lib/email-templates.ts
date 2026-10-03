@@ -756,12 +756,12 @@ export function nemhandelRegistrationNoticeHtml(
   const settingsUrl = `${data.appUrl}${data.settingsPath ?? '/settings-edelivery'}`;
 
   const heading = language === 'da'
-    ? 'AlphaFlow er nu registreret som digitalt bogføringssystem'
-    : 'AlphaFlow is now a registered digital bookkeeping system';
+    ? 'Tilmeld NemHandelsregisteret via AlphaFlow'
+    : 'Enroll in the NemHandel Register via AlphaFlow';
 
   const intro = language === 'da'
-    ? `Vi er glade for at kunne meddele, at <strong>${APP_NAME}</strong> er registreret som et digitalt standardbogføringssystem hos Erhvervsstyrelsen. Som en del af dette kan din virksomhed tilmeldes <strong>NemHandelsregisteret</strong>.`
-    : `We are pleased to announce that <strong>${APP_NAME}</strong> is now registered as a digital standard bookkeeping system with the Danish Business Authority (Erhvervsstyrelsen). As part of this, your business can be enrolled in the <strong>NemHandel Register</strong>.`;
+    ? `<strong>${APP_NAME}</strong> er godkendt som digitalt standardbogføringssystem hos Erhvervsstyrelsen. Det betyder, at din virksomhed kan tilmeldes <strong>NemHandelsregisteret</strong> og derved modtage og afsende elektroniske fakturaer via NemHandel og det europæiske Peppol-netværk.`
+    : `<strong>${APP_NAME}</strong> is approved as a digital standard bookkeeping system with the Danish Business Authority (Erhvervsstyrelsen). This means your business can be enrolled in the <strong>NemHandel Register</strong> to send and receive electronic invoices via NemHandel and the European Peppol network.`;
 
   const whatIsHeading = language === 'da'
     ? 'Hvad er NemHandelsregisteret?'
