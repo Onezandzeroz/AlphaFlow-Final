@@ -12,6 +12,12 @@ import { Separator } from '@/components/ui/separator';
 import { ResponsiveSwitch } from '@/components/ui/responsive-switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from '@/components/ui/accordion';
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -54,6 +60,8 @@ import {
   Search,
   Activity,
   PlusCircle,
+  ArrowRight,
+  Sparkles,
 } from 'lucide-react';
 import { toast } from '@/lib/hermes-toast';
 import { format } from 'date-fns';
@@ -797,10 +805,16 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 <Link2 className="h-4 w-4 text-white" />
               </div>
               {isDa ? 'Sproom Access Point' : 'Sproom Access Point'}
-              {sproomStatus?.connected && (
+              {/* Step badge — shows the user where they are in the setup flow */}
+              {!sproomStatus?.connected ? (
+                <Badge className="bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800/40 text-xs gap-1 ml-auto">
+                  <Sparkles className="h-3 w-3" />
+                  {isDa ? 'Trin 1 af 2' : 'Step 1 of 2'}
+                </Badge>
+              ) : (
                 <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40 text-xs gap-1 ml-auto">
                   <CheckCircle2 className="h-3 w-3" />
-                  {isDa ? 'Forbundet' : 'Connected'}
+                  {isDa ? 'Trin 1 af 2 ✓' : 'Step 1 of 2 ✓'}
                 </Badge>
               )}
             </CardTitle>
@@ -934,29 +948,52 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 )}
                 {cvrVerified ? (
                   <>
-                    <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
-                      <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
-                      <span>
+                    {/* ── Prominent CTA zone ──
+                        When the user has NOT yet connected to Sproom AND their
+                        CVR is verified, this is the PRIMARY next action on the
+                        entire page. We make it visually impossible to miss:
+                        - A teal-tinted "action box" with border + subtle shadow
+                        - A "Næste skridt" label above the button
+                        - A large, full-width gradient button with arrow icon
+                        - A one-line description of what happens on click */}
+                    <div className="rounded-xl border-2 border-[#0d9488]/40 dark:border-[#14b8a6]/30 bg-gradient-to-br from-[#f0fdfa] to-[#ccfbf1] dark:from-[#0d9488]/10 dark:to-[#14b8a6]/5 p-4 sm:p-5 shadow-sm">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-[#0d9488] dark:text-[#14b8a6] mb-2">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        {isDa ? 'NÆSTE SKRIDT' : 'NEXT STEP'}
+                      </div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mb-3 leading-relaxed">
                         {isDa
-                          ? `CVR ${companyCvr} er verificeret. Du kan oprette en child company i Sproom — AlphaFlow bruger platformens Sproom-konto automatisk og tilmelder dig både NemHandel og Peppol.`
-                          : `CVR ${companyCvr} is verified. You can create a child company in Sproom — AlphaFlow uses the platform Sproom account automatically and registers you on both NemHandel and Peppol.`}
-                      </span>
+                          ? `Opret din virksomhed i Sproom. AlphaFlow tilmelder dig automatisk både NemHandel og Peppol — ingen manuelle trin.`
+                          : `Create your company in Sproom. AlphaFlow automatically registers you on both NemHandel and Peppol — no manual steps.`}
+                      </p>
+                      <Button
+                        onClick={handleCreateSproomChild}
+                        disabled={isCreatingSproomChild}
+                        size="lg"
+                        className="w-full h-14 text-base bg-gradient-to-r from-[#0d9488] to-[#14b8a6] hover:from-[#0f766e] hover:to-[#0d9488] text-white gap-3 font-semibold transition-all shadow-md hover:shadow-lg hover:scale-[1.01]"
+                      >
+                        {isCreatingSproomChild ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <PlusCircle className="h-5 w-5" />
+                        )}
+                        {isCreatingSproomChild
+                          ? (isDa ? 'Opretter...' : 'Creating...')
+                          : (isDa ? 'Opret child company i Sproom' : 'Create child company in Sproom')
+                        }
+                        {!isCreatingSproomChild && (
+                          <ArrowRight className="h-5 w-5 ml-auto" />
+                        )}
+                      </Button>
+                      <div className="flex items-center gap-1.5 mt-2.5 text-xs text-[#0d9488] dark:text-[#14b8a6]">
+                        <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          {isDa
+                            ? `CVR ${companyCvr} er verificeret — klar til oprettelse`
+                            : `CVR ${companyCvr} is verified — ready to create`}
+                        </span>
+                      </div>
                     </div>
-                    <Button
-                      onClick={handleCreateSproomChild}
-                      disabled={isCreatingSproomChild}
-                      className="w-full bg-[#0d9488] hover:bg-[#0f766e] text-white gap-2 font-medium transition-all"
-                    >
-                      {isCreatingSproomChild ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <PlusCircle className="h-4 w-4" />
-                      )}
-                      {isCreatingSproomChild
-                        ? (isDa ? 'Opretter...' : 'Creating...')
-                        : (isDa ? 'Opret child company i Sproom' : 'Create child company in Sproom')
-                      }
-                    </Button>
                   </>
                 ) : (
                   <div className="flex items-start gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 rounded-lg p-3">
@@ -1142,80 +1179,92 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
               </>
             )}
 
-            {/* ── Sproom info section ── */}
-            <div className="space-y-3">
-              <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 info-box-primary rounded-lg p-3">
-                <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#14b8a6] dark:text-[#99f6e4]" />
-                <div className="space-y-2">
-                  <p className="font-semibold text-gray-700 dark:text-gray-300">
-                    {isDa ? 'Hvad er Sproom?' : 'What is Sproom?'}
-                  </p>
-                  <p className="leading-relaxed">
-                    {isDa
-                      ? 'Sproom er en certificeret Access Point udbyder for både Peppol og NemHandel. AlphaFlow sender raw OIOUBL/PeppolBIS3 XML direkte til Sproom, som leverer den videre til modtageren på det korrekte netværk — uden manuel upload.'
-                      : 'Sproom is a certified Access Point provider for both Peppol and NemHandel. AlphaFlow sends raw OIOUBL/PeppolBIS3 XML directly to Sproom, which delivers it to the recipient on the correct network — without manual upload.'}
-                  </p>
-                  <p className="leading-relaxed">
-                    {isDa
-                      ? 'Workflow: Generer XML → Send til Sproom API → Automatisk leveret via Peppol/NemHandel. Sproom understøtter statuspolling og webhook-signaturer (RSA-SHA256).'
-                      : 'Workflow: Generate XML → Send to Sproom API → Auto-delivered via Peppol/NemHandel. Sproom supports status polling and webhook signatures (RSA-SHA256).'}
-                  </p>
-                  <div className="flex flex-col gap-1 pt-1">
-                    <p className="font-medium text-gray-700 dark:text-gray-300">
-                      {isDa ? 'Fordele' : 'Benefits'}
-                    </p>
-                    <ul className="list-disc list-inside space-y-0.5">
-                      <li>
+            {/* ── Sproom info section (collapsible — collapsed by default) ──
+                This detailed info is available but doesn't compete with the
+                primary CTA. The user can expand it if they want to learn
+                more about Sproom, its workflow, and external links. */}
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="sproom-info" className="border-none">
+                <AccordionTrigger className="text-sm font-medium text-gray-600 dark:text-gray-400 hover:no-underline hover:text-[#0d9488] dark:hover:text-[#14b8a6] py-3">
+                  <span className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-[#14b8a6] dark:text-[#99f6e4]" />
+                    {isDa ? 'Hvad er Sproom? (klik for at vise)' : 'What is Sproom? (click to expand)'}
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-3 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="info-box-primary rounded-lg p-3">
+                    <div className="space-y-2">
+                      <p className="font-semibold text-gray-700 dark:text-gray-300">
+                        {isDa ? 'Hvad er Sproom?' : 'What is Sproom?'}
+                      </p>
+                      <p className="leading-relaxed">
                         {isDa
-                          ? 'Ét barn-virksomhed ID dækker både Peppol og NemHandel'
-                          : 'One child company ID covers both Peppol and NemHandel'}
-                      </li>
-                      <li>
+                          ? 'Sproom er en certificeret Access Point udbyder for både Peppol og NemHandel. AlphaFlow sender raw OIOUBL/PeppolBIS3 XML direkte til Sproom, som leverer den videre til modtageren på det korrekte netværk — uden manuel upload.'
+                          : 'Sproom is a certified Access Point provider for both Peppol and NemHandel. AlphaFlow sends raw OIOUBL/PeppolBIS3 XML directly to Sproom, which delivers it to the recipient on the correct network — without manual upload.'}
+                      </p>
+                      <p className="leading-relaxed">
                         {isDa
-                          ? 'Direkte raw-XML upload (ingen JSON-konvertering)'
-                          : 'Direct raw-XML upload (no JSON conversion)'}
-                      </li>
-                      <li>
-                        {isDa
-                          ? 'Realtids statussporing via /api/documents/{id}/state'
-                          : 'Real-time status tracking via /api/documents/{id}/state'}
-                      </li>
-                      <li>
-                        {isDa
-                          ? 'RSA-signede webhooks (SHA256withRSA)'
-                          : 'RSA-signed webhooks (SHA256withRSA)'}
-                      </li>
-                    </ul>
+                          ? 'Workflow: Generer XML → Send til Sproom API → Automatisk leveret via Peppol/NemHandel. Sproom understøtter statuspolling og webhook-signaturer (RSA-SHA256).'
+                          : 'Workflow: Generate XML → Send to Sproom API → Auto-delivered via Peppol/NemHandel. Sproom supports status polling and webhook signatures (RSA-SHA256).'}
+                      </p>
+                      <div className="flex flex-col gap-1 pt-1">
+                        <p className="font-medium text-gray-700 dark:text-gray-300">
+                          {isDa ? 'Fordele' : 'Benefits'}
+                        </p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          <li>
+                            {isDa
+                              ? 'Ét barn-virksomhed ID dækker både Peppol og NemHandel'
+                              : 'One child company ID covers both Peppol and NemHandel'}
+                          </li>
+                          <li>
+                            {isDa
+                              ? 'Direkte raw-XML upload (ingen JSON-konvertering)'
+                              : 'Direct raw-XML upload (no JSON conversion)'}
+                          </li>
+                          <li>
+                            {isDa
+                              ? 'Realtids statussporing via /api/documents/{id}/state'
+                              : 'Real-time status tracking via /api/documents/{id}/state'}
+                          </li>
+                          <li>
+                            {isDa
+                              ? 'RSA-signede webhooks (SHA256withRSA)'
+                              : 'RSA-signed webhooks (SHA256withRSA)'}
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              {/* External links */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                  <a
-                    href="https://sproom.net/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#0d9488] hover:underline dark:text-[#99f6e4]"
-                  >
-                    sproom.net
-                  </a>
-                </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <FileText className="h-3.5 w-3.5 shrink-0" />
-                  <a
-                    href="https://sproom.net/api"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#0d9488] hover:underline dark:text-[#99f6e4]"
-                  >
-                    {isDa ? 'API-dokumentation' : 'API Documentation'}
-                  </a>
-                </div>
-              </div>
-            </div>
+                  {/* External links */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                      <a
+                        href="https://sproom.net/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#0d9488] hover:underline dark:text-[#99f6e4]"
+                      >
+                        sproom.net
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <FileText className="h-3.5 w-3.5 shrink-0" />
+                      <a
+                        href="https://sproom.net/api"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[#0d9488] hover:underline dark:text-[#99f6e4]"
+                      >
+                        {isDa ? 'API-dokumentation' : 'API Documentation'}
+                      </a>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </CardContent>
         </Card>
       )}
@@ -1455,6 +1504,18 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                 <Building2 className="h-4 w-4 text-white" />
               </div>
               {isDa ? 'NemHandelsregisteret' : 'NemHandelsregisteret'}
+              {/* Step badge — Trin 2 of the setup flow */}
+              {nemhandelRegistered ? (
+                <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40 text-xs gap-1 ml-auto">
+                  <CheckCircle2 className="h-3 w-3" />
+                  {isDa ? 'Trin 2 af 2 ✓' : 'Step 2 of 2 ✓'}
+                </Badge>
+              ) : (
+                <Badge className="bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-800/40 text-xs gap-1 ml-auto">
+                  <Sparkles className="h-3 w-3" />
+                  {isDa ? 'Trin 2 af 2' : 'Step 2 of 2'}
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
               {isDa
