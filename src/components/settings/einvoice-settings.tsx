@@ -200,7 +200,18 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
         setGln(data.gln || '');
         setPeppolAs4Id(data.peppolAs4Id || '');
         setAutoSendOnFinalize(data.autoSendOnFinalize);
-        setDeliveryMode(data.deliveryMode);
+        // Persistence fix: if the backend has no saved deliveryMode yet
+        // (null/undefined — e.g. a brand-new company that never saved),
+        // default to 'manual' so ONE of the two delivery-mode buttons is
+        // always highlighted as selected on refresh. Without this, both
+        // buttons appear "collapsed"/unselected after a page refresh,
+        // which is confusing. The two buttons' onClick handlers keep
+        // `enabled` in sync with `deliveryMode` (manual→false, automatic→true).
+        setDeliveryMode(
+          data.deliveryMode === 'manual' || data.deliveryMode === 'automatic'
+            ? data.deliveryMode
+            : 'manual',
+        );
       }
     } catch (err) {
       console.error('Failed to fetch e-invoice settings:', err);
@@ -774,230 +785,6 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
         </CardContent>
       </Card>
 
-      {/* ═══ AUTOMATIC MODE: E-INVOICE CONFIG CARD ═══ */}
-      {deliveryMode === 'automatic' && (
-        <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#0d9488] to-[#14b8a6] flex items-center justify-center shrink-0">
-                <Settings className="h-4 w-4 text-white" />
-              </div>
-              {isDa ? 'Automatisk e-faktura indstillinger' : 'Automatic e-invoice settings'}
-            </CardTitle>
-            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
-              {isDa
-                ? 'Konfigurer afsendelse af e-fakturaer via NemHandel og Peppol.'
-                : 'Configure e-invoice sending via NemHandel and Peppol.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {/* ── Default channel ── */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {isDa ? 'Standardkanal' : 'Default channel'}
-                <span className="text-red-500 ml-0.5">*</span>
-              </Label>
-              <Select value={defaultChannel} onValueChange={setDefaultChannel}>
-                <SelectTrigger className="h-10 w-full bg-white dark:bg-white/5 border-gray-200 dark:border-white/10">
-                  <div className="flex items-center gap-2">
-                    {defaultChannel === 'OIOUBL' ? (
-                      <ShieldCheck className="h-4 w-4 text-[#0d9488]" />
-                    ) : (
-                      <Globe className="h-4 w-4 text-blue-500" />
-                    )}
-                    <SelectValue />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="OIOUBL">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-3.5 w-3.5 text-[#0d9488]" />
-                      <span>Sproom ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="PEPPOL">
-                    <div className="flex items-center gap-2">
-                      <Globe className="h-3.5 w-3.5 text-blue-500" />
-                      <span>Sproom ({isDa ? 'Peppol' : 'Peppol'})</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {defaultChannel === 'OIOUBL'
-                  ? (isDa
-                    ? 'Standard. Sproom vælger automatisk OIOUBL for danske modtagere (NemHandel) og Peppol BIS 3 for internationale modtagere.'
-                    : 'Default. Sproom auto-selects OIOUBL for Danish recipients (NemHandel) and Peppol BIS 3 for international recipients.')
-                  : (isDa
-                    ? 'Tving Peppol BIS 3-format. Brug kun til internationale sends hvor modtageren eksplicit kræver Peppol.'
-                    : 'Force Peppol BIS 3 format. Only use for international sends where the recipient explicitly requires Peppol.')}
-              </p>
-            </div>
-
-            <Separator />
-
-            {/* ── EndpointID ── */}
-            {/* When Sproom is connected, this is MANAGED by the AP
-                (auto-set to 0184:<CVR>) and must NOT be edited manually. */}
-            <div className="space-y-1.5">
-              <Label htmlFor="endpointId" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {isDa ? 'EndpointID' : 'EndpointID'}
-                <span className="text-red-500 ml-0.5">*</span>
-              </Label>
-              <div className="relative">
-                <Input
-                  id="endpointId"
-                  value={endpointId}
-                  onChange={(e) => setEndpointId(e.target.value)}
-                  placeholder={`0184:${companyCvr || 'CVR-nummer'}`}
-                  className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-24"
-                  readOnly={apConnected}
-                  disabled={apConnected}
-                />
-                {apConnected ? (
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0d9488] dark:text-[#14b8a6] bg-[#0d9488]/10 dark:bg-[#14b8a6]/10 px-2 py-0.5 rounded">
-                    <ShieldCheck className="h-3 w-3" />
-                    {isDa ? `Auto fra Sproom` : `Auto from Sproom`}
-                  </span>
-                ) : companyCvr && !endpointId ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 text-[10px] text-[#0d9488] hover:bg-[#0d9488]/10"
-                    onClick={() => setEndpointId(`0184:${companyCvr}`)}
-                  >
-                    {isDa ? 'Auto-udfyld' : 'Auto-fill'}
-                  </Button>
-                ) : null}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {apConnected
-                  ? (isDa
-                      ? `Håndteres automatisk af din Sproom child company. Kan ikke ændres manuelt.`
-                      : `Managed automatically by your Sproom child company. Cannot be edited manually.`)
-                  : (isDa
-                      ? 'Dit unikke EndpointID i NemHandel-netværket. Schema 0184 = DK CVR.'
-                      : 'Your unique EndpointID in the NemHandel network. Scheme 0184 = DK CVR.')}
-              </p>
-            </div>
-
-            {/* ── GLN/EAN number ── */}
-            {/* Genuinely per-tenant — always editable. */}
-            <div className="space-y-1.5">
-              <Label htmlFor="gln" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {isDa ? 'GLN/EAN-nummer' : 'GLN/EAN number'}
-                <span className="text-muted-foreground ml-1 font-normal">({isDa ? 'frivilligt' : 'optional'})</span>
-              </Label>
-              <Input
-                id="gln"
-                value={gln}
-                onChange={(e) => setGln(e.target.value)}
-                placeholder={isDa ? 'f.eks. 5790001234567' : 'e.g. 5790001234567'}
-                className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10"
-              />
-              <p className="text-xs text-muted-foreground">
-                {isDa
-                  ? 'Global Location Number bruges af nogle offentlige institutioner til identifikation.'
-                  : 'Global Location Number is used by some public institutions for identification.'}
-              </p>
-            </div>
-
-            {/* ── Peppol AS4 ID ── */}
-            {/* When Sproom is connected, this is MANAGED by the AP
-                (auto-set to 0188:CVR<CVR>) and must NOT be edited manually. */}
-            <div className="space-y-1.5">
-              <Label htmlFor="peppolAs4Id" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                {isDa ? 'Peppol AS4 ID' : 'Peppol AS4 ID'}
-                {apConnected
-                  ? <span className="text-red-500 ml-0.5">*</span>
-                  : <span className="text-muted-foreground ml-1 font-normal">({isDa ? 'frivilligt' : 'optional'})</span>
-                }
-              </Label>
-              <div className="relative">
-                <Input
-                  id="peppolAs4Id"
-                  value={peppolAs4Id}
-                  onChange={(e) => setPeppolAs4Id(e.target.value)}
-                  placeholder={`0188:CVR${companyCvr || 'xxxx'}`}
-                  className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-24"
-                  readOnly={apConnected}
-                  disabled={apConnected}
-                />
-                {apConnected ? (
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0d9488] dark:text-[#14b8a6] bg-[#0d9488]/10 dark:bg-[#14b8a6]/10 px-2 py-0.5 rounded">
-                    <ShieldCheck className="h-3 w-3" />
-                    {isDa ? `Auto fra Sproom` : `Auto from Sproom`}
-                  </span>
-                ) : companyCvr && !peppolAs4Id ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 text-[10px] text-blue-500 hover:bg-blue-500/10"
-                    onClick={() => setPeppolAs4Id(`0188:CVR${companyCvr}`)}
-                  >
-                    {isDa ? 'Auto-udfyld' : 'Auto-fill'}
-                  </Button>
-                ) : null}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {apConnected
-                  ? (isDa
-                      ? `Håndteres automatisk af din Sproom child company. Kan ikke ændres manuelt.`
-                      : `Managed automatically by your Sproom child company. Cannot be edited manually.`)
-                  : (isDa
-                      ? 'Peppol AS4 Participant ID til Peppol-netværket. Format: 0188:CVRnummer.'
-                      : 'Peppol AS4 Participant ID for the Peppol network. Format: 0188:CVRnumber.')}
-              </p>
-            </div>
-
-            <Separator />
-
-            {/* ── Auto-send on finalize ── */}
-            <div className="flex items-center justify-between rounded-xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="h-8 w-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-                  <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">
-                    {isDa ? 'Automatisk afsendelse' : 'Auto-send on finalize'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {isDa
-                      ? 'Send e-faktura automatisk når fakturaen godkendes/finaliseres.'
-                      : 'Automatically send e-invoice when the invoice is approved/finalized.'}
-                  </p>
-                </div>
-              </div>
-              <ResponsiveSwitch
-                checked={autoSendOnFinalize}
-                onCheckedChange={setAutoSendOnFinalize}
-              />
-            </div>
-
-            {/* ── Save button ── */}
-            <div className="flex justify-end pt-1">
-              <Button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="bg-[#0d9488] hover:bg-[#0f766e] text-white gap-2 min-w-[140px] font-medium transition-all"
-              >
-                {isSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4" />
-                )}
-                {isSaving
-                  ? (isDa ? 'Gemmer...' : 'Saving...')
-                  : (isDa ? 'Gem indstillinger' : 'Save settings')
-                }
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* ═══ AUTOMATIC MODE: SPROOM ACCESS POINT CARD ═══ */}
       {/* Shown whenever the user selects Automatic delivery mode. Sproom is
@@ -1432,6 +1219,232 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* ═══ AUTOMATIC MODE: E-INVOICE CONFIG CARD ═══ */}
+      {deliveryMode === 'automatic' && (
+        <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#0d9488] to-[#14b8a6] flex items-center justify-center shrink-0">
+                <Settings className="h-4 w-4 text-white" />
+              </div>
+              {isDa ? 'Automatisk e-faktura indstillinger' : 'Automatic e-invoice settings'}
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
+              {isDa
+                ? 'Konfigurer afsendelse af e-fakturaer via NemHandel og Peppol.'
+                : 'Configure e-invoice sending via NemHandel and Peppol.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* ── Default channel ── */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {isDa ? 'Standardkanal' : 'Default channel'}
+                <span className="text-red-500 ml-0.5">*</span>
+              </Label>
+              <Select value={defaultChannel} onValueChange={setDefaultChannel}>
+                <SelectTrigger className="h-10 w-full bg-white dark:bg-white/5 border-gray-200 dark:border-white/10">
+                  <div className="flex items-center gap-2">
+                    {defaultChannel === 'OIOUBL' ? (
+                      <ShieldCheck className="h-4 w-4 text-[#0d9488]" />
+                    ) : (
+                      <Globe className="h-4 w-4 text-blue-500" />
+                    )}
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="OIOUBL">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-3.5 w-3.5 text-[#0d9488]" />
+                      <span>Sproom ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="PEPPOL">
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-3.5 w-3.5 text-blue-500" />
+                      <span>Sproom ({isDa ? 'Peppol' : 'Peppol'})</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {defaultChannel === 'OIOUBL'
+                  ? (isDa
+                    ? 'Standard. Sproom vælger automatisk OIOUBL for danske modtagere (NemHandel) og Peppol BIS 3 for internationale modtagere.'
+                    : 'Default. Sproom auto-selects OIOUBL for Danish recipients (NemHandel) and Peppol BIS 3 for international recipients.')
+                  : (isDa
+                    ? 'Tving Peppol BIS 3-format. Brug kun til internationale sends hvor modtageren eksplicit kræver Peppol.'
+                    : 'Force Peppol BIS 3 format. Only use for international sends where the recipient explicitly requires Peppol.')}
+              </p>
+            </div>
+
+            <Separator />
+
+            {/* ── EndpointID ── */}
+            {/* When Sproom is connected, this is MANAGED by the AP
+                (auto-set to 0184:<CVR>) and must NOT be edited manually. */}
+            <div className="space-y-1.5">
+              <Label htmlFor="endpointId" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {isDa ? 'EndpointID' : 'EndpointID'}
+                <span className="text-red-500 ml-0.5">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="endpointId"
+                  value={endpointId}
+                  onChange={(e) => setEndpointId(e.target.value)}
+                  placeholder={`0184:${companyCvr || 'CVR-nummer'}`}
+                  className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-24"
+                  readOnly={apConnected}
+                  disabled={apConnected}
+                />
+                {apConnected ? (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0d9488] dark:text-[#14b8a6] bg-[#0d9488]/10 dark:bg-[#14b8a6]/10 px-2 py-0.5 rounded">
+                    <ShieldCheck className="h-3 w-3" />
+                    {isDa ? `Auto fra Sproom` : `Auto from Sproom`}
+                  </span>
+                ) : companyCvr && !endpointId ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 text-[10px] text-[#0d9488] hover:bg-[#0d9488]/10"
+                    onClick={() => setEndpointId(`0184:${companyCvr}`)}
+                  >
+                    {isDa ? 'Auto-udfyld' : 'Auto-fill'}
+                  </Button>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {apConnected
+                  ? (isDa
+                      ? `Håndteres automatisk af din Sproom child company. Kan ikke ændres manuelt.`
+                      : `Managed automatically by your Sproom child company. Cannot be edited manually.`)
+                  : (isDa
+                      ? 'Dit unikke EndpointID i NemHandel-netværket. Schema 0184 = DK CVR.'
+                      : 'Your unique EndpointID in the NemHandel network. Scheme 0184 = DK CVR.')}
+              </p>
+            </div>
+
+            {/* ── GLN/EAN number ── */}
+            {/* Genuinely per-tenant — always editable. */}
+            <div className="space-y-1.5">
+              <Label htmlFor="gln" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {isDa ? 'GLN/EAN-nummer' : 'GLN/EAN number'}
+                <span className="text-muted-foreground ml-1 font-normal">({isDa ? 'frivilligt' : 'optional'})</span>
+              </Label>
+              <Input
+                id="gln"
+                value={gln}
+                onChange={(e) => setGln(e.target.value)}
+                placeholder={isDa ? 'f.eks. 5790001234567' : 'e.g. 5790001234567'}
+                className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10"
+              />
+              <p className="text-xs text-muted-foreground">
+                {isDa
+                  ? 'Global Location Number bruges af nogle offentlige institutioner til identifikation.'
+                  : 'Global Location Number is used by some public institutions for identification.'}
+              </p>
+            </div>
+
+            {/* ── Peppol AS4 ID ── */}
+            {/* When Sproom is connected, this is MANAGED by the AP
+                (auto-set to 0188:CVR<CVR>) and must NOT be edited manually. */}
+            <div className="space-y-1.5">
+              <Label htmlFor="peppolAs4Id" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {isDa ? 'Peppol AS4 ID' : 'Peppol AS4 ID'}
+                {apConnected
+                  ? <span className="text-red-500 ml-0.5">*</span>
+                  : <span className="text-muted-foreground ml-1 font-normal">({isDa ? 'frivilligt' : 'optional'})</span>
+                }
+              </Label>
+              <div className="relative">
+                <Input
+                  id="peppolAs4Id"
+                  value={peppolAs4Id}
+                  onChange={(e) => setPeppolAs4Id(e.target.value)}
+                  placeholder={`0188:CVR${companyCvr || 'xxxx'}`}
+                  className="h-10 bg-white dark:bg-white/5 border-gray-200 dark:border-white/10 pr-24"
+                  readOnly={apConnected}
+                  disabled={apConnected}
+                />
+                {apConnected ? (
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[10px] font-medium text-[#0d9488] dark:text-[#14b8a6] bg-[#0d9488]/10 dark:bg-[#14b8a6]/10 px-2 py-0.5 rounded">
+                    <ShieldCheck className="h-3 w-3" />
+                    {isDa ? `Auto fra Sproom` : `Auto from Sproom`}
+                  </span>
+                ) : companyCvr && !peppolAs4Id ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 text-[10px] text-blue-500 hover:bg-blue-500/10"
+                    onClick={() => setPeppolAs4Id(`0188:CVR${companyCvr}`)}
+                  >
+                    {isDa ? 'Auto-udfyld' : 'Auto-fill'}
+                  </Button>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {apConnected
+                  ? (isDa
+                      ? `Håndteres automatisk af din Sproom child company. Kan ikke ændres manuelt.`
+                      : `Managed automatically by your Sproom child company. Cannot be edited manually.`)
+                  : (isDa
+                      ? 'Peppol AS4 Participant ID til Peppol-netværket. Format: 0188:CVRnummer.'
+                      : 'Peppol AS4 Participant ID for the Peppol network. Format: 0188:CVRnumber.')}
+              </p>
+            </div>
+
+            <Separator />
+
+            {/* ── Auto-send on finalize ── */}
+            <div className="flex items-center justify-between rounded-xl p-4 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                  <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {isDa ? 'Automatisk afsendelse' : 'Auto-send on finalize'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {isDa
+                      ? 'Send e-faktura automatisk når fakturaen godkendes/finaliseres.'
+                      : 'Automatically send e-invoice when the invoice is approved/finalized.'}
+                  </p>
+                </div>
+              </div>
+              <ResponsiveSwitch
+                checked={autoSendOnFinalize}
+                onCheckedChange={setAutoSendOnFinalize}
+              />
+            </div>
+
+            {/* ── Save button ── */}
+            <div className="flex justify-end pt-1">
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="bg-[#0d9488] hover:bg-[#0f766e] text-white gap-2 min-w-[140px] font-medium transition-all"
+              >
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                {isSaving
+                  ? (isDa ? 'Gemmer...' : 'Saving...')
+                  : (isDa ? 'Gem indstillinger' : 'Save settings')
+                }
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
 
       {/* ═══ AUTOMATIC MODE: NEMHANDELSREGISTERET CARD ═══ */}
       {deliveryMode === 'automatic' && (
