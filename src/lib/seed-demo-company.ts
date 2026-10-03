@@ -1310,6 +1310,85 @@ export async function seedDemoCompany(demoCompanyId: string, systemUserId: strin
   }
   console.log(`[seed-demo-company] Created ${contactIds.length} contacts`)
 
+  // ─── 2b. EU and non-EU contacts for SAF-T coverage ────────────
+  console.log('[seed-demo-company] Creating EU/non-EU contacts...')
+  const euContacts = [
+    // EU customer (Germany)
+    {
+      name: 'Berlin Digital GmbH',
+      cvrNumber: 'DE123456789',
+      email: 'info@berlin-digital.de',
+      phone: '+49 30 1234 5678',
+      address: 'Friedrichstraße 100',
+      city: 'Berlin',
+      postalCode: '10117',
+      country: 'Tyskland',
+      type: 'CUSTOMER' as const,
+      notes: 'EU-kunde (Tyskland) — varesalg med omvendt betalingspligt (IGS)',
+    },
+    // EU supplier (Sweden)
+    {
+      name: 'Stockholm Cloud Services AB',
+      cvrNumber: 'SE556677889901',
+      email: 'order@stockholmcloud.se',
+      phone: '+46 8 123 45 67',
+      address: 'Sveavägen 45',
+      city: 'Stockholm',
+      postalCode: '11134',
+      country: 'Sverige',
+      type: 'SUPPLIER' as const,
+      notes: 'EU-leverandør (Sverige) — køb med omvendt betalingspligt',
+    },
+    // Non-EU supplier (USA)
+    {
+      name: 'Global Tech Solutions Inc.',
+      cvrNumber: 'US12-3456789',
+      email: 'sales@globaltechsolutions.com',
+      phone: '+1 415 555 0199',
+      address: '500 Market Street, Suite 200',
+      city: 'San Francisco',
+      postalCode: '94105',
+      country: 'USA',
+      type: 'SUPPLIER' as const,
+      notes: 'Non-EU leverandør (USA) — import med importmoms',
+    },
+    // Danish customer for 12% VAT (newspaper/admission services)
+    {
+      name: 'Aarhus Mediehus ApS',
+      cvrNumber: '34567890',
+      email: 'redaktion@aarhusmediehus.dk',
+      phone: '+45 86 55 44 33',
+      address: 'Mediehuset 12',
+      city: 'Aarhus C',
+      postalCode: '8000',
+      country: 'Danmark',
+      type: 'CUSTOMER' as const,
+      notes: 'Kunde for nedsat moms (12%) — annoncering og avisannoncer',
+    },
+  ]
+
+  for (const c of euContacts) {
+    const contact = await db.contact.create({
+      data: {
+        name: c.name,
+        cvrNumber: c.cvrNumber,
+        email: c.email,
+        phone: c.phone,
+        address: c.address,
+        city: c.city,
+        postalCode: c.postalCode,
+        country: c.country,
+        type: c.type,
+        notes: c.notes,
+        isActive: true,
+        userId: systemUserId,
+        companyId: demoCompanyId,
+      },
+    })
+    contactIds.push(contact.id)
+  }
+  console.log(`[seed-demo-company] Created ${euContacts.length} EU/non-EU contacts (total: ${contactIds.length})`)
+
   // ─── 3. Invoices ──────────────────────────────────────────────
   console.log('[seed-demo-company] Creating invoices...')
   const invoiceSeeds = buildInvoices()
@@ -1445,6 +1524,171 @@ export async function seedDemoCompany(demoCompanyId: string, systemUserId: strin
     jeCount++
   }
   console.log(`[seed-demo-company] Created ${jeCount} journal entries`)
+
+  // ─── 5b. EU and special VAT transactions for SAF-T coverage ────
+  console.log('[seed-demo-company] Creating EU and special VAT transactions...')
+
+  // EU sale (SEU) — sale to German customer, 0% VAT, account 4200
+  const euSaleNet = 35000
+  const euSaleJE = await db.$transaction(async (tx) => {
+    const entry = await tx.journalEntry.create({
+      data: {
+        date: d(CURRENT_YEAR, 3, 15),
+        description: 'EU-salg til Berlin Digital GmbH (IGS, 0% moms)',
+        reference: 'EU-SALG-001',
+        status: 'POSTED',
+        cancelled: false,
+        userId: systemUserId,
+        companyId: demoCompanyId,
+        lines: {
+          create: [
+            { companyId: demoCompanyId, accountId: ac('1200'), debit: euSaleNet, credit: 0, vatCode: 'SEU', description: 'Tilgodehavende — Berlin Digital GmbH' },
+            { companyId: demoCompanyId, accountId: ac('4200'), debit: 0, credit: euSaleNet, vatCode: 'SEU', description: 'EU-salg af varer (IGS)' },
+          ],
+        },
+      },
+    })
+    await assignVoucherNumberIfPosted(tx, entry.id, demoCompanyId, 'POSTED')
+    return entry
+  })
+  jeCount++
+
+  // EU purchase (KEU) — purchase from Swedish supplier, reverse charge
+  const euPurchaseNet = 28000
+  const euPurchaseVat = 7000 // 25% of 28000
+  const euPurchaseJE = await db.$transaction(async (tx) => {
+    const entry = await tx.journalEntry.create({
+      data: {
+        date: d(CURRENT_YEAR, 4, 10),
+        description: 'EU-køb fra Stockholm Cloud Services AB (omvendt betalingspligt)',
+        reference: 'EU-KØB-001',
+        status: 'POSTED',
+        cancelled: false,
+        userId: systemUserId,
+        companyId: demoCompanyId,
+        lines: {
+          create: [
+            { companyId: demoCompanyId, accountId: ac('6100'), debit: euPurchaseNet, credit: 0, vatCode: 'KEU', description: 'EU-køb — cloud services' },
+            { companyId: demoCompanyId, accountId: ac('5410'), debit: euPurchaseVat, credit: 0, vatCode: 'KEU', description: 'Indgående moms (EU-køb)' },
+            { companyId: demoCompanyId, accountId: ac('2000'), debit: 0, credit: euPurchaseNet + euPurchaseVat, vatCode: null, description: 'Leverandørgæld — Stockholm Cloud' },
+            { companyId: demoCompanyId, accountId: ac('4510'), debit: 0, credit: euPurchaseVat, vatCode: 'KEU', description: 'Udgående moms (omvendt betalingspligt)' },
+          ],
+        },
+      },
+    })
+    await assignVoucherNumberIfPosted(tx, entry.id, demoCompanyId, 'POSTED')
+    return entry
+  })
+  jeCount++
+
+  // Non-EU import (KUF) — import from US supplier, import VAT
+  const importNet = 45000
+  const importVat = 11250 // 25% of 45000
+  const importJE = await db.$transaction(async (tx) => {
+    const entry = await tx.journalEntry.create({
+      data: {
+        date: d(CURRENT_YEAR, 5, 20),
+        description: 'Import fra Global Tech Solutions Inc. (importmoms)',
+        reference: 'IMPORT-001',
+        status: 'POSTED',
+        cancelled: false,
+        userId: systemUserId,
+        companyId: demoCompanyId,
+        lines: {
+          create: [
+            { companyId: demoCompanyId, accountId: ac('6100'), debit: importNet, credit: 0, vatCode: 'KUF', description: 'Import — IT-udstyr' },
+            { companyId: demoCompanyId, accountId: ac('5410'), debit: importVat, credit: 0, vatCode: 'KUF', description: 'Indgående moms (import)' },
+            { companyId: demoCompanyId, accountId: ac('2000'), debit: 0, credit: importNet + importVat, vatCode: null, description: 'Leverandørgæld — Global Tech Solutions' },
+            { companyId: demoCompanyId, accountId: ac('4510'), debit: 0, credit: importVat, vatCode: 'KUF', description: 'Udgående moms (import)' },
+          ],
+        },
+      },
+    })
+    await assignVoucherNumberIfPosted(tx, entry.id, demoCompanyId, 'POSTED')
+    return entry
+  })
+  jeCount++
+
+  // 12% VAT sale (S12) — newspaper advertising to Aarhus Mediehus
+  const s12Net = 18000
+  const s12Vat = 2160 // 12% of 18000
+  const s12JE = await db.$transaction(async (tx) => {
+    const entry = await tx.journalEntry.create({
+      data: {
+        date: d(CURRENT_YEAR, 6, 12),
+        description: 'Annoncering i Aarhus Mediehus (12% moms)',
+        reference: 'S12-SALG-001',
+        status: 'POSTED',
+        cancelled: false,
+        userId: systemUserId,
+        companyId: demoCompanyId,
+        lines: {
+          create: [
+            { companyId: demoCompanyId, accountId: ac('1200'), debit: s12Net + s12Vat, credit: 0, vatCode: 'S12', description: 'Tilgodehavende — Aarhus Mediehus' },
+            { companyId: demoCompanyId, accountId: ac('4000'), debit: 0, credit: s12Net, vatCode: 'S12', description: 'Salg af annoncering (12% moms)' },
+            { companyId: demoCompanyId, accountId: ac('4520'), debit: 0, credit: s12Vat, vatCode: 'S12', description: 'Udgående moms 12%' },
+          ],
+        },
+      },
+    })
+    await assignVoucherNumberIfPosted(tx, entry.id, demoCompanyId, 'POSTED')
+    return entry
+  })
+  jeCount++
+
+  // Zero-rated sale (S0) — export to non-EU customer
+  const s0Net = 22000
+  const s0JE = await db.$transaction(async (tx) => {
+    const entry = await tx.journalEntry.create({
+      data: {
+        date: d(CURRENT_YEAR, 7, 8),
+        description: 'Eksport til Global Tech Solutions Inc. (0% moms)',
+        reference: 'EKSPORT-001',
+        status: 'POSTED',
+        cancelled: false,
+        userId: systemUserId,
+        companyId: demoCompanyId,
+        lines: {
+          create: [
+            { companyId: demoCompanyId, accountId: ac('1200'), debit: s0Net, credit: 0, vatCode: 'S0', description: 'Tilgodehavende — Global Tech Solutions' },
+            { companyId: demoCompanyId, accountId: ac('4300'), debit: 0, credit: s0Net, vatCode: 'S0', description: 'Salg af varer udenfor EU (eksport)' },
+          ],
+        },
+      },
+    })
+    await assignVoucherNumberIfPosted(tx, entry.id, demoCompanyId, 'POSTED')
+    return entry
+  })
+  jeCount++
+
+  // Credit note — reversal of a previous sale
+  const cnNet = 15000
+  const cnVat = 3750 // 25% of 15000
+  const creditNoteJE = await db.$transaction(async (tx) => {
+    const entry = await tx.journalEntry.create({
+      data: {
+        date: d(CURRENT_YEAR, 8, 5),
+        description: 'Kreditnota — returneret vare til DataDrift ApS',
+        reference: 'KREDITNOTA-001',
+        status: 'POSTED',
+        cancelled: false,
+        userId: systemUserId,
+        companyId: demoCompanyId,
+        lines: {
+          create: [
+            { companyId: demoCompanyId, accountId: ac('4000'), debit: cnNet, credit: 0, vatCode: 'S25', description: 'Kreditnota — salg returneret' },
+            { companyId: demoCompanyId, accountId: ac('4510'), debit: cnVat, credit: 0, vatCode: 'S25', description: 'Udgående moms tilbageført' },
+            { companyId: demoCompanyId, accountId: ac('1200'), debit: 0, credit: cnNet + cnVat, vatCode: 'S25', description: 'Tilgodehavende reduceret — DataDrift ApS' },
+          ],
+        },
+      },
+    })
+    await assignVoucherNumberIfPosted(tx, entry.id, demoCompanyId, 'POSTED')
+    return entry
+  })
+  jeCount++
+
+  console.log(`[seed-demo-company] Created 7 EU/special VAT journal entries (total: ${jeCount})`)
 
   // ─── 6. Fiscal Periods ────────────────────────────────────────
   console.log('[seed-demo-company] Creating fiscal periods...')
