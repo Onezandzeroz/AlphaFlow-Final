@@ -564,8 +564,12 @@ export const GET = withGuard(
               line.account?.group === 'OUTPUT_VAT',
           );
           if (salesLines.length === 0) continue;
+          // Only count invoices that have at least one non-OUTPUT_VAT line
+          const hasInvoiceLines = salesLines.some(l => l.account?.group !== 'OUTPUT_VAT');
+          if (!hasInvoiceLines) continue;
           salesInvoiceCount++;
           for (const line of salesLines) {
+            if (line.account?.group === 'OUTPUT_VAT') continue;
             salesTotalCredit += Number(line.credit) || 0;
           }
         }
@@ -585,6 +589,12 @@ export const GET = withGuard(
           );
 
           if (salesLines.length === 0) return;
+
+          // Filter out OUTPUT_VAT lines — they are VAT postings, not invoice lines.
+          // If after filtering there are no lines left (e.g. a pure VAT adjustment
+          // entry with only OUTPUT_VAT lines), skip this invoice entirely.
+          const invoiceLines = salesLines.filter(l => l.account?.group !== 'OUTPUT_VAT');
+          if (invoiceLines.length === 0) return;
 
           // Resolve CustomerID: try to match the entry description/reference
           // against a known customer name. If no match, fall back to the
@@ -630,10 +640,12 @@ export const GET = withGuard(
           // [ShippingCostsAmount], TaxInformation.
           // NOTE: Settlement is a child of INVOICE (after all Lines), not of Line.
           salesLines.forEach((line, lineIdx) => {
+            // Use the pre-filtered invoiceLines (OUTPUT_VAT already excluded)
+            // but iterate over the original to maintain index consistency
             if (line.account?.group === 'OUTPUT_VAT') return;
 
             const invLine = invoice.ele('Line');
-            invLine.ele('LineNumber').txt((lineIdx + 1).toString());
+            invLine.ele('LineNumber').txt((invoiceIndex + 1).toString());
             invLine.ele('AccountID').txt(line.account?.number || line.accountId);
             // XSD: GoodsServicesID is mandatory
             invLine.ele('GoodsServicesID').txt(`GS-${lineIdx + 1}`);
