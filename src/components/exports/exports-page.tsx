@@ -1134,6 +1134,16 @@ export function ExportsPage({ user }: ExportsPageProps) {
                                   {language === 'da' ? 'Download .xml' : 'Download .xml'}
                                 </Button>
                               )}
+                              {saftValidation?.hasErrors && (
+                                <Button
+                                  size="sm"
+                                  onClick={downloadSAFT}
+                                  className="h-7 gap-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  {language === 'da' ? 'Download .xml (med fejl)' : 'Download .xml (with errors)'}
+                                </Button>
+                              )}
                             </div>
                           </div>
                           <pre 
@@ -1179,7 +1189,6 @@ export function ExportsPage({ user }: ExportsPageProps) {
                           <Button 
                             onClick={downloadSAFT} 
                             className="btn-gradient text-white gap-2"
-                            disabled={saftValidation?.hasErrors}
                           >
                             <Download className="h-4 w-4" />
                             {t('downloadSAFTFile')}

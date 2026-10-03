@@ -1570,7 +1570,7 @@ export async function seedDemoCompany(demoCompanyId: string, systemUserId: strin
           create: [
             { companyId: demoCompanyId, accountId: ac('6100'), debit: euPurchaseNet, credit: 0, vatCode: 'KEU', description: 'EU-køb — cloud services' },
             { companyId: demoCompanyId, accountId: ac('5410'), debit: euPurchaseVat, credit: 0, vatCode: 'KEU', description: 'Indgående moms (EU-køb)' },
-            { companyId: demoCompanyId, accountId: ac('2000'), debit: 0, credit: euPurchaseNet + euPurchaseVat, vatCode: null, description: 'Leverandørgæld — Stockholm Cloud' },
+            { companyId: demoCompanyId, accountId: ac('2000'), debit: 0, credit: euPurchaseNet, vatCode: null, description: 'Leverandørgæld — Stockholm Cloud' },
             { companyId: demoCompanyId, accountId: ac('4510'), debit: 0, credit: euPurchaseVat, vatCode: 'KEU', description: 'Udgående moms (omvendt betalingspligt)' },
           ],
         },
@@ -1598,7 +1598,7 @@ export async function seedDemoCompany(demoCompanyId: string, systemUserId: strin
           create: [
             { companyId: demoCompanyId, accountId: ac('6100'), debit: importNet, credit: 0, vatCode: 'KUF', description: 'Import — IT-udstyr' },
             { companyId: demoCompanyId, accountId: ac('5410'), debit: importVat, credit: 0, vatCode: 'KUF', description: 'Indgående moms (import)' },
-            { companyId: demoCompanyId, accountId: ac('2000'), debit: 0, credit: importNet + importVat, vatCode: null, description: 'Leverandørgæld — Global Tech Solutions' },
+            { companyId: demoCompanyId, accountId: ac('2000'), debit: 0, credit: importNet, vatCode: null, description: 'Leverandørgæld — Global Tech Solutions' },
             { companyId: demoCompanyId, accountId: ac('4510'), debit: 0, credit: importVat, vatCode: 'KUF', description: 'Udgående moms (import)' },
           ],
         },

@@ -1,0 +1,62 @@
+[
+  {
+    "row": 188,
+    "remark": "Modtagelse af elektroniske fakturaer i OIOUBL-format er fuldt implementeret. Systemet modtager fakturaer både via manuel upload og automatisk via Sproom-webhook. Formatet detekteres automatisk ud fra OIOUBL-versionsidentifikation, og systemet understøtter både almindelige fakturaer (type 380) og kreditnotaer som rodelementer.\n\nModtagne fakturaer gemmes med formatangivelse, dokumenttype og rå XML. Dobbeltmodtagelse forhindres via en unik begrænsning på virksomhed og fakturanummer. Der føres auditlog i overensstemmelse med Bogføringsloven §10-12, og brugergrænsefladen opdateres automatisk ved modtagelse.\n\nTeknisk dokumentation findes i src/lib/invoice-receiver.ts og src/lib/einvoice-parser.ts. NemHandel demo-endepunkter til test er dokumenteret i Bilag 15 (GLN 5798009811639, P 9999999999, CVR 10150817, SE 99999999).\n\nSe Bilag 15."
+  },
+  {
+    "row": 198,
+    "remark": "Kravet er fuldt opfyldt. Kreditnotaer transmitteres som OIOUBL-type 381. Systemet sætter korrekt dokumenttype baseret på dokumentets art — kreditnotaer får type 381, fakturaer får type 380. Det oprindelige fakturanummer inkluderes i kreditnotaen.\n\nDet genererede OIOUBL-dokument anvender CreditNote som rodelement med korrekte linjeelementer og antalsfelter. Forfaldsdato udelades automatisk for kreditnotaer, og der inkluderes en reference til den oprindelige faktura. Dokumentet sendes via Sproom-integrationen.\n\nTeknisk dokumentation findes i src/lib/einvoice-sender.ts og src/lib/oioubl-generator.ts. Alle krav er opfyldt. NemHandel demo-endepunkter for alle fire ID-typer er dokumenteret i Bilag 15."
+  },
+  {
+    "row": 207,
+    "remark": "Modtagelse af kreditnotaer håndteres af samme modtagelsesproces som almindelige fakturaer. Systemet detekterer automatisk, om et modtaget dokument er en kreditnota, og sætter dokumenttypen til 381 uanset eventuelle attributter, da OIOUBL-kreditnotaer ikke benytter en separat typekode.\n\nKreditnotalinjer aflæses korrekt med de tilsvarende antalsfelter. Der genereres advarsler, hvis en forfaldsdato fejlagtigt er angivet på en kreditnota. Ved bogføring af en modtagen kreditnota matcher systemet automatisk en eksisterende faktura fra samme leverandør (via CVR eller navn) med tilsvarende beløb og markerer kreditnotaen som afstemt uden behov for bankafstemning.\n\nTeknisk dokumentation findes i src/lib/einvoice-parser.ts, src/lib/invoice-receiver.ts og src/app/api/invoices/received/[id]/route.ts. NemHandel demo-endepunkter er dokumenteret i Bilag 15."
+  },
+  {
+    "row": 217,
+    "remark": "Når en elektronisk faktura modtages, genererer systemet automatisk et Application Response som UBL 2.1 XML. Svaret indeholder en reference til den modtagne fakturas ID og angiver, om fakturaen er accepteret eller afvist, med danske beskrivelsestekster. Svaret genereres for alle modtagne OIOUBL-fakturaer og gemmes i systemet.\n\nNår brugeren godkender eller afviser en modtaget faktura i indbakken, informerer systemet Sproom, som derefter sender et reelt Application Response tilbage til afsenderen via NemHandel/Peppol-netværket. Dette lukker gap I-7.\n\nTeknisk dokumentation findes i src/lib/einvoice-response.ts, src/lib/invoice-receiver.ts og src/app/api/invoices/received/[id]/route.ts."
+  },
+  {
+    "row": 227,
+    "remark": "Se Bilag 16 Peppol-Integrationsrapport"
+  },
+  {
+    "row": 236,
+    "remark": "Se Bilag 16 Peppol-Integrationsrapport"
+  },
+  {
+    "row": 245,
+    "remark": "Se Bilag 16 Peppol-Integrationsrapport"
+  },
+  {
+    "row": 254,
+    "remark": "Se Bilag 16 Peppol-Integrationsrapport"
+  },
+  {
+    "row": 264,
+    "remark": "For Peppol BIS-modtagne fakturaer og kreditnotaer genererer systemet et Message Level Response som UBL 2.1 XML. Svaret angiver status som OK (ingen fejl) eller ERROR (fortolkningsfejl) med danske beskrivelsestekster. Svaret gemmes i systemet og vises i indbakken.\n\nDette opfylder NemHandel eDelivery-kravet om, at det modtagende adgangspunkt skal returnere en MLR ved schematron-valideringsfejl. Sproom genererer den netværksvendte MLR, mens systemet genererer intern lagring til visning i indbakken. Brugergrænsefladen viser svaret i en udvidelig sektion med statusbetegnelse.\n\nTeknisk dokumentation findes i src/lib/einvoice-response.ts, src/lib/invoice-receiver.ts og einvoice-inbox.tsx."
+  },
+  {
+    "row": 274,
+    "remark": "Et Invoice Response genereres, når en modtagen Peppol BIS-faktura bogføres via indbakken. Bogføring kræver, at der findes mindst én aktiv konto i gruppen for kreditorer og én i gruppen for driftsomkostninger i virksomhedens kontoplan. Kontoplanen administreres via brugergrænsefladen og kan oprettes som standard dansk kontoplan. Kontonavnet inkluderes i Invoice Response-XML'en for hver linje.\n\nInvoice Response genereres som UBL 2.1 XML og understøtter svar per linje: Hver linje i det modtagne dokument får en status (OK eller ERROR) med tilhørende beskrivelse, der angiver, hvilken konto linjen er bogført på. Resultatet gemmes i systemet og vises i indbakken. Dette muliggør, at afsenderen får præcis viden om, hvilke fakturalinjer der er accepteret.\n\nTeknisk dokumentation findes i src/lib/einvoice-response.ts, src/app/api/invoices/received/[id]/route.ts, src/components/chart-of-accounts/chart-of-accounts-page.tsx, src/lib/seed-chart-of-accounts.ts og einvoice-inbox.tsx."
+  },
+  {
+    "row": 284,
+    "remark": "Kravet er opfyldt. CSV-import er fuldt implementeret. Systemet understøtter import af CSV-filer med bankposteringer med automatisk detektering af filformat:\n\n- Automatisk detektion af separator (semikolon, komma eller tabulator)\n- Korrekt håndtering af citationstegn i felter, så beløb som \"−43,94\" og \"4.334,12\" fortolkes korrekt\n- Understøttelse af danske datoformater (DD.MM.ÅÅÅÅ, DD/MM/ÅÅÅÅ, DD-MM-ÅÅÅÅ samt ISO YYYY-MM-DD)\n- Understøttelse af danske talformater med decimalkomma og tusindtalspunktum, herunder negative beløb og beløb med valutaangivelse\n- Automatisk kolonnegenkendelse ud fra overskrifter på dansk og engelsk (dato, tekst, reference, beløb, saldo)\n\nUpload foregår via drag-and-drop med forhåndsvisning, og formatet \"dato, tekst, reference, beløb, saldo\" angives eksplicit. MT940 understøttes også som tilvalg for kunder, der foretrækker dette.\n\nTeknisk dokumentation findes i src/components/bank-reconciliation/bank-reconciliation-page.tsx og src/app/api/bank-reconciliation/route.ts. Både CSV-import (krav 3a) og PSD2 via Tink (krav 3c) er opfyldt. Krav Bilag 2, 3, a er opfyldt."
+  },
+  {
+    "row": 294,
+    "remark": "Kravet er opfyldt via Tink PSD2-integration. Systemet understøtter fem bankudbydere, hvoraf Tink er den fulde PSD2-aggregator, der dækker danske banker. De øvrige bankudbydere (Nordea, Danske Bank og Jyske Bank) kræver fuldmagtsgodkendelse, før transaktioner kan hentes.\n\nAutomatisk synkronisering planlægges pr. bankforbindelse og udføres udelukkende for aktive forbindelser. Synkroniseringsfrekvensen kan sættes til time, daglig eller manuel. Kravet opfyldes dermed via Tink-PSD2-vejen (række 32), der dækker danske banker via PSD2-aggregator. CSV-import (krav 3a) er også implementeret som alternativ metode, så kravet opfyldes via to uafhængige metoder.\n\nTeknisk dokumentation findes i src/lib/bank-providers.ts, src/lib/tink-client.ts, src/app/api/bank-connections/route.ts og prisma/schema.prisma."
+  },
+  {
+    "row": 303,
+    "remark": "Kravet er fuldt implementeret. Systemet indeholder komplet Tink v2 API-integration, der dækker hele PSD2-processen:\n\nSystemet konstruerer en godkendelses-URL med de nødvendige adgangstilladelser (læsning af konti, saldi, transaktioner og legitimationsoplysninger) og landestilling Danmark med dansk sprog. Efter bankgodkendelse veksles koden til et adgangstoken, hvorefter konti og transaktioner hentes med paginering og et sikkerhedsloft på 10.000 transaktioner. Systemet understøtter fornyelse og tilbagekaldelse af legitimationsoplysninger.\n\nTilbagekaldelsesflowet modtager godkendelsen, veksler token, henter konti, krypterer adgangstokenet, og præsenterer brugeren for en kontovalgsside. Frontend håndterer valget og fuldfører tilkoblingen. Udløbne tokens detekteres automatisk, og fornyelse af godkendelse forsøges automatisk ved synkronisering.\n\nBrugergrænsefladen viser en PSD2/SCA-besked om, at bankforbindelse kræver godkendelse via bankens sikre godkendelsesside (SCA — Strong Customer Authentication), hvilket er et krav fra PSD2/EU-lovgivningen. CSV-import (krav 3a) er også implementeret som alternativ metode, så kravet er opfyldt via to uafhængige metoder.\n\nTeknisk dokumentation findes i src/lib/tink-client.ts, src/app/api/bank-connections/tink-callback/route.ts, src/app/api/bank-connections/route.ts og open-banking-section.tsx."
+  },
+  {
+    "row": 313,
+    "remark": "Bekræftet. I systemets standardkontoplan oprettes konto 1100 \"Bankkonto\" med typen aktiv og gruppen BANK som del af den indbyggede kontoplan for nye virksomheder. Konto 3200 \"Bankindestående\" er mappet til FSR-55 konto 1100.\n\nBankafstemningen filtrerer konsekvent på gruppen BANK for at identificere bankkonti: ved import af posteringer, ved fremsøgning af afstemningskandidater, ved AI-match og ved synkronisering via open banking. Brugeren angiver kontonummer ved CSV-import, og ved Tink-synkronisering dannes bankkonto-identifikatoren ud fra registreringsnummer og kontonummer, hvorefter match mod kontoplanen sker via kontonummer. Bankkontoen er dermed repræsenteret i kontoplanen og afstemmes med de indlæste bankposteringer.\n\nTeknisk dokumentation findes i src/lib/seed-chart-of-accounts.ts, src/lib/standard-chart-of-accounts.ts, src/app/api/bank-reconciliation/route.ts, src/app/api/bank-connections/route.ts, src/components/bank-reconciliation/bank-reconciliation-page.tsx og prisma/schema.prisma."
+  },
+  {
+    "row": 323,
+    "remark": "Kravet er implementeret med tydelig visuel differencemærkning. Systemet viser differencer på flere niveauer:\n\n1. Sammenfattende statuskort: Tre farvekodede kort viser \"Matchet\" (grøn) og \"Uafstemt\" (rød med teksten \"Kræver handling\"). Antallet opdateres løbende.\n\n2. Statusmærke pr. postering: Tre tilstande med konsekvent farvekode — \"Matchet\" (grøn) for afstemte posteringer, \"AI-forslag\" (gul) med konfidensprocent og accept/afvis-knapper, og \"Uafstemt\" (rød) for posteringer, der ikke er afstemt.\n\n3. Afstemningsmærke pr. kontoudtog: Viser \"X/Y afstemt\" i grøn (alle matchet), gul (delvist) eller rød (ingen matchet).\n\n4. Match/Aflift-knapper: \"Match\"-knap for uafstemte linjer og \"Aflift\"-knap for afstemte linjer, med bekræftelsesdialog ved afmatchning.\n\n5. Filterbjælke: Brugeren kan filtrere på alle, kun uafstemte eller kun afstemte posteringer.\n\n6. Manuelt match: En dialog præsenterer op til 50 kandidater fra finansjournalen, sorteret efter beløbsnærhed og dato.\n\nEt kontoudtog markeres først som fuldt afstemt, når der ikke længere er uafstemte eller AI-forslagte linjer tilbage.\n\nTeknisk dokumentation findes i src/components/bank-reconciliation/bank-reconciliation-page.tsx, src/app/api/bank-reconciliation/route.ts og prisma/schema.prisma."
+  }
+]
