@@ -78,6 +78,13 @@ const EMAIL_TYPES: EmailType[] = [
     descriptionDa: 'Informerer om ændringer i forretningsbetingelser',
     descriptionEn: 'Notifies about changes to terms of service',
   },
+  {
+    key: 'nemhandel',
+    labelDa: 'NemHandel tilmelding',
+    labelEn: 'NemHandel Enrollment Notice',
+    descriptionDa: 'Information om tilmelding til NemHandelsregisteret (Bilag 2, krav 8/9)',
+    descriptionEn: 'Notice about enrollment in the NemHandel Register (Bilag 2, item 8/9)',
+  },
 ];
 
 // ── Plan definitions ─────────────────────────────────────────────

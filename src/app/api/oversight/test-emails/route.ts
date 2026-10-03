@@ -12,7 +12,7 @@
  *
  *   emails is an array of email type keys, e.g.:
  *     ["welcome", "receipt", "pre-renewal", "pre-billing",
- *      "cancelled", "payment-failed", "terms-change"]
+ *      "cancelled", "payment-failed", "terms-change", "nemhandel"]
  */
 
 import { NextResponse } from 'next/server';
@@ -26,6 +26,7 @@ import {
   sendSubscriptionCancelledEmail,
   sendPaymentFailedEmail,
   sendTermsChangeEmail,
+  sendNemHandelNoticeEmail,
 } from '@/lib/email-service';
 import { generateSequentialInvoiceNumber } from '@/lib/invoice-number';
 import { frontendPlanIdToTier, getBindingMonths, PlanTier } from '@/lib/plan-features';
@@ -181,13 +182,26 @@ async function sendTermsChange(to: string, lang: 'da' | 'en') {
   }, lang);
 }
 
+// NemHandel enrollment notice — Bilag 2, krav 8/9.
+// Plan-agnostic: the email is informational about NemHandelsregisteret
+// enrollment and does not depend on the customer's subscription plan.
+async function sendNemHandel(to: string, lang: 'da' | 'en') {
+  return sendNemHandelNoticeEmail(
+    to,
+    { appUrl: APP_URL, settingsPath: '/settings-edelivery' },
+    lang,
+    undefined,
+    { trigger: 'superdev_test_batch' },
+  );
+}
+
 // ── Map of email type keys to send functions ─────────────────────
 
-type EmailType = 'welcome' | 'receipt' | 'pre-renewal' | 'pre-billing' | 'cancelled' | 'payment-failed' | 'terms-change';
+type EmailType = 'welcome' | 'receipt' | 'pre-renewal' | 'pre-billing' | 'cancelled' | 'payment-failed' | 'terms-change' | 'nemhandel';
 
 const VALID_EMAILS: EmailType[] = [
   'welcome', 'receipt', 'pre-renewal', 'pre-billing',
-  'cancelled', 'payment-failed', 'terms-change',
+  'cancelled', 'payment-failed', 'terms-change', 'nemhandel',
 ];
 
 async function sendTestEmail(
@@ -206,6 +220,7 @@ async function sendTestEmail(
       case 'cancelled':      result = await sendCancelled(to, lang, plan); break;
       case 'payment-failed': result = await sendFailed(to, lang, plan); break;
       case 'terms-change':   result = await sendTermsChange(to, lang); break;
+      case 'nemhandel':      result = await sendNemHandel(to, lang); break;
     }
     return { type, success: result.success, logId: result.logId };
   } catch (err) {
