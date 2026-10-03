@@ -53,7 +53,7 @@ export const POST = withGuard(
 
       // Get existing account numbers for conflict detection
       const existingAccounts = await db.account.findMany({
-        where: { companyId: ctx.activeCompanyId },
+        where: { companyId: ctx.activeCompanyId! },
         select: { number: true },
       });
       const existingAccountNumbers = existingAccounts.map((a) => a.number);
