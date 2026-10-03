@@ -999,160 +999,6 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
         </Card>
       )}
 
-      {/* ═══ AUTOMATIC MODE: NEMHANDELSREGISTERET CARD ═══ */}
-      {deliveryMode === 'automatic' && (
-        <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shrink-0">
-                <Building2 className="h-4 w-4 text-white" />
-              </div>
-              {isDa ? 'NemHandelsregisteret' : 'NemHandelsregisteret'}
-            </CardTitle>
-            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
-              {isDa
-                ? 'Registrering i det danske NemHandelsregister for e-fakturamodtagelse.'
-                : 'Registration in the Danish NemHandel register for e-invoice reception.'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* ── Registration status ── */}
-            <div className={`rounded-xl p-4 border ${
-              nemhandelRegistered
-                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40'
-                : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10'
-            }`}>
-              <div className="flex items-center gap-4">
-                <div className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 ${
-                  nemhandelRegistered
-                    ? 'bg-gradient-to-br from-emerald-500 to-green-500'
-                    : 'bg-gradient-to-br from-gray-400 to-gray-500'
-                }`}>
-                  {nemhandelRegistered ? (
-                    <CheckCircle2 className="h-6 w-6 text-white" />
-                  ) : (
-                    <Building2 className="h-6 w-6 text-white" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {nemhandelRegistered
-                        ? (isDa ? 'Registreret i NemHandelsregisteret' : 'Registered in NemHandelsregisteret')
-                        : (isDa ? 'Ikke registreret' : 'Not registered')
-                      }
-                    </span>
-                    {nemhandelRegistered ? (
-                      <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40 text-xs gap-1">
-                        <CheckCircle2 className="h-3 w-3" />
-                        {isDa ? 'Tilmeldt' : 'Registered'}
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700/40 text-xs gap-1">
-                        <Building2 className="h-3 w-3" />
-                        {isDa ? 'Ikke tilmeldt' : 'Not registered'}
-                      </Badge>
-                    )}
-                  </div>
-                  {nemhandelRegistered && sproomStatus?.lastTestedAt && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {isDa ? 'Senest bekræftet' : 'Last confirmed'}:{' '}
-                      {format(new Date(sproomStatus.lastTestedAt), 'dd.MM.yyyy', { locale })}
-                    </p>
-                  )}
-                  {nemhandelRegistered && sproomStatus?.childCompanyId && (
-                    <p className="text-xs text-muted-foreground">
-                      {isDa ? 'Sproom child' : 'Sproom child'}:{' '}
-                      <span className="font-mono font-medium">{sproomStatus.childCompanyId}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* ── Register button ── */}
-            {!nemhandelRegistered && (
-              <Button
-                onClick={handleNemHandelRegister}
-                disabled={nemhandelLoading || !companyCvr || !sproomStatus?.connected}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2 font-medium transition-all"
-              >
-                {nemhandelLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ExternalLink className="h-4 w-4" />
-                )}
-                {nemhandelLoading
-                  ? (isDa ? 'Tilmelder...' : 'Registering...')
-                  : (isDa ? 'Tilmeld NemHandelsregisteret' : 'Register with NemHandelsregisteret')
-                }
-              </Button>
-            )}
-
-            {/* ── NemHandel info section ── */}
-            <div className="space-y-3">
-              <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 info-box-primary rounded-lg p-3">
-                <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#14b8a6] dark:text-[#99f6e4]" />
-                <div className="space-y-2">
-                  <p className="font-semibold text-gray-700 dark:text-gray-300">
-                    {isDa ? 'Hvad er NemHandel?' : 'What is NemHandel?'}
-                  </p>
-                  <p className="leading-relaxed">
-                    {isDa
-                      ? 'NemHandel er det danske infrastruktur-netværk for elektronisk fakturering (e-faktura). Det er et lovkrav for offentlige institutioner at kunne modtage og sende e-fakturaer via NemHandel-netværket.'
-                      : 'NemHandel is the Danish infrastructure network for electronic invoicing (e-invoice). It is a legal requirement for public institutions to receive and send e-invoices via the NemHandel network.'}
-                  </p>
-                  <p className="leading-relaxed">
-                    {isDa
-                      ? 'For at sende e-fakturaer til offentlige institutioner (stat, regioner, kommuner), skal din virksomhed være tilmeldt NemHandelsregisteret med et gyldigt EndpointID.'
-                      : 'To send e-invoices to public institutions (government, regions, municipalities), your company must be registered in NemHandelsregisteret with a valid EndpointID.'}
-                  </p>
-                  <div className="flex flex-col gap-1 pt-1">
-                    <p className="font-medium text-gray-700 dark:text-gray-300">
-                      {isDa ? 'Hvorfor er det påkrævet?' : 'Why is it required?'}
-                    </p>
-                    <ul className="list-disc list-inside space-y-0.5">
-                      <li>
-                        {isDa
-                          ? 'Lovkrav ifølge bogføringsloven og Kravbekendtgørelsen (BEK nr. 97 af 2023)'
-                          : 'Legal requirement per the Danish Bookkeeping Act and the Requirements Executive Order (BEK 97 of 2023)'}
-                      </li>
-                      <li>
-                        {isDa
-                          ? 'NemHandel-registrering og Peppol-registrering kræves for at sende og modtage e-fakturaer'
-                          : 'NemHandel registration and Peppol registration are required to send and receive e-invoices'}
-                      </li>
-                      <li>
-                        {isDa
-                          ? 'Giver adgang til at sende fakturaer til alle offentlige institutioner i Danmark'
-                          : 'Provides access to send invoices to all public institutions in Denmark'}
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* External link */}
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <FileText className="h-3.5 w-3.5 shrink-0" />
-                <span>
-                  {isDa ? 'Læs mere på' : 'Read more at'}{' '}
-                  <a
-                    href="https://digst.dk/it-loesninger/nemhandel/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[#0d9488] hover:underline dark:text-[#99f6e4]"
-                  >
-                    digst.dk/nemhandel
-                    <ExternalLink className="h-3 w-3 inline ml-0.5" />
-                  </a>
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* ═══ AUTOMATIC MODE: SPROOM ACCESS POINT CARD ═══ */}
       {/* Shown whenever the user selects Automatic delivery mode. Sproom is
           AlphaFlow's only Access Point — supports both Peppol and NemHandel. */}
@@ -1581,6 +1427,160 @@ export function EInvoiceSettings({ user }: EInvoiceSettingsProps) {
                     {isDa ? 'API-dokumentation' : 'API Documentation'}
                   </a>
                 </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ═══ AUTOMATIC MODE: NEMHANDELSREGISTERET CARD ═══ */}
+      {deliveryMode === 'automatic' && (
+        <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center shrink-0">
+                <Building2 className="h-4 w-4 text-white" />
+              </div>
+              {isDa ? 'NemHandelsregisteret' : 'NemHandelsregisteret'}
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400">
+              {isDa
+                ? 'Registrering i det danske NemHandelsregister for e-fakturamodtagelse.'
+                : 'Registration in the Danish NemHandel register for e-invoice reception.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* ── Registration status ── */}
+            <div className={`rounded-xl p-4 border ${
+              nemhandelRegistered
+                ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40'
+                : 'bg-gray-50 dark:bg-white/5 border-gray-200 dark:border-white/10'
+            }`}>
+              <div className="flex items-center gap-4">
+                <div className={`h-12 w-12 rounded-xl flex items-center justify-center shrink-0 ${
+                  nemhandelRegistered
+                    ? 'bg-gradient-to-br from-emerald-500 to-green-500'
+                    : 'bg-gradient-to-br from-gray-400 to-gray-500'
+                }`}>
+                  {nemhandelRegistered ? (
+                    <CheckCircle2 className="h-6 w-6 text-white" />
+                  ) : (
+                    <Building2 className="h-6 w-6 text-white" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                      {nemhandelRegistered
+                        ? (isDa ? 'Registreret i NemHandelsregisteret' : 'Registered in NemHandelsregisteret')
+                        : (isDa ? 'Ikke registreret' : 'Not registered')
+                      }
+                    </span>
+                    {nemhandelRegistered ? (
+                      <Badge className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800/40 text-xs gap-1">
+                        <CheckCircle2 className="h-3 w-3" />
+                        {isDa ? 'Tilmeldt' : 'Registered'}
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700/40 text-xs gap-1">
+                        <Building2 className="h-3 w-3" />
+                        {isDa ? 'Ikke tilmeldt' : 'Not registered'}
+                      </Badge>
+                    )}
+                  </div>
+                  {nemhandelRegistered && sproomStatus?.lastTestedAt && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {isDa ? 'Senest bekræftet' : 'Last confirmed'}:{' '}
+                      {format(new Date(sproomStatus.lastTestedAt), 'dd.MM.yyyy', { locale })}
+                    </p>
+                  )}
+                  {nemhandelRegistered && sproomStatus?.childCompanyId && (
+                    <p className="text-xs text-muted-foreground">
+                      {isDa ? 'Sproom child' : 'Sproom child'}:{' '}
+                      <span className="font-mono font-medium">{sproomStatus.childCompanyId}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── Register button ── */}
+            {!nemhandelRegistered && (
+              <Button
+                onClick={handleNemHandelRegister}
+                disabled={nemhandelLoading || !companyCvr || !sproomStatus?.connected}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2 font-medium transition-all"
+              >
+                {nemhandelLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-4 w-4" />
+                )}
+                {nemhandelLoading
+                  ? (isDa ? 'Tilmelder...' : 'Registering...')
+                  : (isDa ? 'Tilmeld NemHandelsregisteret' : 'Register with NemHandelsregisteret')
+                }
+              </Button>
+            )}
+
+            {/* ── NemHandel info section ── */}
+            <div className="space-y-3">
+              <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 info-box-primary rounded-lg p-3">
+                <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#14b8a6] dark:text-[#99f6e4]" />
+                <div className="space-y-2">
+                  <p className="font-semibold text-gray-700 dark:text-gray-300">
+                    {isDa ? 'Hvad er NemHandel?' : 'What is NemHandel?'}
+                  </p>
+                  <p className="leading-relaxed">
+                    {isDa
+                      ? 'NemHandel er det danske infrastruktur-netværk for elektronisk fakturering (e-faktura). Det er et lovkrav for offentlige institutioner at kunne modtage og sende e-fakturaer via NemHandel-netværket.'
+                      : 'NemHandel is the Danish infrastructure network for electronic invoicing (e-invoice). It is a legal requirement for public institutions to receive and send e-invoices via the NemHandel network.'}
+                  </p>
+                  <p className="leading-relaxed">
+                    {isDa
+                      ? 'For at sende e-fakturaer til offentlige institutioner (stat, regioner, kommuner), skal din virksomhed være tilmeldt NemHandelsregisteret med et gyldigt EndpointID.'
+                      : 'To send e-invoices to public institutions (government, regions, municipalities), your company must be registered in NemHandelsregisteret with a valid EndpointID.'}
+                  </p>
+                  <div className="flex flex-col gap-1 pt-1">
+                    <p className="font-medium text-gray-700 dark:text-gray-300">
+                      {isDa ? 'Hvorfor er det påkrævet?' : 'Why is it required?'}
+                    </p>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      <li>
+                        {isDa
+                          ? 'Lovkrav ifølge bogføringsloven og Kravbekendtgørelsen (BEK nr. 97 af 2023)'
+                          : 'Legal requirement per the Danish Bookkeeping Act and the Requirements Executive Order (BEK 97 of 2023)'}
+                      </li>
+                      <li>
+                        {isDa
+                          ? 'NemHandel-registrering og Peppol-registrering kræves for at sende og modtage e-fakturaer'
+                          : 'NemHandel registration and Peppol registration are required to send and receive e-invoices'}
+                      </li>
+                      <li>
+                        {isDa
+                          ? 'Giver adgang til at sende fakturaer til alle offentlige institutioner i Danmark'
+                          : 'Provides access to send invoices to all public institutions in Denmark'}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* External link */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {isDa ? 'Læs mere på' : 'Read more at'}{' '}
+                  <a
+                    href="https://digst.dk/it-loesninger/nemhandel/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[#0d9488] hover:underline dark:text-[#99f6e4]"
+                  >
+                    digst.dk/nemhandel
+                    <ExternalLink className="h-3 w-3 inline ml-0.5" />
+                  </a>
+                </span>
               </div>
             </div>
           </CardContent>
