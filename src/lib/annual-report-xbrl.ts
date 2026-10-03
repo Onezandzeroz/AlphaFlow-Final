@@ -90,7 +90,7 @@ const TAXONOMY_ELEMENTS: Record<string, { local: string; label: string }> = {
   cash: { local: 'CashAndCashEquivalents', label: 'Likvide beholdninger' },
   receivables: { local: 'TradeReceivables', label: 'Tilgodehavender' },
   inventory: { local: 'Inventories', label: 'Varelager' },
-  fixedAssets: { local: 'TangibleFixedAssets', label: 'Tangible fixed assets' },
+  fixedAssets: { local: 'TangibleFixedAssets', label: 'Materielle anlægsaktiver' },
   payables: { local: 'TradePayables', label: 'Kreditorer' },
   shortTermDebt: { local: 'ShortTermBorrowings', label: 'Kortfristet gæld' },
   longTermDebt: { local: 'LongTermBorrowings', label: 'Langfristet gæld' },
@@ -178,7 +178,7 @@ export async function generateAnnualReportXBRL(
   const context1 = hiddenResources.ele('xbrli:context', { id: 'c1' });
   const entity = context1.ele('xbrli:entity');
   entity.ele('xbrli:identifier', {
-    scheme: 'http://standards.iso.org/iso/17442',
+    scheme: 'http://cvr.dk',
   }).txt(cvrNumber.length === 8 ? `0${cvrNumber}` : cvrNumber);
   context1.ele('xbrli:period')
     .ele('xbrli:instant').txt(yearEndStr);
@@ -186,7 +186,7 @@ export async function generateAnnualReportXBRL(
   const context2 = hiddenResources.ele('xbrli:context', { id: 'c2' });
   const entity2 = context2.ele('xbrli:entity');
   entity2.ele('xbrli:identifier', {
-    scheme: 'http://standards.iso.org/iso/17442',
+    scheme: 'http://cvr.dk',
   }).txt(cvrNumber.length === 8 ? `0${cvrNumber}` : cvrNumber);
   const period2 = context2.ele('xbrli:period');
   period2.ele('xbrli:startDate').txt(yearStartStr);
@@ -416,9 +416,15 @@ function buildFinancialData(
       case AccountGroup.OTHER_ASSETS:
         fixedAssets += acc.netBalance;
         break;
+      case AccountGroup.INPUT_VAT:
+        cash += acc.netBalance; // Input VAT is a current asset — group with cash/equivalents
+        break;
       case AccountGroup.PAYABLES:
       case AccountGroup.OTHER_LIABILITIES:
         payables += acc.netBalance;
+        break;
+      case AccountGroup.OUTPUT_VAT:
+        payables += acc.netBalance; // Output VAT is a current liability — group with payables
         break;
       case AccountGroup.SHORT_TERM_DEBT:
         shortTermDebt += acc.netBalance;
@@ -447,9 +453,13 @@ function buildFinancialData(
   shareCapital = r2(shareCapital);
   retainedEarnings = r2(retainedEarnings);
 
+  // Inject current-year net result into equity if year hasn't been closed
+  // (account 3300 will be 0, so retainedEarnings doesn't include current year)
+  const adjustedRetainedEarnings = r2(retainedEarnings + netResult);
+
   const totalAssets = r2(cash + receivables + inventory + fixedAssets);
   const totalLiabilities = r2(payables + shortTermDebt + longTermDebt);
-  const totalEquity = r2(shareCapital + retainedEarnings);
+  const totalEquity = r2(shareCapital + adjustedRetainedEarnings);
 
   return {
     revenue,
@@ -474,6 +484,6 @@ function buildFinancialData(
     shortTermDebt,
     longTermDebt,
     shareCapital,
-    retainedEarnings,
+    retainedEarnings: adjustedRetainedEarnings,
   };
 }

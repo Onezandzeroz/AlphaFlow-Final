@@ -113,6 +113,7 @@ const ASSET_GROUPS: AccountGroup[] = [
   AccountGroup.INVENTORY,
   AccountGroup.FIXED_ASSETS,
   AccountGroup.OTHER_ASSETS,
+  AccountGroup.INPUT_VAT,
 ];
 
 const LIABILITY_GROUPS: AccountGroup[] = [
@@ -120,6 +121,7 @@ const LIABILITY_GROUPS: AccountGroup[] = [
   AccountGroup.SHORT_TERM_DEBT,
   AccountGroup.LONG_TERM_DEBT,
   AccountGroup.OTHER_LIABILITIES,
+  AccountGroup.OUTPUT_VAT,
 ];
 
 const EQUITY_GROUPS: AccountGroup[] = [
@@ -287,6 +289,14 @@ export async function generateAnnualReportCSV(
 
   const balanceSheet = buildBalanceSheet(allTimeAccountMap);
 
+  // Fix: If account 3300 (Årets resultat) is 0 because the year hasn't been closed yet,
+  // inject the income statement's net result into equity so the balance sheet balances.
+  // This mirrors what a year-end closing entry would do (close P&L accounts → 3300).
+  const currentYearNetResult = incomeStatement.netResult;
+  const adjustedTotalEquity = r2(balanceSheet.totalEquity + currentYearNetResult);
+  balanceSheet.totalEquity = adjustedTotalEquity;
+  balanceSheet.details.retainedEarnings = r2(balanceSheet.details.retainedEarnings + currentYearNetResult);
+
   // Build equity statement
   const equityStatement = buildEquityStatement(
     balanceSheet,
@@ -360,7 +370,7 @@ export async function generateAnnualReportCSV(
   lines.push('RESULTATOPGØRELSE (Indkomstopgørelse)');
   lines.push('');
 
-  lines.push('I  Nettoomsætning');
+  lines.push(`I  Nettoomsætning;${fmt(incomeStatement.details.salesRevenue)}`);
   lines.push(`II Øvrige indtægter;${fmt(incomeStatement.details.otherRevenue)}`);
   lines.push(`   Samlet omsætning (I+II);${fmt(incomeStatement.details.salesRevenue + incomeStatement.details.otherRevenue)}`);
   lines.push('');
@@ -528,10 +538,12 @@ function buildBalanceSheet(accountMap: Map<string, AccountAggregate>): BalanceSh
   let inventory = 0;
   let fixedAssets = 0;
   let otherAssets = 0;
+  let inputVat = 0;
   let payables = 0;
   let shortTermDebt = 0;
   let longTermDebt = 0;
   let otherLiabilities = 0;
+  let outputVat = 0;
   let shareCapital = 0;
   let retainedEarnings = 0;
 
@@ -557,6 +569,9 @@ function buildBalanceSheet(accountMap: Map<string, AccountAggregate>): BalanceSh
       case AccountGroup.OTHER_ASSETS:
         otherAssets += net;
         break;
+      case AccountGroup.INPUT_VAT:
+        inputVat += net;
+        break;
       case AccountGroup.PAYABLES:
         payables += net;
         break;
@@ -569,6 +584,9 @@ function buildBalanceSheet(accountMap: Map<string, AccountAggregate>): BalanceSh
       case AccountGroup.OTHER_LIABILITIES:
         otherLiabilities += net;
         break;
+      case AccountGroup.OUTPUT_VAT:
+        outputVat += net;
+        break;
       case AccountGroup.SHARE_CAPITAL:
         shareCapital += net;
         break;
@@ -580,8 +598,8 @@ function buildBalanceSheet(accountMap: Map<string, AccountAggregate>): BalanceSh
     }
   }
 
-  const totalAssets = r2(cash + bank + receivables + inventory + fixedAssets + otherAssets);
-  const totalLiabilities = r2(payables + shortTermDebt + longTermDebt + otherLiabilities);
+  const totalAssets = r2(cash + bank + receivables + inventory + fixedAssets + otherAssets + inputVat);
+  const totalLiabilities = r2(payables + shortTermDebt + longTermDebt + otherLiabilities + outputVat);
   const totalEquity = r2(shareCapital + retainedEarnings);
 
   return {
