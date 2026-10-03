@@ -46,6 +46,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { EmailVerificationBanner } from '@/components/auth/email-verification-banner';
+import { NemHandelGlobalBanner } from '@/components/layout/nemhandel-global-banner';
 import {
   LogOut,
   Menu,
@@ -786,6 +787,17 @@ export function AppLayout({
 
       {/* Main Content */}
       <main className="lg:pl-[260px] pt-16 lg:pt-0 pb-16 lg:pb-0">
+        {/* NemHandel registration notice — global floating semi-transparent banner.
+            Always visible across all authenticated views (Erhvervsstyrelsen
+            compliance, Bilag 2 krav 8/9). forceVisible on the settings-edelivery
+            view overrides the 30-day dismissal cooldown so the banner always shows
+            on the actual e-invoice settings page. */}
+        <NemHandelGlobalBanner
+          companyId={user.activeCompanyId}
+          forceVisible={currentView === 'settings-edelivery'}
+          onNavigate={(view) => onViewChange(view as View)}
+        />
+
         {/* Oversight Mode Banner — desktop only */}
         {user.isOversightMode && (
           <div className="hidden lg:flex bg-amber-500 dark:bg-amber-600 text-white px-4 py-2 items-center justify-between gap-3 text-sm">
