@@ -316,8 +316,8 @@ export const POST = withGuard(
       });
 
       // Notify data change
-      notifyDataChange({ scope: 'accounts', companyId: ctx.activeCompanyId!, action: 'import' }).catch(() => {});
-      notifyDataChange({ scope: 'journal-entries', companyId: ctx.activeCompanyId!, action: 'import' }).catch(() => {});
+      notifyDataChange({ scope: 'accounts', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
+      notifyDataChange({ scope: 'journal-entries', companyId: ctx.activeCompanyId!, action: 'create' }).catch(() => {});
 
       logger.info(`[Import-SAF-T] Import complete: ${result.accounts} accounts, ${result.journalEntries} entries, ${result.journalEntryLines} lines`);
 
