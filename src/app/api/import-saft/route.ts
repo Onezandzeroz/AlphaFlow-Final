@@ -311,7 +311,7 @@ export const POST = withGuard(
         entityId: ctx.activeCompanyId!,
         userId: ctx.id,
         companyId: ctx.activeCompanyId!,
-        changes: { type: 'saft_import', source: file.name },
+        changes: { type: { old: null, new: 'saft_import' }, source: { old: null, new: file.name } },
         metadata: { ...result, source: 'import-saft' },
       });
 
