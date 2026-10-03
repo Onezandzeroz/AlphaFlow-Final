@@ -70,6 +70,7 @@ import {
   ArrowRightLeft,
   Info,
   RotateCcw,
+  Lightbulb,
 } from 'lucide-react';
 import { useDataVersion } from '@/hooks/use-data-version';
 import { useDraftSync } from '@/hooks/use-draft-sync';
@@ -1573,6 +1574,21 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                             ))}
                           </SelectContent>
                         </Select>
+                        {/* Konteringsvejledning — vises når kontoen har en postingGuide */}
+                        {(() => {
+                          const selectedAccount = accounts.find(a => a.id === line.accountId);
+                          if (selectedAccount?.postingGuide) {
+                            return (
+                              <div className="mt-1 px-2 py-1.5 rounded-md bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800/30 flex items-start gap-1.5">
+                                <Lightbulb className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
+                                <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-tight">
+                                  {selectedAccount.postingGuide}
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
 
                       {/* Debit */}

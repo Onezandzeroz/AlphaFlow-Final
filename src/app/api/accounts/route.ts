@@ -52,7 +52,7 @@ export const POST = withGuard({
 }, async (request: NextRequest, ctx) => {
   try {
     const body = await request.json();
-    const { number, name, nameEn, type, group, description } = body;
+    const { number, name, nameEn, type, group, description, postingGuide } = body;
 
     if (!number || !name || !type || !group) {
       return NextResponse.json(
@@ -94,6 +94,7 @@ export const POST = withGuard({
         type,
         group,
         description: description || null,
+        postingGuide: postingGuide || null,
         userId: ctx.id,
         companyId: ctx.activeCompanyId!,
       },
@@ -103,7 +104,7 @@ export const POST = withGuard({
       ctx.id,
       'Account',
       account.id,
-      { number, name, nameEn, type, group, description },
+      { number, name, nameEn, type, group, description, postingGuide },
       requestMetadata(request),
       ctx.activeCompanyId
     );

@@ -401,6 +401,12 @@ export const routeConfig: RouteConfigMap = {
   '/api/import-tenant': {
     POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BACKUP_RESTORE] },
   },
+  '/api/import-saft': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BACKUP_RESTORE] },
+  },
+  '/api/import-saft/dry-run': {
+    POST: { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.BACKUP_RESTORE] },
+  },
 
   // ═══════════════════════════════════════════════════════════
   // COMPANY & MEMBERSHIP ROUTES
