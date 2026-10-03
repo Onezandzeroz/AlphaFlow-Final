@@ -52,6 +52,9 @@ import {
   FileText,
   Download,
   ChevronDown,
+  ExternalLink,
+  FileCheck,
+  Info,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { da } from 'date-fns/locale';
@@ -75,6 +78,10 @@ interface VATSubmission {
   status: VATSubmissionStatus;
   submittedDate: string | null;
   reference: string | null;
+  deepLink?: string | null;
+  advisoryCode?: string | null;
+  errorMessage?: string | null;
+  errorCode?: string | null;
 }
 
 interface PnLData {
@@ -132,6 +139,10 @@ function mapVATSubmission(raw: Record<string, unknown>): VATSubmission {
     status: raw.status as VATSubmissionStatus,
     submittedDate: raw.submittedAt ? String(raw.submittedAt) : (raw.submittedDate as string | null ?? null),
     reference: (raw.referenceId ?? raw.reference ?? null) as string | null,
+    deepLink: (raw.deepLink ?? null) as string | null,
+    advisoryCode: (raw.advisoryCode ?? null) as string | null,
+    errorMessage: (raw.errorMessage ?? null) as string | null,
+    errorCode: (raw.errorCode ?? null) as string | null,
   };
 }
 
@@ -224,6 +235,8 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
   } | null>(null);
   const [isSubmittingVAT, setIsSubmittingVAT] = useState(false);
   const [isLoadingVAT, setIsLoadingVAT] = useState(true);
+  const [fetchingReceiptFor, setFetchingReceiptFor] = useState<string | null>(null);
+  const [lastSubmissionResult, setLastSubmissionResult] = useState<VATSubmission | null>(null);
 
   // ─── History state ───
   const [historyEntries, setHistoryEntries] = useState<YearReportEntry[]>([]);
@@ -575,6 +588,8 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
       }
 
       const data = await response.json();
+      const submission = data.submission || data;
+      setLastSubmissionResult(mapVATSubmission(submission));
       toast.success(
         language === 'da' ? 'Momsopgørelse indsendt' : 'VAT report submitted',
         {
@@ -598,6 +613,66 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
       setIsSubmittingVAT(false);
     }
   }, [selectedYear, selectedPeriod, language, fetchVATSubmissions]);
+
+  // ─── Fetch VAT receipt (after user approves in TastSelv) ───
+  const handleFetchReceipt = useCallback(async (submissionId: string) => {
+    setFetchingReceiptFor(submissionId);
+    try {
+      const response = await fetch('/api/vat-report/receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to fetch receipt');
+      }
+
+      const data = await response.json();
+      const updated = data.submission;
+
+      if (updated?.status === 'ACCEPTED') {
+        toast.success(
+          language === 'da' ? 'Kvittering modtaget' : 'Receipt received',
+          {
+            description: language === 'da'
+              ? 'Momsangivelsen er godkendt og kvitteringen er tilgængelig'
+              : 'VAT return approved and receipt is available',
+          },
+        );
+      } else if (updated?.errorCode === '4810') {
+        toast.info(
+          language === 'da' ? 'Afventer godkendelse' : 'Awaiting approval',
+          {
+            description: language === 'da'
+              ? 'Du skal først godkende momsangivelsen i TastSelv Erhverv med MitID'
+              : 'You must first approve the VAT return in TastSelv Erhverv with MitID',
+          },
+        );
+      } else if (updated?.status === 'REJECTED') {
+        toast.error(
+          language === 'da' ? 'Momsangivelse afvist' : 'VAT return rejected',
+          {
+            description: updated?.errorMessage || (language === 'da' ? 'Angivelsen blev afvist' : 'Return was rejected'),
+          },
+        );
+      }
+
+      // Refresh submissions list
+      fetchVATSubmissions(selectedYear);
+    } catch (error) {
+      console.error('Receipt fetch failed:', error);
+      toast.error(
+        language === 'da' ? 'Kunne ikke hente kvittering' : 'Failed to fetch receipt',
+        {
+          description: error instanceof Error ? error.message : undefined,
+        },
+      );
+    } finally {
+      setFetchingReceiptFor(null);
+    }
+  }, [language, fetchVATSubmissions, selectedYear]);
 
   // ─── Period label helper ───
   const getPeriodLabel = useCallback((period: string) => {
@@ -1002,6 +1077,9 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                         <TableHead className="py-2.5 px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 hidden md:table-cell">
                           {language === 'da' ? 'Reference' : 'Reference'}
                         </TableHead>
+                        <TableHead className="py-2.5 px-3 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                          {language === 'da' ? 'Handlinger' : 'Actions'}
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1036,6 +1114,56 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                           <TableCell className="py-2.5 px-3 text-sm text-gray-500 dark:text-gray-400 font-mono hidden md:table-cell">
                             {sub.reference || '—'}
                           </TableCell>
+                          <TableCell className="py-2.5 px-3">
+                            <div className="flex items-center gap-2">
+                              {/* Advisory code badge */}
+                              {sub.advisoryCode && (
+                                <Badge variant="outline" className="text-[9px] font-mono bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800/30">
+                                  {sub.advisoryCode === '5001'
+                                    ? (language === 'da' ? 'Ordinær' : 'Ordinary')
+                                    : sub.advisoryCode === '5002'
+                                      ? (language === 'da' ? 'Efterangivelse' : 'Subsequent')
+                                      : sub.advisoryCode}
+                                </Badge>
+                              )}
+                              {/* Deep link button — for SUBMITTED status */}
+                              {sub.status === 'SUBMITTED' && sub.deepLink && (
+                                <a
+                                  href={sub.deepLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4] font-medium transition-colors"
+                                  title={language === 'da' ? 'Godkend i TastSelv Erhverv med MitID' : 'Approve in TastSelv Erhverv with MitID'}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  {language === 'da' ? 'Godkend (MitID)' : 'Approve (MitID)'}
+                                </a>
+                              )}
+                              {/* Fetch receipt button — for SUBMITTED status */}
+                              {sub.status === 'SUBMITTED' && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-xs gap-1"
+                                  disabled={fetchingReceiptFor === sub.id}
+                                  onClick={() => handleFetchReceipt(sub.id)}
+                                >
+                                  {fetchingReceiptFor === sub.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <FileCheck className="h-3 w-3" />
+                                  )}
+                                  {language === 'da' ? 'Kvittering' : 'Receipt'}
+                                </Button>
+                              )}
+                              {/* Error message tooltip */}
+                              {sub.status === 'ERROR' && sub.errorMessage && (
+                                <span className="text-xs text-red-500 dark:text-red-400" title={sub.errorMessage}>
+                                  <Info className="h-3 w-3" />
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -1053,6 +1181,47 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
               )}
             </CardContent>
           </Card>
+
+          {/* ═══ Deep Link Banner (shown after successful submission) ═══ */}
+          {lastSubmissionResult?.status === 'SUBMITTED' && lastSubmissionResult?.deepLink && (
+            <Card className="stat-card border-[#0d9488]/30 bg-[#0d9488]/5 dark:bg-[#0d9488]/10">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-[#0d9488]/15 flex items-center justify-center shrink-0">
+                    <ExternalLink className="h-5 w-5 text-[#0d9488]" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                      {language === 'da' ? 'Godkend momsangivelsen i TastSelv Erhverv' : 'Approve VAT return in TastSelv Erhverv'}
+                    </h4>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                      {language === 'da'
+                        ? 'Momsangivelsen er indsendt som udkast til Skattestyrelsen. For at fuldføre indberetningen skal du godkende tallene i TastSelv Erhverv med MitID.'
+                        : 'The VAT return has been submitted as a draft to the Tax Authority. To complete the filing, you must approve the figures in TastSelv Erhverv with MitID.'}
+                    </p>
+                    {lastSubmissionResult.advisoryCode && (
+                      <Badge variant="outline" className="text-[9px] font-mono mb-2 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800/30">
+                        {lastSubmissionResult.advisoryCode === '5001'
+                          ? (language === 'da' ? 'Ordinær angivelse' : 'Ordinary return')
+                          : lastSubmissionResult.advisoryCode === '5002'
+                            ? (language === 'da' ? 'Efterangivelse' : 'Subsequent return')
+                            : lastSubmissionResult.advisoryCode}
+                      </Badge>
+                    )}
+                    <a
+                      href={lastSubmissionResult.deepLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0d9488] hover:bg-[#0d7c66] text-white text-sm font-medium transition-colors"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {language === 'da' ? 'Gå til TastSelv Erhverv' : 'Go to TastSelv Erhverv'}
+                    </a>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* ═══ Moms pr. sats (VAT Breakdown Tables) — flyttet fra Momsafregning ═══ */}
           <Card className="stat-card card-hover-lift">
