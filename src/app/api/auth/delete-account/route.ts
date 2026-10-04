@@ -150,7 +150,7 @@ export const DELETE = withGuard({
     // account manually if the email never arrives.
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
     const reactivationUrl = `${appUrl}/login?reactivate=${reactivationToken}`;
-    sendAccountDeactivatedEmail(userEmail, reactivationUrl, 'da', ctx.activeCompanyId).catch((emailErr) => {
+    sendAccountDeactivatedEmail(userEmail, reactivationUrl, 'da', ctx.activeCompanyId ?? undefined).catch((emailErr) => {
       logger.warn(`[DEACTIVATE_ACCOUNT] Failed to send reactivation email to ${userEmail} (account ${userId} is still deactivated; token is stored for manual recovery):`, emailErr);
     });
 
