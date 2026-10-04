@@ -6,6 +6,7 @@ import { tokenpayClient, getAccessLevelLabel, getAccessLevelDescription, type Ac
 import { User } from '@/lib/auth-store';
 import { TwoFactorSettings } from '@/components/settings/two-factor-settings';
 import { ProviderSwitchChecklist } from '@/components/exports/provider-switch-checklist';
+import { SaftImportSection } from '@/components/exports/saft-import-section';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   ShieldX,
   Upload,
+  Download,
   FileKey2,
   CheckCircle2,
   XCircle,
@@ -726,6 +728,25 @@ export function AccessSettings({ userId, user }: AccessSettingsProps) {
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-2">
           <ProviderSwitchChecklist user={user} />
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* ═══ IMPORT FROM ANOTHER PROVIDER (collapsible) ═══ */}
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between mt-2 mb-1 border-amber-300 dark:border-amber-700/50 bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/40"
+          >
+            <span className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+              <Download className="h-4 w-4" />
+              {language === 'da' ? 'Import fra anden udbyder' : 'Import from another provider'}
+            </span>
+            <ChevronDown className="h-4 w-4 text-amber-600 dark:text-amber-400 transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-2">
+          <SaftImportSection />
         </CollapsibleContent>
       </Collapsible>
     </div>

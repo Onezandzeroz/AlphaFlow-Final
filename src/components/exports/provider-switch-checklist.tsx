@@ -21,7 +21,6 @@ import {
   Shield,
   Clock,
 } from 'lucide-react';
-import { SaftImportSection } from '@/components/exports/saft-import-section';
 
 interface ExportInfoData {
   totalExports: number;
@@ -275,16 +274,6 @@ export function ProviderSwitchChecklist({ user }: ProviderSwitchChecklistProps) 
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* ── Import section (switching TO AlphaFlow) ──
-              Expandable section for importing company data from a SAF-T XML
-              file produced by another bogføringssystem. This is the
-              complementary flow to the export below. */}
-          <div className="rounded-xl border border-[#0d9488]/20 dark:border-[#14b8a6]/15 bg-[#f0fdfa]/50 dark:bg-[#0d9488]/5 p-3">
-            <SaftImportSection />
-          </div>
-
-          <Separator />
-
           {/* Progress */}
           <div className="flex items-center gap-3">
             <div className="flex-1 bg-gray-100 dark:bg-white/5 rounded-full h-2 overflow-hidden">
