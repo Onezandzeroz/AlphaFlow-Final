@@ -260,11 +260,16 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
       }
 
       if (bsRes.ok) {
+        // The balance-sheet API returns a nested object:
+        //   { assets: { totalAssets }, liabilities: { totalLiabilities },
+        //     equity: { totalEquity }, totalLiabilitiesAndEquity, balanced }
+        // Read the nested paths — reading flat props (bs.totalAssets etc.) returns
+        // undefined→0, which is why the Balance (resumé) previously showed zeros.
         const bs = await bsRes.json();
         setBalanceData({
-          totalAssets: bs.totalAssets ?? 0,
-          totalLiabilities: bs.totalLiabilities ?? 0,
-          equity: bs.equity ?? bs.totalEquity ?? 0,
+          totalAssets: bs?.assets?.totalAssets ?? 0,
+          totalLiabilities: bs?.liabilities?.totalLiabilities ?? 0,
+          equity: bs?.equity?.totalEquity ?? 0,
         });
       }
     } catch (error) {
@@ -359,7 +364,8 @@ export function AnnualReportPage({ user }: AnnualReportPageProps) {
           ]);
 
           let resolvedBs: BalanceSheetData | null = null;
-          if (bsRes.ok) { const d = await bsRes.json(); resolvedBs = { totalAssets: d.totalAssets ?? 0, totalLiabilities: d.totalLiabilities ?? 0, equity: d.equity ?? d.totalEquity ?? 0 }; }
+          // Read nested paths (see fetchFinancialData for the API shape explanation).
+          if (bsRes.ok) { const d = await bsRes.json(); resolvedBs = { totalAssets: d?.assets?.totalAssets ?? 0, totalLiabilities: d?.liabilities?.totalLiabilities ?? 0, equity: d?.equity?.totalEquity ?? 0 }; }
 
           let yeClosed = false;
           if (yeRes.ok) { const yeData = await yeRes.json(); yeClosed = yeData?.isClosed ?? false; }
