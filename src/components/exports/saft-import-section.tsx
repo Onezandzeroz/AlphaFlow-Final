@@ -514,8 +514,8 @@ export function SaftImportSection() {
                       </p>
                       <p className="mt-0.5">
                         {isDa
-                          ? 'Import erstatter eksisterende data i virksomheden. Dette er kun tilladt i en virksomhed uden bogførte data — jf. Bogføringsloven §10-12.'
-                          : 'Import replaces existing data in the tenant. This is only permitted in a tenant with no booked data — per the Danish Bookkeeping Act §10-12.'}
+                          ? 'Import erstatter eksisterende data i virksomheden. Dette tillades kun i en ny Tenant uden bogført data — jf. Bogføringsloven §10-12.'
+                          : 'Import replaces existing data in the tenant. This is only permitted in a new Tenant without booked data — per the Danish Bookkeeping Act §10-12.'}
                       </p>
                     </div>
                   </div>
