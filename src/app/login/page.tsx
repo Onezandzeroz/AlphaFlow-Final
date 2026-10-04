@@ -11,6 +11,7 @@ import { LoginForm } from '@/components/auth/login-form';
 import { RegisterForm } from '@/components/auth/register-form';
 import { VerifyEmailScreen } from '@/components/auth/verify-email-screen';
 import { ResetPasswordForm } from '@/components/auth/reset-password-form';
+import { ReactivationScreen } from '@/components/auth/reactivation-screen';
 import { useHydrated } from '@/lib/use-hydrated';
 import { AppLayout } from '@/components/layout/app-layout';
 import { PwaInstallBanner, PostInstallCameraPrompt } from '@/components/pwa/pwa-register';
@@ -220,6 +221,23 @@ function Home() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [searchParams]);
+
+  // ── URL token detection: reactivate (account reactivation) ──
+  // Sent in the deactivation email so a deactivated user can restore their
+  // account with one click. Renders the ReactivationScreen, which POSTs the
+  // token to /api/auth/reactivate-account.
+  const [reactivateToken, setReactivateToken] = useState<string | null>(null);
+  const reactivateReadRef = useRef(false);
+  useEffect(() => {
+    if (reactivateReadRef.current) return;
+    reactivateReadRef.current = true;
+    const t = searchParams.get('reactivate');
+    if (t) {
+      setReactivateToken(t);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [searchParams]);
+
   const resetPathDetectedRef = useRef(false);
   useEffect(() => {
     if (!hydrated || resetPathDetectedRef.current || resetPasswordToken) return;
@@ -524,13 +542,33 @@ function Home() {
     try {
       const response = await fetch('/api/auth/delete-account', { method: 'DELETE' });
       if (response.ok) {
+        toast.success(language === 'da' ? 'Konto deaktiveret' : 'Account deactivated', {
+          description: language === 'da'
+            ? 'En e-mail med et reaktiveringslink er sendt til dig (gyldigt i 30 dage).'
+            : 'An email with a reactivation link has been sent to you (valid for 30 days).',
+        });
         setUser(null);
         navigateToView('dashboard');
+      } else {
+        // Surface backend refusals — e.g. HTTP 403 SUPERDEV_PROTECTED if a
+        // SuperDev account somehow reaches here (button is hidden in the UI,
+        // but a direct API call could still attempt it).
+        let detail = language === 'da' ? 'Kunne ikke deaktivere kontoen.' : 'Failed to deactivate account.';
+        try {
+          const data = await response.json();
+          if (data?.error) detail = data.error as string;
+        } catch { /* non-JSON body — keep default */ }
+        toast.error(language === 'da' ? 'Deaktivering afvist' : 'Deactivation refused', {
+          description: detail,
+        });
       }
     } catch (error) {
       console.error('Failed to delete account:', error);
+      toast.error(language === 'da' ? 'Netværksfejl' : 'Network error', {
+        description: language === 'da' ? 'Kunne ikke kontakte serveren. Prøv igen.' : 'Could not reach the server. Please try again.',
+      });
     }
-  }, [setUser, navigateToView]);
+  }, [setUser, navigateToView, language]);
 
   /**
    * FAB "Scan bilag" — opens the standalone scanner.
@@ -669,6 +707,52 @@ function Home() {
             >
               {language === 'da' ? 'Forretningsbetingelser' : 'Terms of Service'}
             </button>
+          </p>
+        </footer>
+      </div>
+    );
+  }
+
+  // ─── Account reactivation screen (?reactivate=TOKEN) ───
+  // Shown when a deactivated user clicks the reactivation link from the
+  // deactivation email. Renders the ReactivationScreen, which auto-POSTs the
+  // token to /api/auth/reactivate-account. MUST be checked before the auth
+  // spinner (isLoading) so the reactivation UI isn't blocked.
+  if (hydrated && reactivateToken && !user) {
+    return (
+      <div className="min-h-[100dvh] flex flex-col bg-[#f8faf9] light-forced login-mesh">
+        <div className="login-shape-3 absolute top-1/3 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-to-br from-[#0d9488]/[0.04] to-[#7c9a82]/[0.03] rounded-full blur-3xl pointer-events-none" />
+
+        {/* Marketing nav — lets unauthenticated users browse to /features, /pricing, etc. */}
+        <AuthMarketingNav />
+
+        <main className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-md flex flex-col items-center mt-[57px] relative z-10">
+            {/* Logo */}
+            <div className="mb-[46px] -mt-[19px]">
+              <Image
+                src="/logo-clean.png"
+                alt="AlphaFlow"
+                width={170}
+                height={114}
+                className="object-contain login-logo-hover"
+                priority
+              />
+            </div>
+
+            <ReactivationScreen
+              token={reactivateToken}
+              onGoToLogin={() => { setReactivateToken(null); }}
+            />
+          </div>
+        </main>
+
+        <footer className="relative z-10 py-6 text-center">
+          <div className="sidebar-brand-badge mx-auto mb-2">
+            <span>Powered by AlphaAi Consult ApS</span>
+          </div>
+          <p className="text-[11px] text-gray-400">
+            © {new Date().getFullYear()} AlphaFlow {t('accountingApp')}
           </p>
         </footer>
       </div>

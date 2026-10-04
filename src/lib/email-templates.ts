@@ -833,3 +833,60 @@ export function nemhandelRegistrationNoticeHtml(
     : `You are receiving this email because you are a customer of ${APP_NAME}, and we are required to inform you about the possibility of enrollment in the NemHandel Register.`
   );
 }
+
+// ─── ACCOUNT DEACTIVATED / REACTIVATION ────────────────────────────
+// Sent when a user self-deactivates their account (and, if they are the
+// sole member, the tenant). Conveys a "sad to see you leave" message and
+// provides a one-click, single-use reactivation link valid for 30 days.
+// The link points at /login?reactivate=<token> where the SPA picks it up.
+
+export function accountDeactivatedHtml(
+  language: Language,
+  reactivationUrl: string
+): string {
+  const heading =
+    language === 'da' ? 'Det er vi kede af at høre' : "We're sad to see you go";
+
+  const body =
+    language === 'da'
+      ? `Hej,<br/><br/>
+         Vi har modtaget besked om, at du har deaktiveret din konto hos <strong>${APP_NAME}</strong>.<br/><br/>
+         Det er vi rigtig kede af at høre — og vi vil gerne have dig tilbage, hvis du fortryder.<br/><br/>
+         Dine data er stadig bevaret i overensstemmelse med Bogføringslovens 5-års opbevaringspligt (§10-12), og du kan til enhver tid inden for de næste <strong>30 dage</strong> genaktiver din konto med ét klik ved hjælp af knappen herunder.`
+      : `Hi,<br/><br/>
+         We've received notice that you've deactivated your account with <strong>${APP_NAME}</strong>.<br/><br/>
+         We're genuinely sorry to see you go — and we'd love to have you back if you change your mind.<br/><br/>
+         Your data is still preserved in accordance with the Danish Bookkeeping Act's 5-year retention requirement (§10-12), and you can reactivate your account at any time within the next <strong>30 days</strong> with a single click using the button below.`;
+
+  const buttonText =
+    language === 'da' ? 'Genaktiver min konto' : 'Reactivate my account';
+
+  const fallback =
+    language === 'da'
+      ? `Hvis knappen ikke virker, kan du kopiere dette link ind i din browser:<br/>
+         <a href="${reactivationUrl}" style="color:${PRIMARY}; word-break:break-all;">${reactivationUrl}</a><br/><br/>
+         Linket er personligt og udløber om 30 dage. Efter udløbet skal du kontakte support for at få genaktiveret din konto.`
+      : `If the button doesn't work, copy and paste this link into your browser:<br/>
+         <a href="${reactivationUrl}" style="color:${PRIMARY}; word-break:break-all;">${reactivationUrl}</a><br/><br/>
+         This link is personal to you and expires in 30 days. After expiry, please contact support to have your account reactivated.`;
+
+  const note =
+    language === 'da'
+      ? `Hvis du ikke selv har deaktiveret din konto, bedes du kontakte os omgående — dette kan tyde på uautoriseret adgang.`
+      : `If you did not deactivate your account yourself, please contact us immediately — this may indicate unauthorized access.`;
+
+  const content = `
+    <h2 style="margin:0 0 16px; color:${TEXT_DARK}; font-size:20px; font-weight:600;">${heading}</h2>
+    <p style="margin:0 0 24px; color:${TEXT_DARK}; font-size:15px; line-height:1.6;">${body}</p>
+    ${buttonHtml(reactivationUrl, buttonText)}
+    <p style="margin:12px 0 0; font-size:13px; color:${TEXT_MUTED}; line-height:1.5;">${fallback}</p>
+    <div style="margin:20px 0 0; padding:12px 16px; background-color:#fef2f2; border-left:3px solid #ef4444; border-radius:0 8px 8px 0;">
+      <p style="margin:0; font-size:12px; color:#991b1b; line-height:1.6;">${note}</p>
+    </div>
+  `;
+
+  return wrapperHtml(content, language, language === 'da'
+    ? `Du modtager denne e-mail, fordi en konto hos ${APP_NAME} netop er blevet deaktiveret.`
+    : `You are receiving this email because an account with ${APP_NAME} was just deactivated.`
+  );
+}

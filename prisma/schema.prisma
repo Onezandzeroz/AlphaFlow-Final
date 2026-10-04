@@ -494,6 +494,13 @@ model User {
   deactivatedAt      DateTime? // Null = active account. Set = account deactivated at this timestamp.
   deactivationReason String? // 'self_request' | 'admin_action' | 'sole_company_cleanup'
 
+  // Reactivation token — emailed to the user when they self-deactivate, so they
+  // can undo the deactivation within 30 days via a one-click email link.
+  // Single-use: cleared on reactivation. Follows the same pattern as
+  // resetPasswordToken / resetPasswordExpires.
+  reactivationToken  String?  @unique
+  reactivationExpires DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

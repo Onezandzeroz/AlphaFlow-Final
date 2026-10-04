@@ -1255,20 +1255,28 @@ export const translations = {
     en: 'Delete Account',
   },
   deleteAccountTitle: {
-    da: 'Slet din konto',
-    en: 'Delete Your Account',
+    da: 'Deaktiver din konto — dette kan ikke fortrydes let',
+    en: 'Deactivate your account — this cannot be easily undone',
   },
   deleteAccountDescription: {
-    da: 'Dette vil permanent slette din konto og alle tilknyttede data, herunder virksomhedsoplysninger, fakturaer og posteringer. Revisionsloggen bevares i overensstemmelse med bogføringsloven.',
-    en: 'This will permanently delete your account and all associated data, including company information, invoices, and transactions. The audit log is preserved per the Bookkeeping Act.',
+    da: 'ADVARSEL: Dette deaktiverer din konto med det samme. Du logges ud, og hvis du er eneste medlem af virksomheden, deaktiveres virksomheden også.\n\nDine bogførte data og revisionsloggen bevares i 5 år jf. Bogføringsloven §10-12, men du mister adgangen til dem, indtil kontoen genaktiveres.\n\nDu får tilsendt en e-mail med et reaktiveringslink, der er gyldigt i 30 dage. Efter 30 dage kræves manuel kontakt til support.',
+    en: 'WARNING: This immediately deactivates your account. You will be signed out, and if you are the sole member of the company, the company will be deactivated too.\n\nYour booked data and audit trail are preserved for 5 years per the Danish Bookkeeping Act §10-12, but you will lose access to them until the account is reactivated.\n\nYou will receive an email with a reactivation link valid for 30 days. After 30 days, manual contact with support is required.',
   },
   deleteAccountConfirm: {
-    da: 'Ja, slet min konto',
-    en: 'Yes, delete my account',
+    da: 'Ja, deaktiver min konto nu',
+    en: 'Yes, deactivate my account now',
   },
   deletingAccount: {
-    da: 'Sletter konto...',
-    en: 'Deleting account...',
+    da: 'Deaktiverer konto…',
+    en: 'Deactivating account…',
+  },
+  deleteAccountSuperDevProtected: {
+    da: 'SuperDev-konti kan ikke deaktiveres',
+    en: 'SuperDev accounts cannot be deactivated',
+  },
+  deleteAccountSuperDevProtectedDesc: {
+    da: 'Dette er en platform-administratorkonto og er permanent beskyttet mod deaktivering. Kontakt en anden SuperDev, hvis du mener dette er en fejl.',
+    en: 'This is a platform administrator account and is permanently protected from deactivation. Contact another SuperDev if you believe this is an error.',
   },
   logoutTitle: {
     da: 'Log ud',

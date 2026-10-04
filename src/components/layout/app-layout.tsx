@@ -473,7 +473,9 @@ export function AppLayout({
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Delete Account with confirmation */}
+        {/* Deactivate account — hidden for SuperDev (platform admin accounts
+            are permanently protected from deactivation at the API layer too) */}
+        {!user.isSuperDev && (
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button
@@ -490,7 +492,7 @@ export function AppLayout({
                 <AlertTriangle className="h-5 w-5" />
                 {t('deleteAccountTitle')}
               </AlertDialogTitle>
-              <AlertDialogDescription>
+              <AlertDialogDescription className="whitespace-pre-line text-sm leading-relaxed">
                 {t('deleteAccountDescription')}
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -506,6 +508,7 @@ export function AppLayout({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        )}
       </div>
     </div>
   );
@@ -745,6 +748,8 @@ export function AppLayout({
                     </AlertDialogContent>
                   </AlertDialog>
 
+                  {/* Deactivate account — hidden for SuperDev (protected at API layer) */}
+                  {!user.isSuperDev && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
@@ -761,7 +766,7 @@ export function AppLayout({
                           <AlertTriangle className="h-5 w-5" />
                           {t('deleteAccountTitle')}
                         </AlertDialogTitle>
-                        <AlertDialogDescription>
+                        <AlertDialogDescription className="whitespace-pre-line text-sm leading-relaxed">
                           {t('deleteAccountDescription')}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
@@ -777,6 +782,7 @@ export function AppLayout({
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+                  )}
                 </div>
               </div>
             </SheetContent>

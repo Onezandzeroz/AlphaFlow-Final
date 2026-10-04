@@ -33,6 +33,7 @@ import {
   preRenewalReminderHtml,
   termsChangeHtml,
   nemhandelRegistrationNoticeHtml,
+  accountDeactivatedHtml,
   type SubscriptionWelcomeData,
   type PaymentReceiptData,
   type SubscriptionCancelledData,
@@ -63,7 +64,10 @@ export type EmailTemplate =
   | 'pre-billing-reminder'        // (b) reminder before trial → paid conversion
   | 'terms-change-notice'         // (g)+(h) terms/service change notification
   // Erhvervsstyrelsen compliance — NemHandel notification (Bilag 2, Row 47/48)
-  | 'nemhandel-registration-notice';
+  | 'nemhandel-registration-notice'
+  // Account deactivation — "sad to see you leave" email with a one-click
+  // single-use reactivation link. Sent when a user self-deactivates.
+  | 'account-deactivated';
 
 interface SendEmailOptions {
   to: string;
@@ -657,6 +661,37 @@ export async function sendNemHandelNoticeEmail(
       appUrl: data.appUrl,
       settingsPath: data.settingsPath ?? '/settings-edelivery',
       ...metadata,
+    },
+  });
+}
+
+// ─── ACCOUNT DEACTIVATED / REACTIVATION ────────────────────────────
+// Sent immediately when a user self-deactivates their account. Conveys a
+// "sad to see you leave" message and a single-use reactivation link valid
+// for 30 days. The link points at the SPA (/login?reactivate=<token>) so the
+// reactivation screen can present a one-click restore. Data is preserved per
+// Bogføringsloven §10-12 — the email reassures the user of this and offers
+// an easy path back.
+
+export async function sendAccountDeactivatedEmail(
+  to: string,
+  reactivationUrl: string,
+  language: Language = 'da',
+  companyId?: string,
+): Promise<{ success: boolean; logId: string }> {
+  const subject = language === 'da'
+    ? 'Det er vi kede af at se dig gå — genaktiver din AlphaFlow-konto når som helst'
+    : "We're sad to see you go — reactivate your AlphaFlow account anytime";
+
+  return sendEmail({
+    to,
+    subject,
+    html: accountDeactivatedHtml(language, reactivationUrl),
+    template: 'account-deactivated',
+    companyId,
+    metadata: {
+      reactivationUrl,
+      language,
     },
   });
 }
