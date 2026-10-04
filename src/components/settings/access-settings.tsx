@@ -746,7 +746,23 @@ export function AccessSettings({ userId, user }: AccessSettingsProps) {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-2">
-          <SaftImportSection />
+          {/* ── Inner card: SAF-T import (its own card, nested inside
+              the "Import fra anden udbyder" card) — only one instance ── */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#0d9488] to-[#14b8a6] flex items-center justify-center shrink-0">
+                  <Download className="h-4 w-4 text-white" />
+                </div>
+                {language === 'da'
+                  ? 'Importer virksomhedsdata (SAF-T XML) — skift fra andet system'
+                  : 'Import company data (SAF-T XML) — switch from another system'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SaftImportSection />
+            </CardContent>
+          </Card>
         </CollapsibleContent>
       </Collapsible>
     </div>

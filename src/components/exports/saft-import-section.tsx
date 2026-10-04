@@ -29,12 +29,6 @@ import { toast } from '@/lib/hermes-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from '@/components/ui/accordion';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -214,17 +208,7 @@ export function SaftImportSection() {
   );
 
   return (
-    <Accordion type="single" collapsible className="w-full">
-      <AccordionItem value="saft-import" className="border-none">
-        <AccordionTrigger className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:no-underline hover:text-[#0d9488] dark:hover:text-[#14b8a6] py-3">
-          <span className="flex items-center gap-2">
-            <Download className="h-4 w-4 text-[#0d9488] dark:text-[#14b8a6]" />
-            {isDa
-              ? 'Importer virksomhedsdata (SAF-T XML) — skift fra andet system'
-              : 'Import company data (SAF-T XML) — switch from another system'}
-          </span>
-        </AccordionTrigger>
-        <AccordionContent className="space-y-4 pt-2">
+    <div className="space-y-4">
           {/* Description */}
           <div className="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 info-box-primary rounded-lg p-3">
             <Info className="h-4 w-4 shrink-0 mt-0.5 text-[#14b8a6] dark:text-[#99f6e4]" />
@@ -543,8 +527,6 @@ export function SaftImportSection() {
               </p>
             </div>
           )}
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+        </div>
   );
 }
