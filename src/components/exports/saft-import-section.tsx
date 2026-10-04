@@ -74,6 +74,17 @@ interface DryRunResult {
     suggestedAlphaFlowCode: string | null;
   }>;
   warnings: string[];
+  /** §10-12 guard result — present when the dry-run included the tenant population check. */
+  populatedTenant?: {
+    isPopulated: boolean;
+    summaryDa: string;
+    summaryEn: string;
+    counts: {
+      postedJournalEntries: number;
+      sealedTransactions: number;
+      closedFiscalPeriods: number;
+    };
+  };
 }
 
 interface ImportResult {
@@ -171,6 +182,15 @@ export function SaftImportSection() {
       const res = await fetch('/api/import-saft', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) {
+        // §10-12 guard refusal — the tenant already holds booked data.
+        if (res.status === 409 && data?.code === 'TENANT_ALREADY_POPULATED') {
+          const detail = data?.detail;
+          throw new Error(
+            isDa
+              ? (detail?.summaryDa ?? 'Import afvist: Virksomheden indeholder allerede bogførte data (Bogføringsloven §10-12).')
+              : (detail?.summaryEn ?? 'Import refused: this tenant already contains booked data (Danish Bookkeeping Act §10-12).'),
+          );
+        }
         throw new Error(data.error || (isDa ? 'Import fejlede' : 'Import failed'));
       }
       setImportResult(data as ImportResult);
@@ -194,7 +214,8 @@ export function SaftImportSection() {
   }, [selectedFile, isDa]);
 
   const canDryRun = !!selectedFile && !isDryRunning && !isImporting;
-  const canImport = !!selectedFile && !isImporting && !isDryRunning;
+  const tenantPopulated = !!dryRunResult?.populatedTenant?.isPopulated;
+  const canImport = !!selectedFile && !isImporting && !isDryRunning && !tenantPopulated;
 
   // ── Stat pill helper ──
   const StatPill = ({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: number | string }) => (
@@ -402,6 +423,26 @@ export function SaftImportSection() {
                 {isDa ? 'Analyse resultat' : 'Analysis result'}
               </div>
 
+                           {/* §10-12 block — tenant already has booked data; import is refused */}
+              {tenantPopulated && (
+                <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 p-3 text-xs text-red-700 dark:text-red-400">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-600 dark:text-red-400" />
+                    <div className="space-y-1">
+                      <p className="font-medium text-red-800 dark:text-red-300">
+                        {isDa ? 'Import blokeret — Bogføringsloven §10-12' : 'Import blocked — Danish Bookkeeping Act §10-12'}
+                      </p>
+                      <p>{isDa ? dryRunResult.populatedTenant!.summaryDa : dryRunResult.populatedTenant!.summaryEn}</p>
+                      <p className="text-red-600 dark:text-red-400">
+                        {isDa
+                          ? 'Import kan kun gennemføres i en virksomhed uden bogførte data (førstegangs overflytning fra et andet system). Eksisterende bogførte posteringer og lukkede perioder må ikke overskrives.'
+                          : 'Import can only proceed into a tenant with no booked data (first-time migration from another system). Existing posted entries and closed periods must not be overwritten.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Stats grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <StatPill icon={Database} label={isDa ? 'Konti' : 'Accounts'} value={dryRunResult.summary.accounts} />
@@ -473,8 +514,8 @@ export function SaftImportSection() {
                       </p>
                       <p className="mt-0.5">
                         {isDa
-                          ? 'Eksisterende data slettes fuldstændigt før import, så konflikter er ikke et problem — de nye data overskriver de gamle.'
-                          : 'Existing data is fully wiped before import, so conflicts are not an issue — new data overwrites old data.'}
+                          ? 'Import erstatter eksisterende data i virksomheden. Dette er kun tilladt i en virksomhed uden bogførte data — jf. Bogføringsloven §10-12.'
+                          : 'Import replaces existing data in the tenant. This is only permitted in a tenant with no booked data — per the Danish Bookkeeping Act §10-12.'}
                       </p>
                     </div>
                   </div>
@@ -482,7 +523,7 @@ export function SaftImportSection() {
               )}
 
               {/* No issues — clean import */}
-              {dryRunResult.unmappedVatCodes.length === 0 && dryRunResult.warnings.length === 0 && (
+              {!tenantPopulated && dryRunResult.unmappedVatCodes.length === 0 && dryRunResult.warnings.length === 0 && (
                 <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/40 p-3 text-xs text-green-700 dark:text-green-400 flex items-start gap-2">
                   <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
                   <span>

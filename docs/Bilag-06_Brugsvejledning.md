@@ -1572,7 +1572,9 @@ Denne eksport opfylder GDPR's krav om dataportabilitet (Art. 20) og Bogføringsl
 
 ### 15.3 ProviderSwitchChecklist (udbyderskift)
 
-Under Eksport findes `ProviderSwitchChecklist` — en guide, der forklarer, hvordan man flytter til et andet regnskabsprogram i overensstemmelse med Bogføringsloven og Kravbekendtgørelsen (BEK 97):
+Under Indstillinger → **Adgang** findes to sammenfoldbare kort til udbyderskift:
+
+1. **Udbyderskift af bogføringssystem** — en eksport-checkliste (se trin nedenfor), der forklarer, hvordan man flytter data *fra* AlphaFlow til et andet regnskabsprogram i overensstemmelse med Bogføringsloven og Kravbekendtgørelsen (BEK 97).
 
 | Trin | Handling |
 |------|----------|
@@ -1584,6 +1586,16 @@ Under Eksport findes `ProviderSwitchChecklist` — en guide, der forklarer, hvor
 | 6 | Meddel ny udbyder om eksportformat |
 | 7 | Importér i nyt system |
 | 8 | Bekræft overførsel |
+
+2. **Import fra anden udbyder** — SAF-T-import til førstegangs overflytning *til* AlphaFlow. Kortet indeholder et indre kort, "Importer virksomhedsdata (SAF-T XML) — skift fra andet system", som lader brugeren uploade en SAF-T Financial DK v2.1 XML-fil fra et tredjepartssystem (f.eks. e-conomic, Dinero, Visma).
+
+**Sådan fungerer importen:**
+
+1. Vælg en SAF-T XML-fil (.xml, maks. 100 MB).
+2. Klik **Analyser fil (sikkerhedstjek)** — `POST /api/import-saft/dry-run` parser filen, identificerer konflikter og umappede momskoder, og returnerer tenantens befolkningstilstand. Ingen data ændres.
+3. Gennemgå resultatet og klik **Bekræft import** — `POST /api/import-saft` genskaber kontoplan, adresser, kunder/leverandører og alle bogførte posteringer i én samlet database-transaktion.
+
+**§10-12-beskyttelse (vigtigt):** Import kan **kun gennemføres i en virksomhed uden bogførte data** — altså som en førstegangs overflytning. Hvis virksomheden allerede indeholder bogførte journalposter (status = POSTED), forsegilede transaktioner eller lukkede regnskabsperioder, afviser serveren importen med HTTP 409 (`TENANT_ALREADY_POPULATED`), og knappen "Bekræft import" deaktiveres. Dette sikrer, at eksisterende bogførte data ikke overskrives i strid med Bogføringsloven §10-12. Bevogtningen implementeres i `src/lib/tenant-import-guard.ts` og konsulteres *før* immutability-bypassen aktiveres, så database-triggerne forbliver fuldt aktive for beskyttet data. Det blokerede forsøg logges uforanderligt i AuditLog som en `DELETE_ATTEMPT`.
 
 ### 15.4 Sletning/deaktivering af konto
 

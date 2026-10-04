@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
+import { getTenantPopulation } from '@/lib/tenant-import-guard';
 import { parseSaftXml } from '@/lib/saft-import/parser';
 import { analyzeForDryRun } from '@/lib/saft-import/transformer';
 
@@ -61,15 +62,23 @@ export const POST = withGuard(
       // Run dry-run analysis
       const result = analyzeForDryRun(parsed, existingAccountNumbers);
 
+      // §10-12 compliance check — surface the tenant's population state so
+      // the frontend can disable the import button and warn the user before
+      // they attempt an import that the server would refuse. This is
+      // informational only; the dry-run never modifies data.
+      const populatedTenant = await getTenantPopulation(ctx.activeCompanyId!);
+
       logger.info(
         `[Import-SAF-T] Dry-run result: ${result.summary.accounts} accounts, ` +
         `${result.summary.transactions} transactions, ${result.summary.lines} lines, ` +
-        `${result.unmappedVatCodes.length} unmapped VAT codes`,
+        `${result.unmappedVatCodes.length} unmapped VAT codes, ` +
+        `populatedTenant=${populatedTenant.isPopulated}`,
       );
 
       return NextResponse.json({
         success: true,
         ...result,
+        populatedTenant,
       });
     } catch (error) {
       logger.error('[Import-SAF-T] Dry-run error:', error);

@@ -183,13 +183,26 @@ BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om b
 | Regnskab Basis (CSV) | `src/lib/annual-report-csv.ts` — UTF-8 BOM, danske overskrifter, sektioner: resultatopgørelse, balance, statusopgørelse, momsdata. | `GET /api/reports/annual-csv` |
 | Regnskab Special (iXBRL) | `src/lib/annual-report-xbrl.ts` — Danish FSA taxonomy (DCCA namespace), `ix:nonFraction`-tagging. | `GET /api/reports/annual-xbrl` |
 
-### 2.9 Udbyderskift (eksport af bilag)
+### 2.9 Udbyderskift (eksport og import af bilag)
 
 | Funktion | Implementering |
 |----------|----------------|
 | Tenant-eksport med filer | `POST /api/export-tenant` — GUID per eksport (`crypto.randomUUID()`), format-version `alphaflow-portable-v2`, compliance-metadata (Bogføringsloven BEK 98, 5-års retention), SHA-256 data-integrity checksum. |
 | Eksport-historik | `GET /api/company/export-info` — total eksporter, seneste eksport, datavolumen, audit-entries med GUIDs og checksums. |
-| Audit-trail | Alle eksporter logges uforanderligt i AuditLog. |
+| SAF-T import (indlæsning af standardfil) | `POST /api/import-saft` — importerer en SAF-T Financial DK v2.1 XML-fil fra et tredjepartssystem (førstegangs overflytning til AlphaFlow). |
+| Pre-flight (dry-run) | `POST /api/import-saft/dry-run` — parser filen, identificerer konflikter og umappede momskoder, og returnerer tenantens befolkningstilstand (`populatedTenant`). Ændrer ingen data. |
+| §10-12 compliance-guard | `src/lib/tenant-import-guard.ts` — `getTenantPopulation()` tæller eksisterende **POSTED** journalposter, forseglete transaktioner (`recordHash IS NOT NULL`) og lukkede regnskabsperioder (`status = 'CLOSED'`). Import **afvises med HTTP 409** (`TENANT_ALREADY_POPULATED`) hvis tenanten allerede indeholder bogførte data — FØR `app.immutability_bypass` aktiveres. |
+| Audit-trail | Alle eksporter og import-forsøg logges uforanderligt i AuditLog. Blokerede import-forsøg på en befolket tenant logges som `DELETE_ATTEMPT` (tamper-evident via `prisma/audit-immutability.sql`). |
+
+#### 2.9.1 §10-12-beskyttelse ved import (Bogføringsloven)
+
+Import af en SAF-T-standardfil sletter al eksisterende tenant-data og genskaber dem fra filen. Fordi bogførte posteringer er uforanderlige per Bogføringsloven §10-12 ("bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes"), er denne operation **kun tilladt som en førstegangs overflytning** i en tenant, der endnu ikke indeholder bogførte data.
+
+`src/lib/tenant-import-guard.ts` håndhæver dette på applikationsniveauet: før `SET LOCAL app.immutability_bypass = 'true'` aktiveres i import-transaktionen, undersøger `getTenantPopulation()` tenanten. Findes der blot én POSTED journalpost, én forseglet transaktion eller én lukket regnskabsperiode, afvises importen med HTTP 409, og database-triggerene i `prisma/journal-immutability.sql` forbliver fuldt aktive. Derved overholdes §10-12 på både applikations- og databaseniveau — eksisterende bogført data kan ikke overskrives.
+
+DRAFT-journalposter (uden `recordHash`) er ikke omfattet af §10-12 og må slettes; en tenant, der kun indeholder kladder, kan derfor godt importere.
+
+**Filkilder:** `src/lib/tenant-import-guard.ts`, `src/app/api/import-saft/route.ts`, `src/app/api/import-saft/dry-run/route.ts`, `src/components/exports/saft-import-section.tsx`.
 
 ### 2.10 Kryptografisk hash-chain på bogførte posteringer
 
@@ -261,6 +274,8 @@ Selvom hash-chain'en detekterer mutation efter fact, forhindrer PostgreSQL-trigg
 | `prevent_transaction_delete_sealed` | `Transaction` | `OLD.recordHash IS NOT NULL` | Unsealed transactions (sjældent — kun ved oprettelsesfejl) |
 
 **Design-beslutning:** Triggeren tillader UPDATE på POSTED-rækker **mens** `recordHash IS NULL`. Dette vindue eksisterer kun inde i posting-transactionen (CREATE → assignVoucherNumber → sealJournalEntry → COMMIT). Udefra ses aldrig en "POSTED men uforseglet" række, fordi isolation-level READ COMMITTED (default) skjuler uforanskede transaktioner. Når først `recordHash` er sat (efter sealing-UPDATE), blokeres alle yderligere UPDATEs og DELETEs — selv af en DBA eller kompromitteret forbindelse.
+
+**Undtagelse — `app.immutability_bypass`:** Triggerne har en enkelt dokumenteret undtagelse (se `prisma/journal-immutability.sql` linje 18-22 + funktionen `_immutability_bypass_active()`): en session kan sætte `SET LOCAL app.immutability_bypass = 'true'` for administrative operationer (demo-reset, tenant-restore, SAF-T-import). Denne session-variabel nulstilles automatisk ved COMMIT. For SAF-T-importen er bypassen **bevogtet af `src/lib/tenant-import-guard.ts`** (`getTenantPopulation()`): importen afvises med HTTP 409 (`TENANT_ALREADY_POPULATED`), hvis tenanten allerede indeholder POSTED journalposter, forsegilede transaktioner eller lukkede regnskabsperioder — dvs. bypassen kan kun aktiveres i en tenant uden bogførte data, og §10-12 overholdes. Se afsnit 2.9.1.
 
 **Deployment:** `psql $DATABASE_URL -f prisma/journal-immutability.sql` (idempotent — `CREATE OR REPLACE FUNCTION` + `DROP TRIGGER IF EXISTS`).
 

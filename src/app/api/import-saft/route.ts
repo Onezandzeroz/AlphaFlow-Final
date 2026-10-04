@@ -5,6 +5,7 @@ import { Permission } from '@/lib/rbac';
 import { withGuard } from '@/lib/route-guard';
 import { auditLog, requestMetadata } from '@/lib/audit';
 import { notifyDataChange } from '@/lib/notify-data-change';
+import { getTenantPopulation } from '@/lib/tenant-import-guard';
 import { parseSaftXml } from '@/lib/saft-import/parser';
 import {
   transformAccount,
@@ -17,12 +18,21 @@ import type { ImportSummary } from '@/lib/saft-import/transformer';
 /**
  * POST /api/import-saft
  *
- * Imports a SAF-T Financial DK v2.1 XML file from a third-party accounting system.
- * Replaces existing company data (accounts, contacts, journal entries) with
- * the imported data in a single transactional operation.
+ * Imports a SAF-T Financial DK v2.1 XML file from a third-party accounting
+ * system — a one-time migration INTO AlphaFlow from another provider.
  *
- * IMPORTANT: This endpoint wipes existing data before importing. The dry-run
- * endpoint should be called first to review conflicts and unmapped VAT codes.
+ * §10-12 COMPLIANCE (Bogføringsloven): Import is ONLY permitted into a tenant
+ * that holds no booked data yet (no POSTED journal entries, no sealed
+ * transactions, no closed fiscal periods). A populated tenant is refused with
+ * HTTP 409 `TENANT_ALREADY_POPULATED` BEFORE the immutability bypass is
+ * activated, so the database-level triggers in journal-immutability.sql stay
+ * fully in force and booked data cannot be overwritten. See
+ * `src/lib/tenant-import-guard.ts`.
+ *
+ * For an empty tenant the import wipes any draft data and re-creates all
+ * entities (accounts, contacts, journal entries) in a single transactional
+ * operation. The dry-run endpoint should be called first to review conflicts
+ * and unmapped VAT codes.
  *
  * Body: multipart form with field "file" containing the SAF-T XML file.
  */
@@ -47,6 +57,51 @@ export const POST = withGuard(
         );
       }
 
+      // ── §10-12 compliance guard (Bogføringsloven) ──
+      // The import below wipes all existing tenant data under the
+      // immutability bypass (SET LOCAL app.immutability_bypass = 'true').
+      // That is ONLY permitted for a first-time migration into a tenant
+      // that holds no booked data yet. If the tenant already has POSTED
+      // journal entries, sealed transactions, or closed fiscal periods,
+      // the import is refused (HTTP 409) BEFORE the bypass is activated —
+      // so the DB immutability triggers stay fully in force and §10-12 is
+      // respected at both the application and database layers.
+      const population = await getTenantPopulation(ctx.activeCompanyId!);
+      if (population.isPopulated) {
+        logger.warn(
+          `[Import-SAF-T] Blocked by §10-12 guard: tenant ${ctx.activeCompanyId} already has booked data — ` +
+            `${population.counts.postedJournalEntries} posted journal entries, ` +
+            `${population.counts.sealedTransactions} sealed transactions, ` +
+            `${population.counts.closedFiscalPeriods} closed fiscal periods.`,
+        );
+        // Audit-log the prevented wipe attempt (tamper-evident via the
+        // immutable AuditLog triggers in prisma/audit-immutability.sql).
+        await auditLog({
+          action: 'DELETE_ATTEMPT',
+          entityType: 'System',
+          entityId: ctx.activeCompanyId!,
+          userId: ctx.id,
+          companyId: ctx.activeCompanyId!,
+          changes: {
+            type: { old: null, new: 'saft_import_blocked' },
+          },
+          metadata: {
+            reason: 'saft_import_blocked_§10-12',
+            blocked: true,
+            source: 'import-saft',
+            ...population.counts,
+          },
+        });
+        return NextResponse.json(
+          {
+            error: 'Import afvist: Virksomheden indeholder allerede bogførte data.',
+            code: 'TENANT_ALREADY_POPULATED',
+            detail: population,
+          },
+          { status: 409 },
+        );
+      }
+
       const xmlContent = await file.text();
       logger.info(`[Import-SAF-T] Starting import: file=${file.name}, size=${file.size} bytes`);
 
@@ -66,7 +121,10 @@ export const POST = withGuard(
 
       // ── Execute import in a single transaction ──
       const result = await db.$transaction(async (tx) => {
-        // Bypass immutability triggers (Bogføringsloven §10-12) for import
+        // Bypass immutability triggers (Bogføringsloven §10-12). This is safe
+        // because the §10-12 guard above already confirmed the tenant holds no
+        // booked data — the bypass only affects draft data (which §10-12 does
+        // not protect) during this one-time first migration.
         await tx.$executeRawUnsafe("SET LOCAL app.immutability_bypass = 'true'");
 
         const companyId = ctx.activeCompanyId!;
