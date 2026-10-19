@@ -412,13 +412,21 @@ export async function fetchVATReceipt(
     );
   }
 
+  // Fetch the company CVR (SE-number) to include in the <Angiver> block,
+  // which SKAT's sample request expects (see MomsangivelseKvitteringHent_I_Document.xml)
+  const company = await db.company.findUnique({
+    where: { id: submission.companyId },
+    select: { cvrNumber: true },
+  });
+  const seNumber = company?.cvrNumber || undefined;
+
   let newStatus: 'SUBMITTED' | 'ACCEPTED' | 'REJECTED' | 'ERROR' = submission.status;
   let errorMessage: string | null = submission.errorMessage;
   let errorCode: string | null = submission.errorCode;
   let receiptPdfBase64: string | null = submission.receiptPdfBase64;
 
   try {
-    const result = await getMomsangivelseKvitteringHent(submission.transactionIdentifier);
+    const result = await getMomsangivelseKvitteringHent(submission.transactionIdentifier, seNumber);
 
     if (result.approved) {
       newStatus = 'ACCEPTED';

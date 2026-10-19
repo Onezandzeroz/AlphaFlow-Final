@@ -9,6 +9,7 @@
  * Architecture:
  *   - Transport: HTTPS with mutual TLS (mTLS) using a VOCES3 System (S1) certificate
  *   - Message security: WS-Security XML signature (rsa-sha1) over Timestamp + Body
+ *     + BinarySecurityToken (DirectReference key identifier)
  *   - Format: SOAP 1.1 document/literal XML
  *   - Namespace: urn:oio:skat:nemvirksomhed:ws:1.0.0
  *
@@ -16,34 +17,37 @@
  * must then approve via MitID on TastSelv Erhverv through the returned deep link.
  * After approval, the receipt can be fetched via MomsangivelseKvitteringHent.
  *
+ * The SOAP envelope structure matches the official sample requests from
+ * https://github.com/skat/rsu-b2b-sample-client-java (src/test/resources/*_Document.xml
+ * and assets/full-sample-request.xml):
+ *   - HovedOplysninger lives INSIDE <soap:Body> (within the *_I request element),
+ *     NOT in the SOAP header. The SOAP header contains only <wsse:Security>.
+ *   - <soap:Body> carries a wsu:Id so it can be referenced by the signature.
+ *
  * References:
  *   - https://github.com/skat/rsu-b2b-sample-client-java
  *   - Target namespace: urn:oio:skat:nemvirksomhed:ws:1.0.0
  *
- * Onboarding steps (organizational, not code):
- *   1. Email momsapi@sktst.dk with AlphaFlow's CVR to get test endpoints + test VOCES3 cert
- *   2. Order a VOCES3 System (S1) certificate from MitID Erhverv for production
- *   3. Each customer company must delegate "Nemvirksomhed – adgang for systemudbyder"
- *      to AlphaFlow's CVR on skat.dk (one-time per customer)
- *
- * Environment variables:
+ * Environment variables (see .env.example + docs/SKAT-setup.md):
  *   SKAT_ENV                                    = "test" | "production"
  *   SKAT_ENDPOINT_VIRKSOMHEDKALENDERHENT       = https://<host>/VirksomhedKalenderHent
  *   SKAT_ENDPOINT_MODTAGMOMSANGIVELSEFORELOEBIG = https://<host>/ModtagMomsangivelseForeloebig
  *   SKAT_ENDPOINT_MOMSANGIVELSEKVITTERINGHENT  = https://<host>/MomsangivelseKvitteringHent
- *   SKAT_KEYSTORE_PATH                          = /path/to/client-keystore.jks (or .p12)
- *   SKAT_KEYSTORE_PASSWORD                      = keystore password
- *   SKAT_KEY_PASSWORD                           = private key password
- *   SKAT_CERT_ALIAS                             = cert alias in keystore (the S1 cert)
- *   SKAT_TRUSTSTORE_PATH                        = /path/to/client-truststore.jks
- *   SKAT_TRUSTSTORE_PASSWORD                    = truststore password
+ *   SKAT_KEYSTORE_PATH                          = /path/to/client.p12 (PKCS12) — or SKAT_CERT_PATH + SKAT_KEY_PATH (PEM)
+ *   SKAT_KEYSTORE_PASSWORD / SKAT_KEY_PASSWORD = keystore + key passphrase
+ *   SKAT_TRUSTSTORE_PATH                        = /path/to/ca-bundle.pem (SKAT server CA)
  *   ALPHAFLOW_CVR                               = AlphaFlow's own CVR (the RSU identifier)
  *
- * When endpoints are not configured, all calls return a simulated response
- * so the UI flow can be tested without real certificates.
+ * When credentials are not configured, all calls return a simulated response
+ * so the UI flow can be tested end-to-end without real certificates.
  */
 
+import https from 'https';
+import { randomUUID } from 'crypto';
 import { logger } from '@/lib/logger';
+import { loadSkatCredentials, isSkatCredentialsConfigured, type SkatCredentials } from '@/lib/skat-keystore';
+import { signSoapEnvelope } from '@/lib/skat-ws-security';
+import { VAT_RATE_MAP } from '@/lib/vat-codes';
 
 // ─── Configuration ────────────────────────────────────────────────────
 
@@ -55,26 +59,27 @@ const ENDPOINTS = {
   momsangivelseKvitteringHent: process.env.SKAT_ENDPOINT_MOMSANGIVELSEKVITTERINGHENT || '',
 };
 
-const KEYSTORE_PATH = process.env.SKAT_KEYSTORE_PATH || '';
-const KEYSTORE_PASSWORD = process.env.SKAT_KEYSTORE_PASSWORD || '';
-const KEY_PASSWORD = process.env.SKAT_KEY_PASSWORD || '';
-const CERT_ALIAS = process.env.SKAT_CERT_ALIAS || '';
-const TRUSTSTORE_PATH = process.env.SKAT_TRUSTSTORE_PATH || '';
-const TRUSTSTORE_PASSWORD = process.env.SKAT_TRUSTSTORE_PASSWORD || '';
-const ALPHAFLOW_CVR = process.env.ALPHAFLOW_CVR || '';
+/** SOAPAction for each service (from the WSDL soap:operation). */
+const SOAP_ACTIONS: Record<string, string> = {
+  virksomhedKalenderHent: 'getVirksomhedKalenderHent',
+  modtagMomsangivelseForeloebig: 'getModtagMomsangivelseForeloebig',
+  momsangivelseKvitteringHent: 'getMomsangivelseKvitteringHent',
+};
 
-/** Check if SKAT SOAP/mTLS credentials are configured. */
+/**
+ * Check if SKAT SOAP/mTLS credentials + endpoints are configured.
+ * When false, all calls fall back to simulation mode.
+ */
 export function hasSkatCredentials(): boolean {
   return !!(
     ENDPOINTS.virksomhedKalenderHent &&
     ENDPOINTS.modtagMomsangivelseForeloebig &&
     ENDPOINTS.momsangivelseKvitteringHent &&
-    KEYSTORE_PATH &&
-    CERT_ALIAS
+    isSkatCredentialsConfigured()
   );
 }
 
-// ─── Types ────────────────────────────────────────────────────────────
+// ─── Types (unchanged — preserved for backward compatibility) ───────────
 
 export interface SkatVatPeriod {
   periodStart: string;  // YYYY-MM-DD
@@ -90,35 +95,26 @@ export interface SkatVatCalendarResult {
 }
 
 export interface SkatVatField {
-  /** The 17 MomsAngivelse field names from the XSD, in sequence. */
   fieldName: string;
   value: number;
 }
 
 export interface SkatVatSubmissionResult {
-  /** SKAT's transaction identifier — needed for receipt retrieval. */
   transactionIdentifier: string;
-  /** Deep link to TastSelv Erhverv where the user approves with MitID. */
   deepLink: string | null;
-  /** Advisory code: 5001 = ordinary draft, 5002 = subsequent declaration. */
   advisoryCode: string | null;
-  /** Full SOAP response XML (for audit trail). */
   responseXml: string;
 }
 
 export interface SkatReceiptResult {
   transactionIdentifier: string;
-  /** PDF receipt as base64-encoded string (if available). */
   receiptPdfBase64: string | null;
-  /** Payment information. */
   paymentInfo: {
     amount: number | null;
     dueDate: string | null;
     accountNumber: string | null;
   } | null;
-  /** True if the draft has been approved and a receipt exists. */
   approved: boolean;
-  /** Error code if not approved (e.g. 4810 = not yet approved). */
   errorCode: string | null;
   responseXml: string;
 }
@@ -132,29 +128,32 @@ export class SkatApiError extends Error {
   }
 }
 
-// ─── SOAP Envelope Builders ───────────────────────────────────────────
+// ─── Namespace constants ──────────────────────────────────────────────
 
 const NS_SERVICE = 'urn:oio:skat:nemvirksomhed:ws:1.0.0';
 const NS_DATA = 'urn:oio:skat:nemvirksomhed:1.0.0';
 const NS_CONTEXT = 'http://rep.oio.dk/skat.dk/basis/kontekst/xml/schemas/2006/09/01/';
 const NS_SE = 'http://rep.oio.dk/skat.dk/motor/class/virksomhed/xml/schemas/20080401/';
+const NS_WSSE =
+  'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd';
+const NS_WSU =
+  'http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd';
+const NS_SOAP = 'http://schemas.xmlsoap.org/soap/envelope/';
+
+// ─── Helpers ──────────────────────────────────────────────────────────
 
 /** Generate a fresh UUID for TransaktionIdentifikator (required per call). */
 function generateTransactionId(): string {
-  // crypto.randomUUID is available in Node 19+ and Bun
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-  // Fallback
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return randomUUID();
 }
 
-/** Current ISO-8601 timestamp for TransaktionTid. */
-function nowIso(): string {
+/** Current ISO-8601 timestamp for TransaktionTid (SKAT expects local+offset format). */
+function nowTransactionTime(): string {
+  // SKAT sample uses local time with offset, e.g. 2017-04-24T12:00:00.146+02:00
+  // ISO with timezone offset. new Date().toISOString() gives Z (UTC) which is also valid.
   return new Date().toISOString();
 }
 
@@ -170,61 +169,75 @@ function escapeXml(text: string): string {
 
 /**
  * Build the HovedOplysninger (context) block required by every request.
- * Contains a unique transaction ID + timestamp.
+ * Contains a unique transaction ID + timestamp. Placed INSIDE the Body.
  */
 function buildHovedOplysninger(): string {
-  return `    <ns:HovedOplysninger xmlns:ns="${NS_CONTEXT}">
-      <ns:TransaktionIdentifikator>${generateTransactionId()}</ns:TransaktionIdentifikator>
-      <ns:TransaktionTid>${nowIso()}</ns:TransaktionTid>
-    </ns:HovedOplysninger>`;
+  return (
+    `<ns:HovedOplysninger xmlns:ns="${NS_CONTEXT}">` +
+    `<ns:TransaktionIdentifikator>${generateTransactionId()}</ns:TransaktionIdentifikator>` +
+    `<ns:TransaktionTid>${nowTransactionTime()}</ns:TransaktionTid>` +
+    `</ns:HovedOplysninger>`
+  );
 }
 
 /**
- * Build a complete SOAP envelope with WS-Security header placeholder.
+ * Build a complete UNSIGNED SOAP envelope with:
+ *   - An empty <wsse:Security> placeholder in the header (populated by the signer)
+ *   - <soap:Body wsu:Id="id-<uuid>"> containing the service request
  *
- * NOTE: The actual XML-DSig signature must be applied by the HTTP client
- * that has access to the VOCES3 private key (mTLS + WS-Security). In
- * production, this is done by a SOAP client library (CXF/WSS4J for Java,
- * or a Node.js soap client with xml-crypto). The signature covers:
- * Timestamp, Body, and BinarySecurityToken.
+ * The service request body MUST include HovedOplysninger as its first child.
  *
- * The returned XML is the UNSIGNED body — the signing step wraps it.
+ * @param serviceName - The service name (e.g. "ModtagMomsangivelseForeloebig")
+ * @param requestBodyXml - The inner request XML (the children of <ServiceName_I>)
  */
-function buildSoapEnvelope(serviceName: string, bodyContent: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
-               xmlns:urn="${NS_SERVICE}"
-               xmlns:urn1="${NS_DATA}">
-  <soap:Header>
-    <urn:${serviceName}>
-${buildHovedOplysninger()}
-    </urn:${serviceName}>
-  </soap:Header>
-  <soap:Body>
-    <urn:${serviceName}_I>
-${bodyContent}
-    </urn:${serviceName}_I>
-  </soap:Body>
-</soap:Envelope>`;
+function buildSoapEnvelope(serviceName: string, requestBodyXml: string): string {
+  const bodyId = `id-${randomUUID()}`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<soap:Envelope xmlns:soap="${NS_SOAP}" ` +
+    `xmlns:wsse="${NS_WSSE}" xmlns:wsu="${NS_WSU}">` +
+    `<soap:Header>` +
+    // Empty Security placeholder — the signer inserts BinarySecurityToken + Timestamp + Signature
+    `<wsse:Security soap:mustUnderstand="1"></wsse:Security>` +
+    `</soap:Header>` +
+    `<soap:Body wsu:Id="${bodyId}">` +
+    `<ns:${serviceName}_I xmlns:ns="${NS_SERVICE}" xmlns:ns1="${NS_DATA}" ` +
+    `xmlns:ns2="${NS_SE}" xmlns:ns3="${NS_CONTEXT}">` +
+    requestBodyXml +
+    `</ns:${serviceName}_I>` +
+    `</soap:Body>` +
+    `</soap:Envelope>`
+  );
 }
 
 // ─── Service 1: VirksomhedKalenderHent ────────────────────────────────
 
 /**
- * Build the SOAP request XML for VirksomhedKalenderHent.
+ * Build the SOAP request body for VirksomhedKalenderHent.
  * Fetches VAT periods + deadlines for a given SE-number and date range.
+ *
+ * Structure (from src/test/resources/VirksomhedKalenderHent_I_Document.xml):
+ *   <HovedOplysninger>...</HovedOplysninger>
+ *   <VirksomhedSENummerIdentifikator>12345678</VirksomhedSENummerIdentifikator>
+ *   <AngivelseTypeNavn>Moms</AngivelseTypeNavn>
+ *   <AngivelseBetalingFristHentFra>
+ *     <SoegeDatoFraDate>2018-01-01</SoegeDatoFraDate>
+ *     <SoegeDatoTilDate>2018-12-31</SoegeDatoTilDate>
+ *   </AngivelseBetalingFristHentFra>
  */
 export function buildVirksomhedKalenderHentRequest(
   seNumber: string,
   dateFrom: string,
   dateTo: string,
 ): string {
-  const body = `      <urn1:AngiverVirksomhedSENummer>
-        <urn1:VirksomhedSENummerIdentifikator xmlns:ns1="${NS_SE}">${escapeXml(seNumber)}</urn1:VirksomhedSENummerIdentifikator>
-      </urn1:AngiverVirksomhedSENummer>
-      <urn1:Angivelsestype> Moms </urn1:Angivelsestype>
-      <urn1:DatoFra>${escapeXml(dateFrom)}</urn1:DatoFra>
-      <urn1:DatoTil>${escapeXml(dateTo)}</urn1:DatoTil>`;
+  const body =
+    buildHovedOplysninger() +
+    `<ns2:VirksomhedSENummerIdentifikator>${escapeXml(seNumber)}</ns2:VirksomhedSENummerIdentifikator>` +
+    `<ns1:AngivelseTypeNavn>Moms</ns1:AngivelseTypeNavn>` +
+    `<ns:AngivelseBetalingFristHentFra>` +
+    `<ns1:SoegeDatoFraDate>${escapeXml(dateFrom)}</ns1:SoegeDatoFraDate>` +
+    `<ns1:SoegeDatoTilDate>${escapeXml(dateTo)}</ns1:SoegeDatoTilDate>` +
+    `</ns:AngivelseBetalingFristHentFra>`;
   return buildSoapEnvelope('VirksomhedKalenderHent', body);
 }
 
@@ -233,7 +246,6 @@ export function buildVirksomhedKalenderHentRequest(
  * Extracts periods, deadlines, and frequency codes.
  */
 export function parseVirksomhedKalenderHentResponse(responseXml: string): SkatVatCalendarResult {
-  // Simple regex-based parsing (avoids full XML parser dependency)
   const seMatch = responseXml.match(/VirksomhedSENummerIdentifikator[^>]*>(\d+)</);
   const periodMatches = responseXml.matchAll(
     /AngivelsePeriodeFraDato>(\d{4}-\d{2}-\d{2})<\/[^>]+>\s*<[^>]*AngivelsePeriodeTilDato>(\d{4}-\d{2}-\d{2})<\/[^>]+>\s*(?:<[^>]*AngivelseFrekvensTypeKode>(\w+)<\/[^>]+>)?/g,
@@ -244,9 +256,9 @@ export function parseVirksomhedKalenderHentResponse(responseXml: string): SkatVa
     periods.push({
       periodStart: match[1],
       periodEnd: match[2],
-      deadline: '', // extracted separately if present
+      deadline: '',
       frequencyCode: match[3] || '',
-      isOpen: true, // determined by comparing with current date
+      isOpen: true,
     });
   }
 
@@ -283,8 +295,24 @@ export const VAT_FIELD_NAMES = [
 ] as const;
 
 /**
- * Build the SOAP request XML for ModtagMomsangivelseForeloebig.
+ * Build the SOAP request body for ModtagMomsangivelseForeloebig.
  * Submits a DRAFT VAT return with the 17 VAT field values.
+ *
+ * Structure (from src/test/resources/ModtagMomsangivelseForeloebig_I_Document.xml):
+ *   <HovedOplysninger>...</HovedOplysninger>
+ *   <Angivelse>
+ *     <AngiverVirksomhedSENummer>
+ *       <VirksomhedSENummerIdentifikator>12345678</...>
+ *     </AngiverVirksomhedSENummer>
+ *     <Angivelsesoplysninger>
+ *       <AngivelsePeriodeFraDato>2018-01-01</...>
+ *       <AngivelsePeriodeTilDato>2018-03-31</...>
+ *     </Angivelsesoplysninger>
+ *     <Angivelsesafgifter>
+ *       <MomsAngivelseAfgiftTilsvarBeloeb>1500</...>
+ *       ... 16 more fields ...
+ *     </Angivelsesafgifter>
+ *   </Angivelse>
  */
 export function buildModtagMomsangivelseForeloebigRequest(
   seNumber: string,
@@ -292,23 +320,27 @@ export function buildModtagMomsangivelseForeloebigRequest(
   periodTo: string,
   vatFields: Record<string, number>,
 ): string {
-  // Build the Angivelsesafgifter block with the 17 fields in sequence.
-  // Only emit fields that have a non-zero value (XSD allows omission).
+  // Build the Angivelsesafgifter block — only emit non-zero fields (XSD allows omission)
   const afgifterXml = VAT_FIELD_NAMES
-    .filter((fieldName) => vatFields[fieldName] !== undefined && vatFields[fieldName] !== 0)
-    .map((fieldName) => `      <urn1:${fieldName}>${vatFields[fieldName].toFixed(2)}</urn1:${fieldName}>`)
-    .join('\n');
+    .filter((fieldName) => {
+      const val = vatFields[fieldName];
+      return val !== undefined && val !== 0;
+    })
+    .map((fieldName) => `<ns1:${fieldName}>${vatFields[fieldName].toFixed(2)}</ns1:${fieldName}>`)
+    .join('');
 
-  const body = `      <urn1:AngiverVirksomhedSENummer>
-        <urn1:VirksomhedSENummerIdentifikator xmlns:ns1="${NS_SE}">${escapeXml(seNumber)}</urn1:VirksomhedSENummerIdentifikator>
-      </urn1:AngiverVirksomhedSENummer>
-      <urn1:Angivelsesoplysninger>
-        <urn1:AngivelsePeriodeFraDato>${escapeXml(periodFrom)}</urn1:AngivelsePeriodeFraDato>
-        <urn1:AngivelsePeriodeTilDato>${escapeXml(periodTo)}</urn1:AngivelsePeriodeTilDato>
-      </urn1:Angivelsesoplysninger>
-      <urn1:Angivelsesafgifter>
-${afgifterXml}
-      </urn1:Angivelsesafgifter>`;
+  const body =
+    buildHovedOplysninger() +
+    `<ns:Angivelse>` +
+    `<ns:AngiverVirksomhedSENummer>` +
+    `<ns2:VirksomhedSENummerIdentifikator>${escapeXml(seNumber)}</ns2:VirksomhedSENummerIdentifikator>` +
+    `</ns:AngiverVirksomhedSENummer>` +
+    `<ns:Angivelsesoplysninger>` +
+    `<ns1:AngivelsePeriodeFraDato>${escapeXml(periodFrom)}</ns1:AngivelsePeriodeFraDato>` +
+    `<ns1:AngivelsePeriodeTilDato>${escapeXml(periodTo)}</ns1:AngivelsePeriodeTilDato>` +
+    `</ns:Angivelsesoplysninger>` +
+    `<ns:Angivelsesafgifter>${afgifterXml}</ns:Angivelsesafgifter>` +
+    `</ns:Angivelse>`;
 
   return buildSoapEnvelope('ModtagMomsangivelseForeloebig', body);
 }
@@ -319,12 +351,11 @@ ${afgifterXml}
  * deep link (Dybtlink) to TastSelv Erhverv.
  */
 export function parseModtagMomsangivelseForeloebigResponse(responseXml: string): SkatVatSubmissionResult {
-  // The TransaktionIdentifier is in the data namespace (ns2), not the context (ns)
+  // The TransaktionIdentifier may be spelled with 'd' or 'k' depending on the SKAT version
   const txIdMatch = responseXml.match(
-    /<(?:ns2:)?TransaktionIdentifier[^>]*>([0-9a-fA-F-]{36})<\/(?:ns2:)?TransaktionIdentifier>/,
+    /<(?:ns\d+:)?TransaktionIdentif[ik]er[^>]*>([0-9a-fA-F-]{36})<\/(?:ns\d+:)?TransaktionIdentif[ik]er>/,
   );
   const deepLinkMatch = responseXml.match(/UrlIndicator[^>]*>(https?:\/\/[^<]+)<\/UrlIndicator/);
-  // Advisory codes 5001 (ordinary) or 5002 (subsequent declaration)
   const advisoryMatch = responseXml.match(/AdvisoryKode[^>]*>(\d+)<\/AdvisoryKode/);
 
   return {
@@ -338,14 +369,33 @@ export function parseModtagMomsangivelseForeloebigResponse(responseXml: string):
 // ─── Service 3: MomsangivelseKvitteringHent ───────────────────────────
 
 /**
- * Build the SOAP request XML for MomsangivelseKvitteringHent.
+ * Build the SOAP request body for MomsangivelseKvitteringHent.
  * Fetches the receipt (PDF) after the legal entity has approved the draft
  * in TastSelv Erhverv. Returns error 4810 if not yet approved.
+ *
+ * Structure (from src/test/resources/MomsangivelseKvitteringHent_I_Document.xml):
+ *   <HovedOplysninger>...</HovedOplysninger>
+ *   <TransaktionIdentifier>42C8FE92-...</TransaktionIdentifier>
+ *   <Angiver>
+ *     <VirksomhedSENummerIdentifikator>12345678</...>
+ *   </Angiver>
+ *
+ * @param transactionIdentifier - The draft's transaction ID (from the submission response)
+ * @param seNumber - Optional SE-number for the Angiver block (the reporting company)
  */
 export function buildMomsangivelseKvitteringHentRequest(
   transactionIdentifier: string,
+  seNumber?: string,
 ): string {
-  const body = `      <urn1:TransaktionIdentifier>${escapeXml(transactionIdentifier)}</urn1:TransaktionIdentifier>`;
+  const body =
+    buildHovedOplysninger() +
+    `<ns1:TransaktionIdentifier>${escapeXml(transactionIdentifier)}</ns1:TransaktionIdentifier>` +
+    (seNumber
+      ? `<ns:Angiver>` +
+        `<ns2:VirksomhedSENummerIdentifikator>${escapeXml(seNumber)}</ns2:VirksomhedSENummerIdentifikator>` +
+        `</ns:Angiver>`
+      : '');
+
   return buildSoapEnvelope('MomsangivelseKvitteringHent', body);
 }
 
@@ -355,7 +405,7 @@ export function buildMomsangivelseKvitteringHentRequest(
  * Returns approved=false with errorCode if the draft is not yet approved.
  */
 export function parseMomsangivelseKvitteringHentResponse(responseXml: string): SkatReceiptResult {
-  // Check for error codes (4810 = not yet approved, 4811 = rejected, 4812 = no receipt)
+  // Error codes: 4810 = not yet approved, 4811 = rejected, 4812/4813 = other errors
   const errorCodeMatch = responseXml.match(/FejlKode[^>]*>(\d+)<\/FejlKode/);
   const errorCode = errorCodeMatch ? errorCodeMatch[1] : null;
 
@@ -392,55 +442,153 @@ export function parseMomsangivelseKvitteringHentResponse(responseXml: string): S
   };
 }
 
-// ─── HTTP Transport (mTLS) ────────────────────────────────────────────
+// ─── HTTP Transport (mTLS + WS-Security) ─────────────────────────────
+
+/** Loaded credentials are cached by the keystore module. */
+let cachedCredentials: SkatCredentials | null = null;
+
+function getCredentials(): SkatCredentials {
+  if (!cachedCredentials) {
+    cachedCredentials = loadSkatCredentials();
+  }
+  return cachedCredentials;
+}
 
 /**
  * Send a signed SOAP request to a SKAT endpoint via mutual TLS.
  *
- * PRODUCTION: This must use a real HTTP client with mTLS support that loads
- * the VOCES3 certificate from the keystore and applies WS-Security XML
- * signature to the SOAP body. In Node.js/Bun, this requires:
- *   - `https.Agent` with `cert`, `key`, `ca` options for mTLS
- *   - `xml-crypto` or similar for WS-Security XML-DSig signing
+ * Pipeline:
+ *   1. Load VOCES3 credentials (cert + private key) from the keystore
+ *   2. Sign the SOAP envelope with WS-Security (BinarySecurityToken + Timestamp + Signature)
+ *   3. POST over HTTPS with mTLS (client cert + key, SKAT server CA verified)
  *
- * SIMULATION MODE: When no keystore is configured, returns a simulated
- * response so the UI flow can be tested end-to-end.
- *
- * @param endpointUrl - The SKAT SOAP endpoint URL
- * @param soapXml - The unsigned SOAP envelope XML
- * @returns The SOAP response XML
+ * @param endpointKey - Which endpoint to use ("modtagMomsangivelseForeloebig", etc.)
+ * @param soapXml - The UNSIGNED SOAP envelope (with empty <wsse:Security> + wsu:Id'd Body)
+ * @returns The SOAP response XML body
+ * @throws SkatApiError on transport, TLS, or HTTP errors
  */
-async function sendSoapRequest(endpointUrl: string, soapXml: string): Promise<string> {
-  if (!hasSkatCredentials()) {
+async function sendSoapRequest(endpointKey: string, soapXml: string): Promise<string> {
+  const endpointUrl = ENDPOINTS[endpointKey as keyof typeof ENDPOINTS];
+  if (!endpointUrl) {
     throw new SkatApiError(
-      'SKAT_CREDENTIALS_MISSING',
-      'SKAT mTLS credentials not configured. Set SKAT_KEYSTORE_PATH, SKAT_CERT_ALIAS, ' +
-      'and the SKAT_ENDPOINT_* environment variables. See docs/SKAT-setup.md for onboarding.',
+      'SKAT_ENDPOINT_NOT_CONFIGURED',
+      `The endpoint for ${endpointKey} is not configured. ` +
+        `Set the SKAT_ENDPOINT_* environment variable. See docs/SKAT-setup.md.`,
     );
   }
 
-  // ── Production path: mTLS + WS-Security signing ──
-  // TODO: When real credentials are available, implement:
-  //   1. Load VOCES3 cert + private key from keystore (PKCS12/JKS)
-  //   2. Sign the SOAP body with xml-crypto (rsa-sha1, WS-Security)
-  //   3. Send via https.Agent with cert + key + ca (mTLS)
-  //
-  // For now, this throws so the caller can fall back to simulation mode.
-  // The actual signing + mTLS implementation will be added once we receive
-  // the test VOCES3 certificate from Skattestyrelsen.
+  let credentials: SkatCredentials;
+  try {
+    credentials = getCredentials();
+  } catch (err) {
+    throw new SkatApiError(
+      'SKAT_CREDENTIAL_LOAD_FAILED',
+      'Could not load SKAT mTLS credentials: ' +
+        (err instanceof Error ? err.message : String(err)),
+    );
+  }
 
-  throw new SkatApiError(
-    'SKAT_MTLS_NOT_IMPLEMENTED',
-    'mTLS + WS-Security signing is not yet implemented. This requires the VOCES3 ' +
-    'certificate from MitID Erhverv. Contact momsapi@sktst.dk to get test credentials. ' +
-    'Once the certificate is available, the sendSoapRequest function will be completed ' +
-    'with xml-crypto signing + https.Agent mTLS support.',
+  // Sign the envelope with WS-Security
+  let signedXml: string;
+  try {
+    signedXml = signSoapEnvelope(soapXml, credentials);
+  } catch (err) {
+    throw new SkatApiError(
+      'SKAT_SIGNING_FAILED',
+      'Failed to sign the SOAP envelope with WS-Security: ' +
+        (err instanceof Error ? err.message : String(err)),
+    );
+  }
+
+  logger.info(
+    `[SKAT-Transport] POST ${endpointUrl} (env=${SKAT_ENV}, ` +
+      `signed=${signedXml.length} bytes, action=${SOAP_ACTIONS[endpointKey]})`,
   );
+
+  // Build the HTTPS request options for mTLS.
+  // `cert` + `key` work for PEM; `pfx` works for PKCS12. We support both.
+  const tlsOptions: https.RequestOptions = credentials.pfxBuffer
+    ? { pfx: credentials.pfxBuffer, passphrase: credentials.passphrase || undefined }
+    : { cert: credentials.certPem, key: credentials.keyPem, passphrase: credentials.passphrase || undefined };
+
+  if (credentials.caPem) {
+    tlsOptions.ca = credentials.caPem;
+    tlsOptions.rejectUnauthorized = true;
+  } else {
+    // No custom truststore: use system CAs. In the test environment SKAT uses a
+    // private CA, so SKAT_TRUSTSTORE_PATH should be set. We keep strict verification.
+    tlsOptions.rejectUnauthorized = true;
+  }
+
+  const options: https.RequestOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      'SOAPAction': `"${SOAP_ACTIONS[endpointKey] || ''}"`,
+      'Content-Length': Buffer.byteLength(signedXml, 'utf8'),
+    },
+    // 3-minute timeout (matches the Java client's ConnectionTimeout="180000")
+    timeout: 180000,
+    ...tlsOptions,
+  };
+
+  // Perform the HTTPS POST and collect the response
+  const { statusCode, body } = await new Promise<{ statusCode: number; body: string }>(
+    (resolve, reject) => {
+      const req = https.request(endpointUrl, options, (res) => {
+        let data = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk: string) => {
+          data += chunk;
+        });
+        res.on('end', () => {
+          resolve({ statusCode: res.statusCode || 0, body: data });
+        });
+      });
+
+      req.on('error', (err: NodeJS.ErrnoException) => {
+        // Map common mTLS / network errors to actionable codes
+        let code = 'SKAT_TRANSPORT_ERROR';
+        if (err.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || err.code === 'CERT_HAS_EXPIRED') {
+          code = 'SKAT_TLS_CERT_INVALID';
+        } else if (err.code === 'ECONNREFUSED') {
+          code = 'SKAT_CONNECTION_REFUSED';
+        } else if (err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT') {
+          code = 'SKAT_CONNECTION_TIMEOUT';
+        }
+        reject(new SkatApiError(code, `HTTPS request to ${endpointUrl} failed: ${err.message}`));
+      });
+
+      req.on('timeout', () => {
+        req.destroy(new Error('Request timed out after 180s'));
+      });
+
+      req.write(signedXml);
+      req.end();
+    },
+  );
+
+  if (statusCode === 0 || statusCode >= 500) {
+    throw new SkatApiError(
+      'SKAT_SERVER_ERROR',
+      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 500)}`,
+    );
+  }
+
+  if (statusCode >= 400) {
+    // 4xx — likely a SOAP fault or auth failure
+    throw new SkatApiError(
+      'SKAT_CLIENT_ERROR',
+      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 500)}`,
+    );
+  }
+
+  logger.info(`[SKAT-Transport] Response: HTTP ${statusCode}, ${body.length} bytes`);
+  return body;
 }
 
 // ─── Simulated Responses (for UI testing without real certificates) ───
 
-/** Generate a simulated calendar response for UI testing. */
 function simulateVirksomhedKalenderHent(seNumber: string, year: number): SkatVatCalendarResult {
   return {
     seNumber,
@@ -453,7 +601,6 @@ function simulateVirksomhedKalenderHent(seNumber: string, year: number): SkatVat
   };
 }
 
-/** Generate a simulated VAT submission response for UI testing. */
 function simulateModtagMomsangivelseForeloebig(
   seNumber: string,
   periodFrom: string,
@@ -463,7 +610,7 @@ function simulateModtagMomsangivelseForeloebig(
   return {
     transactionIdentifier: txId,
     deepLink: `https://tastselv.skat.dk/momsindberetning?tx=${txId}&se=${seNumber}&from=${periodFrom}&to=${periodTo}`,
-    advisoryCode: '5001', // ordinary draft
+    advisoryCode: '5001',
     responseXml: `<?xml version="1.0" encoding="UTF-8"?>
 <SIMULATED_RESPONSE>
   <TransaktionIdentifier>${txId}</TransaktionIdentifier>
@@ -476,7 +623,6 @@ function simulateModtagMomsangivelseForeloebig(
   };
 }
 
-/** Generate a simulated receipt response for UI testing. */
 function simulateMomsangivelseKvitteringHent(txId: string): SkatReceiptResult {
   return {
     transactionIdentifier: txId,
@@ -496,10 +642,6 @@ function simulateMomsangivelseKvitteringHent(txId: string): SkatReceiptResult {
 
 /**
  * Service 1: Get the VAT calendar (periods + deadlines) for a SE-number.
- *
- * @param seNumber - The legal entity's SE-number (8 digits)
- * @param dateFrom - Start of search range (YYYY-MM-DD)
- * @param dateTo   - End of search range (YYYY-MM-DD)
  */
 export async function getVirksomhedKalenderHent(
   seNumber: string,
@@ -515,20 +657,12 @@ export async function getVirksomhedKalenderHent(
   }
 
   const soapXml = buildVirksomhedKalenderHentRequest(seNumber, dateFrom, dateTo);
-  const responseXml = await sendSoapRequest(ENDPOINTS.virksomhedKalenderHent, soapXml);
+  const responseXml = await sendSoapRequest('virksomhedKalenderHent', soapXml);
   return parseVirksomhedKalenderHentResponse(responseXml);
 }
 
 /**
  * Service 2: Submit a DRAFT VAT return to SKAT.
- *
- * The draft is pre-filled in TastSelv Erhverv. The legal entity must then
- * approve it with MitID via the returned deep link.
- *
- * @param seNumber  - The legal entity's SE-number (8 digits)
- * @param periodFrom - Period start (YYYY-MM-DD)
- * @param periodTo   - Period end (YYYY-MM-DD)
- * @param vatFields  - The 17 VAT field values (keyed by field name)
  */
 export async function submitModtagMomsangivelseForeloebig(
   seNumber: string,
@@ -538,7 +672,7 @@ export async function submitModtagMomsangivelseForeloebig(
 ): Promise<SkatVatSubmissionResult> {
   logger.info(
     `[SKAT] ModtagMomsangivelseForeloebig: SE=${seNumber}, ${periodFrom} → ${periodTo}, ` +
-    `fields: ${Object.keys(vatFields).length}`,
+      `fields: ${Object.keys(vatFields).length}`,
   );
 
   if (!hasSkatCredentials()) {
@@ -547,7 +681,7 @@ export async function submitModtagMomsangivelseForeloebig(
   }
 
   const soapXml = buildModtagMomsangivelseForeloebigRequest(seNumber, periodFrom, periodTo, vatFields);
-  const responseXml = await sendSoapRequest(ENDPOINTS.modtagMomsangivelseForeloebig, soapXml);
+  const responseXml = await sendSoapRequest('modtagMomsangivelseForeloebig', soapXml);
   return parseModtagMomsangivelseForeloebigResponse(responseXml);
 }
 
@@ -558,19 +692,22 @@ export async function submitModtagMomsangivelseForeloebig(
  * Returns errorCode='4810' if the draft has not yet been approved.
  *
  * @param transactionIdentifier - The ID returned by the draft submission
+ * @param seNumber - The reporting company's SE-number (recommended — included
+ *                   in the <Angiver> block so SKAT can identify the reporter)
  */
 export async function getMomsangivelseKvitteringHent(
   transactionIdentifier: string,
+  seNumber?: string,
 ): Promise<SkatReceiptResult> {
-  logger.info(`[SKAT] MomsangivelseKvitteringHent: txId=${transactionIdentifier}`);
+  logger.info(`[SKAT] MomsangivelseKvitteringHent: txId=${transactionIdentifier}, SE=${seNumber || '(none)'}`);
 
   if (!hasSkatCredentials()) {
     logger.info('[SKAT] SIMULATED MomsangivelseKvitteringHent (no mTLS credentials)');
     return simulateMomsangivelseKvitteringHent(transactionIdentifier);
   }
 
-  const soapXml = buildMomsangivelseKvitteringHentRequest(transactionIdentifier);
-  const responseXml = await sendSoapRequest(ENDPOINTS.momsangivelseKvitteringHent, soapXml);
+  const soapXml = buildMomsangivelseKvitteringHentRequest(transactionIdentifier, seNumber);
+  const responseXml = await sendSoapRequest('momsangivelseKvitteringHent', soapXml);
   return parseMomsangivelseKvitteringHentResponse(responseXml);
 }
 
@@ -580,20 +717,28 @@ export async function getMomsangivelseKvitteringHent(
  * Map AlphaFlow's VAT register data to the 17 SKAT MomsAngivelse fields.
  *
  * AlphaFlow's internal VAT codes:
- *   Output (salg): S25 (25%), S12 (12%), S0 (0%), SEU (EU sale, 0%)
- *   Input (køb):   K25 (25%), K12 (12%), K0 (0%), KEU (reverse charge), KUF
+ *   Output (salg): S25 (25%), S12 (12%), S0 (0%), SEU (EU sale, 0% — reverse charge to buyer)
+ *   Input (køb):   K25 (25%), K12 (12%), K0 (0%), KEU (EU reverse charge), KUF (non-EU import)
  *
- * SKAT's 17 fields (in sequence, see VAT_FIELD_NAMES):
- *   Field 9  = Input VAT (KoebsMoms)
- *   Field 14 = Output VAT (SalgsMoms)
- *   Field 1  = Net tax due (AfgiftTilsvar = SalgsMoms − KoebsMoms)
+ * SKAT field mapping:
+ *   Field 14 (SalgsMoms)    = totalOutputVAT (domestic output VAT)
+ *   Field 9  (KoebsMoms)    = totalInputVAT  (deductible input VAT, incl. reverse-charged EU + import)
+ *   Field 1  (AfgiftTilsvar)= netVATPayable  (field 14 − field 9)
+ *   Field 4  (EUSalgVarer)  = net base of SEU sales (Box B, ex-VAT EU goods sales)
+ *   Field 3  (EUKoeb)       = net base of KEU purchases (Box A, ex-VAT EU acquisitions)
+ *   Field 11 (MomsEUKoeb)   = VAT on KEU purchases (reverse-charged, also in field 9)
  *
- * For now, we map the most common fields. Fields for CO2, electricity, gas,
- * coal, oil, water taxes are left as 0 (AlphaFlow doesn't track these yet).
- * EU acquisition/sale boxes (A/B) are also 0 until AlphaFlow tracks EU trade.
+ * The reverse-charge VAT (KEU) appears in BOTH field 11 (output, self-charged)
+ * and field 9 (input, deductible) — they cancel out in field 1, which is the
+ * correct Danish momsangivelse treatment for EU reverse-charge acquisitions.
+ *
+ * Fields for CO2, electricity, gas, coal, oil, water taxes remain 0 (AlphaFlow
+ * does not track these special excise taxes yet). EU service boxes (16, 17) and
+ * field 12 (MomsEUYdelser) are 0 because AlphaFlow's VAT codes don't yet split
+ * goods from services for EU trade — this can be extended later.
  *
  * @param vatRegister - The result from computeVATRegister()
- * @returns The 17 VAT field values keyed by field name
+ * @returns The VAT field values keyed by field name
  */
 export function mapVatRegisterToSkatFields(vatRegister: {
   totalOutputVAT: number;
@@ -604,19 +749,50 @@ export function mapVatRegisterToSkatFields(vatRegister: {
 }): Record<string, number> {
   const fields: Record<string, number> = {};
 
-  // Field 14: Output VAT (SalgsMoms) — total output VAT
+  // ── Core totals ──
+  // Field 14: Output VAT (SalgsMoms) — total output VAT (domestic + reverse charge)
   fields['MomsAngivelseSalgsMomsBeloeb'] = Math.max(0, vatRegister.totalOutputVAT);
 
-  // Field 9: Input VAT (KoebsMoms) — total input VAT
+  // Field 9: Input VAT (KoebsMoms) — total deductible input VAT
   fields['MomsAngivelseKoebsMomsBeloeb'] = Math.max(0, vatRegister.totalInputVAT);
 
   // Field 1: Total tax due (positive = pay, negative = refund)
   fields['MomsAngivelseAfgiftTilsvarBeloeb'] = vatRegister.netVATPayable;
 
-  // EU trade fields — populated when AlphaFlow tracks EU acquisitions/sales
-  // For now these are 0 (omitted from the XML since they're 0)
-  // Future: map SEU output → MomsAngivelseEUSalgBeloebVarerBeloeb (box B)
-  // Future: map KEU input → MomsAngivelseEUKoebBeloeb (box A)
+  // ── EU trade fields (from the per-code breakdown) ──
+  const outputByCode = new Map(
+    (vatRegister.outputVAT || []).map((v) => [v.code, v.netAmount]),
+  );
+  const inputByCode = new Map(
+    (vatRegister.inputVAT || []).map((v) => [v.code, v.netAmount]),
+  );
+
+  // Helper: compute VAT amount from a net base using the code's rate
+  const vatFor = (code: string, map: Map<string, number>): number => {
+    const net = map.get(code) || 0;
+    const rate = VAT_RATE_MAP[code as keyof typeof VAT_RATE_MAP];
+    return rate ? net * (rate / 100) : 0;
+  };
+
+  // Field 4: Box B — EU goods sales without VAT (SEU = 0% EU sale, reverse charge to buyer)
+  const seuNet = outputByCode.get('SEU') || 0;
+  if (seuNet !== 0) {
+    fields['MomsAngivelseEUSalgBeloebVarerBeloeb'] = Math.max(0, seuNet);
+  }
+
+  // Field 3: Box A — EU goods acquisitions, ex-VAT (KEU net base)
+  const keuNet = inputByCode.get('KEU') || 0;
+  if (keuNet !== 0) {
+    fields['MomsAngivelseEUKoebBeloeb'] = Math.max(0, keuNet);
+  }
+
+  // Field 11: VAT on goods purchased abroad (KEU reverse charge = self-charged VAT)
+  // This is the VAT portion of the EU reverse-charge acquisition. It's also in
+  // field 9 as deductible input VAT — the two cancel in field 1.
+  const keuVat = vatFor('KEU', inputByCode);
+  if (keuVat !== 0) {
+    fields['MomsAngivelseMomsEUKoebBeloeb'] = Math.max(0, keuVat);
+  }
 
   return fields;
 }
