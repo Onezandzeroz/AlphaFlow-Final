@@ -93,3 +93,6 @@ local-*
 # Skills directory
 /skills/
 tool-results/
+
+# SKAT app.conf (contains certificate passphrase — CONFIDENTIAL)
+app.conf

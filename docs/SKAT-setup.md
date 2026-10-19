@@ -110,14 +110,22 @@ openssl pkcs12 -in certs/skat/client.p12 -clcerts -nokeys  -out certs/skat/clien
 # Then set SKAT_CERT_PATH + SKAT_KEY_PATH instead of SKAT_KEYSTORE_PATH
 ```
 
-### Truststore (CA bundle)
+### Truststore (CA bundle) — ✅ already in place
 
-The test environment uses a private CA. Save the CA certificate SKAT sends you
-as `certs/skat/skat-ca.pem` and set `SKAT_TRUSTSTORE_PATH=certs/skat/skat-ca.pem`.
-Without it, mTLS will fail with `UNABLE_TO_VERIFY_LEAF_SIGNATURE`.
+The TLS CA bundles for both TEST and PROD environments have been downloaded
+from [github.com/skat/rsu-b2b-sample-client-java/pem](https://github.com/skat/rsu-b2b-sample-client-java/tree/master/pem)
+into `certs/skat/tls/`:
 
-> The `certs/skat/` directory is **gitignored** and has `chmod 700`. See
-> `certs/skat/README.md` for the full list of files expected there.
+- **TEST environment**: `certs/skat/tls/skat-test-ca.pem` (GlobalSign intermediate + root)
+- **PROD environment**: `certs/skat/tls/skat-prod-ca.pem` (server + intermediate + root)
+
+Set `SKAT_TRUSTSTORE_PATH` in `.env` to the one matching your `SKAT_ENV`. The
+default in `.env.example` already points to the TEST bundle.
+
+> The `certs/skat/` directory is **gitignored** and has `chmod 700`. The
+> individual CA certs in `tls/` and `ws-security/` are public (from SKAT's
+> GitHub repo), but your future `client.p12` will be confidential. See
+> `certs/skat/README.md` for the full file map.
 
 ---
 
@@ -143,8 +151,9 @@ SKAT_KEY_PASSWORD=<key passphrase>
 # SKAT_CERT_PATH=certs/skat/client.crt
 # SKAT_KEY_PATH=certs/skat/client.key
 
-# Truststore (REQUIRED for the test environment — place the CA bundle in certs/skat/)
-SKAT_TRUSTSTORE_PATH=certs/skat/skat-ca.pem
+# Truststore (already in place — downloaded from SKAT's GitHub repo)
+# Use skat-test-ca.pem for TEST env, skat-prod-ca.pem for PROD env
+SKAT_TRUSTSTORE_PATH=certs/skat/tls/skat-test-ca.pem
 
 # AlphaFlow's own CVR (the RSU identifier registered with SKAT)
 ALPHAFLOW_CVR=<AlphaFlow CVR>
@@ -254,13 +263,15 @@ If SKAT rejects the request with a signature error:
 For production on Ubuntu with PM2:
 
 1. Store the production VOCES3 S1 `.p12` in `certs/skat/client.p12` (the
-   project's gitignored cert directory). Ensure the PM2 process user owns it:
+   project's gitignored cert directory). The truststore (`skat-prod-ca.pem`)
+   is already in `certs/skat/tls/` — switch `SKAT_TRUSTSTORE_PATH` to it.
+   Ensure the PM2 process user owns the keystore:
 
    ```bash
-   chown <pm2-user>:<pm2-group> certs/skat/*
-   chmod 700 certs certs/skat
-   chmod 600 certs/skat/client.p12   # keystore + private key: owner-only
-   chmod 644 certs/skat/skat-ca.pem  # CA bundle can be world-readable
+   chown -R <pm2-user>:<pm2-group> certs/skat
+   chmod 700 certs certs/skat certs/skat/tls certs/skat/ws-security
+   chmod 600 certs/skat/client.p12                         # private keystore: owner-only
+   chmod 644 certs/skat/tls/*.pem certs/skat/ws-security/*.pem  # public CA certs
    ```
 
 2. Set the production environment variables in the PM2 ecosystem config
