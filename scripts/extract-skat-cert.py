@@ -45,9 +45,30 @@ from pathlib import Path
 try:
     import jks
 except ImportError:
-    print("ERROR: pyjks is not installed.")
-    print("       Install it with:  uv pip install pyjks")
-    sys.exit(1)
+    # Auto-install pyjks if missing — the script only needs it once
+    import subprocess
+    import sys as _sys
+    print("pyjks not found — attempting auto-install...")
+    for tool in ["uv pip install pyjks", "pip3 install pyjks", f"{_sys.executable} -m pip install pyjks"]:
+        try:
+            result = subprocess.run(tool.split(), capture_output=True, text=True, timeout=60)
+            if result.returncode == 0:
+                print(f"  ✓ Installed via: {tool}")
+                break
+        except Exception:
+            continue
+    else:
+        print("ERROR: Could not auto-install pyjks. Install it manually:")
+        print("       uv pip install pyjks   (or)   pip3 install pyjks")
+        _sys.exit(1)
+    # Re-import after install
+    try:
+        import jks
+    except ImportError:
+        print("ERROR: pyjks install seemed to succeed but import still fails.")
+        print("       Try running with the same Python that has pip:")
+        print(f"       {_sys.executable} scripts/extract-skat-cert.py")
+        _sys.exit(1)
 
 # ─── Configuration ───────────────────────────────────────────────────────
 
@@ -79,14 +100,26 @@ TMP_DIR = "/tmp/skat-extract"
 
 def find_jks():
     """Find the client-keystore.jks file."""
+    # Check local clone locations first
     for p in JKS_PATHS:
         if p and os.path.isfile(p):
             return p
-    print("ERROR: Could not find client-keystore.jks")
-    print("       Download it from:")
-    print("       https://github.com/skat/rsu-b2b-sample-client-java/raw/master/rsu-b2b-sample-client/src/main/resources/keystore/client-keystore.jks")
-    print("       Then set the SKAT_JKS_PATH env var to its location.")
-    sys.exit(1)
+    # Auto-download from SKAT's GitHub repo if not found
+    print("[i] client-keystore.jks not found locally — downloading from SKAT's GitHub repo...")
+    import urllib.request
+    url = "https://raw.githubusercontent.com/skat/rsu-b2b-sample-client-java/master/rsu-b2b-sample-client/src/main/resources/keystore/client-keystore.jks"
+    local_path = os.path.join(TMP_DIR, "client-keystore.jks")
+    os.makedirs(TMP_DIR, exist_ok=True)
+    try:
+        urllib.request.urlretrieve(url, local_path)
+        print(f"  ✓ Downloaded to {local_path} ({os.path.getsize(local_path)} bytes)")
+        return local_path
+    except Exception as e:
+        print(f"ERROR: Could not download client-keystore.jks: {e}")
+        print("       Download it manually from:")
+        print("       https://github.com/skat/rsu-b2b-sample-client-java/raw/master/rsu-b2b-sample-client/src/main/resources/keystore/client-keystore.jks")
+        print("       Then set the SKAT_JKS_PATH env var to its location.")
+        sys.exit(1)
 
 
 def parse_app_conf(path):
