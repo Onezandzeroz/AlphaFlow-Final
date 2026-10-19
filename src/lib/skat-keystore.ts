@@ -25,7 +25,10 @@
  * @see https://github.com/skat/rsu-b2b-sample-client-java
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, unlinkSync, mkdtempSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { execSync } from 'child_process';
 import forge from 'node-forge';
 import { logger } from '@/lib/logger';
 
@@ -59,20 +62,137 @@ export class SkatKeystoreError extends Error {
 
 let cachedCredentials: SkatCredentials | null = null;
 
-// ─── PKCS12 parsing via node-forge ──────────────────────────────────────
+// ─── PKCS12 parsing ────────────────────────────────────────────────────
 
 /**
- * Parse a PKCS12 (.p12/.pfx) buffer into PEM cert + key using node-forge.
+ * Parse a PKCS12 (.p12/.pfx) buffer into PEM cert + key.
  *
- * VOCES3 certificates from MitID Erhverv store the cert in a `certBag` and
- * the key in a `pkcs8ShrouledKeyBag`. node-forge's `pkcs12FromAsn1` decrypts
- * the shrouded key using the supplied password.
+ * Two strategies are tried in order:
  *
- * If multiple certs are present (e.g. a chain), the first end-entity cert
- * (not a CA) is selected for signing.
+ * 1. **openssl CLI** (preferred, robust): writes the buffer to a temp file
+ *    and calls `openssl pkcs12` to extract the cert + key as PEM. Handles
+ *    ALL PKCS12 encryption algorithms (legacy RC2, modern PBES2/AES) since
+ *    openssl is the reference implementation. Requires `openssl` on PATH.
+ *
+ * 2. **node-forge** (fallback): pure-JS parser. Works for legacy RC2-encrypted
+ *    PKCS12 files but cannot extract certs from modern PBES2/AES keystores
+ *    (node-forge's pkcs12 module has limited cipher support).
+ *
+ * @param pfxBuffer - The raw PKCS12 file contents
+ * @param password - The keystore + key passphrase (VOCES3 uses the same for both)
  */
 function parsePkcs12(pfxBuffer: Buffer, password: string): { certPem: string; keyPem: string } {
-  // node-forge works with binary strings, not Buffers
+  // Try openssl first (handles all PKCS12 variants)
+  const opensslResult = parsePkcs12WithOpenssl(pfxBuffer, password);
+  if (opensslResult) {
+    return opensslResult;
+  }
+
+  // Fall back to node-forge (works for legacy RC2 encryption only)
+  logger.warn('[SKAT-Keystore] openssl extraction failed, falling back to node-forge');
+  return parsePkcs12WithNodeForge(pfxBuffer, password);
+}
+
+/**
+ * Extract cert + key from a PKCS12 using the openssl CLI.
+ *
+ * This is the most reliable method because openssl is the reference PKCS12
+ * implementation and supports all encryption algorithms (RC2, DES, 3DES,
+ * AES-128/256, PBES2, PBKDF2). The temp files are created with mkdtempSync
+ * (0700 permissions) and deleted immediately after extraction.
+ */
+function parsePkcs12WithOpenssl(
+  pfxBuffer: Buffer,
+  password: string,
+): { certPem: string; keyPem: string } | null {
+  // Check openssl is available
+  let opensslPath: string;
+  try {
+    opensslPath = execSync('command -v openssl', { encoding: 'utf8' }).trim();
+  } catch {
+    return null;
+  }
+
+  // Create a secure temp directory for the p12 + extracted PEM files
+  const tmpDir = mkdtempSync(join(tmpdir(), 'skat-p12-'));
+  const p12Path = join(tmpDir, 'keystore.p12');
+  const certPath = join(tmpDir, 'cert.pem');
+  const keyPath = join(tmpDir, 'key.pem');
+
+  try {
+    writeFileSync(p12Path, pfxBuffer, { mode: 0o600 });
+
+    // Extract the end-entity certificate (clcerts = client certs only, nokeys)
+    // -legacy is needed for old RC2-encrypted p12 files; harmless for modern ones
+    //   but we try without first, then with -legacy as fallback
+    const extractCert = (legacy: boolean) => {
+      const args = `pkcs12 -in ${p12Path} -passin pass:${password} -clcerts -nokeys -out ${certPath}` +
+        (legacy ? ' -legacy' : '');
+      return execSync(`openssl ${args}`, { encoding: 'utf8', stdio: 'pipe' });
+    };
+
+    try {
+      extractCert(false);
+    } catch {
+      try {
+        extractCert(true);
+      } catch {
+        return null; // openssl couldn't extract the cert
+      }
+    }
+
+    // Extract the private key (nocerts, -nodes = no encryption on output PEM)
+    const extractKey = (legacy: boolean) => {
+      const args = `pkcs12 -in ${p12Path} -passin pass:${password} -nocerts -nodes -out ${keyPath}` +
+        (legacy ? ' -legacy' : '');
+      return execSync(`openssl ${args}`, { encoding: 'utf8', stdio: 'pipe' });
+    };
+
+    try {
+      extractKey(false);
+    } catch {
+      try {
+        extractKey(true);
+      } catch {
+        return null; // openssl couldn't extract the key
+      }
+    }
+
+    const certPem = readFileSync(certPath, 'utf8').trim();
+    const keyPem = readFileSync(keyPath, 'utf8').trim();
+
+    if (!certPem.includes('BEGIN CERTIFICATE') || !keyPem.includes('PRIVATE KEY')) {
+      logger.warn('[SKAT-Keystore] openssl extraction produced incomplete PEM');
+      return null;
+    }
+
+    return { certPem, keyPem };
+  } catch (err) {
+    logger.warn(
+      '[SKAT-Keystore] openssl PKCS12 extraction failed: ' +
+        (err instanceof Error ? err.message : String(err)),
+    );
+    return null;
+  } finally {
+    // Clean up temp files (they may contain the private key)
+    for (const f of [p12Path, certPath, keyPath]) {
+      try { unlinkSync(f); } catch { /* ignore */ }
+    }
+    try { execSync(`rmdir ${tmpDir} 2>/dev/null || true`); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * Fallback: parse PKCS12 using node-forge (pure JS, no external deps).
+ *
+ * Only works for legacy RC2/DES-encrypted PKCS12 files. Modern keystores
+ * created by Java 11+ or openssl 3.x use PBES2/AES which node-forge cannot
+ * decrypt fully (it can get the key but not the certs).
+ */
+function parsePkcs12WithNodeForge(
+  pfxBuffer: Buffer,
+  password: string,
+): { certPem: string; keyPem: string } {
   const derBytes = pfxBuffer.toString('binary');
   const asn1 = forge.asn1.fromDer(derBytes);
 
@@ -82,7 +202,8 @@ function parsePkcs12(pfxBuffer: Buffer, password: string): { certPem: string; ke
   } catch (err) {
     throw new SkatKeystoreError(
       'PKCS12_DECRYPT_FAILED',
-      'Could not decrypt the PKCS12 keystore. Check SKAT_KEYSTORE_PASSWORD / SKAT_KEY_PASSWORD. ' +
+      'Could not decrypt the PKCS12 keystore with either openssl or node-forge. ' +
+        'Check SKAT_KEYSTORE_PASSWORD / SKAT_KEY_PASSWORD. ' +
         (err instanceof Error ? `(${err.message})` : ''),
     );
   }
@@ -90,7 +211,6 @@ function parsePkcs12(pfxBuffer: Buffer, password: string): { certPem: string; ke
   let certPem = '';
   let keyPem = '';
 
-  // OID constants from node-forge
   const oidCertBag = forge.pki.oids.certBag;
   const oidKeyBag = forge.pki.oids.keyBag;
   const oidShroudedKeyBag = forge.pki.oids.pkcs8ShroudedKeyBag;
@@ -99,7 +219,6 @@ function parsePkcs12(pfxBuffer: Buffer, password: string): { certPem: string; ke
     for (const bag of safeContents.safeBags) {
       // Certificate bag
       if (bag.type === oidCertBag && bag.attributes?.cert && !certPem) {
-        // Prefer end-entity cert (basicConstraints CA = false), but fall back to first cert
         const cert = bag.attributes.cert as forge.pki.Certificate;
         const isCA = cert.extensions?.some(
           (ext: { name?: string; cA?: boolean }) =>
@@ -108,7 +227,6 @@ function parsePkcs12(pfxBuffer: Buffer, password: string): { certPem: string; ke
         if (!isCA) {
           certPem = forge.pki.certificateToPem(cert);
         } else if (!certPem) {
-          // Fallback: use the CA cert if no end-entity cert found yet
           certPem = forge.pki.certificateToPem(cert);
         }
       }
@@ -118,29 +236,23 @@ function parsePkcs12(pfxBuffer: Buffer, password: string): { certPem: string; ke
         try {
           const privateKey = forge.pki.privateKeyFromAsn1(bag.asn1);
           keyPem = forge.pki.privateKeyToPem(privateKey);
-        } catch {
-          // ignore — try next bag
-        }
+        } catch { /* ignore */ }
       }
 
-      // Shrouded (encrypted) key bag — node-forge already decrypted it via the password
+      // Shrouded (encrypted) key bag
       if (bag.type === oidShroudedKeyBag && !keyPem) {
-        // node-forge exposes the decrypted key ASN1 on `bag.asn1` after pkcs12FromAsn1
         if (bag.asn1) {
           try {
             const privateKey = forge.pki.privateKeyFromAsn1(bag.asn1);
             keyPem = forge.pki.privateKeyToPem(privateKey);
           } catch {
-            // Some shrouded bags need manual decryption
             try {
               const decryptedPkcs8 = forge.pki.decryptPrivateKeyInfo(bag.asn1, password);
               if (decryptedPkcs8) {
                 const privateKey = forge.pki.privateKeyFromAsn1(decryptedPkcs8);
                 keyPem = forge.pki.privateKeyToPem(privateKey);
               }
-            } catch {
-              // ignore
-            }
+            } catch { /* ignore */ }
           }
         }
       }
@@ -151,7 +263,8 @@ function parsePkcs12(pfxBuffer: Buffer, password: string): { certPem: string; ke
     throw new SkatKeystoreError(
       'PKCS12_NO_CERTIFICATE',
       'No X.509 certificate found in the PKCS12 keystore. ' +
-        'The keystore must contain at least one certificate.',
+        'The keystore must contain at least one certificate. ' +
+        '(node-forge fallback was used — try regenerating the p12 with keytool/openssl)',
     );
   }
 
