@@ -107,7 +107,7 @@ async function main() {
     try {
       // Leaf tables that reference Accounts/Transactions WITHOUT Cascade.
       // Use .catch(() => {}) on tables that may not exist in all deployments.
-      await db.bankStatementLine.deleteMany({ where: { company: { id: c.id } } }).catch(() => {});
+      await db.bankStatementLine.deleteMany({ where: { companyId: c.id } }).catch(() => {});
       await db.bankStatement.deleteMany({ where: { companyId: c.id } });
       await db.bankConnection.deleteMany({ where: { companyId: c.id } });
       await db.recurringEntry.deleteMany({ where: { companyId: c.id } });
