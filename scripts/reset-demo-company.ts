@@ -39,6 +39,7 @@ async function main() {
           journalEntries: true,
           accounts: true,
           vatSubmissions: true,
+          auditLogs: true,
         },
       },
     },
@@ -79,6 +80,7 @@ async function main() {
     console.log(`      journalEntries: ${c._count.journalEntries}`);
     console.log(`      accounts: ${c._count.accounts}`);
     console.log(`      vatSubmissions: ${c._count.vatSubmissions}`);
+    console.log(`      auditLogs: ${c._count.auditLogs} (deleted first — demo data exempt from Bogføringsloven)`);
   }
 
   if (dryRun) {
@@ -86,17 +88,38 @@ async function main() {
     return;
   }
 
-  // Delete the old demo company/companies (cascade deletes all related data
-  // because the schema uses onDelete: Cascade on the Company relations)
+  // Delete the old demo company/companies.
+  //
+  // Most relations use onDelete: Cascade (transactions, invoices, contacts,
+  // journalEntries, accounts, vatSubmissions, etc.), so deleting the Company
+  // will automatically remove those.
+  //
+  // BUT: AuditLog uses onDelete: Restrict (required by Bogføringsloven §10-12
+  // to maintain an immutable 5-year audit trail). Demo data is NOT covered by
+  // the bookkeeping act, so we delete AuditLogs for the demo company first,
+  // then the Company can be deleted.
+  //
+  // User.activeCompany / User.oversightCompany use onDelete: SetNull, which
+  // the database handles automatically (sets those fields to null).
   console.log('\nDeleting...');
   for (const c of oldDemoCompanies) {
     try {
+      // Step 1: Delete AuditLog entries for this company (demo data — safe to delete)
+      const auditCount = await db.auditLog.count({ where: { companyId: c.id } });
+      if (auditCount > 0) {
+        console.log(`  Deleting ${auditCount} AuditLog entries (demo audit trail)…`);
+        await db.auditLog.deleteMany({ where: { companyId: c.id } });
+        console.log(`    ✓ AuditLog cleared`);
+      }
+
+      // Step 2: Delete the company (cascade handles the rest)
       await db.company.delete({ where: { id: c.id } });
       console.log(`  ✓ Deleted company "${c.name}" (ID: ${c.id}) + all related data`);
     } catch (err) {
       console.error(`  ✗ Failed to delete company ${c.id}: ${err instanceof Error ? err.message : String(err)}`);
-      console.error('    This may happen if there are foreign-key constraints without cascade.');
-      console.error('    Try running: bun x prisma db push --force-reset (WARNING: resets ALL data)');
+      console.error('    This may happen if there are other foreign-key constraints without cascade.');
+      console.error('    Check the schema for additional onDelete: Restrict relations on Company.');
+      console.error('    Do NOT run prisma db push --force-reset — that wipes ALL companies, not just demo.');
     }
   }
 
