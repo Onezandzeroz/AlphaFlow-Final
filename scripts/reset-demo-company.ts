@@ -79,7 +79,7 @@ async function main() {
     console.log(`      journalEntries: ${c._count.journalEntries}`);
     console.log(`      accounts: ${c._count.accounts}`);
     console.log(`      vatSubmissions: ${c._count.vatSubmissions}`);
-  });
+  }
 
   if (dryRun) {
     console.log('\n[DRY RUN] No changes made. Run without DRY_RUN=1 to actually delete.');
