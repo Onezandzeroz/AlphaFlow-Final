@@ -90,36 +90,65 @@ async function main() {
 
   // Delete the old demo company/companies.
   //
-  // Most relations use onDelete: Cascade (transactions, invoices, contacts,
-  // journalEntries, accounts, vatSubmissions, etc.), so deleting the Company
-  // will automatically remove those.
+  // We deliberately delete in LEAF-FIRST order (children before parents) to
+  // respect the foreign-key constraints WITHOUT changing the schema's onDelete
+  // behavior. This is critical: the schema intentionally uses onDelete: Restrict
+  // (default) on Account-related FKs to enforce Bogføringsloven §10-12 — an
+  // Account cannot be deleted while Transactions/JournalEntryLines reference it.
   //
-  // BUT: AuditLog uses onDelete: Restrict (required by Bogføringsloven §10-12
-  // to maintain an immutable 5-year audit trail). Demo data is NOT covered by
-  // the bookkeeping act, so we delete AuditLogs for the demo company first,
-  // then the Company can be deleted.
+  // For demo data (which is exempt from the bookkeeping act), we manually
+  // delete the leaf tables first, then work up to the Company.
   //
-  // User.activeCompany / User.oversightCompany use onDelete: SetNull, which
-  // the database handles automatically (sets those fields to null).
-  console.log('\nDeleting...');
+  // The schema's Cascade behavior is left UNCHANGED — normal tenants keep
+  // their full bookkeeping-law protection. This script only affects the demo
+  // company being deleted.
+  console.log('\nDeleting (leaf-first order, preserves Bogføringsloven for normal tenants)...');
   for (const c of oldDemoCompanies) {
     try {
-      // Step 1: Delete AuditLog entries for this company (demo data — safe to delete)
+      // Leaf tables that reference Accounts/Transactions WITHOUT Cascade.
+      // Use .catch(() => {}) on tables that may not exist in all deployments.
+      await db.bankStatementLine.deleteMany({ where: { company: { id: c.id } } }).catch(() => {});
+      await db.bankStatement.deleteMany({ where: { companyId: c.id } });
+      await db.bankConnection.deleteMany({ where: { companyId: c.id } });
+      await db.recurringEntry.deleteMany({ where: { companyId: c.id } });
+      await db.budgetEntry.deleteMany({ where: { budget: { companyId: c.id } } }).catch(() => {});
+      await db.budget.deleteMany({ where: { companyId: c.id } }).catch(() => {});
+      await db.projectBudgetEntry.deleteMany({ where: { project: { companyId: c.id } } }).catch(() => {});
+      await db.standardAccountMapping.deleteMany({ where: { companyId: c.id } }).catch(() => {});
+
+      // JournalEntryLines reference Accounts (Restrict) — delete lines before entries
+      await db.journalEntryLine.deleteMany({ where: { companyId: c.id } }).catch(() => {});
+      await db.journalEntry.deleteMany({ where: { companyId: c.id } });
+
+      // Transactions reference Accounts (Restrict) — delete after journal lines
+      await db.transaction.deleteMany({ where: { companyId: c.id } });
+
+      // Now Accounts can be deleted (no more references)
+      await db.account.deleteMany({ where: { companyId: c.id } });
+
+      // Other cascading tables (safe to delete directly)
+      await db.vATSubmission.deleteMany({ where: { companyId: c.id } });
+      await db.invoice.deleteMany({ where: { companyId: c.id } });
+      await db.contact.deleteMany({ where: { companyId: c.id } });
+      await db.fiscalPeriod.deleteMany({ where: { companyId: c.id } }).catch(() => {});
+
+      // AuditLog uses Restrict (Bogføringsloven) — delete for demo (exempt)
       const auditCount = await db.auditLog.count({ where: { companyId: c.id } });
       if (auditCount > 0) {
-        console.log(`  Deleting ${auditCount} AuditLog entries (demo audit trail)…`);
+        console.log(`  Deleting ${auditCount} AuditLog entries (demo exempt from Bogføringsloven)…`);
         await db.auditLog.deleteMany({ where: { companyId: c.id } });
-        console.log(`    ✓ AuditLog cleared`);
       }
 
-      // Step 2: Delete the company (cascade handles the rest)
+      // UserCompany join table
+      await db.userCompany.deleteMany({ where: { companyId: c.id } }).catch(() => {});
+
+      // Finally, the Company itself (no more FK references)
       await db.company.delete({ where: { id: c.id } });
-      console.log(`  ✓ Deleted company "${c.name}" (ID: ${c.id}) + all related data`);
+      console.log(`  ✓ Deleted company "${c.name}" (ID: ${c.id}) + all related demo data`);
     } catch (err) {
       console.error(`  ✗ Failed to delete company ${c.id}: ${err instanceof Error ? err.message : String(err)}`);
-      console.error('    This may happen if there are other foreign-key constraints without cascade.');
-      console.error('    Check the schema for additional onDelete: Restrict relations on Company.');
-      console.error('    Do NOT run prisma db push --force-reset — that wipes ALL companies, not just demo.');
+      console.error('    Schema cascade behavior is UNCHANGED — normal tenants are not affected.');
+      console.error('    If this persists, check for new tables referencing Company without Cascade.');
     }
   }
 
