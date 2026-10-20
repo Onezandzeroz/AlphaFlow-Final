@@ -527,7 +527,7 @@ Implementeret i applikationslaget (`src/lib/rate-limit.ts`) — in-memory slidin
 | Type | Implementering |
 |------|----------------|
 | **SuperDev (App Owner)** | `isSuperDev = true` for brugere med aktivt firma navn "AlphaAi". Promoteres via `/api/auth/promote-superdev`. Får alle features, bypasser 2FA og TokenPay, kan oversee andre tenants **read-only** (mutationer blokeres via `blockOversightMutation`). SuperDev-administrative endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare for abonnements- og trial-styring på tværs af tenants — dette er en bevidst App Owner-funktion, ikke en data-isolation. |
-| **Demo-firma** | Delt demo-firma (CVR 29876543) med read-only for non-SuperDev. Mutationer blokeres via `requireNotDemoCompany`. |
+| **Demo-firma** | Delt demo-firma (CVR 41250313) med read-only for non-SuperDev. Mutationer blokeres via `requireNotDemoCompany`. |
 
 **23 permissions** i 7 kategorier (`src/lib/rbac.ts` linje 81–117):
 

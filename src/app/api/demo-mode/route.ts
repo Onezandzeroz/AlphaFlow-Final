@@ -47,7 +47,7 @@ export const POST = withGuard({
     // ── Reseed demo company ────────────
     if (action === 'reseed') {
       const demoCompany = await db.company.findFirst({
-        where: { isDemo: true, isActive: true, cvrNumber: '29876543' },
+        where: { isDemo: true, isActive: true, cvrNumber: '41250313' },
       });
       if (!demoCompany) {
         return NextResponse.json({ error: 'Demo company not found' }, { status: 404 });
@@ -95,7 +95,7 @@ export const POST = withGuard({
       let demoCompany = await db.company.findFirst({
         where: {
           isActive: true,
-          cvrNumber: '29876543',
+          cvrNumber: '41250313',
         },
       });
       let demoCompanyId: string;
@@ -113,7 +113,7 @@ export const POST = withGuard({
             address: 'Vesterbrogade 42, 3. sal',
             phone: '+45 33 12 34 56',
             email: 'info@nordiskerhverv.dk',
-            cvrNumber: '29876543',
+            cvrNumber: '41250313',
             companyType: 'ApS',
             invoicePrefix: 'NE',
             invoiceTerms: 'Netto 30 dage',

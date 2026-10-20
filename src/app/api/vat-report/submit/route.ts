@@ -23,7 +23,10 @@ const VALID_PERIODS: VATReportingPeriod[] = ['Q1', 'Q2', 'Q3', 'Q4', 'YEARLY'];
  *   - period (required): Q1, Q2, Q3, Q4, or YEARLY
  */
 export const POST = withGuard(
-  { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_CREATE] },
+  // Note: blockDemo is intentionally NOT set here — the demo company's CVR is
+  // 41250313 (SKAT's test company), so demo users CAN submit VAT to SKAT's
+  // test environment for end-to-end testing. Oversight users are still blocked.
+  { auth: true, requireCompany: true, blockOversight: true, requireTokenPay: true, permissions: [Permission.DATA_CREATE] },
   async (request, ctx) => {
     try {
       const companyId = ctx.activeCompanyId!;

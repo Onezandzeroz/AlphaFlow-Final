@@ -331,7 +331,7 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
     activeCompanyRole,
     activeCompanyName: session.activeCompany?.name ?? null,
     demoModeEnabled: session.user.demoModeEnabled,
-    isDemoCompany: session.activeCompany?.isDemo === true && session.activeCompany?.cvrNumber === '29876543',
+    isDemoCompany: session.activeCompany?.isDemo === true && session.activeCompany?.cvrNumber === '41250313',
     oversightCompanyId: session.oversightCompanyId,
     oversightCompanyName: session.oversightCompany?.name ?? null,
     isOversightMode: session.oversightCompanyId !== null,

@@ -8,7 +8,7 @@
  *
  * This script:
  *   1. Sets isDemo = false for all companies EXCEPT the shared demo company
- *      (identified by cvrNumber = '29876543' or name = 'Nordisk Erhverv ApS')
+ *      (identified by cvrNumber = '41250313' or name = 'Nordisk Erhverv ApS')
  *   2. Sets demoModeEnabled = false for all users who are not currently in the demo company
  *
  * Run with: bun run scripts/fix-isdemo-default.ts
@@ -25,7 +25,7 @@ async function main() {
   const demoCompany = await prisma.company.findFirst({
     where: {
       OR: [
-        { cvrNumber: '29876543' },
+        { cvrNumber: '41250313' },
         { name: 'Nordisk Erhverv ApS' },
       ],
     },

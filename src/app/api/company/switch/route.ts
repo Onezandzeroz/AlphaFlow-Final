@@ -88,7 +88,7 @@ export const POST = withGuard(routeConfig['/api/company/switch'].POST!, async (r
       success: true,
       companyId,
       companyName: displayCompanyName,
-      isDemoCompany: company.isDemo && company.cvrNumber === '29876543',
+      isDemoCompany: company.isDemo && company.cvrNumber === '41250313',
       role: membership?.role ?? (ctx.isSuperDev ? 'OWNER' : null),
     });
   } catch (error) {

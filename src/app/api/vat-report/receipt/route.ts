@@ -19,7 +19,9 @@ import { notifyDataChanges } from '@/lib/notify-data-change';
  *   - submissionId (required): The VATSubmission database ID
  */
 export const POST = withGuard(
-  { auth: true, requireCompany: true, blockOversight: true, blockDemo: true, requireTokenPay: true, permissions: [Permission.DATA_CREATE] },
+  // Note: blockDemo is intentionally NOT set here — allows demo company (CVR
+  // 41250313) to fetch SKAT receipts during end-to-end SKAT testnet testing.
+  { auth: true, requireCompany: true, blockOversight: true, requireTokenPay: true, permissions: [Permission.DATA_CREATE] },
   async (request, ctx) => {
     try {
       const body = await request.json().catch(() => ({}));

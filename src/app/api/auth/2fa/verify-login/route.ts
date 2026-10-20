@@ -220,7 +220,7 @@ export const POST = withGuard({ auth: false }, async (request: NextRequest) => {
       });
       activeCompanyRole = userCompany?.role ?? null;
       activeCompanyName = userCompany?.company.name ?? null;
-      isDemoCompany = userCompany?.company.isDemo === true && userCompany?.company.cvrNumber === '29876543';
+      isDemoCompany = userCompany?.company.isDemo === true && userCompany?.company.cvrNumber === '41250313';
     }
 
     // Fetch user's companies for the selector

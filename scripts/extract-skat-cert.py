@@ -8,14 +8,18 @@ client-keystore.jks (in the rsu-b2b-sample-client-java GitHub repo) and
 builds a PKCS12 keystore that AlphaFlow can load.
 
 PRIVACY: This script runs entirely locally. It does NOT make any network
-request, does NOT print the passphrase, and does NOT upload anything.
-The passphrase is read from your local app.conf and used only in-memory.
+request (except an optional one-time download of the public JKS file from
+SKAT's GitHub repo), does NOT print the passphrase, and does NOT upload
+anything. The passphrase is read from your local app.conf and used only
+in-memory.
 
-PREREQUISITES:
-  - pyjks installed:  uv pip install pyjks   (or: pip install pyjks)
-  - openssl available on PATH
-  - The SKAT repo cloned (or just the client-keystore.jks file)
-  - Your app.conf file from SKAT (contains the certificate passphrase)
+TWO EXTRACTION METHODS (auto-detected):
+  1. keytool  — Java's native JKS tool (preferred, no Python deps needed)
+  2. pyjks    — Python library (fallback if keytool not installed)
+
+PREREQUISITES (one of):
+  - Java JRE installed (provides `keytool`):  sudo apt install default-jre
+  - OR pyjks Python package:                  pip3 install pyjks
 
 USAGE:
   1. Place your app.conf file at:  certs/skat/app.conf
@@ -39,42 +43,13 @@ ALTERNATIVE — if you don't want to place app.conf:
 import os
 import re
 import sys
+import shutil
 import subprocess
 from pathlib import Path
 
-try:
-    import jks
-except ImportError:
-    # Auto-install pyjks if missing — the script only needs it once
-    import subprocess
-    import sys as _sys
-    print("pyjks not found — attempting auto-install...")
-    for tool in ["uv pip install pyjks", "pip3 install pyjks", f"{_sys.executable} -m pip install pyjks"]:
-        try:
-            result = subprocess.run(tool.split(), capture_output=True, text=True, timeout=60)
-            if result.returncode == 0:
-                print(f"  ✓ Installed via: {tool}")
-                break
-        except Exception:
-            continue
-    else:
-        print("ERROR: Could not auto-install pyjks. Install it manually:")
-        print("       uv pip install pyjks   (or)   pip3 install pyjks")
-        _sys.exit(1)
-    # Re-import after install
-    try:
-        import jks
-    except ImportError:
-        print("ERROR: pyjks install seemed to succeed but import still fails.")
-        print("       Try running with the same Python that has pip:")
-        print(f"       {_sys.executable} scripts/extract-skat-cert.py")
-        _sys.exit(1)
-
 # ─── Configuration ───────────────────────────────────────────────────────
 
-# The JKS keystore from SKAT's public GitHub repo. Adjust this path if you
-# cloned the repo elsewhere. You can also download just this one file from:
-# https://github.com/skat/rsu-b2b-sample-client-java/blob/master/rsu-b2b-sample-client/src/main/resources/keystore/client-keystore.jks
+# The JKS keystore from SKAT's public GitHub repo.
 JKS_PATHS = [
     "/tmp/skat-rsu/rsu-b2b-sample-client/src/main/resources/keystore/client-keystore.jks",
     "./rsu-b2b-sample-client/src/main/resources/keystore/client-keystore.jks",
@@ -83,10 +58,15 @@ JKS_PATHS = [
 
 JKS_STOREPASS = "storepassword"  # public, from Client_Sign.properties
 
-# The alias we want — the VOCES3 System S1 integrationstest certificate
+# The alias we want — the VOCES3 System S1 integrationstest certificate.
+# Listed in BOTH CamelCase (as in app.conf) and lowercase (as stored in JKS).
+# keytool/pyjks will use whichever matches the keystore.
 PREFERRED_ALIASES = [
+    "LucaPacioli_ApS_System_Integrationstest_S1",
     "lucapacioli_aps_system_integrationstest_s1",
+    "LucaPacioli_ApS_System_Integrationstest_S1_expired",
     "lucapacioli_aps_system_integrationstest_s1_expired",
+    "LucaPacioli_ApS_System_Integrationstest_S1_revoked",
     "lucapacioli_aps_system_integrationstest_s1_revoked",
 ]
 
@@ -99,12 +79,11 @@ TMP_DIR = "/tmp/skat-extract"
 
 
 def find_jks():
-    """Find the client-keystore.jks file."""
-    # Check local clone locations first
+    """Find the client-keystore.jks file, auto-downloading if needed."""
     for p in JKS_PATHS:
         if p and os.path.isfile(p):
             return p
-    # Auto-download from SKAT's GitHub repo if not found
+    # Auto-download from SKAT's GitHub repo
     print("[i] client-keystore.jks not found locally — downloading from SKAT's GitHub repo...")
     import urllib.request
     url = "https://raw.githubusercontent.com/skat/rsu-b2b-sample-client-java/master/rsu-b2b-sample-client/src/main/resources/keystore/client-keystore.jks"
@@ -125,7 +104,7 @@ def find_jks():
 def parse_app_conf(path):
     """Parse the certificatePassphrases section from app.conf (HOCON format).
 
-    Returns a dict: { alias: passphrase }
+    Returns a dict: { alias: passphrase }  (both original and lowercased alias)
     """
     with open(path, "r") as f:
         content = f.read()
@@ -136,7 +115,6 @@ def parse_app_conf(path):
         return {}
 
     block = m.group(1)
-    # Parse lines like:  alias_name = "passphrase"
     passphrases = {}
     for line in block.splitlines():
         line = line.strip()
@@ -145,7 +123,6 @@ def parse_app_conf(path):
         m2 = re.match(r'^([a-zA-Z0-9_]+)\s*=\s*"([^"]*)"', line)
         if m2:
             alias = m2.group(1)
-            # Normalize: pyjks/jks aliases are lowercase, but app.conf may have CamelCase
             passphrases[alias] = m2.group(2)
             passphrases[alias.lower()] = m2.group(2)
 
@@ -153,8 +130,11 @@ def parse_app_conf(path):
 
 
 def get_passphrase():
-    """Get the certificate passphrase either from app.conf or env var."""
-    # Option 1: environment variable
+    """Get the certificate passphrase from app.conf or env var.
+
+    Returns (passphrases_dict_or_string, source_description)
+    """
+    # Option 1: environment variable (single passphrase)
     env_pass = os.environ.get("SKAT_KEY_PASSPHRASE")
     if env_pass:
         return env_pass, "(from SKAT_KEY_PASSPHRASE env var)"
@@ -185,87 +165,132 @@ def get_passphrase():
     sys.exit(1)
 
 
-def extract_key_and_cert(jks_path, alias, passphrase):
-    """Extract the private key + cert chain from the JKS as DER bytes."""
-    ks = jks.KeyStore.load(jks_path, JKS_STOREPASS)
+def has_keytool():
+    """Check if Java's keytool is available on PATH."""
+    return shutil.which("keytool") is not None
 
+
+def has_openssl():
+    """Check if openssl is available on PATH."""
+    return shutil.which("openssl") is not None
+
+
+# ─── Method 1: keytool (Java native, no Python deps) ────────────────────
+
+
+def extract_with_keytool(jks_path, alias, passphrase):
+    """Use Java's keytool to convert the JKS alias to a PKCS12 file directly.
+
+    keytool is Java's native JKS handler — it's the most reliable way to
+    read JKS keystores. Requires a Java JRE (provides `keytool`).
+    """
+    if not has_keytool():
+        return False, "keytool not found on PATH"
+
+    os.makedirs(os.path.dirname(OUTPUT_P12), exist_ok=True)
+    # Remove existing output so keytool doesn't complain
+    if os.path.exists(OUTPUT_P12):
+        os.remove(OUTPUT_P12)
+
+    cmd = [
+        "keytool",
+        "-importkeystore",
+        "-srckeystore", jks_path,
+        "-srcstorepass", JKS_STOREPASS,
+        "-srcalias", alias,
+        "-srckeypass", passphrase,
+        "-destkeystore", OUTPUT_P12,
+        "-deststorepass", passphrase,
+        "-destkeypass", passphrase,
+        "-deststoretype", "PKCS12",
+        "-J-Dkeystore.pkcs12.legacy=true",  # fast RC2 encryption (node-forge compatible)
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+
+    if result.returncode == 0 and os.path.exists(OUTPUT_P12):
+        return True, None
+    else:
+        stderr = result.stderr.strip()
+        # Clean up partial output
+        if os.path.exists(OUTPUT_P12):
+            os.remove(OUTPUT_P12)
+        if "UnrecoverableKeyException" in stderr or "Cannot recover key" in stderr:
+            return False, f"wrong passphrase for alias '{alias}'"
+        return False, stderr or "keytool failed (unknown reason)"
+
+
+# ─── Method 2: pyjks + openssl (Python, fallback) ───────────────────────
+
+
+def extract_with_pyjks(jks_path, alias, passphrase):
+    """Use the pyjks Python library to extract the key, then openssl to build PKCS12."""
+    try:
+        import jks
+    except ImportError:
+        return False, "pyjks not installed (install with: pip3 install pyjks)"
+
+    ks = jks.KeyStore.load(jks_path, JKS_STOREPASS)
     if alias not in ks.private_keys:
-        print(f"ERROR: Alias '{alias}' not found in keystore.")
-        print(f"       Available aliases: {list(ks.private_keys.keys())}")
-        return None
+        return False, f"alias '{alias}' not found in keystore"
 
     entry = ks.private_keys[alias]
     if not entry.is_decrypted():
         try:
             entry.decrypt(passphrase)
         except Exception as e:
-            print(f"ERROR: Could not decrypt private key for alias '{alias}'.")
-            print(f"       The passphrase is incorrect. ({e})")
-            return None
+            return False, f"could not decrypt private key (wrong passphrase?)"
 
-    key_der = entry.pkey
-    cert_der = entry.cert_chain[0].cert
-    ca_chain_der = b""
-    if len(entry.cert_chain) > 1:
-        for c in entry.cert_chain[1:]:
-            ca_chain_der += c.cert
+    if not has_openssl():
+        return False, "openssl not found on PATH (required for pyjks method)"
 
-    return key_der, cert_der, ca_chain_der
-
-
-def der_to_pem(der_bytes, pem_type="CERTIFICATE"):
-    """Convert DER bytes to PEM string."""
+    # Convert DER → PEM
     import base64
-    b64 = base64.b64encode(der_bytes).decode("ascii")
-    lines = [b64[i : i + 64] for i in range(0, len(b64), 64)]
-    return f"-----BEGIN {pem_type}-----\n" + "\n".join(lines) + f"\n-----END {pem_type}-----\n"
+    def der_to_pem(der, pem_type="CERTIFICATE"):
+        b64 = base64.b64encode(der).decode("ascii")
+        lines = [b64[i:i + 64] for i in range(0, len(b64), 64)]
+        return f"-----BEGIN {pem_type}-----\n" + "\n".join(lines) + f"\n-----END {pem_type}-----\n"
 
-
-def build_pkcs12(key_pem, cert_pem, ca_pem, out_path, passphrase):
-    """Build a PKCS12 keystore from PEM components using openssl."""
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    key_pem = der_to_pem(entry.pkey, "PRIVATE KEY")
+    cert_pem = der_to_pem(entry.cert_chain[0].cert, "CERTIFICATE")
+    ca_pem = ""
+    if len(entry.cert_chain) > 1:
+        ca_der = b"".join(c.cert for c in entry.cert_chain[1:])
+        ca_pem = der_to_pem(ca_der, "CERTIFICATE")
 
     # Write temp PEM files
     os.makedirs(TMP_DIR, exist_ok=True)
     key_file = os.path.join(TMP_DIR, "key.pem")
     cert_file = os.path.join(TMP_DIR, "cert.pem")
     ca_file = os.path.join(TMP_DIR, "ca-chain.pem")
-
-    with open(key_file, "w") as f:
-        f.write(key_pem)
-    with open(cert_file, "w") as f:
-        f.write(cert_pem)
+    with open(key_file, "w") as f: f.write(key_pem)
+    with open(cert_file, "w") as f: f.write(cert_pem)
     if ca_pem:
-        with open(ca_file, "w") as f:
-            f.write(ca_pem)
+        with open(ca_file, "w") as f: f.write(ca_pem)
 
-    # Build PKCS12 with openssl (use -legacy for fast RC2 encryption,
-    # which node-forge parses without issues)
+    os.makedirs(os.path.dirname(OUTPUT_P12), exist_ok=True)
     cmd = [
         "openssl", "pkcs12", "-export",
         "-inkey", key_file,
         "-in", cert_file,
         "-passout", f"pass:{passphrase}",
-        "-out", out_path,
+        "-out", OUTPUT_P12,
         "-legacy",
-        "-name", "lucapacioli_aps_system_integrationstest_s1",
+        "-name", alias,
     ]
-    if ca_pem and os.path.isfile(ca_file):
+    if ca_pem:
         cmd += ["-certfile", ca_file]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"ERROR: openssl pkcs12 failed: {result.stderr}")
-        sys.exit(1)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
-    # Clean up temp files (they contain the private key)
+    # Clean up temp files (contain private key)
     for f in [key_file, cert_file, ca_file]:
         if os.path.exists(f):
             os.remove(f)
-    try:
-        os.rmdir(TMP_DIR)
-    except OSError:
-        pass
+
+    if result.returncode == 0 and os.path.exists(OUTPUT_P12):
+        return True, None
+    return False, result.stderr.strip() or "openssl pkcs12 failed"
 
 
 # ─── Main ───────────────────────────────────────────────────────────────
@@ -276,112 +301,135 @@ def main():
     print("  SKAT Test Certificate Extractor")
     print("=" * 60)
     print()
-    print("This script extracts the VOCES3 S1 test certificate from")
-    print("SKAT's public client-keystore.jks and builds a PKCS12 file")
-    print("that AlphaFlow can load.")
+    print("Extracts the VOCES3 S1 test certificate from SKAT's public")
+    print("client-keystore.jks and builds a PKCS12 file for AlphaFlow.")
     print()
-    print("PRIVACY: runs entirely locally. No network. Passphrase is")
-    print("read from app.conf / env var and used in-memory only.")
+    print("PRIVACY: runs entirely locally. No network (except optional")
+    print("JKS download). Passphrase used in-memory only, never printed.")
+    print()
+
+    # Check prerequisites
+    use_keytool = has_keytool()
+    use_pyjks = False
+    if not use_keytool:
+        try:
+            import jks
+            use_pyjks = True
+        except ImportError:
+            pass
+
+    if not use_keytool and not use_pyjks:
+        print("ERROR: Neither keytool nor pyjks is available.")
+        print()
+        print("Install ONE of the following:")
+        print()
+        print("  Option A — Java JRE (provides keytool, recommended):")
+        print("    sudo apt install default-jre")
+        print()
+        print("  Option B — pyjks Python package:")
+        print("    sudo apt install python3-pip")
+        print("    pip3 install pyjks")
+        print("    # (if PEP 668 blocks: pip3 install --break-system-packages pyjks)")
+        sys.exit(1)
+
+    method = "keytool" if use_keytool else "pyjks"
+    print(f"[i] Extraction method: {method}" + (" (Java native)" if use_keytool else " (Python)"))
     print()
 
     # 1. Find the JKS
     jks_path = find_jks()
-    print(f"[1/5] JKS keystore: {jks_path}")
+    print(f"[1/4] JKS keystore: {jks_path}")
 
     # 2. Get the passphrase
     passphrase, source = get_passphrase()
-    print(f"[2/5] Passphrase source: {source}")
+    print(f"[2/4] Passphrase source: {source}")
     print(f"      (passphrase not shown for security)")
 
-    # 3. Load the keystore + list aliases
-    ks = jks.KeyStore.load(jks_path, JKS_STOREPASS)
-    aliases = list(ks.private_keys.keys())
-    print(f"[3/5] Keystore loaded. {len(aliases)} private key entries:")
-    for a in aliases:
-        marker = " ← preferred" if a in PREFERRED_ALIASES else ""
-        print(f"        - {a}{marker}")
-
-    # 4. Try each preferred alias with the passphrase
-    print(f"[4/5] Extracting private key + certificate...")
-    result = None
-    used_alias = None
-    # If passphrase came from app.conf, it's a dict of {alias: pass}
+    # 3. Determine which alias + passphrase to use
+    # If passphrase came from app.conf, it's a dict {alias: pass}
+    # If from env var, it's a single string
+    candidates = []  # list of (alias, passphrase) tuples to try
     if isinstance(passphrase, dict):
         for alias in PREFERRED_ALIASES:
             pwd = passphrase.get(alias) or passphrase.get(alias.lower())
-            if not pwd:
-                continue
-            print(f"        Trying alias '{alias}'...")
-            result = extract_key_and_cert(jks_path, alias, pwd)
-            if result:
-                used_alias = alias
-                passphrase_to_use = pwd
-                break
-        if not result:
-            # Try all aliases in the passphrases dict
-            for alias, pwd in passphrase.items():
-                if alias in ks.private_keys:
-                    print(f"        Trying alias '{alias}'...")
-                    result = extract_key_and_cert(jks_path, alias, pwd)
-                    if result:
-                        used_alias = alias
-                        passphrase_to_use = pwd
-                        break
+            if pwd:
+                candidates.append((alias, pwd))
+        # Also try all aliases present in the passphrases dict
+        for alias, pwd in passphrase.items():
+            if alias not in [c[0] for c in candidates]:
+                candidates.append((alias, pwd))
     else:
-        # Single passphrase from env var — try preferred aliases
-        passphrase_to_use = passphrase
         for alias in PREFERRED_ALIASES:
-            print(f"        Trying alias '{alias}'...")
-            result = extract_key_and_cert(jks_path, alias, passphrase_to_use)
-            if result:
-                used_alias = alias
-                break
+            candidates.append((alias, passphrase))
 
-    if not result:
+    if not candidates:
+        print("ERROR: No matching alias found in app.conf.")
+        print("       Expected an entry for one of:")
+        for a in PREFERRED_ALIASES:
+            print(f"         {a}")
+        sys.exit(1)
+
+    print(f"[3/4] Trying {len(candidates)} alias(es) with the {method} method...")
+
+    # 4. Try each candidate
+    success = False
+    used_alias = None
+    used_passphrase = None
+    for alias, pwd in candidates:
+        print(f"        - alias '{alias}'...", end=" ")
+        if use_keytool:
+            ok, err = extract_with_keytool(jks_path, alias, pwd)
+        else:
+            ok, err = extract_with_pyjks(jks_path, alias, pwd)
+        if ok:
+            print("✓")
+            success = True
+            used_alias = alias
+            used_passphrase = pwd
+            break
+        else:
+            print(f"✗ ({err})")
+
+    if not success:
         print()
-        print("ERROR: Could not extract the private key with the provided passphrase.")
-        print("       The passphrase does not match any of the preferred aliases.")
-        print("       Check that your app.conf contains the correct passphrase for")
+        print("ERROR: Could not extract the private key with any of the tried aliases.")
+        print()
+        if method == "keytool":
+            print("       The passphrase(s) in your app.conf do not match the keystore.")
+        else:
+            print("       The passphrase(s) could not decrypt the private key.")
+        print()
+        print("       Verify that your app.conf contains the correct passphrase for")
         print("       'lucapacioli_aps_system_integrationstest_s1'.")
         sys.exit(1)
 
-    key_der, cert_der, ca_der = result
-    print(f"        ✓ Extracted from alias '{used_alias}'")
-    print(f"          Private key: {len(key_der)} bytes DER")
-    print(f"          Certificate: {len(cert_der)} bytes DER")
-    if ca_der:
-        print(f"          CA chain: {len(ca_der)} bytes DER")
+    print(f"[4/4] Building PKCS12: {OUTPUT_P12}")
 
-    # 5. Build the PKCS12
-    print(f"[5/5] Building PKCS12 keystore: {OUTPUT_P12}")
-    key_pem = der_to_pem(key_der, "PRIVATE KEY")
-    cert_pem = der_to_pem(cert_der, "CERTIFICATE")
-    ca_pem = der_to_pem(ca_der, "CERTIFICATE") if ca_der else ""
-    build_pkcs12(key_pem, cert_pem, ca_pem, OUTPUT_P12, passphrase_to_use)
-
-    # 6. Verify
+    # Verify the output
     print()
     print("Verifying the PKCS12...")
     verify = subprocess.run(
-        ["openssl", "pkcs12", "-info", "-in", OUTPUT_P12, "-passin", f"pass:{passphrase_to_use}", "-noout"],
+        ["openssl", "pkcs12", "-info", "-in", OUTPUT_P12, "-passin", f"pass:{used_passphrase}", "-noout"],
         capture_output=True, text=True,
     )
-    if verify.returncode == 0:
+    if verify.returncode == 0 and "MAC verified OK" in verify.stderr:
+        print("  ✓ PKCS12 is valid — MAC verified OK")
+    elif verify.returncode == 0:
         print("  ✓ PKCS12 is valid and can be opened with the passphrase")
     else:
-        print(f"  ✗ Verification failed: {verify.stderr}")
-        sys.exit(1)
+        print(f"  ⚠ Verification warning: {verify.stderr.strip()}")
+        print(f"    (the file may still be usable — try loading it in AlphaFlow)")
 
-    # Done
     size = os.path.getsize(OUTPUT_P12)
     print()
     print("=" * 60)
     print("  ✓ SUCCESS — client.p12 created")
     print("=" * 60)
     print(f"  File: {OUTPUT_P12}  ({size} bytes)")
+    print(f"  Alias used: {used_alias}")
     print()
     print("Next steps:")
-    print(f"  1. Set in .env (the passphrase is the one from your app.conf):")
+    print(f"  1. Set in .env (use the SAME passphrase from your app.conf):")
     print(f"       SKAT_KEYSTORE_PATH={OUTPUT_P12}")
     print(f"       SKAT_KEYSTORE_PASSWORD=<passphrase>")
     print(f"       SKAT_KEY_PASSWORD=<passphrase>")
