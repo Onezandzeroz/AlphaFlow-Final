@@ -304,11 +304,28 @@ export async function submitVATToSkat(
     // referenceId = transactionIdentifier (for backward compat with UI)
     referenceId = result.transactionIdentifier;
 
-    logger.info(
-      `[VAT-Submit] DRAFT submitted to SKAT: ${submission.year} ${submission.period}, ` +
-      `txId=${transactionIdentifier}, advisory=${advisoryCode}, ` +
-      `deepLink=${deepLink ? 'yes' : 'no'}, simulated=${!hasSkatCredentials()}`,
-    );
+    // SKAT returns HTTP 200 for both success AND business errors (e.g. F0475).
+    // When skatErrorCode is set, the submission was REJECTED by SKAT —
+    // set status to ERROR so the user sees it was not accepted.
+    if (result.skatErrorCode) {
+      newStatus = 'ERROR';
+      errorCode = `SKAT_F${result.skatErrorCode}`;
+      errorMessage = result.skatErrorMessage || `SKAT afviste momsangivelsen (fejl ${result.skatErrorCode})`;
+      // Clear transactionIdentifier since SKAT didn't accept the draft
+      transactionIdentifier = null;
+      referenceId = null;
+      deepLink = null;
+      logger.warn(
+        `[VAT-Submit] SKAT rejected submission: ${submission.year} ${submission.period}, ` +
+        `errorCode=${errorCode}, errorMessage=${errorMessage}`,
+      );
+    } else {
+      logger.info(
+        `[VAT-Submit] DRAFT submitted to SKAT: ${submission.year} ${submission.period}, ` +
+        `txId=${transactionIdentifier}, advisory=${advisoryCode}, ` +
+        `deepLink=${deepLink ? 'yes' : 'no'}, simulated=${!hasSkatCredentials()}`,
+      );
+    }
   } catch (error) {
     newStatus = 'ERROR';
     if (error instanceof SkatApiError) {

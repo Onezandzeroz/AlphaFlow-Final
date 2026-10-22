@@ -1269,10 +1269,14 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                                   {language === 'da' ? 'PDF' : 'PDF'}
                                 </Button>
                               )}
-                              {/* Error message tooltip */}
+                              {/* Error message — for ERROR status (e.g. SKAT rejected with F0475) */}
                               {sub.status === 'ERROR' && sub.errorMessage && (
-                                <span className="text-xs text-red-500 dark:text-red-400" title={sub.errorMessage}>
-                                  <Info className="h-3 w-3" />
+                                <span
+                                  className="text-xs text-red-600 dark:text-red-400 inline-flex items-center gap-1 cursor-help"
+                                  title={sub.errorMessage}
+                                >
+                                  <AlertCircle className="h-3 w-3" />
+                                  {sub.errorCode ? sub.errorCode : (language === 'da' ? 'Fejl' : 'Error')}
                                 </span>
                               )}
                             </div>

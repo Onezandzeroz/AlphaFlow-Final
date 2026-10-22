@@ -104,6 +104,12 @@ export interface SkatVatSubmissionResult {
   deepLink: string | null;
   advisoryCode: string | null;
   responseXml: string;
+  /** SKAT business error code if the submission was rejected (e.g. '475').
+   *  When this is non-null, the submission was NOT accepted by SKAT —
+   *  transactionIdentifier will be empty and no receipt can be fetched. */
+  skatErrorCode: string | null;
+  /** Human-readable error text from SKAT (e.g. 'F0475, Der findes ingen angivelser...') */
+  skatErrorMessage: string | null;
 }
 
 export interface SkatReceiptResult {
@@ -481,10 +487,24 @@ export function buildModtagMomsangivelseForeloebigRequest(
 
 /**
  * Parse the ModtagMomsangivelseForeloebig SOAP response.
- * Extracts the TransaktionIdentifier (for receipt retrieval) and the
- * deep link (Dybtlink) to TastSelv Erhverv.
+ *
+ * SKAT returns HTTP 200 for both success AND business errors (e.g. F0475).
+ * The difference is in the SOAP body:
+ *   - SUCCESS: contains <TransaktionIdentifier> + <Dybtlink> + <AdvisoryKode>
+ *   - BUSINESS ERROR: contains <FejlStruktur> with <FejlIdentifikator> + <FejlTekst>
+ *
+ * This parser checks for both and populates skatErrorCode/skatErrorMessage
+ * when a business error is present, so the caller can set status=ERROR
+ * instead of status=SUBMITTED.
  */
 export function parseModtagMomsangivelseForeloebigResponse(responseXml: string): SkatVatSubmissionResult {
+  // Check for SKAT business error (FejlStruktur)
+  const errorCodeMatch = responseXml.match(/FejlIdentifikator[^>]*>(\d+)</);
+  // FejlTekst may contain commas, spaces, and Danish characters — use [\s\S] to match any char
+  const errorTextMatch = responseXml.match(/FejlTekst[^>]*>([\s\S]*?)<\/(?:\w+:)?FejlTekst/);
+  const skatErrorCode = errorCodeMatch ? errorCodeMatch[1] : null;
+  const skatErrorMessage = errorTextMatch ? errorTextMatch[1].trim() : null;
+
   // The TransaktionIdentifier may be spelled with 'd' or 'k' depending on the SKAT version
   const txIdMatch = responseXml.match(
     /<(?:ns\d+:)?TransaktionIdentif[ik]er[^>]*>([0-9a-fA-F-]{36})<\/(?:ns\d+:)?TransaktionIdentif[ik]er>/,
@@ -496,6 +516,8 @@ export function parseModtagMomsangivelseForeloebigResponse(responseXml: string):
     transactionIdentifier: txIdMatch ? txIdMatch[1] : '',
     deepLink: deepLinkMatch ? deepLinkMatch[1] : null,
     advisoryCode: advisoryMatch ? advisoryMatch[1] : null,
+    skatErrorCode,
+    skatErrorMessage,
     responseXml,
   };
 }
@@ -748,6 +770,8 @@ function simulateModtagMomsangivelseForeloebig(
     transactionIdentifier: txId,
     deepLink: `https://tastselv.skat.dk/momsindberetning?tx=${txId}&se=${seNumber}&from=${periodFrom}&to=${periodTo}`,
     advisoryCode: '5001',
+    skatErrorCode: null,
+    skatErrorMessage: null,
     responseXml: `<?xml version="1.0" encoding="UTF-8"?>
 <SIMULATED_RESPONSE>
   <TransaktionIdentifier>${txId}</TransaktionIdentifier>
