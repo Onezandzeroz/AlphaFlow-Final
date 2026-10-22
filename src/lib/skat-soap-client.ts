@@ -451,7 +451,11 @@ export function buildModtagMomsangivelseForeloebigRequest(
   periodTo: string,
   vatFields: Record<string, number>,
 ): string {
-  // Build the Angivelsesafgifter block — only emit non-zero fields (XSD allows omission)
+  // Build the Angivelsesafgifter block — emit ALL 17 fields (even zeros).
+  // SKAT's official sample (ModtagMomsangivelseForeloebig_I_Document.xml)
+  // includes all 17 fields, even when empty. While the XSD marks them
+  // minOccurs="0" (optional), emitting all 17 defensively rules out
+  // F0475 being caused by a missing required field.
   // ns3 = data namespace (MomsAngivelse* fields, AngivelsePeriodeFraDato)
   // ns4 = service namespace (Angivelse wrapper, AngiverVirksomhedSENummer, Angivelsesoplysninger)
   // ns2 = SE namespace (VirksomhedSENummerIdentifikator)
@@ -462,11 +466,10 @@ export function buildModtagMomsangivelseForeloebigRequest(
   //   WRONG:   <MomsAngivelseSalgsMomsBeloeb>2000.00</MomsAngivelseSalgsMomsBeloeb>
   // Using .toFixed(2) caused "BEA-382505: OSB Validate action failed validation"
   const afgifterXml = VAT_FIELD_NAMES
-    .filter((fieldName) => {
-      const val = vatFields[fieldName];
-      return val !== undefined && val !== 0;
+    .map((fieldName) => {
+      const val = vatFields[fieldName] ?? 0;
+      return `<ns3:${fieldName}>${Math.round(val)}</ns3:${fieldName}>`;
     })
-    .map((fieldName) => `<ns3:${fieldName}>${Math.round(vatFields[fieldName])}</ns3:${fieldName}>`)
     .join('');
 
   const body =
@@ -489,9 +492,14 @@ export function buildModtagMomsangivelseForeloebigRequest(
  * Parse the ModtagMomsangivelseForeloebig SOAP response.
  *
  * SKAT returns HTTP 200 for both success AND business errors (e.g. F0475).
- * The difference is in the SOAP body:
- *   - SUCCESS: contains <TransaktionIdentifier> + <Dybtlink> + <AdvisoryKode>
+ * The difference is in the SOAP body's SvarStruktur:
+ *   - SUCCESS: contains <AdvisStruktur> with <AdvisIdentifikator> (5001/5002)
+ *     + <Dybtlink> with the MitID approval URL
  *   - BUSINESS ERROR: contains <FejlStruktur> with <FejlIdentifikator> + <FejlTekst>
+ *
+ * Advisory codes (per SKAT's Java reference ServiceTestAction.java):
+ *   5001 = ordinary draft (normal angivelse)
+ *   5002 = subsequent declaration (efterangivelse)
  *
  * This parser checks for both and populates skatErrorCode/skatErrorMessage
  * when a business error is present, so the caller can set status=ERROR
@@ -510,7 +518,8 @@ export function parseModtagMomsangivelseForeloebigResponse(responseXml: string):
     /<(?:ns\d+:)?TransaktionIdentif[ik]er[^>]*>([0-9a-fA-F-]{36})<\/(?:ns\d+:)?TransaktionIdentif[ik]er>/,
   );
   const deepLinkMatch = responseXml.match(/UrlIndicator[^>]*>(https?:\/\/[^<]+)<\/UrlIndicator/);
-  const advisoryMatch = responseXml.match(/AdvisoryKode[^>]*>(\d+)<\/AdvisoryKode/);
+  // Advisory code: SKAT uses AdvisIdentifikator (not AdvisoryKode) inside AdvisStruktur
+  const advisoryMatch = responseXml.match(/AdvisIdentifikator[^>]*>(\d+)<\/(?:\w+:)?AdvisIdentifikator/);
 
   return {
     transactionIdentifier: txIdMatch ? txIdMatch[1] : '',
@@ -557,42 +566,92 @@ export function buildMomsangivelseKvitteringHentRequest(
 
 /**
  * Parse the MomsangivelseKvitteringHent SOAP response.
- * Extracts the receipt PDF (base64) and payment information.
- * Returns approved=false with errorCode if the draft is not yet approved.
+ *
+ * Response structure (per MomsangivelseKvitteringHent_O.xsd + Java reference):
+ *   <HovedOplysningerSvar>
+ *     <SvarStruktur>
+ *       <AdvisStruktur> OR <FejlStruktur>   ← SvarStruktur can contain either or both
+ *         <AdvisIdentifikator>4810</...>     ← Advis (info) codes
+ *         <AdvisTekst>...</...>
+ *       </AdvisStruktur>
+ *       <FejlStruktur>
+ *         <FejlIdentifikator>...</...>      ← Error codes
+ *       </FejlStruktur>
+ *     </SvarStruktur>
+ *   </HovedOplysningerSvar>
+ *   <PDFkvittering>
+ *     <DokumentFilIndholdData>base64-pdf</...>   ← The actual PDF receipt
+ *   </PDFkvittering>
+ *   <Betalingsoplysninger>
+ *     <OCRLinie>
+ *       <OCRKontoNummerIdentifikator>...</...>   ← Payment account number
+ *     </OCRLinie>
+ *     <BetalingIkkeBetaltBeloeb>1234.56</...>    ← Amount to pay
+ *     <AngivelseFristKalenderBetalingDato>2026-03-02</...>  ← Payment deadline
+ *   </Betalingsoplysninger>
+ *
+ * Advisory codes (per ServiceTestAction.java:122-131):
+ *   4810 = VAT return has yet to be approved in TastSelv (not yet MitID-approved)
+ *   4812 = other advisory on receipt
+ *
+ * Returns approved=false with errorCode when 4810/4812 advisory is present.
  */
 export function parseMomsangivelseKvitteringHentResponse(responseXml: string): SkatReceiptResult {
-  // Error codes: 4810 = not yet approved, 4811 = rejected, 4812/4813 = other errors
-  const errorCodeMatch = responseXml.match(/FejlKode[^>]*>(\d+)<\/FejlKode/);
+  // Check for advis codes (4810 = not yet approved, 4812 = other advis)
+  // These are in <AdvisStruktur><AdvisIdentifikator> (NOT FejlKode)
+  const advisMatch = responseXml.match(/AdvisIdentifikator[^>]*>(\d+)<\/(?:\w+:)?AdvisIdentifikator/);
+  const advisCode = advisMatch ? advisMatch[1] : null;
+
+  // Also check for error codes (FejlIdentifikator) — these indicate hard failures
+  const errorCodeMatch = responseXml.match(/FejlIdentifikator[^>]*>(\d+)</);
   const errorCode = errorCodeMatch ? errorCodeMatch[1] : null;
 
-  if (errorCode === '4810' || errorCode === '4811' || errorCode === '4812' || errorCode === '4813') {
+  // 4810 = not yet MitID-approved, 4811 = rejected, 4812 = other advis, 4813 = other error
+  const blockingCode = advisCode || errorCode;
+  if (blockingCode === '4810' || blockingCode === '4811' || blockingCode === '4812' || blockingCode === '4813') {
     return {
       transactionIdentifier: '',
       receiptPdfBase64: null,
       paymentInfo: null,
       approved: false,
-      errorCode,
+      errorCode: blockingCode,
       responseXml,
     };
   }
 
-  // Extract PDF receipt (base64-encoded)
-  const pdfMatch = responseXml.match(/KvitteringPdf[^>]*>([A-Za-z0-9+/=]+)<\/KvitteringPdf/);
+  // Extract PDF receipt: <PDFkvittering><DokumentFilIndholdData>base64</...>
+  const pdfMatch = responseXml.match(
+    /DokumentFilIndholdData[^>]*>([A-Za-z0-9+/=\s]+)<\/(?:\w+:)?DokumentFilIndholdData/,
+  );
+  const receiptPdfBase64 = pdfMatch ? pdfMatch[1].replace(/\s+/g, '') : null;
 
-  // Extract payment info
-  const amountMatch = responseXml.match(/Beloeb[^>]*>([\d.]+)<\/Beloeb/);
-  const dueDateMatch = responseXml.match(/ForfaldDato[^>]*>(\d{4}-\d{2}-\d{2})<\/ForfaldDato/);
-  const accountMatch = responseXml.match(/KontoNummer[^>]*>(\d+)<\/KontoNummer/);
+  // Extract payment info from <Betalingsoplysninger>:
+  //   <BetalingIkkeBetaltBeloeb> = amount to pay
+  //   <AngivelseFristKalenderBetalingDato> = payment deadline
+  //   <OCRKontoNummerIdentifikator> = account number for payment
+  const amountMatch = responseXml.match(/BetalingIkkeBetaltBeloeb[^>]*>([\d.,]+)</);
+  const dueDateMatch = responseXml.match(/AngivelseFristKalenderBetalingDato[^>]*>(\d{4}-\d{2}-\d{2})</);
+  const accountMatch = responseXml.match(/OCRKontoNummerIdentifikator[^>]*>(\d+)</);
+
+  // Extract advisory text if present (e.g. "Dette er en efterangivelse")
+  const advisTextMatch = responseXml.match(/AdvisTekst[^>]*>([\s\S]*?)<\/(?:\w+:)?AdvisTekst/);
+  const advisText = advisTextMatch ? advisTextMatch[1].trim() : null;
+
+  const hasPdf = !!receiptPdfBase64;
+  const hasPaymentInfo = !!(amountMatch || dueDateMatch || accountMatch);
+
+  // Approved = we got either a PDF or payment info (no blocking advis/error code)
+  const approved = hasPdf || hasPaymentInfo;
 
   return {
     transactionIdentifier: '',
-    receiptPdfBase64: pdfMatch ? pdfMatch[1] : null,
-    paymentInfo: (amountMatch || dueDateMatch || accountMatch) ? {
-      amount: amountMatch ? parseFloat(amountMatch[1]) : null,
+    receiptPdfBase64,
+    paymentInfo: hasPaymentInfo ? {
+      amount: amountMatch ? parseFloat(amountMatch[1].replace(/\./g, '').replace(',', '.')) : null,
       dueDate: dueDateMatch ? dueDateMatch[1] : null,
       accountNumber: accountMatch ? accountMatch[1] : null,
     } : null,
-    approved: true,
+    approved,
     errorCode: null,
     responseXml,
   };
