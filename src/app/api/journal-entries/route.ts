@@ -21,6 +21,11 @@ export const GET = withGuard(
       const fromDate = searchParams.get('from');
       const toDate = searchParams.get('to');
       const accountFilter = searchParams.get('account');
+      // Lightweight "exists" check: if take=1 is passed, return at most 1 entry
+      // (used by dashboard to check if any posted entries exist without
+      // fetching thousands of rows with full nested includes).
+      const takeParam = searchParams.get('take');
+      const takeLimit = takeParam ? parseInt(takeParam, 10) : undefined;
 
       const where: Record<string, unknown> = { ...tenantFilter(ctx) };
 
@@ -50,6 +55,7 @@ export const GET = withGuard(
       const entries = await db.journalEntry.findMany({
         where,
         orderBy: { date: 'desc' },
+        ...(takeLimit && { take: takeLimit }),
         include: {
           lines: {
             include: {

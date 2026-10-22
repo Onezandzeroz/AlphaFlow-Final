@@ -208,10 +208,12 @@ export function AppLayout({
   // brugerdata med det samme.
   const checkAuth = useAuthStore((s) => s.checkAuth);
   useEffect(() => {
-    // Polling — hvert 60. sekund
+    // Polling — every 5 min (was 60s — reduced for Neon compute).
+    // The WebSocket DATA_CHANGED event triggers an immediate refresh,
+    // so polling is only a fallback for missed events.
     const interval = setInterval(() => {
       checkAuth();
-    }, 60_000);
+    }, 300_000);
 
     // Event-baseret — genhent med det samme når en event modtages
     const handleRefresh = () => {

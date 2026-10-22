@@ -81,12 +81,16 @@ function sanitizeCompanyName(name: string): string {
 }
 
 // Retention policy
+// Per Bogføringsloven §§10-12 + Erhvervsstyrelsen guidance: data must be
+// retained for 5 years from the END of the fiscal year (not calendar year).
+// Since companies can have non-calendar fiscal years (e.g. Jul-Jun),
+// we retain monthly backups for 5 years + 2 months margin = 62 months.
 const RETENTION = {
-  hourly:  { count: 24, expiresMs: 25 * 60 * 60 * 1000 },         // 25 hours
-  daily:   { count: 30, expiresMs: 31 * 24 * 60 * 60 * 1000 },     // 31 days
-  weekly:  { count: 52, expiresMs: 53 * 24 * 60 * 60 * 1000 },     // 53 days
-  monthly: { count: 60, expiresMs: 5 * 365 * 24 * 60 * 60 * 1000 },   // 5 years (Bogføringsloven §12)
-  manual:  { count: 999, expiresMs: 90 * 24 * 60 * 60 * 1000 },    // 90 days
+  hourly:  { count: 0,  expiresMs: 0 },                               // Disabled — no hourly backups
+  daily:   { count: 30, expiresMs: 31 * 24 * 60 * 60 * 1000 },        // 31 days
+  weekly:  { count: 52, expiresMs: 53 * 24 * 60 * 60 * 1000 },        // 53 days (≈12 months)
+  monthly: { count: 62, expiresMs: (5 * 365 + 60) * 24 * 60 * 60 * 1000 }, // 5 years + 2 months (Bogføringsloven §12 + fiscal year margin)
+  manual:  { count: 999, expiresMs: 90 * 24 * 60 * 60 * 1000 },       // 90 days
 } as const;
 
 export type BackupType = 'hourly' | 'daily' | 'weekly' | 'monthly' | 'manual';
@@ -635,7 +639,7 @@ async function restoreTenantSnapshot(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // 1. Create pre-restore safety backup — MUST succeed
-    const preRestoreBackup = await createBackup(userId, 'automatic', 'hourly', companyId, 'tenant', {
+    const preRestoreBackup = await createBackup(userId, 'automatic', 'manual', companyId, 'tenant', {
       reason: 'pre-tenant-restore-snapshot',
     });
     if (!preRestoreBackup) {
@@ -765,7 +769,7 @@ export async function restoreBackupFromBuffer(
   }
 
   // Create a pre-restore safety backup — MUST succeed
-  const preRestoreBackup = await createBackup(userId, 'automatic', 'hourly', companyId, 'tenant', {
+  const preRestoreBackup = await createBackup(userId, 'automatic', 'manual', companyId, 'tenant', {
     reason: 'pre-upload-tenant-restore',
     source: originalFilename || 'uploaded-snapshot.zip',
   });

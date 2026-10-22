@@ -451,7 +451,7 @@ export function Dashboard({ user, onNavigate, onboardingStepJustDone, onOnboardi
         fetch(`/api/reports?type=income-statement&from=${from}&to=${to}`),
         fetch(`/api/reports?type=balance-sheet&to=${to}`),
         fetch(`/api/journal-entries?status=POSTED&from=${from}&to=${to}`),
-        fetch(`/api/journal-entries?status=POSTED`), // All entries regardless of date range
+        fetch(`/api/journal-entries?status=POSTED&take=1`), // Lightweight: just 1 entry to check if any data exists
         fetch(`/api/ledger?from=${from}&to=${to}`),
         fetch(`/api/vat-register?from=${from}&to=${to}`),
       ]);

@@ -209,13 +209,21 @@ export async function getAuthContext(request?: Request): Promise<AuthContext | n
     return null;
   }
 
-  // Sliding expiry: extend session on each use
-  const newExpiresAt = new Date();
-  newExpiresAt.setDate(newExpiresAt.getDate() + SESSION_MAX_AGE_DAYS);
-  await db.session.update({
-    where: { id: session.id },
-    data: { expiresAt: newExpiresAt },
-  });
+  // Sliding expiry: extend session on each use, but only if it's about to expire
+  // (< 24h remaining). This prevents a DB UPDATE on every single API request,
+  // which is especially costly on Neon (serverless Postgres) where each write
+  // keeps the compute active. Without this gate, polling clients (every 30-60s)
+  // would trigger hundreds of unnecessary writes per hour.
+  const remainingMs = session.expiresAt.getTime() - Date.now();
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+  if (remainingMs < TWENTY_FOUR_HOURS_MS) {
+    const newExpiresAt = new Date();
+    newExpiresAt.setDate(newExpiresAt.getDate() + SESSION_MAX_AGE_DAYS);
+    await db.session.update({
+      where: { id: session.id },
+      data: { expiresAt: newExpiresAt },
+    });
+  }
 
   // Determine the user's role in the active company
   let activeCompanyRole: string | null = null;

@@ -233,7 +233,7 @@ export function BackupPage({ user }: BackupPageProps) {
     }
     fetchSchedulerStatus();
     // Start with fast polling initially
-    interval = setInterval(fetchSchedulerStatus, 15_000);
+    interval = setInterval(fetchSchedulerStatus, 60_000); // was 15s — reduced for Neon compute
     return () => { if (interval) clearInterval(interval); if (timeout) clearTimeout(timeout); };
   }, []);
 

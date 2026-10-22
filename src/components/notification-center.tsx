@@ -98,7 +98,7 @@ const strings = {
 };
 
 const FETCH_INTERVAL = 5 * 60 * 1000; // 5 minutes (fallback polling)
-const READ_STATE_SYNC_INTERVAL = 30 * 1000; // 30 seconds — how often to poll read state from server for cross-device sync
+const READ_STATE_SYNC_INTERVAL = 2 * 60 * 1000; // 2 min — was 30s, reduced for Neon compute
 
 export function NotificationCenter({ onNavigate }: NotificationCenterProps) {
   const { language } = useLanguageStore();

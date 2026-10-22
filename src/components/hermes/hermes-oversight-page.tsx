@@ -158,9 +158,9 @@ export function HermesOversightPage({ user }: HermesOversightPageProps) {
     Promise.all([fetchTenants(), fetchUsage()]).finally(() => setIsLoading(false));
   }, [fetchTenants, fetchUsage]);
 
-  // ── Auto-refresh usage every 15s (live counters) ──
+  // ── Auto-refresh usage every 60s (was 15s — reduced for Neon compute) ──
   useEffect(() => {
-    const interval = setInterval(fetchUsage, 15_000);
+    const interval = setInterval(fetchUsage, 60_000);
     return () => clearInterval(interval);
   }, [fetchUsage]);
 

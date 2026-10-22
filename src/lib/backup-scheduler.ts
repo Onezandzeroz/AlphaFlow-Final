@@ -372,7 +372,11 @@ export async function getCronHealth(companyId: string): Promise<{
 // These match the retention policy in backup-engine.ts
 
 const SCHEDULES: { type: BackupType; cron: string; label: string; jobType: string }[] = [
-  { type: 'hourly',  cron: '5 * * * *',       label: 'Hourly backup',  jobType: 'backup_hourly' },
+  // Hourly backups removed entirely to reduce Neon compute.
+  // The daily backup at 02:15 captures a full snapshot every night, providing
+  // 31 days of rollback granularity — more than sufficient for operational recovery.
+  // Bogføringsloven only requires regular backups + 5-year retention (monthly),
+  // not hourly snapshots. This saves ~15-20% of Neon CU-hrs.
   { type: 'daily',   cron: '15 2 * * *',       label: 'Daily backup',   jobType: 'backup_daily' },
   { type: 'weekly',  cron: '30 3 * * 1',       label: 'Weekly backup',  jobType: 'backup_weekly' },
   { type: 'monthly', cron: '0 4 1 * *',        label: 'Monthly backup', jobType: 'backup_monthly' },

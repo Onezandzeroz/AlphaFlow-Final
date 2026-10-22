@@ -55,7 +55,7 @@ export function ReceivedInvoiceNotifier() {
     };
 
     checkForNew(); // Initial fetch (sets prevCount, no toast)
-    const interval = setInterval(checkForNew, 30000); // Poll every 30s
+    const interval = setInterval(checkForNew, 120000); // Poll every 2 min (was 30s — reduced for Neon compute)
 
     return () => {
       cancelled = true;
