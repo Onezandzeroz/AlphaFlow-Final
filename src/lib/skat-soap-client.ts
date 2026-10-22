@@ -366,12 +366,18 @@ export function buildModtagMomsangivelseForeloebigRequest(
   // ns3 = data namespace (MomsAngivelse* fields, AngivelsePeriodeFraDato)
   // ns4 = service namespace (Angivelse wrapper, AngiverVirksomhedSENummer, Angivelsesoplysninger)
   // ns2 = SE namespace (VirksomhedSENummerIdentifikator)
+  //
+  // IMPORTANT: SKAT's XSD defines all MomsAngivelse* fields as xs:integer (NOT xs:decimal).
+  // This means values must be formatted as integers without decimal points:
+  //   CORRECT: <MomsAngivelseSalgsMomsBeloeb>2000</MomsAngivelseSalgsMomsBeloeb>
+  //   WRONG:   <MomsAngivelseSalgsMomsBeloeb>2000.00</MomsAngivelseSalgsMomsBeloeb>
+  // Using .toFixed(2) caused "BEA-382505: OSB Validate action failed validation"
   const afgifterXml = VAT_FIELD_NAMES
     .filter((fieldName) => {
       const val = vatFields[fieldName];
       return val !== undefined && val !== 0;
     })
-    .map((fieldName) => `<ns3:${fieldName}>${vatFields[fieldName].toFixed(2)}</ns3:${fieldName}>`)
+    .map((fieldName) => `<ns3:${fieldName}>${Math.round(vatFields[fieldName])}</ns3:${fieldName}>`)
     .join('');
 
   const body =
