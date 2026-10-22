@@ -282,10 +282,34 @@ function parsePkcs12WithNodeForge(
 // ─── PEM extraction helper ───────────────────────────────────────────────
 
 /**
- * Strip PEM headers/footers and whitespace to get the raw base64 DER content.
- * Used for the BinarySecurityToken (which is base64-encoded DER, not PEM).
+ * Extract the raw base64 DER content from a PEM certificate.
+ *
+ * IMPORTANT: When openssl extracts a certificate from a PKCS12 keystore
+ * (`openssl pkcs12 -clcerts -nokeys`), it includes "Bag Attributes"
+ * (localKeyID, friendlyName) and subject/issuer lines BEFORE the actual
+ * PEM certificate block. If we naively strip PEM headers, these metadata
+ * lines get included in the base64 output, corrupting the certificate.
+ *
+ * This function extracts ONLY the content between the BEGIN/END CERTIFICATE
+ * markers, ignoring any Bag Attributes or other metadata outside the block.
+ *
+ * The result is pure base64-encoded DER — exactly what the WS-Security
+ * BinarySecurityToken element requires.
  */
 function pemToBase64(pem: string): string {
+  // Extract only the certificate content between BEGIN/END CERTIFICATE markers.
+  // This ignores "Bag Attributes" and subject/issuer lines that openssl
+  // includes in PKCS12 PEM output.
+  const match = pem.match(
+    /-----BEGIN CERTIFICATE-----\s*([\s\S]*?)\s*-----END CERTIFICATE-----/,
+  );
+  if (match) {
+    // Return only the base64 content between the markers, with whitespace removed
+    return match[1].replace(/\s+/g, '');
+  }
+
+  // Fallback: if no CERTIFICATE markers found (e.g. for private keys),
+  // strip any BEGIN/END markers and whitespace
   return pem
     .replace(/-----BEGIN [A-Z0-9 ]+-----/g, '')
     .replace(/-----END [A-Z0-9 ]+-----/g, '')
