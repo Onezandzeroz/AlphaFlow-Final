@@ -19,7 +19,7 @@ async function main() {
           transactions: true,
           invoices: true,
           accounts: true,
-          users: true,
+          members: true,
         },
       },
     },
