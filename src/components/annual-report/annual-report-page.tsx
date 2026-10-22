@@ -217,34 +217,74 @@ function getStatusIcon(status: VATSubmissionStatus) {
  * filing real VAT returns). They must NOT reference test environments,
  * SKAT support emails, or internal developer concerns. They should explain
  * what went wrong and what the user can do about it.
+ *
+ * Returns { message, severity } where severity is:
+ *   'warning' — mild business error (wrong period, already filed, etc.)
+ *               shown in orange/yellow via toast.warning
+ *   'error'   — serious error (delegation missing, technical failure)
+ *               shown in red via toast.error
  */
-function getSkatErrorDescription(skatCode: string, language: 'da' | 'en'): string {
-  const messages: Record<string, { da: string; en: string }> = {
+type SkatErrorSeverity = 'warning' | 'error';
+
+interface SkatErrorInfo {
+  message: string;
+  severity: SkatErrorSeverity;
+}
+
+function getSkatErrorDescription(skatCode: string, language: 'da' | 'en'): SkatErrorInfo {
+  const messages: Record<string, { da: SkatErrorInfo; en: SkatErrorInfo }> = {
     '475': {
-      da: 'SKAT har modtaget indberetningen, men der kræves ingen momsangivelse for den valgte periode. Dette kan skyldes at virksomheden ikke er momsregistreret for perioden, eller at perioden allerede er indberettet. Tjek at du har valgt den rigtige periode, eller kontakt din bogholder.',
-      en: 'SKAT received the submission, but no VAT return is expected for the selected period. This may be because the company is not VAT-registered for this period, or the period has already been reported. Check that you have selected the correct period, or contact your accountant.',
+      da: {
+        severity: 'warning',
+        message: 'SKAT har modtaget indberetningen, men der kræves ingen momsangivelse for den valgte periode. Dette kan skyldes at virksomheden ikke er momsregistreret for perioden, eller at perioden allerede er indberettet. Tjek at du har valgt den rigtige periode, eller kontakt din bogholder.',
+      },
+      en: {
+        severity: 'warning',
+        message: 'SKAT received the submission, but no VAT return is expected for the selected period. This may be because the company is not VAT-registered for this period, or the period has already been reported. Check that you have selected the correct period, or contact your accountant.',
+      },
     },
     '4801': {
-      da: 'SKAT afviste indberetningen: Virksomheden har ikke delegeret adgang til systemudbyder. Log ind på skat.dk og delegere "Nemvirksomhed – adgang for systemudbyder" til AlphaFlows CVR.',
-      en: 'SKAT rejected the submission: The company has not delegated access to the system provider. Log in to skat.dk and delegate "Nemvirksomhed – system provider access" to AlphaFlow\'s CVR.',
+      da: {
+        severity: 'error',
+        message: 'SKAT afviste indberetningen: Virksomheden har ikke delegeret adgang til systemudbyder. Log ind på skat.dk og delegere "Nemvirksomhed – adgang for systemudbyder" til AlphaFlows CVR.',
+      },
+      en: {
+        severity: 'error',
+        message: 'SKAT rejected the submission: The company has not delegated access to the system provider. Log in to skat.dk and delegate "Nemvirksomhed – system provider access" to AlphaFlow\'s CVR.',
+      },
     },
     '4802': {
-      da: 'SKAT afviste indberetningen: Der er allerede indberettet moms for denne periode. Hvis det er en efterangivelse, skal du bruge funktionen til efterangivelse.',
-      en: 'SKAT rejected the submission: VAT has already been reported for this period. If this is a subsequent declaration, use the subsequent declaration feature.',
+      da: {
+        severity: 'warning',
+        message: 'SKAT afviste indberetningen: Der er allerede indberettet moms for denne periode. Hvis det er en efterangivelse, skal du bruge funktionen til efterangivelse.',
+      },
+      en: {
+        severity: 'warning',
+        message: 'SKAT rejected the submission: VAT has already been reported for this period. If this is a subsequent declaration, use the subsequent declaration feature.',
+      },
     },
     '4803': {
-      da: 'SKAT afviste indberetningen: Periode er uden for den gyldige indberetningsperiode. Vælg en periode der ligger inden for det aktuelle indberetningsår.',
-      en: 'SKAT rejected the submission: The period is outside the valid reporting period. Select a period within the current reporting year.',
+      da: {
+        severity: 'warning',
+        message: 'SKAT afviste indberetningen: Periode er uden for den gyldige indberetningsperiode. Vælg en periode der ligger inden for det aktuelle indberetningsår.',
+      },
+      en: {
+        severity: 'warning',
+        message: 'SKAT rejected the submission: The period is outside the valid reporting period. Select a period within the current reporting year.',
+      },
     },
   };
 
-  const msg = messages[skatCode];
-  if (msg) return msg[language];
+  const entry = messages[skatCode];
+  if (entry) return entry[language];
 
-  // Unknown SKAT error — show the code + generic message
-  return language === 'da'
-    ? `SKAT afviste momsangivelsen med fejlkode ${skatCode}. Prøv igen senere, eller kontakt din bogholder hvis problemet fortsætter.`
-    : `SKAT rejected the VAT return with error code ${skatCode}. Try again later, or contact your accountant if the problem persists.`;
+  // Unknown SKAT error — treat as serious (error) since we don't know what it is
+  return {
+    severity: 'error',
+    message: language === 'da'
+      ? `SKAT afviste momsangivelsen med fejlkode ${skatCode}. Prøv igen senere, eller kontakt din bogholder hvis problemet fortsætter.`
+      : `SKAT rejected the VAT return with error code ${skatCode}. Try again later, or contact your accountant if the problem persists.`,
+  };
 }
 
 /**
@@ -667,15 +707,16 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
           },
         );
       } else if (mappedSubmission.status === 'ERROR' && mappedSubmission.errorCode?.startsWith('SKAT_F')) {
-        // SKAT REJECTED: business error (e.g. F0475)
+        // SKAT REJECTED: business error (e.g. F0475, F4801, F4802, F4803)
+        // Use toast.warning (orange) for mild procedural errors (wrong period, already filed)
+        // and toast.error (red) for serious errors (missing delegation, unknown codes)
         const skatCode = mappedSubmission.errorCode.replace('SKAT_F', '');
-        const userMessage = getSkatErrorDescription(skatCode, language);
-        toast.error(
-          language === 'da' ? 'SKAT afviste momsangivelsen' : 'SKAT rejected the VAT return',
-          {
-            description: userMessage,
-          },
-        );
+        const errorInfo = getSkatErrorDescription(skatCode, language);
+        const toastMethod = errorInfo.severity === 'warning' ? toast.warning : toast.error;
+        const title = errorInfo.severity === 'warning'
+          ? (language === 'da' ? 'SKAT kunne ikke behandle momsangivelsen' : 'SKAT could not process the VAT return')
+          : (language === 'da' ? 'SKAT afviste momsangivelsen' : 'SKAT rejected the VAT return');
+        toastMethod(title, { description: errorInfo.message });
       } else if (mappedSubmission.status === 'ERROR') {
         // OTHER ERROR: transport error, signing error, etc.
         toast.error(
