@@ -55,6 +55,8 @@ export const POST = withGuard({
 
       await db.$transaction(async (tx) => {
         await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
+        // Delete SKAT VAT submissions first (they reference Accounts via AuditLog)
+        await tx.vATSubmission.deleteMany({ where: { companyId: demoCompany.id } });
         await tx.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: demoCompany.id } } });
         await tx.journalEntry.deleteMany({ where: { companyId: demoCompany.id } });
         await tx.bankStatementLine.deleteMany({ where: { bankStatement: { companyId: demoCompany.id } } });
@@ -140,6 +142,8 @@ export const POST = withGuard({
 
         await db.$transaction(async (tx) => {
           await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
+          // Delete SKAT VAT submissions first (they reference Accounts via AuditLog)
+          await tx.vATSubmission.deleteMany({ where: { companyId: demoCompanyId } });
           await tx.journalEntryLine.deleteMany({ where: { journalEntry: { companyId: demoCompanyId } } });
           await tx.journalEntry.deleteMany({ where: { companyId: demoCompanyId } });
           await tx.bankStatementLine.deleteMany({ where: { bankStatement: { companyId: demoCompanyId } } });
