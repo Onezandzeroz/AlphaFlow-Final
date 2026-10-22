@@ -550,6 +550,13 @@ async function sendSoapRequest(endpointKey: string, soapXml: string): Promise<st
       `signed=${signedXml.length} bytes, action=${SOAP_ACTIONS[endpointKey]})`,
   );
 
+  // DEBUG: Log the full signed SOAP envelope so we can compare it with SKAT's sample.
+  // This is temporary — remove once the integration is verified working.
+  // The envelope does NOT contain the passphrase (only the public cert + signature).
+  console.log('[SKAT-DEBUG] === SIGNED SOAP ENVELOPE BEING SENT ===');
+  console.log(signedXml);
+  console.log('[SKAT-DEBUG] === END SOAP ENVELOPE ===');
+
   // Build the HTTPS request options for mTLS.
   // `cert` + `key` work for PEM; `pfx` works for PKCS12. We support both.
   const tlsOptions: https.RequestOptions = credentials.pfxBuffer
@@ -613,10 +620,16 @@ async function sendSoapRequest(endpointKey: string, soapXml: string): Promise<st
     },
   );
 
+  // DEBUG: Log the full SKAT response so we can see the complete error message.
+  // This is temporary — remove once the integration is verified working.
+  console.log(`[SKAT-DEBUG] === SKAT RESPONSE (HTTP ${statusCode}) ===`);
+  console.log(body);
+  console.log('[SKAT-DEBUG] === END SKAT RESPONSE ===');
+
   if (statusCode === 0 || statusCode >= 500) {
     throw new SkatApiError(
       'SKAT_SERVER_ERROR',
-      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 500)}`,
+      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 2000)}`,
     );
   }
 
@@ -624,7 +637,7 @@ async function sendSoapRequest(endpointKey: string, soapXml: string): Promise<st
     // 4xx — likely a SOAP fault or auth failure
     throw new SkatApiError(
       'SKAT_CLIENT_ERROR',
-      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 500)}`,
+      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 2000)}`,
     );
   }
 
