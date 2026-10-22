@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/shared/page-header';
 import { YearEndTab } from '@/components/annual-report/year-end-tab';
+import { VatCalendarTimeline } from '@/components/annual-report/vat-calendar-timeline';
 import {
   FileDown,
   FileSpreadsheet,
@@ -82,6 +83,7 @@ interface VATSubmission {
   advisoryCode?: string | null;
   errorMessage?: string | null;
   errorCode?: string | null;
+  receiptPdfBase64?: string | null;
 }
 
 interface PnLData {
@@ -143,6 +145,7 @@ function mapVATSubmission(raw: Record<string, unknown>): VATSubmission {
     advisoryCode: (raw.advisoryCode ?? null) as string | null,
     errorMessage: (raw.errorMessage ?? null) as string | null,
     errorCode: (raw.errorCode ?? null) as string | null,
+    receiptPdfBase64: (raw.receiptPdfBase64 ?? null) as string | null,
   };
 }
 
@@ -647,6 +650,33 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
               : 'VAT return approved and receipt is available',
           },
         );
+        // Auto-download the PDF receipt (base64 → Blob → download link)
+        if (updated.receiptPdfBase64) {
+          // Find year + period from the existing submissions list for the filename
+          const sub = vatSubmissions.find((s) => s.id === submissionId);
+          const fname = `momskvittering-${sub?.year ?? ''}-${sub?.period ?? ''}.pdf`;
+          try {
+            const byteChars = atob(updated.receiptPdfBase64);
+            const byteNumbers = new Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) {
+              byteNumbers[i] = byteChars.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: 'application/pdf' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fname;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } catch (downloadErr) {
+            console.error('PDF download failed:', downloadErr);
+            // Fallback: open the PDF download endpoint in a new tab
+            window.open(`/api/vat-report/${submissionId}/receipt.pdf`, '_blank');
+          }
+        }
       } else if (updated?.errorCode === '4810') {
         toast.info(
           language === 'da' ? 'Afventer godkendelse' : 'Awaiting approval',
@@ -678,7 +708,46 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
     } finally {
       setFetchingReceiptFor(null);
     }
-  }, [language, fetchVATSubmissions, selectedYear]);
+  }, [language, fetchVATSubmissions, selectedYear, vatSubmissions]);
+
+  // ─── Download PDF receipt for ACCEPTED submissions ───
+  const handleDownloadReceiptPdf = useCallback(async (submissionId: string, year: number, period: string) => {
+    setFetchingReceiptFor(submissionId);
+    try {
+      const res = await fetch(`/api/vat-report/${submissionId}/receipt.pdf`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `momskvittering-${year}-${period}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(
+        language === 'da' ? 'Kvittering downloadet' : 'Receipt downloaded',
+        {
+          description: language === 'da'
+            ? `momskvittering-${year}-${period}.pdf`
+            : `momskvittering-${year}-${period}.pdf`,
+        },
+      );
+    } catch (error) {
+      console.error('PDF download failed:', error);
+      toast.error(
+        language === 'da' ? 'Kunne ikke downloade kvittering' : 'Failed to download receipt',
+        {
+          description: error instanceof Error ? error.message : undefined,
+        },
+      );
+    } finally {
+      setFetchingReceiptFor(null);
+    }
+  }, [language]);
 
   // ─── Period label helper ───
   const getPeriodLabel = useCallback((period: string) => {
@@ -938,6 +1007,15 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
             TAB 2: Momsindberetning (VAT Submission)
         ═══════════════════════════════════════════════════════════════ */}
         <TabsContent value="vat-submission" className="space-y-4 lg:space-y-6">
+          {/* Visual VAT Reporting Calendar (milestone timeline from SKAT) */}
+          <VatCalendarTimeline
+            year={selectedYear}
+            vatSubmissions={vatSubmissions}
+            selectedPeriod={selectedPeriod}
+            onPeriodSelect={setSelectedPeriod}
+            language={language}
+          />
+
           {/* Period Selector */}
           <Card className="stat-card card-hover-lift border-0 shadow-lg dark:border dark:border-white/5">
             <CardContent className="p-4">
@@ -1160,6 +1238,23 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                                     <FileCheck className="h-3 w-3" />
                                   )}
                                   {language === 'da' ? 'Kvittering' : 'Receipt'}
+                                </Button>
+                              )}
+                              {/* Download PDF receipt button — for ACCEPTED status */}
+                              {sub.status === 'ACCEPTED' && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-xs gap-1 text-[#0d9488] hover:text-[#0d7c66] dark:text-[#2dd4bf] dark:hover:text-[#5eead4]"
+                                  disabled={fetchingReceiptFor === sub.id}
+                                  onClick={() => handleDownloadReceiptPdf(sub.id, sub.year, sub.period)}
+                                >
+                                  {fetchingReceiptFor === sub.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <FileDown className="h-3 w-3" />
+                                  )}
+                                  {language === 'da' ? 'PDF' : 'PDF'}
                                 </Button>
                               )}
                               {/* Error message tooltip */}
