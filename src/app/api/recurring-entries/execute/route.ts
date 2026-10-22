@@ -45,7 +45,8 @@ export const POST = withGuard(
 
       // ─── 2. Parse and validate journal lines ─────────────────────────
       const parsedLines = entry.lines as Array<{
-        accountId: string;
+        accountId?: string;
+        accountNumber?: string;
         debit: number;
         credit: number;
         description?: string;
@@ -59,7 +60,20 @@ export const POST = withGuard(
       }
 
       // Verify all referenced accounts still exist and are active
-      const accountIds = [...new Set(parsedLines.map((l) => l.accountId))];
+      // Filter out undefined accountIds (defensive — handles old seed data)
+      const accountIds = [...new Set(
+        parsedLines
+          .map((l) => l.accountId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      )];
+
+      if (accountIds.length === 0) {
+        return NextResponse.json(
+          { error: 'Recurring entry has no valid account IDs in its lines. Please recreate this recurring entry.' },
+          { status: 400 },
+        );
+      }
+
       const accounts = await db.account.findMany({
         where: { id: { in: accountIds }, companyId: entry.companyId, isActive: true },
       });
@@ -101,9 +115,11 @@ export const POST = withGuard(
             status: 'POSTED',
             companyId: entry.companyId,
             lines: {
-              create: parsedLines.map((l) => ({
+              create: parsedLines
+                .filter((l) => typeof l.accountId === 'string' && l.accountId.length > 0)
+                .map((l) => ({
                 companyId: entry.companyId,
-                accountId: l.accountId,
+                accountId: l.accountId!,
                 debit: l.debit,
                 credit: l.credit,
                 description: l.description || null,

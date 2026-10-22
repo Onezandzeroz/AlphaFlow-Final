@@ -138,10 +138,26 @@ async function executeRecurringEntry(entry: {
 
   try {
     // 1. Parse and validate lines
-    const parsedLines = lines as Array<{ accountId: string; debit: number; credit: number; description?: string }>;
+    const parsedLines = lines as Array<{ accountId?: string; accountNumber?: string; debit: number; credit: number; description?: string }>;
 
     // 2. Verify all referenced accounts still exist and are active
-    const accountIds = [...new Set(parsedLines.map(l => l.accountId))];
+    // Filter out any lines with undefined accountId (defensive — handles old seed data)
+    const accountIds = [...new Set(
+      parsedLines
+        .map(l => l.accountId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    )];
+
+    if (accountIds.length === 0) {
+      return {
+        entryId: id,
+        entryName: name,
+        companyId,
+        success: false,
+        error: 'Recurring entry has no valid account IDs in its lines (possibly old seed data using accountNumber instead of accountId). Please recreate this recurring entry.',
+      };
+    }
+
     const accounts = await db.account.findMany({
       where: { id: { in: accountIds }, companyId, isActive: true },
     });
@@ -184,9 +200,11 @@ async function executeRecurringEntry(entry: {
           status: 'POSTED',
           companyId,
           lines: {
-            create: parsedLines.map(l => ({
+            create: parsedLines
+              .filter(l => typeof l.accountId === 'string' && l.accountId.length > 0)
+              .map(l => ({
               companyId,
-              accountId: l.accountId,
+              accountId: l.accountId!,
               debit: l.debit,
               credit: l.credit,
               description: l.description || null,
