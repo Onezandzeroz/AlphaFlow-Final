@@ -285,27 +285,110 @@ export function buildVirksomhedKalenderHentRequest(
 
 /**
  * Parse the VirksomhedKalenderHent SOAP response.
- * Extracts periods, deadlines, and frequency codes.
+ *
+ * SKAT's response format (from real test environment):
+ *   <urn:AngivelseFrekvensListe>
+ *     <urn:AngivelseFrekvens>
+ *       <urn1:AngivelseFrekvensForholdGyldigFraDate>2014-01-02</...>
+ *       <urn1:AngivelseFrekvensTypeCode>8</...>   ← 8=quarterly, 7=monthly, 10=yearly
+ *       <urn:AngivelseBetalingFristDatoListe>
+ *         <urn:AngivelseBetalingFristDato>
+ *           <urn1:AngivelseFristKalenderFristDato>2026-03-02</...>  ← Q1 deadline
+ *           <urn1:AngivelseFristKalenderBetalingDato>2026-03-02</...>
+ *         </urn:AngivelseBetalingFristDato>
+ *         <urn:AngivelseBetalingFristDato>
+ *           <urn1:AngivelseFristKalenderFristDato>2026-06-01</...>  ← Q2 deadline
+ *           ...
+ *
+ * SKAT does NOT return period start/end dates — only deadlines. We derive
+ * the period from the deadline: a Q1 deadline (March) → period Jan-Mar.
  */
 export function parseVirksomhedKalenderHentResponse(responseXml: string): SkatVatCalendarResult {
   const seMatch = responseXml.match(/VirksomhedSENummerIdentifikator[^>]*>(\d+)</);
-  const periodMatches = responseXml.matchAll(
-    /AngivelsePeriodeFraDato>(\d{4}-\d{2}-\d{2})<\/[^>]+>\s*<[^>]*AngivelsePeriodeTilDato>(\d{4}-\d{2}-\d{2})<\/[^>]+>\s*(?:<[^>]*AngivelseFrekvensTypeKode>(\w+)<\/[^>]+>)?/g,
+  const seNumber = seMatch ? seMatch[1] : '';
+
+  // Extract the frequency code (8=quarterly, 7=monthly, 10=yearly)
+  const freqMatch = responseXml.match(/AngivelseFrekvensTypeCode[^>]*>(\d+)</);
+  const frequencyCode = freqMatch ? freqMatch[1].padStart(2, '0') : '08'; // default quarterly
+
+  // Extract all deadline dates (AngivelseFristKalenderFristDato)
+  const deadlineMatches = responseXml.matchAll(
+    /AngivelseFristKalenderFristDato[^>]*>(\d{4}-\d{2}-\d{2})</g,
   );
 
   const periods: SkatVatPeriod[] = [];
-  for (const match of periodMatches) {
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+
+  for (const match of deadlineMatches) {
+    const deadlineStr = match[1];
+    const deadlineDate = new Date(deadlineStr);
+
+    // Derive the period from the deadline month:
+    // Deadline in March (month 3) → Q1 (Jan-Mar)
+    // Deadline in June (month 6) → Q2 (Apr-Jun)
+    // Deadline in September (month 9) → Q3 (Jul-Sep)
+    // Deadline in December (month 12) → Q4 (Oct-Dec)
+    const deadlineMonth = deadlineDate.getMonth() + 1; // 1-12
+    const year = deadlineDate.getFullYear();
+
+    let periodStart: string;
+    let periodEnd: string;
+
+    if (frequencyCode === '10') {
+      // Yearly
+      periodStart = `${year}-01-01`;
+      periodEnd = `${year}-12-31`;
+    } else if (frequencyCode === '07') {
+      // Monthly — period is the month before the deadline
+      periodStart = `${year}-${String(deadlineMonth).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, deadlineMonth, 0).getDate();
+      periodEnd = `${year}-${String(deadlineMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else {
+      // Quarterly (default, code '08' or '8')
+      // Deadline in month 3 → Q1 (months 1-3)
+      // Deadline in month 6 → Q2 (months 4-6)
+      // Deadline in month 9 → Q3 (months 7-9)
+      // Deadline in month 12 → Q4 (months 10-12)
+      // Handle case where deadline is early next month (e.g. April 1 → Q1)
+      let qMonth = deadlineMonth;
+      if (qMonth === 4 && deadlineDate.getDate() <= 2) qMonth = 3; // April 1-2 → Q1
+      if (qMonth === 7 && deadlineDate.getDate() <= 2) qMonth = 6; // July 1-2 → Q2
+      if (qMonth === 10 && deadlineDate.getDate() <= 2) qMonth = 9; // Oct 1-2 → Q3
+      if (qMonth === 1 && deadlineDate.getDate() <= 2) qMonth = 12; // Jan 1-2 → Q4 previous year
+
+      if (qMonth <= 3) {
+        periodStart = `${year}-01-01`;
+        periodEnd = `${year}-03-31`;
+      } else if (qMonth <= 6) {
+        periodStart = `${year}-04-01`;
+        periodEnd = `${year}-06-30`;
+      } else if (qMonth <= 9) {
+        periodStart = `${year}-07-01`;
+        periodEnd = `${year}-09-30`;
+      } else {
+        periodStart = `${year}-10-01`;
+        periodEnd = `${year}-12-31`;
+      }
+    }
+
+    // A period is "open" if its deadline hasn't passed yet
+    const isOpen = deadlineStr >= todayStr;
+
     periods.push({
-      periodStart: match[1],
-      periodEnd: match[2],
-      deadline: '',
-      frequencyCode: match[3] || '',
-      isOpen: true,
+      periodStart,
+      periodEnd,
+      deadline: deadlineStr,
+      frequencyCode,
+      isOpen,
     });
   }
 
+  // Sort periods chronologically by periodStart
+  periods.sort((a, b) => a.periodStart.localeCompare(b.periodStart));
+
   return {
-    seNumber: seMatch ? seMatch[1] : '',
+    seNumber,
     periods,
   };
 }
@@ -556,13 +639,6 @@ async function sendSoapRequest(endpointKey: string, soapXml: string): Promise<st
       `signed=${signedXml.length} bytes, action=${SOAP_ACTIONS[endpointKey]})`,
   );
 
-  // DEBUG: Log the full signed SOAP envelope so we can compare it with SKAT's sample.
-  // This is temporary — remove once the integration is verified working.
-  // The envelope does NOT contain the passphrase (only the public cert + signature).
-  console.log('[SKAT-DEBUG] === SIGNED SOAP ENVELOPE BEING SENT ===');
-  console.log(signedXml);
-  console.log('[SKAT-DEBUG] === END SOAP ENVELOPE ===');
-
   // Build the HTTPS request options for mTLS.
   // `cert` + `key` work for PEM; `pfx` works for PKCS12. We support both.
   const tlsOptions: https.RequestOptions = credentials.pfxBuffer
@@ -626,24 +702,21 @@ async function sendSoapRequest(endpointKey: string, soapXml: string): Promise<st
     },
   );
 
-  // DEBUG: Log the full SKAT response so we can see the complete error message.
-  // This is temporary — remove once the integration is verified working.
-  console.log(`[SKAT-DEBUG] === SKAT RESPONSE (HTTP ${statusCode}) ===`);
-  console.log(body);
-  console.log('[SKAT-DEBUG] === END SKAT RESPONSE ===');
-
   if (statusCode === 0 || statusCode >= 500) {
+    // Log the full response body for server errors (helps diagnose SKAT faults)
+    logger.error(`[SKAT-Transport] Server error HTTP ${statusCode}: ${body.substring(0, 1000)}`);
     throw new SkatApiError(
       'SKAT_SERVER_ERROR',
-      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 2000)}`,
+      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 1000)}`,
     );
   }
 
   if (statusCode >= 400) {
     // 4xx — likely a SOAP fault or auth failure
+    logger.warn(`[SKAT-Transport] Client error HTTP ${statusCode}: ${body.substring(0, 1000)}`);
     throw new SkatApiError(
       'SKAT_CLIENT_ERROR',
-      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 2000)}`,
+      `SKAT returned HTTP ${statusCode}. Response: ${body.substring(0, 1000)}`,
     );
   }
 

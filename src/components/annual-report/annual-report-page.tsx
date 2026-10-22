@@ -1223,8 +1223,8 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                                   {language === 'da' ? 'Godkend (MitID)' : 'Approve (MitID)'}
                                 </a>
                               )}
-                              {/* Fetch receipt button — for SUBMITTED status */}
-                              {sub.status === 'SUBMITTED' && (
+                              {/* Fetch receipt button — for SUBMITTED status with a transactionIdentifier */}
+                              {sub.status === 'SUBMITTED' && sub.reference && (
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -1239,6 +1239,18 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
                                   )}
                                   {language === 'da' ? 'Kvittering' : 'Receipt'}
                                 </Button>
+                              )}
+                              {/* Info tooltip — for SUBMITTED submissions without a transaction identifier */}
+                              {sub.status === 'SUBMITTED' && !sub.reference && (
+                                <span
+                                  className="text-xs text-amber-500 dark:text-amber-400 inline-flex items-center gap-1"
+                                  title={language === 'da'
+                                    ? 'Kvittering kan ikke hentes: momsangivelsen blev ikke modtaget af SKAT (ingen transactionIdentifier). Prøv at indsende for en anden periode.'
+                                    : 'Receipt cannot be fetched: the VAT return was not received by SKAT (no transactionIdentifier). Try submitting for a different period.'}
+                                >
+                                  <AlertCircle className="h-3 w-3" />
+                                  {language === 'da' ? 'Ingen kvittering' : 'No receipt'}
+                                </span>
                               )}
                               {/* Download PDF receipt button — for ACCEPTED status */}
                               {sub.status === 'ACCEPTED' && (
