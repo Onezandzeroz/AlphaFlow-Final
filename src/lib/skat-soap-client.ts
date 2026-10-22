@@ -150,11 +150,30 @@ function generateTransactionId(): string {
   return randomUUID();
 }
 
-/** Current ISO-8601 timestamp for TransaktionTid (SKAT expects local+offset format). */
+/** Current ISO-8601 timestamp for TransaktionTid.
+ *
+ * SKAT's sample uses local time with offset, e.g. 2023-06-07T10:05:27.694+02:00
+ * We use the local timezone offset format to match exactly what SKAT expects.
+ * (UTC with 'Z' is also technically valid XML Schema dateTime, but SKAT's
+ * Java XMLGregorianCalendar parser is known to prefer the offset format.)
+ */
 function nowTransactionTime(): string {
-  // SKAT sample uses local time with offset, e.g. 2017-04-24T12:00:00.146+02:00
-  // ISO with timezone offset. new Date().toISOString() gives Z (UTC) which is also valid.
-  return new Date().toISOString();
+  const d = new Date();
+  // Get local timezone offset in minutes, convert to ±HH:MM
+  const offsetMin = -d.getTimezoneOffset(); // positive for east of UTC
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const absMin = Math.abs(offsetMin);
+  const hh = String(Math.floor(absMin / 60)).padStart(2, '0');
+  const mm = String(absMin % 60).padStart(2, '0');
+  // Build local time string (without timezone) then append offset
+  const localStr = d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0') + 'T' +
+    String(d.getHours()).padStart(2, '0') + ':' +
+    String(d.getMinutes()).padStart(2, '0') + ':' +
+    String(d.getSeconds()).padStart(2, '0') + '.' +
+    String(d.getMilliseconds()).padStart(3, '0');
+  return localStr + sign + hh + ':' + mm;
 }
 
 /** Escape XML special characters in text content. */
@@ -170,13 +189,25 @@ function escapeXml(text: string): string {
 /**
  * Build the HovedOplysninger (context) block required by every request.
  * Contains a unique transaction ID + timestamp. Placed INSIDE the Body.
+ *
+ * IMPORTANT: SKAT's sample requests use the DEFAULT xmlns (no prefix) for
+ * HovedOplysninger and its children, NOT a namespace prefix. The default
+ * namespace is declared on the parent *_I element. Using a prefix like
+ * `ns:` causes SKAT's schema validation to fail with
+ * "Failed to invoke method" (HTTP 500).
+ *
+ * Structure (from SKAT's signed sample — assets/full-sample-request.xml):
+ *   <HovedOplysninger>
+ *     <TransaktionIdentifikator>UUID</TransaktionIdentifikator>
+ *     <TransaktionTid>2023-06-07T10:05:27.694+02:00</TransaktionTid>
+ *   </HovedOplysninger>
  */
 function buildHovedOplysninger(): string {
   return (
-    `<ns:HovedOplysninger xmlns:ns="${NS_CONTEXT}">` +
-    `<ns:TransaktionIdentifikator>${generateTransactionId()}</ns:TransaktionIdentifikator>` +
-    `<ns:TransaktionTid>${nowTransactionTime()}</ns:TransaktionTid>` +
-    `</ns:HovedOplysninger>`
+    `<HovedOplysninger>` +
+    `<TransaktionIdentifikator>${generateTransactionId()}</TransaktionIdentifikator>` +
+    `<TransaktionTid>${nowTransactionTime()}</TransaktionTid>` +
+    `</HovedOplysninger>`
   );
 }
 
@@ -186,6 +217,13 @@ function buildHovedOplysninger(): string {
  *   - <soap:Body wsu:Id="id-<uuid>"> containing the service request
  *
  * The service request body MUST include HovedOplysninger as its first child.
+ *
+ * Namespace declarations on the *_I element match SKAT's official signed
+ * sample (assets/full-sample-request.xml) exactly:
+ *   - xmlns (default) = context namespace (so HovedOplysninger needs no prefix)
+ *   - xmlns:ns2 = SE namespace (VirksomhedSENummerIdentifikator)
+ *   - xmlns:ns3 = data namespace (AngivelseTypeNavn, MomsAngivelse* fields)
+ *   - xmlns:ns4 = service namespace (the *_I element itself + Angivelse wrapper)
  *
  * @param serviceName - The service name (e.g. "ModtagMomsangivelseForeloebig")
  * @param requestBodyXml - The inner request XML (the children of <ServiceName_I>)
@@ -201,10 +239,14 @@ function buildSoapEnvelope(serviceName: string, requestBodyXml: string): string 
     `<wsse:Security soap:mustUnderstand="1"></wsse:Security>` +
     `</soap:Header>` +
     `<soap:Body wsu:Id="${bodyId}">` +
-    `<ns:${serviceName}_I xmlns:ns="${NS_SERVICE}" xmlns:ns1="${NS_DATA}" ` +
-    `xmlns:ns2="${NS_SE}" xmlns:ns3="${NS_CONTEXT}">` +
+    // Namespace declarations match SKAT's sample: default xmlns = context, ns4 = service
+    `<ns4:${serviceName}_I ` +
+    `xmlns="${NS_CONTEXT}" ` +
+    `xmlns:ns2="${NS_SE}" ` +
+    `xmlns:ns3="${NS_DATA}" ` +
+    `xmlns:ns4="${NS_SERVICE}">` +
     requestBodyXml +
-    `</ns:${serviceName}_I>` +
+    `</ns4:${serviceName}_I>` +
     `</soap:Body>` +
     `</soap:Envelope>`
   );
@@ -233,11 +275,11 @@ export function buildVirksomhedKalenderHentRequest(
   const body =
     buildHovedOplysninger() +
     `<ns2:VirksomhedSENummerIdentifikator>${escapeXml(seNumber)}</ns2:VirksomhedSENummerIdentifikator>` +
-    `<ns1:AngivelseTypeNavn>Moms</ns1:AngivelseTypeNavn>` +
-    `<ns:AngivelseBetalingFristHentFra>` +
-    `<ns1:SoegeDatoFraDate>${escapeXml(dateFrom)}</ns1:SoegeDatoFraDate>` +
-    `<ns1:SoegeDatoTilDate>${escapeXml(dateTo)}</ns1:SoegeDatoTilDate>` +
-    `</ns:AngivelseBetalingFristHentFra>`;
+    `<ns3:AngivelseTypeNavn>Moms</ns3:AngivelseTypeNavn>` +
+    `<ns4:AngivelseBetalingFristHentFra>` +
+    `<ns3:SoegeDatoFraDate>${escapeXml(dateFrom)}</ns3:SoegeDatoFraDate>` +
+    `<ns3:SoegeDatoTilDate>${escapeXml(dateTo)}</ns3:SoegeDatoTilDate>` +
+    `</ns4:AngivelseBetalingFristHentFra>`;
   return buildSoapEnvelope('VirksomhedKalenderHent', body);
 }
 
@@ -321,26 +363,29 @@ export function buildModtagMomsangivelseForeloebigRequest(
   vatFields: Record<string, number>,
 ): string {
   // Build the Angivelsesafgifter block — only emit non-zero fields (XSD allows omission)
+  // ns3 = data namespace (MomsAngivelse* fields, AngivelsePeriodeFraDato)
+  // ns4 = service namespace (Angivelse wrapper, AngiverVirksomhedSENummer, Angivelsesoplysninger)
+  // ns2 = SE namespace (VirksomhedSENummerIdentifikator)
   const afgifterXml = VAT_FIELD_NAMES
     .filter((fieldName) => {
       const val = vatFields[fieldName];
       return val !== undefined && val !== 0;
     })
-    .map((fieldName) => `<ns1:${fieldName}>${vatFields[fieldName].toFixed(2)}</ns1:${fieldName}>`)
+    .map((fieldName) => `<ns3:${fieldName}>${vatFields[fieldName].toFixed(2)}</ns3:${fieldName}>`)
     .join('');
 
   const body =
     buildHovedOplysninger() +
-    `<ns:Angivelse>` +
-    `<ns:AngiverVirksomhedSENummer>` +
+    `<ns4:Angivelse>` +
+    `<ns4:AngiverVirksomhedSENummer>` +
     `<ns2:VirksomhedSENummerIdentifikator>${escapeXml(seNumber)}</ns2:VirksomhedSENummerIdentifikator>` +
-    `</ns:AngiverVirksomhedSENummer>` +
-    `<ns:Angivelsesoplysninger>` +
-    `<ns1:AngivelsePeriodeFraDato>${escapeXml(periodFrom)}</ns1:AngivelsePeriodeFraDato>` +
-    `<ns1:AngivelsePeriodeTilDato>${escapeXml(periodTo)}</ns1:AngivelsePeriodeTilDato>` +
-    `</ns:Angivelsesoplysninger>` +
-    `<ns:Angivelsesafgifter>${afgifterXml}</ns:Angivelsesafgifter>` +
-    `</ns:Angivelse>`;
+    `</ns4:AngiverVirksomhedSENummer>` +
+    `<ns4:Angivelsesoplysninger>` +
+    `<ns3:AngivelsePeriodeFraDato>${escapeXml(periodFrom)}</ns3:AngivelsePeriodeFraDato>` +
+    `<ns3:AngivelsePeriodeTilDato>${escapeXml(periodTo)}</ns3:AngivelsePeriodeTilDato>` +
+    `</ns4:Angivelsesoplysninger>` +
+    `<ns4:Angivelsesafgifter>${afgifterXml}</ns4:Angivelsesafgifter>` +
+    `</ns4:Angivelse>`;
 
   return buildSoapEnvelope('ModtagMomsangivelseForeloebig', body);
 }
@@ -389,11 +434,11 @@ export function buildMomsangivelseKvitteringHentRequest(
 ): string {
   const body =
     buildHovedOplysninger() +
-    `<ns1:TransaktionIdentifier>${escapeXml(transactionIdentifier)}</ns1:TransaktionIdentifier>` +
+    `<ns3:TransaktionIdentifier>${escapeXml(transactionIdentifier)}</ns3:TransaktionIdentifier>` +
     (seNumber
-      ? `<ns:Angiver>` +
+      ? `<ns4:Angiver>` +
         `<ns2:VirksomhedSENummerIdentifikator>${escapeXml(seNumber)}</ns2:VirksomhedSENummerIdentifikator>` +
-        `</ns:Angiver>`
+        `</ns4:Angiver>`
       : '');
 
   return buildSoapEnvelope('MomsangivelseKvitteringHent', body);
