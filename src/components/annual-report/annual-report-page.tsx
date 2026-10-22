@@ -209,6 +209,64 @@ function getStatusIcon(status: VATSubmissionStatus) {
   }
 }
 
+/**
+ * Get a user-friendly description for a SKAT business error code.
+ * These are the FejlIdentifikator values returned in <FejlStruktur>.
+ *
+ * IMPORTANT: These messages are shown to production users (real companies
+ * filing real VAT returns). They must NOT reference test environments,
+ * SKAT support emails, or internal developer concerns. They should explain
+ * what went wrong and what the user can do about it.
+ */
+function getSkatErrorDescription(skatCode: string, language: 'da' | 'en'): string {
+  const messages: Record<string, { da: string; en: string }> = {
+    '475': {
+      da: 'SKAT har modtaget indberetningen, men der kræves ingen momsangivelse for den valgte periode. Dette kan skyldes at virksomheden ikke er momsregistreret for perioden, eller at perioden allerede er indberettet. Tjek at du har valgt den rigtige periode, eller kontakt din bogholder.',
+      en: 'SKAT received the submission, but no VAT return is expected for the selected period. This may be because the company is not VAT-registered for this period, or the period has already been reported. Check that you have selected the correct period, or contact your accountant.',
+    },
+    '4801': {
+      da: 'SKAT afviste indberetningen: Virksomheden har ikke delegeret adgang til systemudbyder. Log ind på skat.dk og delegere "Nemvirksomhed – adgang for systemudbyder" til AlphaFlows CVR.',
+      en: 'SKAT rejected the submission: The company has not delegated access to the system provider. Log in to skat.dk and delegate "Nemvirksomhed – system provider access" to AlphaFlow\'s CVR.',
+    },
+    '4802': {
+      da: 'SKAT afviste indberetningen: Der er allerede indberettet moms for denne periode. Hvis det er en efterangivelse, skal du bruge funktionen til efterangivelse.',
+      en: 'SKAT rejected the submission: VAT has already been reported for this period. If this is a subsequent declaration, use the subsequent declaration feature.',
+    },
+    '4803': {
+      da: 'SKAT afviste indberetningen: Periode er uden for den gyldige indberetningsperiode. Vælg en periode der ligger inden for det aktuelle indberetningsår.',
+      en: 'SKAT rejected the submission: The period is outside the valid reporting period. Select a period within the current reporting year.',
+    },
+  };
+
+  const msg = messages[skatCode];
+  if (msg) return msg[language];
+
+  // Unknown SKAT error — show the code + generic message
+  return language === 'da'
+    ? `SKAT afviste momsangivelsen med fejlkode ${skatCode}. Prøv igen senere, eller kontakt din bogholder hvis problemet fortsætter.`
+    : `SKAT rejected the VAT return with error code ${skatCode}. Try again later, or contact your accountant if the problem persists.`;
+}
+
+/**
+ * Get a user-friendly description for API-level errors.
+ */
+function getApiErrorDescription(error: string, year: string, period: string): string {
+  if (error.startsWith('VAT_SUBMISSION_EXISTS')) {
+    return `Der findes allerede en momsangivelse for ${year} ${period}. Du kan ikke indberette to gange for samme periode.`;
+  }
+  if (error.startsWith('VAT_SUBMISSION_NOT_FOUND')) {
+    return 'Momsangivelsen blev ikke fundet i databasen. Prøv at opdatere siden og prøv igen.';
+  }
+  if (error.startsWith('VAT_SUBMISSION_NOT_DRAFT')) {
+    return 'Momsangivelsen kan ikke ændres — den er allerede indsendt. Du kan kun ændre kladder.';
+  }
+  if (error.startsWith('COMPANY_SE_NUMBER_MISSING')) {
+    return 'Virksomheden har intet CVR/SE-nummer. Tilføj et CVR-nummer i virksomhedsindstillingerne før du kan indberette moms.';
+  }
+  // Default: return the raw error
+  return error;
+}
+
 // ── Component ──────────────────────────────────────────────────────────
 
 export function AnnualReportPage({ user }: AnnualReportPageProps) {
@@ -591,22 +649,69 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to submit VAT report');
-      }
-
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
       const submission = data.submission || data;
-      setLastSubmissionResult(mapVATSubmission(submission));
-      toast.success(
-        language === 'da' ? 'Momsopgørelse indsendt' : 'VAT report submitted',
-        {
-          description: language === 'da'
-            ? `Moms for ${selectedYear} ${selectedPeriod} er indsendt til Skattestyrelsen`
-            : `VAT for ${selectedYear} ${selectedPeriod} has been submitted to the Tax Authority`,
-        },
-      );
+      const mappedSubmission = mapVATSubmission(submission);
+      setLastSubmissionResult(mappedSubmission);
+
+      // ── Descriptive toast messages based on the actual outcome ──
+
+      if (response.ok && mappedSubmission.status === 'SUBMITTED' && mappedSubmission.reference) {
+        // SUCCESS: SKAT accepted the draft, awaiting MitID approval
+        toast.success(
+          language === 'da' ? 'Momsangivelse afleveret til SKAT' : 'VAT return submitted to SKAT',
+          {
+            description: language === 'da'
+              ? `SKAT har modtaget din momsangivelse for ${selectedYear} ${selectedPeriod}. Du skal nu godkende den i TastSelv Erhverv med MitID. Derefter kan du hente kvitteringen her.`
+              : `SKAT has received your VAT return for ${selectedYear} ${selectedPeriod}. You must now approve it in TastSelv Erhverv with MitID. After approval you can fetch the receipt here.`,
+          },
+        );
+      } else if (mappedSubmission.status === 'ERROR' && mappedSubmission.errorCode?.startsWith('SKAT_F')) {
+        // SKAT REJECTED: business error (e.g. F0475)
+        const skatCode = mappedSubmission.errorCode.replace('SKAT_F', '');
+        const userMessage = getSkatErrorDescription(skatCode, language);
+        toast.error(
+          language === 'da' ? 'SKAT afviste momsangivelsen' : 'SKAT rejected the VAT return',
+          {
+            description: userMessage,
+          },
+        );
+      } else if (mappedSubmission.status === 'ERROR') {
+        // OTHER ERROR: transport error, signing error, etc.
+        toast.error(
+          language === 'da' ? 'Kunne ikke indsende moms' : 'Failed to submit VAT report',
+          {
+            description: language === 'da'
+              ? mappedSubmission.errorMessage
+                ? `Der opstod en teknisk fejl: ${mappedSubmission.errorMessage}`
+                : 'Der opstod en teknisk fejl ved kommunikation med SKAT. Tjek logfiler eller prøv igen senere.'
+              : mappedSubmission.errorMessage
+                ? `A technical error occurred: ${mappedSubmission.errorMessage}`
+                : 'A technical error occurred while communicating with SKAT. Check logs or try again later.',
+          },
+        );
+      } else if (!response.ok) {
+        // API-level error (e.g. VAT_SUBMISSION_EXISTS)
+        const apiError = data.error || data.message || `HTTP ${response.status}`;
+        toast.error(
+          language === 'da' ? 'Kunne ikke indsende moms' : 'Failed to submit VAT report',
+          {
+            description: language === 'da'
+              ? getApiErrorDescription(apiError, selectedYear, selectedPeriod)
+              : apiError,
+          },
+        );
+      } else {
+        // Unknown state
+        toast.info(
+          language === 'da' ? 'Momsindberetning afsluttet' : 'VAT submission completed',
+          {
+            description: language === 'da'
+              ? `Status: ${mappedSubmission.status}`
+              : `Status: ${mappedSubmission.status}`,
+          },
+        );
+      }
 
       // Refresh submissions list
       fetchVATSubmissions(selectedYear);
@@ -615,7 +720,9 @@ ${hasVAT ? `<h2>${isDa ? 'Moms' : 'VAT'}</h2>
       toast.error(
         language === 'da' ? 'Kunne ikke indsende moms' : 'Failed to submit VAT report',
         {
-          description: error instanceof Error ? error.message : undefined,
+          description: language === 'da'
+            ? 'Der opstod en netværksfejl. Tjek din internetforbindelse og prøv igen.'
+            : 'A network error occurred. Check your internet connection and try again.',
         },
       );
     } finally {
