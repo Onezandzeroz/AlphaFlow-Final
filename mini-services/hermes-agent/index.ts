@@ -157,7 +157,7 @@ function userMessageFor(kind: LLMErrorKind): string {
 // ============================================================
 
 const MAX_RETRIES = 3              // Total attempts = 1 + MAX_RETRIES (so up to 4 requests)
-const REQUEST_TIMEOUT_MS = 30_000  // Abort a single fetch after 30s
+const REQUEST_TIMEOUT_MS = 60_000  // Abort a single fetch after 60s (was 30s — too short for tool-calling)
 const MAX_BACKOFF_MS = 10_000      // Never wait longer than 10s between retries
 
 function sleep(ms: number): Promise<void> {
@@ -185,7 +185,7 @@ function parseRetryAfter(res: Response, bodyText: string): number | undefined {
 }
 
 async function callOpenRouter(messages: ChatMessage[], options?: { tools?: typeof SOURCE_TOOL_DEFINITIONS, maxTokens?: number }): Promise<{ content: string | null; toolCalls: ToolCall[] | null }> {
-  const { tools, maxTokens = 1024 } = options || {}
+  const { tools, maxTokens = 4096 } = options || {}
   if (!OPENROUTER_API_KEY) {
     throw new HermesLLMError(
       'missing_key',
@@ -311,7 +311,7 @@ async function callOpenRouterStream(
   onChunk: (delta: string) => void,
   options?: { maxTokens?: number },
 ): Promise<string> {
-  const { maxTokens = 2048 } = options || {}
+  const { maxTokens = 4096 } = options || {}
   if (!OPENROUTER_API_KEY) {
     throw new HermesLLMError(
       'missing_key',
@@ -493,11 +493,13 @@ async function chatWithTools(
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
     const isLastIteration = iteration === MAX_TOOL_ITERATIONS - 1
-    // Use higher token limit for the last iteration so the model has room
-    // to synthesize tool results into a full answer.
+    // Use higher token limit for ALL iterations so the model has room
+    // to generate a full answer. Previously only the last iteration got 4096,
+    // but if the model finishes early it would be limited to 2048 — too
+    // short for detailed source-code explanations.
     const result = await callOpenRouter(currentMessages, {
       tools,
-      maxTokens: isLastIteration ? 4096 : 2048,
+      maxTokens: isLastIteration ? 8192 : 4096,
     })
 
     // Model returned a final text response (no tool calls)
