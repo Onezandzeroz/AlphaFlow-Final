@@ -76,7 +76,7 @@ async function main() {
     console.log('  - Fetch skill prompts from /api/hermes/skills/prompts');
     console.log('  - Use list_source_directory and read_source_file tools');
     console.log('  - Access source code at: ' + alphaflowRoot);
-    console.log('\nIf Hermes still says "I don't have access to source code":');
+    console.log("\nIf Hermes still says it does not have access to source code:");
     console.log('  1. Check PM2 logs: pm2 logs hermes-agent --lines 30');
     console.log('  2. Look for "SkillsLoader" warnings (API fetch failures)');
     console.log('  3. Look for "Source code tools available" (should appear when SuperDev chats)');
