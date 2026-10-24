@@ -896,24 +896,29 @@ io.on('connection', async (socket) => {
     // ─── Per-tenant rate limit check ───
     // Enforced BEFORE storing the message or calling the LLM, so denied
     // requests don't consume the tenant's quota or OpenRouter budget.
-    const rl = await rateLimiter.check(tenantId)
-    if (!rl.allowed) {
-      const windowLabel =
-        rl.window === 'minute' ? 'per minut' :
-        rl.window === 'hour' ? 'i timen' :
-        rl.window === 'day' ? 'i dag' : 'denne måned'
-      const retryMin = rl.retryAfterSeconds != null
-        ? Math.max(1, Math.ceil(rl.retryAfterSeconds / 60))
-        : 1
-      console.log(
-        `[Hermes] Rate limit DENIED for "${meta.userName}" (${tenant.name}) — ` +
-        `window=${rl.window} used=${rl.used}/${rl.limit} retry_after=${rl.retryAfterSeconds}s`
-      )
-      socket.emit('chat-error', {
-        error: `Du har nået grænsen for Hermes (${rl.used}/${rl.limit} ${windowLabel}). Prøv igen om ca. ${retryMin} min.`,
-        kind: 'rate_limited_tenant',
-      })
-      return
+    //
+    // SuperDev (AlphaAi owner) bypasses ALL rate limits — they have
+    // unrestricted access for testing, support, and development.
+    if (!meta.isSuperDev) {
+      const rl = await rateLimiter.check(tenantId)
+      if (!rl.allowed) {
+        const windowLabel =
+          rl.window === 'minute' ? 'per minut' :
+          rl.window === 'hour' ? 'i timen' :
+          rl.window === 'day' ? 'i dag' : 'denne måned'
+        const retryMin = rl.retryAfterSeconds != null
+          ? Math.max(1, Math.ceil(rl.retryAfterSeconds / 60))
+          : 1
+        console.log(
+          `[Hermes] Rate limit DENIED for "${meta.userName}" (${tenant.name}) — ` +
+          `window=${rl.window} used=${rl.used}/${rl.limit} retry_after=${rl.retryAfterSeconds}s`
+        )
+        socket.emit('chat-error', {
+          error: `Du har nået grænsen for Hermes (${rl.used}/${rl.limit} ${windowLabel}). Prøv igen om ca. ${retryMin} min.`,
+          kind: 'rate_limited_tenant',
+        })
+        return
+      }
     }
 
     // NOTE: The user message is persisted AFTER building the LLM context
@@ -976,9 +981,12 @@ Brugeren har klikket "Spørg Hermes" på en bogføringsregel-kort i AlphaFlows b
 
         socket.emit('chat-complete', { fullResponse, done: true })
 
-        rateLimiter.record(tenantId).catch((err) => {
-          console.warn(`[Hermes] rateLimiter.record failed for ${tenantId}:`, err)
-        })
+        // SuperDev messages don't count toward the tenant's rate limit
+        if (!meta.isSuperDev) {
+          rateLimiter.record(tenantId).catch((err) => {
+            console.warn(`[Hermes] rateLimiter.record failed for ${tenantId}:`, err)
+          })
+        }
 
         const elapsed = Date.now() - streamStart
         console.log(`[Hermes] Silent prompt answered for "${meta.userName}" — ${fullResponse.length} chars in ${elapsed}ms`)
@@ -1120,9 +1128,12 @@ Brugeren har klikket "Spørg Hermes" på en bogføringsregel-kort i AlphaFlows b
       // Only successful responses consume quota — failed/429'd requests don't.
       // record() is async (persists to DB fire-and-forget) but we don't need
       // to await it — the counters are already incremented in-memory.
-      rateLimiter.record(tenantId).catch((err) => {
-        console.warn(`[Hermes] rateLimiter.record failed for ${tenantId}:`, err)
-      })
+      // SuperDev messages don't count toward the tenant's rate limit.
+      if (!meta.isSuperDev) {
+        rateLimiter.record(tenantId).catch((err) => {
+          console.warn(`[Hermes] rateLimiter.record failed for ${tenantId}:`, err)
+        })
+      }
 
       console.log(`[Hermes] Response sent to "${meta.userName}" (${fullResponse.length} chars, skill: ${hasSourceCodeSkill ? 'source-code' : 'none'})`)
     } catch (error: any) {
