@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureBuiltInSkills } from '@/lib/hermes-built-in-skills';
 
 /**
  * GET /api/hermes/skills/prompts?companyId=...&lang=...
@@ -9,6 +10,11 @@ import { db } from '@/lib/db';
  * Skills are managed globally by the App Owner (SuperDev).
  * The enabledByDefault flag on HermesSkill determines whether the skill
  * is active for ALL tenants. There is no per-tenant skill toggle.
+ *
+ * This route is SELF-HEALING: if built-in skills (stop-slop, source-code-explorer)
+ * are missing or disabled, they are automatically upserted + re-enabled before
+ * returning the prompt list. This ensures Hermes always has access to source
+ * code tools without requiring a manual seed script run.
  *
  * Query params:
  *   companyId (required) — the tenant's company ID (for context, not filtering)
@@ -31,6 +37,9 @@ export async function GET(request: Request) {
     if (!companyId) {
       return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
     }
+
+    // ── Self-healing: ensure built-in skills exist and are enabled ──
+    await ensureBuiltInSkills()
 
     // Fetch all globally enabled skills (enabledByDefault = true)
     const enabledSkills = await db.hermesSkill.findMany({
