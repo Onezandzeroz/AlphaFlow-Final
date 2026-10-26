@@ -19,7 +19,7 @@
  *   bun run scripts/seed-screenshot-tenant.ts cmABC123...
  *
  * For find dit user-id:
- *   psql "$DATABASE_URL" -c "SELECT id, email FROM \"User\" WHERE \"isAdmin\" = true LIMIT 3;"
+ *   bun run scripts/find-admin-users.ts
  *
  * Genkørsel: Hvis tenant allerede eksisterer, stopper scriptet. Brug
  *   scripts/remove-screenshot-tenant.ts først for at rydde op.
@@ -170,7 +170,7 @@ async function main() {
     console.log('Brug: bun run scripts/seed-screenshot-tenant.ts <user-id>');
     console.log('');
     console.log('Find dit user-id med:');
-    console.log('  psql "$DATABASE_URL" -c "SELECT id, email FROM \\"User\\" WHERE \\"isAdmin\\" = true LIMIT 3;"');
+    console.log('  bun run scripts/find-admin-users.ts');
     process.exit(1);
   }
 
@@ -184,12 +184,12 @@ async function main() {
   // ─── 1. Verificer at brugeren eksisterer ──────────────────────────────
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true, isAdmin: true },
+    select: { id: true, email: true, businessName: true, isSuperDev: true },
   });
   if (!user) {
     fail(`Bruger med ID "${userId}" ikke fundet.`);
   }
-  console.log(`✅ Bruger fundet: ${user.email} (${user.name || 'uden navn'}, isAdmin=${user.isAdmin})`);
+  console.log(`✅ Bruger fundet: ${user.email} (${user.businessName || 'uden virksomhedsnavn'}, isSuperDev=${user.isSuperDev})`);
 
   // ─── 2. Tjek om tenant allerede eksisterer ─────────────────────────────
   const existing = await db.company.findFirst({
