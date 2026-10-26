@@ -217,7 +217,7 @@ async function main() {
       country: 'DK',
       phone: '+45 00 00 00 00',
       email: 'screenshot-demo@example.invalid',
-      isDemo: true, // vigtigt — giver immutability_bypass ved oprydning
+      isDemo: false, // VIGTIGT: Skal være false — ellers skjules i company picker (se src/components/layout/company-selector.tsx:13)
       isActive: true,
       einvoiceEnabled: false, // KRITISK — får NemHandel-banneret til at vises (Bilag 20e)
       nextJournalSequence: 1,

@@ -10,8 +10,10 @@
  *   DRY_RUN=1 bun run scripts/remove-screenshot-tenant.ts
  *
  * Scriptet bruger `immutability_bypass = 'true'` i transaktionen — det er
- * sikkert fordi tenanten er markeret isDemo=true (screenshot-demo-data er
- * undtaget fra Bogføringsloven §10-12). Normale tenants berøres IKKE.
+ * nødvendigt for at kunne slette sealed/hash-chained journal entries.
+ * Sikkerheden ligger i at scriptet KUN sletter tenants med det præcise navn
+ * "AlphaFlow Screenshot Demo" (hardcodet TENANT_NAME) — normale tenants
+ * berøres IKKE.
  *
  * Scriptet sletter i leaf-first rækkefølge for at respektere FK-restriktioner.
  * Hvis en tabel ikke eksisterer (ældre migrationer), ignoreres fejlen stille.
@@ -92,13 +94,17 @@ async function main() {
     return;
   }
 
-  // ─── Sikkerhedscheck: bekræft at tenant er demo ────────────────────────
+  // ─── Sikkerhedscheck: kun screenshot-tenanten må slettes ────────────────
+  // Vi tjekker på NAVN (ikke isDemo) fordi screenshot-tenanten er sat til
+  // isDemo=false for at kunne vises i company picker. Sikkerheden ligger i
+  // at TENANT_NAME er hardcodet ("AlphaFlow Screenshot Demo") og aldrig
+  // matcher en rigtig produktions-tenant.
   for (const t of tenants) {
-    if (!t.isDemo) {
+    if (t.name !== TENANT_NAME) {
       console.error(
-        `\n❌ SIKKERHEDSSTOP: Tenant "${t.name}" (ID: ${t.id}) har isDemo=false.\n` +
-          `Scriptet nægter at slette non-demo tenants (Bogføringsloven §10-12).\n` +
-          `Hvis du har brug for at slette den manuelt, skal du selv skrive SQL med immutability_bypass.`,
+        `\n❌ SIKKERHEDSSTOP: Tenant "${t.name}" (ID: ${t.id}) matcher ikke forventet navn "${TENANT_NAME}".\n` +
+          `Scriptet nægter at slette — beskytter mod utilsigtet sletning af rigtige tenants.\n` +
+          `Hvis du har brug for at slette en anden tenant manuelt, skal du selv skrive SQL med immutability_bypass.`,
       );
       process.exit(1);
     }
@@ -143,16 +149,18 @@ async function main() {
         await tx.transaction.deleteMany({ where: { companyId: t.id } });
 
         // E-fakturering + modtagne fakturaer
-        await tx.eInvoiceSendEvent.deleteMany({ where: { eInvoiceSending: { companyId: t.id } } }).catch(() => {});
+        // EInvoiceSendEvent har relationen 'sending' (ikke 'eInvoiceSending')
+        await tx.eInvoiceSendEvent.deleteMany({ where: { sending: { companyId: t.id } } }).catch(() => {});
         await tx.eInvoiceSending.deleteMany({ where: { companyId: t.id } }).catch(() => {});
         await tx.receivedInvoice.deleteMany({ where: { companyId: t.id } }).catch(() => {});
 
         // VATSubmissions
         await tx.vATSubmission.deleteMany({ where: { companyId: t.id } }).catch(() => {});
 
-        // Invoices + InvoiceCounters + Payments
-        await tx.payment.deleteMany({ where: { invoice: { companyId: t.id } } }).catch(() => {});
-        await tx.invoiceCounter.deleteMany({ where: { companyId: t.id } }).catch(() => {});
+        // Invoices + Payments
+        // Payment har companyId direkte (det er abonnementsbetaling, ikke faktura-betaling)
+        // InvoiceCounter er en singleton-tabel uden companyId — springes over
+        await tx.payment.deleteMany({ where: { companyId: t.id } }).catch(() => {});
         await tx.invoice.deleteMany({ where: { companyId: t.id } }).catch(() => {});
 
         // Documents
@@ -161,19 +169,25 @@ async function main() {
         // Projects
         await tx.project.deleteMany({ where: { companyId: t.id } }).catch(() => {});
 
-        // Contacts + ContactMessages
-        await tx.contactMessage.deleteMany({ where: { contact: { companyId: t.id } } }).catch(() => {});
+        // Contacts
+        // ContactMessage er en selvstændig kontaktformular uden companyId-relation — springes over
         await tx.contact.deleteMany({ where: { companyId: t.id } }).catch(() => {});
 
         // Hermes / AI
-        await tx.hermesAgentSkill.deleteMany({ where: { hermesAgent: { companyId: t.id } } }).catch(() => {});
-        await tx.hermesSkill.deleteMany({ where: { companyId: t.id } }).catch(() => {});
-        await tx.agentMessage.deleteMany({ where: { agentReminder: { companyId: t.id } } }).catch(() => {});
-        await tx.agentReminder.deleteMany({ where: { companyId: t.id } }).catch(() => {});
-        await tx.hermesUsageRecord.deleteMany({ where: { hermesAgent: { companyId: t.id } } }).catch(() => {});
+        // HermesAgentSkill har relationen 'agent' (ikke 'hermesAgent')
+        await tx.hermesAgentSkill.deleteMany({ where: { agent: { companyId: t.id } } }).catch(() => {});
+        // HermesSkill er global (ingen companyId) — springes over
+        // AgentMessage har relationen 'agent' (ikke 'agentReminder')
+        await tx.agentMessage.deleteMany({ where: { agent: { companyId: t.id } } }).catch(() => {});
+        // AgentReminder har relationen 'agent' (ikke companyId direkte)
+        await tx.agentReminder.deleteMany({ where: { agent: { companyId: t.id } } }).catch(() => {});
+        // HermesUsageRecord HAR companyId direkte
+        await tx.hermesUsageRecord.deleteMany({ where: { companyId: t.id } }).catch(() => {});
         await tx.hermesAgent.deleteMany({ where: { companyId: t.id } }).catch(() => {});
-        await tx.knowledgeChunk.deleteMany({ where: { knowledgeDocument: { companyId: t.id } } }).catch(() => {});
-        await tx.knowledgeDocument.deleteMany({ where: { companyId: t.id } }).catch(() => {});
+        // KnowledgeChunk har relationen 'document' (ikke 'knowledgeDocument')
+        await tx.knowledgeChunk.deleteMany({ where: { document: { tenantId: t.id } } }).catch(() => {});
+        // KnowledgeDocument bruger 'tenantId' (ikke 'companyId')
+        await tx.knowledgeDocument.deleteMany({ where: { tenantId: t.id } }).catch(() => {});
 
         // CustomVatCodes
         await tx.customVatCode.deleteMany({ where: { companyId: t.id } }).catch(() => {});
@@ -182,7 +196,8 @@ async function main() {
         await tx.fiscalPeriod.deleteMany({ where: { companyId: t.id } }).catch(() => {});
 
         // Notifications + webhooks + email logs
-        await tx.notificationRead.deleteMany({ where: { user: { userCompanies: { some: { companyId: t.id } } } } }).catch(() => {});
+        // NotificationRead: User har relationen 'companies' (ikke 'userCompanies')
+        await tx.notificationRead.deleteMany({ where: { user: { companies: { some: { companyId: t.id } } } } }).catch(() => {});
         await tx.webhookEvent.deleteMany({ where: { companyId: t.id } }).catch(() => {});
         await tx.emailLog.deleteMany({ where: { companyId: t.id } }).catch(() => {});
         await tx.consentLog.deleteMany({ where: { companyId: t.id } }).catch(() => {});
