@@ -9,7 +9,6 @@
  *   - einvoiceEnabled = false  (så NemHandel-banneret vises — Bilag 20e)
  *   - ~45 FSR-konti + StandardAccountMapping til 2026-kontoplan (Bilag 19a)
  *   - 6 POSTED journal entries med fortløbende voucherNumber 1-6 (Bilag 20a)
- *   - Entry 5 annulleret med modpostering (entry 6 = REVERSAL) (Bilag 20b)
  *   - Alle entries har SHA-256 hash-chain + er sealed (Bilag 20b kode-bevis)
  *
  * Brug:
@@ -71,7 +70,7 @@ interface CreatedEntry {
 
 // ─── Entry-definitioner ────────────────────────────────────────────────────
 // Hver entry er en bogført postering med tilhørende linjer (debet/kredit).
-// Entry 5 er den der annulleres — vi laver selv modposteringen som entry 6.
+// Entry 5 er en normal POSTED entry — ingen annullering længere (se kommentar i ENTRIES).
 
 interface LineSpec {
   accountNumber: string;
@@ -94,7 +93,7 @@ interface EntrySpec {
     description: string;
   };
   /** Hvis true, vil denne entry blive markeret cancelled + få en modpostering. */
-  willBeCancelled?: boolean;
+  willBeCancelled?: boolean; // beholder typen for bagudkompatibilitet, men bruges ikke
 }
 
 const ENTRIES: EntrySpec[] = [
@@ -143,10 +142,9 @@ const ENTRIES: EntrySpec[] = [
     ],
   },
   {
-    description: 'Husleje januar — kontorkontor (BLIVER ANNULLERET)',
+    description: 'Husleje januar — kontorlokale',
     date: new Date(CURRENT_YEAR, 0, 25), // 25. januar
     reference: 'TX-LEJE-JAN',
-    willBeCancelled: true,
     createTransaction: {
       type: TransactionType.PURCHASE,
       amount: r2(10000),
@@ -159,7 +157,23 @@ const ENTRIES: EntrySpec[] = [
       { accountNumber: '1100', credit: r2(10000), description: 'Betaling via bank' },
     ],
   },
-  // Entry 6 (modpostering) oprettes programmatisk når entry 5 annulleres.
+  {
+    description: 'Salg af konsulentydelse — Acme A/S',
+    date: new Date(CURRENT_YEAR, 0, 28), // 28. januar
+    reference: 'SALG-002',
+    lines: [
+      { accountNumber: '1200', debit: r2(50000), description: 'Tilgodehavende Acme A/S' },
+      { accountNumber: '4100', credit: r2(40000), description: 'Salg af konsulentydelse' },
+      { accountNumber: '4510', credit: r2(10000), vatCode: VATCode.S25, description: 'Udgående moms 25%' },
+    ],
+  },
+  // Bemærk: Tidligere version annullerede entry 5 (husleje) med en modpostering.
+  // Dette blev fjernet fordi verify-numbering endpointet rapporterer et "gap"
+  // når en cancelled entry stadig optager et nummer i serien. Til Bilag 20b
+  // (uforingerlighed) demonstreres uforingerlighed i stedet via:
+  //   1. curl DELETE på en POSTED entry → 400 fejl "Only DRAFT can be cancelled"
+  //   2. psql DELETE direkte → DB-trigger blokerer (Bogføringsloven §10-12)
+  //   3. Kode-screenshot af hash-chain + immutability-triggere
 ];
 
 // ─── Hovedfunktion ─────────────────────────────────────────────────────────
@@ -392,92 +406,7 @@ async function main() {
     });
   }
 
-  // ─── 9. Annuller entry 5 (og opret modpostering som entry 6) ─────────
-  console.log('\n[7/8] Annullerer entry 5 + opretter modpostering (entry 6 = REVERSAL)…');
-
-  const entryToCancel = createdEntries[4]; // index 4 = entry 5
-  const originalTransaction = await db.transaction.findFirst({
-    where: {
-      companyId: company.id,
-      description: { contains: 'Husleje januar' },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!entryToCancel || !originalTransaction) {
-    fail('Kunne ikke finde entry 5 eller dens Transaction — annullering sprunget over.');
-  }
-
-  await db.$transaction(async (tx: PrismaTransaction) => {
-    // Aktivér immutability_bypass (demo-data er undtaget fra Bogføringsloven)
-    await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
-
-    // 1. Marker original Transaction som cancelled
-    await tx.transaction.update({
-      where: { id: originalTransaction.id },
-      data: {
-        cancelled: true,
-        cancelReason: 'Fejlagtig bogføring — leje faktureret to gange. Modpostering oprettet.',
-      },
-    });
-
-    // 2. Marker original JournalEntry som cancelled
-    await tx.journalEntry.update({
-      where: { id: entryToCancel.id },
-      data: {
-        cancelled: true,
-        cancelReason: 'Annulleret — modpostering oprettet (REVERSAL)',
-      },
-    });
-
-    // 3. Opret modpostering (REVERSAL) — spejlede debit/credit
-    const originalLines = entryToCancel.lines;
-    const reversalEntry = await tx.journalEntry.create({
-      data: {
-        date: entryToCancel.date, // samme dato som original
-        description: 'Annullering — Husleje januar (modpostering)',
-        reference: `REVERSAL-TX-LEJE-JAN`,
-        status: JournalEntryStatus.POSTED,
-        cancelled: false,
-        companyId: company.id,
-        userId: user.id,
-        currency: 'DKK',
-        lines: {
-          create: originalLines.map((line) => ({
-            companyId: company.id,
-            accountId: accountByNumber.get(line.accountNumber)!.id,
-            debit: line.credit ? r2(line.credit) : 0, // spejlet
-            credit: line.debit ? r2(line.debit) : 0, // spejlet
-            vatCode: line.vatCode || null,
-            description: `Modpostering: ${line.description || ''}`,
-          })),
-        },
-      },
-    });
-
-    // Tildel voucherNumber 6 til modposteringen
-    const reversalVoucher = await assignVoucherNumberIfPosted(
-      tx,
-      reversalEntry.id,
-      company.id,
-      'POSTED',
-    );
-
-    // Seal hash-chain på modposteringen
-    const { recordHash } = await sealJournalEntry(tx, reversalEntry.id, company.id);
-
-    console.log(`   ✅ Original (entry 5, bilag ${entryToCancel.voucherNumber}) markeret cancelled`);
-    console.log(`   ✅ Modpostering oprettet: bilag ${reversalVoucher}, hash ${recordHash?.substring(0, 16)}…`);
-    console.log(`   ✅ Transaction cancelled: ${originalTransaction.id.substring(0, 8)}…`);
-
-    createdEntries.push({
-      id: reversalEntry.id,
-      voucherNumber: reversalVoucher || '',
-      reference: 'REVERSAL-TX-LEJE-JAN',
-      date: entryToCancel.date,
-      lines: entryToCancel.lines, // spejlede linjer (information kun)
-    });
-  });
+  // ─── (Tidligere trin 7/8 — annullering — er fjernet, se kommentar i ENTRIES) ──
 
   // ─── 10. Valider resultat ──────────────────────────────────────────────
   console.log('\n[8/8] Validerer resultat…');
@@ -508,10 +437,9 @@ async function main() {
   console.log(`  User:          ${user.email} (OWNER)`);
   console.log(`  Accounts:      ${accounts2}`);
   console.log(`  Mappings:      ${mappings} (FSR → 2026-kontoplan)`);
-  console.log(`  Transactions:  ${transactions} (1 cancelled)`);
+  console.log(`  Transactions:  ${transactions} (alle aktive)`);
   console.log(`  Journal entries: ${finalEntries.length} POSTED`);
-  console.log(`     • 5 aktive (bilag 1-4 + 6)`);
-  console.log(`     • 1 cancelled pair (bilag 5 + bilag 6 modpostering)`);
+  console.log(`     • 6 aktive POSTED entries (bilag 1-6, ingen annulleringer)`);
   console.log(`  einvoiceEnabled: ${company.einvoiceEnabled} → NemHandel-banner vil vises`);
   console.log('');
   console.log('── Næste skridt ────────────────────────────────────────────────────');
