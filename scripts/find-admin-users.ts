@@ -56,7 +56,7 @@ async function main() {
   }
 
   console.log('═══════════════════════════════════════════════════════════════════');
-  console.log('  Kopiér ID'et ovenfor og brug det i seed-scriptet:');
+  console.log("  Kopiér ID'et ovenfor og brug det i seed-scriptet:");
   console.log('═══════════════════════════════════════════════════════════════════');
   console.log('');
   console.log('  bun run scripts/seed-screenshot-tenant.ts <ID>');
