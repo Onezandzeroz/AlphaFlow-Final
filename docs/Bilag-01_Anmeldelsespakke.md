@@ -59,7 +59,7 @@ Anmeldelsespakken fungerer som **forside og indeks** for den samlede dokumentati
 - **Multi-tenant isolation** — `Company` som tenant-grænse, RBAC med 5 roller (OWNER/ADMIN/ACCOUNTANT/VIEWER/AUDITOR) og 23 permissions i 7 kategorier, SuperDev oversight-mode (read-only for tenant-regnskabsdata; SuperDev-administrative endpoints for abonnements-/trial-styring forbliver kaldbare).
 - **Auth** — email+password (bcrypt, 12 rounds) + TOTP 2FA (RFC 6238) + 10 backup-koder + email-verifikation.
 - **Audit-trail** — 3-niveau immutability (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade).
-- **Backup** — node-cron scheduler (time/dag/uge/måned), AES-256-GCM-krypterede ZIP-filer pr. tenant, SHA-256 checksum, retention op til 5 år (monthly) jf. BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15.
+- **Backup** — node-cron scheduler (time/dag/uge/måned), AES-256-GCM-krypterede ZIP-filer pr. tenant, SHA-256 checksum, retention op til 5 år+ (62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder, monthly) jf. BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15.
 
 ### Funktionelle afgrænsninger
 
@@ -81,7 +81,7 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 |---|---|---|---|
 | **Systemegnethed** | Bogføringsloven §3 | Dobbelt bogføring (JournalEntry + JournalEntryLine), FSR-baseret standardkontoplan, finansjournal, hovedbog, regnskabsperioder med lock. | ✅ Opfyldt |
 | **Uforanderlighed / immutability** | BEK 97 Bilag 1 (bogføringskrav — uforanderlighed) samt Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) | AuditLog 3-niveau (app CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + `onDelete:Restrict` cascade). Konto-deaktivering i stedet for hard-delete. | ✅ Opfyldt — Immutability håndhæves via AuditLog 3-niveau (applikation CREATE-only + PostgreSQL BEFORE UPDATE/DELETE triggere + onDelete:Restrict cascade). Konto-deaktivering i stedet for hard-delete. |
-| **Backup & 5-års retention** | BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 | node-cron scheduler: hourly/daily/weekly/monthly + cleanup; AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant; SHA-256 checksum; monthly retention 60 måneder = 5 år; `Tenant-Backup/` på IONOS VPS. | ✅ Opfyldt |
+| **Backup & 5 år+ retention** | BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 | node-cron scheduler: hourly/daily/weekly/monthly + cleanup; AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant; SHA-256 checksum; monthly retention 62 måneder = 5 år + 2 måneder margin (forskudte regnskabsperioder); `Tenant-Backup/` på IONOS VPS. | ✅ Opfyldt |
 | **SAF-T Financial DK eksport** | BEK 98 | `/api/export-saft` — maskinlæsbar eksport af hele regnskabet. | ✅ Opfyldt |
 | **Årsrapport (XBRL/CSV)** | BEK 98 | `/api/reports/annual-xbrl` + `/api/reports/annual-csv`. | ✅ Opfyldt |
 | **E-fakturering (NemHandel/Peppol)** | BEK 98 | Send/modtag via Sproom som Access Point for både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) — inkl. kreditnotaer (type 381). Modtagelse via webhooks + safety-net-pollere, per-send status-tracking og auto-retry. E-faktura-indbakke med godkend/afvis. | ✅ Opfyldt |
@@ -118,7 +118,7 @@ AlphaFlow er bygget som en multi-tenant SaaS-platform med en Next.js-kerne og 5 
 
 **Multi-tenant isolation:** `Company` er tenant-grænse, `companyId` på tværs af 32 af i alt 45 Prisma-modeller (27 enums), RBAC-isolation via `tenantFilter(ctx)`. SuperDev oversight-mode tillader read-only cross-tenant adgang for AlphaAi-admin.
 
-**Backup-lag:** Neons managed PITR (Point-in-Time Recovery, 7 dage) — defense-in-depth lag 1; AlphaFlows egne `Tenant-Backup/` ZIP-filer (AES-256-GCM, SHA-256, 5-års retention) — lag 2.
+**Backup-lag:** Neons managed PITR (Point-in-Time Recovery, 7 dage) — defense-in-depth lag 1; AlphaFlows egne `Tenant-Backup/` ZIP-filer (AES-256-GCM, SHA-256, 5 år+ retention (62 måneder)) — lag 2.
 
 > Den fulde arkitekturbeskrivelse (komponenter, dataflow, netværk) findes i `docs/Bilag-04_Compliance-rapport.md` og `docs/Bilag-11_IT-sikkerhed-Neon-og-IONOS.md`.
 
@@ -170,7 +170,7 @@ Nedenstående tabel henviser til de specifikke dokumenter, der uddyber hvert com
 | **Databehandleraftaler** | GDPR Art. 28 | `Bilag-07_Databehandleraftale.md` (Bilag 7) | `Bilag-10_Leverandørstyring.md` (Bilag 10) |
 | **Kryptografisk sikkerhed** | GDPR Art. 32; BEK 97 §8 stk. 4 (Hovedkrav 7 — databeskyttelse) | `Bilag-05_Krypteringsrapport.md` (Bilag 5) | `Bilag-11_IT-sikkerhed-Neon-og-IONOS.md` (Bilag 11) |
 | **Adgangsstyring (RBAC + 2FA)** | BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring) | `Bilag-04_Compliance-rapport.md` (Bilag 4) | `Bilag-06_Brugsvejledning.md` (Bilag 6) |
-| **Backup & retention (5 år)** | BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 | `Bilag-04_Compliance-rapport.md` (Bilag 4) | `Bilag-09_Beredskabsplan.md` (Bilag 9), `Bilag-11_IT-sikkerhed-Neon-og-IONOS.md` (Bilag 11) |
+| **Backup & retention (5 år+)** | BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 | `Bilag-04_Compliance-rapport.md` (Bilag 4) | `Bilag-09_Beredskabsplan.md` (Bilag 9), `Bilag-11_IT-sikkerhed-Neon-og-IONOS.md` (Bilag 11) |
 
 ### Dataflow ud af EU/EEA
 

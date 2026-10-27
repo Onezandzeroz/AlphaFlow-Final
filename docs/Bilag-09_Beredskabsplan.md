@@ -65,7 +65,7 @@ Denne plan dækker hele AlphaFlow-platformen:
 | Lovkrav | Reference | Krav |
 |---|---|---|
 | BEK 97 §8 stk. 2 (CIA-triaden) | Sikring mod hændelig tilintetgørelse af bogføringsdata | Beredskab, backup, restore |
-| BEK 97 §3 (5-års opbevaring) | Bogføringsdata skal opbevares i 5 år | Backup retention: monthly 5 år |
+| BEK 97 §3 (5-års opbevaring) | Bogføringsdata skal opbevares i 5 år | Backup retention: monthly 5 år+ (62 måneder) |
 | BEK 97 §7 (backup) | Backup af elektronisk bogføring | AES-256-GCM backup-kryptering |
 | BEK 97 §8 stk. 4 (hovedkrav 6 / krav D4) | It-sikkerhed: Beredskab og reetablering | Denne plan |
 | GDPR Art. 32 | Sikkerhed i behandling af personoplysninger | Tekniske og organisatoriske foranstaltninger |
@@ -175,7 +175,7 @@ RTO/RPO-målene kan justeres ved:
 | Lag | Metode | Hyppighed | Retention | Ansvarlig |
 |---|---|---|---|---|
 | **Lag 1** | Neon managed PITR (Point-In-Time Recovery) | Kontinuerlig (WAL) | 7 dage | Neon, Inc. (managed) |
-| **Lag 2** | AlphaFlow ZIP-backups (`Tenant-Backup/`) | Hourly/Daily/Weekly/Monthly | 25t–5 år | AlphaAi Consult ApS (process-intern `node-cron`) |
+| **Lag 2** | AlphaFlow ZIP-backups (`Tenant-Backup/`) | Hourly/Daily/Weekly/Monthly | 25t–5 år+ (62 mdr) | AlphaAi Consult ApS (process-intern `node-cron`) |
 | **Lag 3** | VPS-disk-snapshot (IONOS) | Manuel / planlagt | Efter IONOS-policy | IONOS / AlphaAi Consult ApS |
 | **Lag 4** | Manuelle backups via `/api/backups` UI | On-demand | 90 dage (Manual retention) | Bruger (OWNER/ADMIN) |
 
@@ -204,7 +204,7 @@ RTO/RPO-målene kan justeres ved:
 | `5 * * * *` | Hourly | Hver time, minut 5 | 24 | 25 timer |
 | `15 2 * * *` | Daily | Daglig kl. 02:15 | 30 | 31 dage |
 | `30 3 * * 1` | Weekly | Mandag kl. 03:30 | 52 | 53 dage |
-| `0 4 1 * *` | Monthly | 1. i måneden kl. 04:00 | 60 | **5 år** (BEK 97 §3 — 5-års opbevaring, udstedt i medfør af Lov om bogføring §15) |
+| `0 4 1 * *` | Monthly | 1. i måneden kl. 04:00 | 62 | **5 år+** (62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder) (BEK 97 §3 — 5-års opbevaring, udstedt i medfør af Lov om bogføring §15) |
 | `0 3 * * *` | Cleanup | Daglig kl. 03:00 — sletter udløbne backups | — | — |
 | On-demand | Manual | Via UI `/api/backups` eller `/api/backups/upload-restore` | 999 | 90 dage |
 

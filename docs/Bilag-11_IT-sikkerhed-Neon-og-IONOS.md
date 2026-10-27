@@ -104,7 +104,7 @@ Neon leverer managed **Point-in-Time Recovery** med op til **7 dages retention**
 | Backup-lag | Ansvarlig | Formål | Retention |
 |---|---|---|---|
 | **Lag 1** — Neon PITR (managed) | Neon, Inc. | Defense-in-depth — gendannelse af databasen til ethvert tidspunkt inden for PITR-vinduet | 7 dage |
-| **Lag 2** — AlphaFlow tenant-backups | AlphaAi Consult ApS | Per-tenant ZIP-backups (AES-256-GCM + SHA-256), lagret på IONOS VPS i `Tenant-Backup/` | 25 timer (hourly) / 31 dage (daily) / 53 dage (weekly) / **5 år** (monthly) |
+| **Lag 2** — AlphaFlow tenant-backups | AlphaAi Consult ApS | Per-tenant ZIP-backups (AES-256-GCM + SHA-256), lagret på IONOS VPS i `Tenant-Backup/` | 25 timer (hourly) / 31 dage (daily) / 53 dage (weekly) / **5 år+** (62 måneder = 5 år + 2 måneder margin, monthly) |
 
 > AlphaFlow kalder ikke Neons backup-API — lag 1 er udelukkende en managed service fra Neon, der fungerer som supplement til AlphaFlows egne tenant-backups. Den fulde backup-strategi er dokumenteret i `docs/Bilag-09_Beredskabsplan.md` og `docs/Bilag-04_Compliance-rapport.md`.
 
@@ -553,8 +553,8 @@ Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinf
 | **D5 — Tredjeparts IT-sikkerhed** | ✅ Opfyldt | SOC 2 Type II (Neon) + C5/ISO 27001/IT-Grundschutz (IONOS); TLS, RBAC, kryptering, audit-log |
 | **D6 — Aftale med 3. part opbevaring** | ✅ Opfyldt | DPA tilgængelig fra både Neon og IONOS; AlphaAi Consult ApS accepterer DPA'erne som del af abonnementet |
 | **N23 — Formel aftale** | ✅ Opfyldt | DPA'erne er formelle juridiske dokumenter, der opfylder GDPR Art. 28-kravene |
-| **GDPR Art. 32 — Sikkerhed** | ✅ Opfyldt | AES-256-GCM, TLS, RBAC, 2FA, audit-log, backup med 5-års retention |
-| **Lov om bogføring §15 / BEK 97 §3 — Datalagring** | ✅ Opfyldt | 5-års retention via monthly tenant-backups; Neon PITR som defense-in-depth |
+| **GDPR Art. 32 — Sikkerhed** | ✅ Opfyldt | AES-256-GCM, TLS, RBAC, 2FA, audit-log, backup med 5 år+ retention (62 måneder) |
+| **Lov om bogføring §15 / BEK 97 §3 — Datalagring** | ✅ Opfyldt | 5 år+ retention (62 måneder) via monthly tenant-backups — 2 måneders margin sikrer dækning af forskudte regnskabsperioder; Neon PITR som defense-in-depth |
 | **EU/EEA-hosting** | ✅ Opfyldt | Både Neon (Frankfurt + Amsterdam) og IONOS (Tyskland) i EU/EEA — ingen infrastruktur-data ud af EU |
 
 > Punkter i afsnit 9 er beskrevet med henblik på fuld information. Planlagte tiltag beskrives i `Bilag-12_Udbedringsplan.md`.

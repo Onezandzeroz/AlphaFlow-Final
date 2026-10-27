@@ -20,7 +20,7 @@
 | Version | Dato | Ændring |
 |---------|------|---------|
 | 3.5 | Oktober 2026 | **Storecove fuldt fjernet + legacy chart fjernet:** (1) Tidligere `src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*` er **fuldt fjernet** fra kodebasen — Sproom er nu faktisk eneste e-faktura Access Point (v3.4-rækkens "Legacy Storecove-kode... er slettet" var foregrebet — den fysiske fjernelse skete først i oktober). (2) Tidligere Storecove-specifikke DB-felter er **fjernet fra Prisma-schemaet** (`storecoveConnected`, `storecoveApiKeyId`, `storecoveLegalEntityId`, `storecoveConnectedAt`, `storecoveLastTestedAt`, `storecoveStorecoveId`); e-faktura dokument-ID-felt er omdøbt fra `storecoveSubmissionId` til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt fra `STORECOVE` til `SPROOM_AUTO`. DB-migration (`bun run db:push`) er kørt på VPS — schema er i sync. (3) Legacy `PUBLIC_STANDARD_CHART` (~49 konti) er helt fjernet — kun `OFFICIAL_STANDARD_CHART` (603 konti, 2026-versionen) benyttes (U-24 gennemført). Standardkonto-UI combobox viser dermed **alle 603 konti** (ikke længere 652 = 603 officielle + 49 legacy). Brødtekst §2.1 række 2 (Standardkonto-mapping) og §2.1 række 6 (E-fakturering) opdateret til at afspejle fysisk fjernelse + sproomDocumentId + SPROOM_AUTO. |
-| 3.4 | September 2026 | Standardkonto-mapping opgraderet til 4-fase AI-assisteret pipeline (Phase 0: hårdkodet `FSR_TO_OFFICIAL_MAPPING`-tabel med 64 AlphaFlow-standardkonti → officielle 2026-kontonumre i `src/lib/fsr-official-mapping.ts`; Phase 1: `suggestStandardMapping()` med validering mod `OFFICIAL_STANDARD_CHART`; Phase 2: type/group-heuristikker; Phase 3: LLM (Hermes/OpenRouter) for semantisk mapping af tilpassede konti i `src/lib/ai-standard-mapping.ts`). Officielt 2026-standardkontoplan (603 konti i `src/lib/official-standard-chart.ts`) erstatter gammel 69-konti PUBLIC_STANDARD_CHART som mapping-grundlag. Standardkonto-UI har nu søgbar combobox (`StandardAccountCombobox`) med type-badges (EXPENSE/REVENUE/ASSET etc.) for alle 652 konti (603 officielle + 49 legacy). Modtagne Peppol BIS-fakturaer genererer nu InvoiceResponse XML (UBL 2.1, namespace `InvoiceResponse-2.1`) ved bogføring (`generateInvoiceResponse()` i `src/lib/einvoice-response.ts`) med per-line OK-respons (`Posted to journal: {accountName}`). `posted-einvoices-list.tsx` har ny "Vis XML"-knap med dialog for både rå modtaget XML og genereret svar-XML (InvoiceResponse/ApplicationResponse/MLR). Kanal-validering i `/api/invoices/[id]/send-einvoice/route.ts` accepterer nu både korte aliases ('PEPPOL', 'OIOUBL') og fulde enum-værdier. `notification-ws-service` har ny `broadcastEInvoiceEvent()` der emitter 'einvoice-event' (var tidligere forkert emit af 'data-changed') for korrekte toast-notifikationer ved modtagelse af e-fakturaer. Legacy Storecove-kode (`src/lib/storecove-client.ts` + 5 `/api/storecove/*`-ruter) er slettet — Sproom er nu eneste Access Point. |
+| 3.4 | September 2026 | Standardkonto-mapping opgraderet til 4-fase AI-assisteret pipeline (Phase 0: hårdkodet `FSR_TO_OFFICIAL_MAPPING`-tabel med 64 AlphaFlow-standardkonti → officielle 2026-kontonumre i `src/lib/fsr-official-mapping.ts`; Phase 1: `suggestStandardMapping()` med validering mod `OFFICIAL_STANDARD_CHART`; Phase 2: type/group-heuristikker; Phase 3: LLM (Hermes/OpenRouter) for semantisk mapping af tilpassede konti i `src/lib/ai-standard-mapping.ts`). Officielt 2026-standardkontoplan (603 konti i `src/lib/official-standard-chart.ts`) erstatter gammel 69-konti PUBLIC_STANDARD_CHART som mapping-grundlag. Standardkonto-UI har nu søgbar combobox (`StandardAccountCombobox`) med type-badges (EXPENSE/REVENUE/ASSET etc.) for alle 603 officielle 2026-konti (dengang 652 inkl. legacy, der siden er fjernet per U-24). Modtagne Peppol BIS-fakturaer genererer nu InvoiceResponse XML (UBL 2.1, namespace `InvoiceResponse-2.1`) ved bogføring (`generateInvoiceResponse()` i `src/lib/einvoice-response.ts`) med per-line OK-respons (`Posted to journal: {accountName}`). `posted-einvoices-list.tsx` har ny "Vis XML"-knap med dialog for både rå modtaget XML og genereret svar-XML (InvoiceResponse/ApplicationResponse/MLR). Kanal-validering i `/api/invoices/[id]/send-einvoice/route.ts` accepterer nu både korte aliases ('PEPPOL', 'OIOUBL') og fulde enum-værdier. `notification-ws-service` har ny `broadcastEInvoiceEvent()` der emitter 'einvoice-event' (var tidligere forkert emit af 'data-changed') for korrekte toast-notifikationer ved modtagelse af e-fakturaer. Legacy Storecove-kode (`src/lib/storecove-client.ts` + 5 `/api/storecove/*`-ruter) er slettet — Sproom er nu eneste Access Point. |
 | 3.3 | September 2026 | Sproom-migrering: Sproom A/S (Danmark) erstatter Storecove B.V. som AlphaFlows eneste e-invoicing Access Point (Peppol BIS Billing 3.0 + NemHandel OIOUBL 2.1). Webhook-signaturverifikation ændret fra HMAC (`X-Storecove-Signature`, legacy) til RSA-SHA256 (`X-Signature`). Tink-bankintegration aktualiseret som reel integration. |
 | 3.2 | 2026 | Tidligere udgave (Storecove-baseret e-fakturering). |
 
@@ -111,7 +111,9 @@ Lov om bogføring § 3 stiller krav om, at regnskabssystemet skal være egnet ti
 
 ### 2.3 BEK 97 Bilag 1 / Lov om bogføring §13 — Uforanderlighed / uforkortethed (5-års opbevaring)
 
-BEK 97 Bilag 1 (bogføringskrav — herunder pkt 2.e: "bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes") og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) stiller krav om, at regnskabsmaterialet kan dokumenteres som fuldstændigt, ægte og pålideligt, og at det ikke kan ændres eller slettes i opbevaringsperioden (5 år — jf. BEK 97 §3).
+> **Note:** Lovkravet er "5 år" (jf. BEK 97 §3); platformens faktiske retention er **5 år+ (62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder)** — se §2.4.
+
+BEK 97 Bilag 1 (bogføringskrav — herunder pkt 2.e: "bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes") og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) stiller krav om, at regnskabsmaterialet kan dokumenteres som fuldstændigt, ægte og pålideligt, og at det ikke kan ændres eller slettes i opbevaringsperioden (5 år+ — jf. BEK 97 §3; platformens faktiske retention er 62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder).
 
 AlphaFlow implementerer en **3-niveau immutability-strategi** på AuditLog-tabellen:
 
@@ -135,15 +137,15 @@ AlphaFlow implementerer en **3-niveau immutability-strategi** på AuditLog-tabel
 - ~~**Ingen kryptografisk hash-chain** på `JournalEntry` eller `Transaction`~~ → **Udbedret:** SHA-256 hash-chain med `recordHash`/`previousHash`/`hashedAt`-felter på begge modeller, sealing ved POSTED-transition, DB-triggers der blokerer UPDATE/DELETE på forseglede rækker, og auditor-endpoint `/api/journal-entries/verify-integrity`. Se afsnit 2.10 for detaljer.
 - **Ingen separate `deletedAt`/`retentionUntil`-felter** på regnskabsmodeller — soft-delete markeres via status-felter (`CANCELLED`, `deactivatedAt`).
 
-### 2.4 BEK 97 §3 + §7 — Backup og opbevaring (5 år) (udstedt i medfør af Lov om bogføring §15)
+### 2.4 BEK 97 §3 + §7 — Backup og opbevaring (5 år+) (udstedt i medfør af Lov om bogføring §15)
 
-BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 — stiller krav om, at regnskabsmaterialet opbevares i mindst 5 år og kan reproduceres i læsbar form.
+BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 — stiller krav om, at regnskabsmaterialet opbevares i mindst 5 år (platformen bevarer 5 år+ = 62 måneder, med 2 måneders margin for forskudte regnskabsperioder) og kan reproduceres i læsbar form.
 
 | Komponent | Implementering | Fil / objekt |
 |-----------|----------------|--------------|
 | **Scheduler** | `node-cron` (process-intern, tidszone `Europe/Copenhagen`). **Bemærk:** backup-scheduleren kører i Next.js-processen — der er intet PM2-cron, crontab eller systemd-timer-lag. | `src/lib/backup-scheduler.ts` |
 | **Cron-udtryk** | Hourly `5 * * * *`, Daily `15 2 * * *`, Weekly `30 3 * * 1`, Monthly `0 4 1 * *`, Cleanup `0 3 * * *`. | `src/lib/backup-scheduler.ts` |
-| **Retention** | Hourly 24/25 timer, Daily 30/31 dage, Weekly 52/53 dage, Monthly 60 måneder (**5 år — opfylder BEK 97 §3**), Manuel 999/90 dage. | `src/lib/backup-engine.ts` |
+| **Retention** | Hourly 24/25 timer, Daily 30/31 dage, Weekly 52/53 dage, Monthly 62 måneder (**5 år+ — opfylder BEK 97 §3 med margin for forskudte regnskabsperioder**), Manuel 999/90 dage. | `src/lib/backup-engine.ts` |
 | **Backup-indhold** | ZIP pr. tenant + `manifest.json` v2 + SHA-256 checksum + AES-256-GCM `.zip.enc`. JSON-filer for: company, accounts, contacts, transactions, invoices, journal-entries, fiscal-periods, budgets, recurring-entries, bank-statements, bank-connections (uden tokens), received-invoices (inkl. rå XML), vat-submissions, einvoice-sendings, members. | `src/lib/backup-engine.ts` |
 | **Integritet** | SHA-256 checksum beregnet streaming via `crypto.createHash('sha256')`, gemmes i `Backup.sha256`, verificeres ved restore. | `src/lib/backup-engine.ts`, `Backup`-model. |
 | **Kryptering** | AES-256-GCM (`ENCRYPTION_KEY` 32 byte). Original ZIP slettes sikkert (`rmSync({force: true})`) efter kryptering. | `src/lib/crypto.ts` |
@@ -190,7 +192,7 @@ BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om b
 
 | Funktion | Implementering |
 |----------|----------------|
-| Tenant-eksport med filer | `POST /api/export-tenant` — GUID per eksport (`crypto.randomUUID()`), format-version `alphaflow-portable-v2`, compliance-metadata (Bogføringsloven BEK 98, 5-års retention), SHA-256 data-integrity checksum. |
+| Tenant-eksport med filer | `POST /api/export-tenant` — GUID per eksport (`crypto.randomUUID()`), format-version `alphaflow-portable-v2`, compliance-metadata (Bogføringsloven BEK 98, 5 år+ retention (62 måneder)), SHA-256 data-integrity checksum. |
 | Eksport-historik | `GET /api/company/export-info` — total eksporter, seneste eksport, datavolumen, audit-entries med GUIDs og checksums. |
 | SAF-T import (indlæsning af standardfil) | `POST /api/import-saft` — importerer en SAF-T Financial DK v2.1 XML-fil fra et tredjepartssystem (førstegangs overflytning til AlphaFlow). |
 | Pre-flight (dry-run) | `POST /api/import-saft/dry-run` — parser filen, identificerer konflikter og umappede momskoder, og returnerer tenantens befolkningstilstand (`populatedTenant`). Ændrer ingen data. |
@@ -354,7 +356,7 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 | Formålsbegrænsning | ✅ Opfyldt | Data behandles alene til bogførings-/regnskabsformål (kontrakt) og AI-assistance (særskilt samtykke). |
 | **Data minimization** | ✅ Opfyldt (med særlig implementering) | `HermesAgent.dataAccessEnabled` er per-tenant opt-in (default `false`). Uden opt-in sendes KUN brugerens spørgsmål + statisk system-prompt til LLM — **ikke** tenant-specifikke finansielle data. |
 | Nøjagtighed | ✅ Opfyldt | Brugerne kan rette egne data via app; CVR-data kan valideres mod CVR-registeret. |
-| Opbevaringsbegrænsning | ⚠️ Delvist | Bogføringsdata: 5-års retention via backup. E-mail/Session/AuditLog: ingen automatisk sletning efter fastsat periode — oprydning af udløbne sessions via `cleanupExpiredSessions()`. |
+| Opbevaringsbegrænsning | ⚠️ Delvist | Bogføringsdata: 5 år+ retention (62 måneder) via backup. E-mail/Session/AuditLog: ingen automatisk sletning efter fastsat periode — oprydning af udløbne sessions via `cleanupExpiredSessions()`. |
 | Integritet og fortrolighed | ✅ Opfyldt (med begrænsninger) | Se art. 32 nedenfor. |
 
 ### 3.3 Art. 6 — Lovgrundlag
@@ -912,7 +914,7 @@ Ingen konfigureret CORS-policy i `next.config.ts` eller `Caddyfile`. API-routes 
 
 ### 11.1 Samlet vurdering
 
-AlphaFlow opfylder Bogføringslovens krav til et digitalt regnskabssystem: dobbelt bogføring, FSR-baseret kontoplan, fortløbende bilagsnummerering, periode-låsning, SAF-T-eksport, årsrapport-eksport (CSV/iXBRL), 5-års backup-retention med AES-256-GCM-kryptering, og en 3-niveau immutability-strategi på audit-loggen (applikation CREATE-only + PostgreSQL-triggers + cascade-Restrict).
+AlphaFlow opfylder Bogføringslovens krav til et digitalt regnskabssystem: dobbelt bogføring, FSR-baseret kontoplan, fortløbende bilagsnummerering, periode-låsning, SAF-T-eksport, årsrapport-eksport (CSV/iXBRL), 5 år+ backup-retention (62 måneder) med AES-256-GCM-kryptering, og en 3-niveau immutability-strategi på audit-loggen (applikation CREATE-only + PostgreSQL-triggers + cascade-Restrict).
 
 Platformen opfylder GDPR's sikkerhedskrav (art. 32): kryptering i transit (TLS 1.2/1.3), kryptering i hvile for følsomme data (bank-tokens, TOTP-secrets, backup-filer via AES-256-GCM), adgangskontrol (RBAC + multi-tenant isolation), TOTP 2FA, og uforanderlig audit-trail.
 

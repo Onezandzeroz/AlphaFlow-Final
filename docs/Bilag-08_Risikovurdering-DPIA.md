@@ -236,7 +236,7 @@ Følgende tekniske kontroller er implementeret og udgør den eksisterende afhjæ
 - ✅ Neons disk-encryption (managed) + PITR 7 dage.
 - ✅ IONOS VPS C5 + IT-Grundschutz cert. (EU-hosting).
 - ✅ AES-256-GCM-krypterede backup-ZIPs (`.zip.enc`) + SHA-256 checksum + manifest v2.
-- ✅ Backup retention: hourly 25t / daily 31d / weekly 53d / monthly 5 år / manual 90d.
+- ✅ Backup retention: hourly 25t / daily 31d / weekly 53d / monthly 5 år+ (62 måneder) / manual 90d.
 - ✅ CronExecution DB-log + startup catch-up + retry 3x exp. backoff + overlap guard + pre-restore safety backup + atomisk gendannelse.
 - ✅ `HermesAgent.dataAccessEnabled` per-tenant opt-in (default `false`) — data minimization over for USA-underbehandlere.
 
@@ -493,12 +493,12 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Beskrivelse** | Backup-scheduler er implementeret som process-intern `node-cron` i alphaflow PM2-appen (`src/lib/backup-scheduler.ts` kaldes fra `src/instrumentation.node.ts`). |
 | **Trussel** | App-crash, hukommelsesudtørring, PM2-fejl, VPS-fejl — backup-scheduler stopper. |
 | **Sårbarhed** | Backups kører så længe alphaflow-appen kører; ingen ekstern cron-job / systemd-timer / PM2 cron_jobs / crontab. |
-| **Aktiv** | A5 (backup-kontinuitet), A2 (5-års retention). |
+| **Aktiv** | A5 (backup-kontinuitet), A2 (5 år+ retention). |
 | **Sandsynlighed** | Mellem (app kan crash) |
 | **Konsekvens** | Mellem |
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | Neon PITR 7 dage (defense-in-depth lag 1, fuld DB-recovery); PM2 `autorestart:true`, `max_restarts:10`, `restart_delay:5000`; `CronExecution` DB-log med startup catch-up (oversete cron-vinduer genkendes og køres); retry 3x exp. backoff (5s/10s/20s); overlap guard via `runningJobs`-Set; per-tenant health monitoring på `/api/backups/scheduler-status`; `ensureInitialBackup()` første-data-triggeret baseline-backup. |
-| **Rest risiko** | Lav — Neon PITR dækker 7 dage, AlphaFlow-backup-ZIPs dækker op til 5 år. |
+| **Rest risiko** | Lav — Neon PITR dækker 7 dage, AlphaFlow-backup-ZIPs dækker op til 5 år+ (62 måneder). |
 | **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — ekstern systemd-timer / PM2 cron_jobs / dedicated backup-cron-script som backup-of-backup. Accepteret for nu — se afsnit 7. |
 
 ### R-18 — SQLite i mini-services ukrypteret på disk
@@ -620,7 +620,7 @@ Følgende risici er **accepteret** af AlphaAi Consult ApS med begrundelse — ek
 | **R-10** (Ingen OAuth/SSO) | Email+password+TOTP er standard for SMB-markedet. SSO kan tilføjes ved enterprise-kunde-efterspørgsel. Accepteret kommercielt. |
 | **R-15** (Bank-API stubs) | Bank-integration: Tink er aktiv i produktion (real OAuth2 via Tink Link); Nordea/Danske Bank/Jyske Bank er stubs. Kunder informeres omkring hvilke banker der er aktive. AES-256-GCM-kryptering er allerede implementeret fremtidssikret for når øvrige bank-integrationer aktiveres. |
 | **R-16** (AI-bankafstemning auto-match) | AI-bankafstemning er implementeret i produktion via OpenRouter (`matching-engine.ts`). Autoprogrammering ved AI-konfidens ≥0,95 er en bevidst value/efficiency-feature; brugeren kan altid Unlink et forkert match. Manuel matching forbliver fuldt tilgængelig. |
-| **R-17** (Backup-scheduler process-intern) | Neon PITR 7d + AlphaFlow-backup-ZIPs (5 år retention) + CronExecution startup catch-up + PM2 autorestart vurderes som tilstrækkelig defense-in-depth. |
+| **R-17** (Backup-scheduler process-intern) | Neon PITR 7d + AlphaFlow-backup-ZIPs (5 år+ retention — 62 måneder) + CronExecution startup catch-up + PM2 autorestart vurderes som tilstrækkelig defense-in-depth. |
 | **R-18** (SQLite ukrypteret) | VPS-disk-encryption (IONOS managed) + inter-service API-key auth vurderes som tilstrækkelig. `.tbkey` proof-fil-indhold er krypteret uafhængigt. |
 | **R-19** (notification-ws auth) | ✅ **Udbedret (U-5).** `io.use()` middleware med session-validering; `/broadcast` og `/stats` beskyttet med `HERMES_ADMIN_KEY`. |
 | **R-21** (AI non-determinisme og hallucinationer) | AI-output er iboende non-deterministisk. Accepteret med kompenserende foranstaltninger: (a) Hermes aktiveres per tenant via en enable/disable-toggle af Owner/Admin (eller SuperDev), separat `dataAccessEnabled`-toggle (default `false`) styrer dataadgang til OpenRouter-LLM'en, (b) aktivering/deaktivering samt dataadgang-ændringer audit-logges (`action: UPDATE`, `entityType: System`), (c) VLM-output markeres "Kræver gennemsyn" ved lav konfidens, (d) AI overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid. Se Bilag 6 (Bilag-06_Brugsvejledning.md) §13.0 for fulde advarselstekster. |

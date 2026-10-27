@@ -383,7 +383,7 @@ Filer på IONOS VPS (`/home/<user>/alphaflow/`):
 
 ### 6.4 Backup-retention & SHA-256 checksum
 
-- **Retention:** Hourly 24/25t, Daily 30/31d, Weekly 52/53d, Monthly 60/**5 år** (BEK 97 §3 — udstedt i medfør af Lov om bogføring §15), Manual 999/90d.
+- **Retention:** Hourly 24/25t, Daily 30/31d, Weekly 52/53d, Monthly 62/**5 år+** (62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder) (BEK 97 §3 — udstedt i medfør af Lov om bogføring §15), Manual 999/90d.
 - **Checksum:** SHA-256 af den ukrypterede ZIP gemmes i `Backup.sha256`. Ved restore genberegnes checksum og sammenlignes — afviser hvis mismatch.
 - **Format:** `[ZIP-indhold]` → SHA-256 beregnes → AES-256-GCM encrypt → original ZIP slettes.
 - **Lokation:** `Tenant-Backup/{companyName}/` på IONOS VPS — ikke automatisk off-site.
@@ -545,7 +545,7 @@ Nedenstående beskriver udvalgte arkitektoniske valg i AlphaFlows krypteringsimp
 | Lov-reference | Implementering | Status |
 |---|---|---|
 | BEK 97 Bilag 1 / Lov om bogføring §13 — uforanderlighed af posteringer | AuditLog 3-niveau (app + DB-triggers + Restrict cascade) | ✅ Opfyldt |
-| BEK 97 §3 — 5-års backup-retention | Monthly backup 5-års retention + AES-256-GCM + SHA-256 | ✅ Opfyldt |
+| BEK 97 §3 — 5-års backup-retention | Monthly backup 5 år+ retention (62 måneder) + AES-256-GCM + SHA-256 | ✅ Opfyldt |
 | BEK 97 §7 — backup integritet | SHA-256 checksum verificeres ved restore | ✅ Opfyldt |
 | BEK 97 §8 stk. 4 (Hovedkrav 2 — adgangsstyring) | bcrypt 12 rounds + TOTP 2FA + RBAC | ✅ Opfyldt |
 | Fortløbende bilagsnummerering | `Company.journalPrefix` + `nextJournalSequence` | ✅ Opfyldt |

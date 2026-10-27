@@ -35,7 +35,7 @@ Denne brugsvejledning beskriver **kun** funktioner, der faktisk findes i AlphaFl
 
 ### Hvad er AlphaFlow?
 
-AlphaFlow er en cloud-baseret (SaaS) dansk bogføringsplatform med dobbelt bogføring, fakturering, momsangivelse, e-fakturering (NemHandel/Peppol), en AI-assistent (Hermes), dokument-OCR og rapportering. Platformen er bygget til overholdelse af Bogføringslovens krav til fortløbende bilagsnummerering, periodelåsning, uforanderlig revisionslog og 5-års opbevaring.
+AlphaFlow er en cloud-baseret (SaaS) dansk bogføringsplatform med dobbelt bogføring, fakturering, momsangivelse, e-fakturering (NemHandel/Peppol), en AI-assistent (Hermes), dokument-OCR og rapportering. Platformen er bygget til overholdelse af Bogføringslovens krav til fortløbende bilagsnummerering, periodelåsning, uforanderlig revisionslog og 5 år+ opbevaring (med margin for forskudte regnskabsperioder).
 
 AlphaFlow er **multi-tenant**: din virksomheds data er fuldt adskilt fra andre kunders data, og adgangen styres af rollebaseret adgangskontrol (RBAC) pr. virksomhed.
 
@@ -439,7 +439,7 @@ Gå til **Kontoplan** i sidebjælken (`/accounts`) for at se, oprette, redigere 
 - Søgning, type-filter, collapsible grupper.
 - Opret/rediger/slet-konti (med write-access-guard — systemkonti kan kun deaktiveres, ikke slettes).
 - **VATMappingPanel** — interne momskoder → offentlige SKAT-koder.
-- **StandardMappingPanel** — kobler dine konti til FSR-standardkonti (til SAF-T eksport). Panelet bruger nu en **søgbar `StandardAccountCombobox`** (Popover + Command/cmdk) med alle 652 standardkonti (603 officielle 2026 Standardkontoplan + 69 legacy, hvoraf 20 er fælles → 652 unikke), type-badges pr. konto og et fritekstsøgefelt (kontonummer eller navn). Se afsnit 5.1.2 for detaljer om combobox og det AI-assisterede auto-map-flow.
+- **StandardMappingPanel** — kobler dine konti til FSR-standardkonti (til SAF-T eksport). Panelet bruger nu en **søgbar `StandardAccountCombobox`** (Popover + Command/cmdk) med alle 603 officielle 2026-standardkonti (Standardkontoplanen), type-badges pr. konto og et fritekstsøgefelt (kontonummer eller navn). Se afsnit 5.1.2 for detaljer om combobox og det AI-assisterede auto-map-flow.
 - **PostingGuideAssistant** — søgbar dansk konteringsvejledning.
 
 #### 5.1.1 Bogføringsguide og konteringsvejledning (PostingGuideAssistant)
@@ -1497,11 +1497,11 @@ AlphaFlow udfører automatisk krypteret backup af din virksomheds data via node-
 | Timebackup | `5 * * * *` | Hver time | Seneste 24 |
 | Dagsbackup | `15 2 * * *` | Hver dag kl. 02:15 | Seneste 30 |
 | Ugebackup | `30 3 * * 1` | Hver mandag kl. 03:30 | Seneste 52 |
-| Månedsbackup | `0 4 1 * *` | 1. i måneden kl. 04:00 | Seneste 60 / **5 år** |
+| Månedsbackup | `0 4 1 * *` | 1. i måneden kl. 04:00 | Seneste 62 / **5 år+** (62 måneder = 5 år + 2 måneder margin) |
 | Oprydning | `0 3 * * *` | Daglig kl. 03:00 | Sletter udløbne |
 | Manuel | (on-demand) | Når du klikker | 90 dage |
 
-> **Bogføringsloven §15:** Månedsbackups opbevares i op til 5 år for at opfylde Bogføringslovens opbevaringspligt for regnskabsmateriale.
+> **Bogføringsloven §15:** Månedsbackups opbevares i 5 år+ (62 måneder — 2 måneders margin sikrer dækning af forskudte regnskabsperioder) for at opfylde Bogføringslovens opbevaringspligt for regnskabsmateriale.
 
 ### 14.2 Format og placering
 
@@ -1548,7 +1548,7 @@ Backup-siden (`BackupPage`) viser:
 - Alle backupper (manuelle, automatiske, planlagte).
 - SHA-256 checksum pr. fil.
 - Filstørrelse.
-- Udløbsdato (typisk 60 måneder for månedlige).
+- Udløbsdato (typisk 62 måneder for månedlige (5 år + 2 måneder margin)).
 - Status (completed / failed).
 - Scheduler-status.
 
@@ -1616,7 +1616,7 @@ I overensstemmelse med Bogføringsloven §10-12 og GDPR Art. 17(3)(c) kan en bru
 1. Klik på **Slet konto**-ikonet (Trash2) i sidebjælken.
 2. Bekræft i AlertDialog.
 3. Systemet deaktiverer kontoen via `DELETE /api/auth/delete-account`.
-4. Din data forbliver opbevaret i mindst 5 år (månedsbackups) til skattekontrol/revision.
+4. Din data forbliver opbevaret i mindst 5 år+ (62 måneder — månedsbackups med margin for forskudte regnskabsperioder) til skattekontrol/revision.
 
 ### 15.5 GDPR-overholdelse
 
@@ -1981,7 +1981,7 @@ Disse begrænsninger er anført for at hjælpe dig med at vurdere, om AlphaFlow 
 
 | Version | Dato | Væsentlige ændringer |
 |---------|------|----------------------|
-| 3.3 | Oktober 2026 | **AI-assisteret standardkonto-mapping + e-faktura-forbedringer:** StandardMappingPanel bruger nu en **søgbar `StandardAccountCombobox`** (Popover + cmdk) med alle officielle 2026-standardkonti (603 konti via `OFFICIAL_STANDARD_CHART` — legacy `PUBLIC_STANDARD_CHART` er helt fjernet per Bilag 12 U-24) og farvede type-badges pr. konto (EXPENSE=Omkostning/rød, REVENUE=Indtægt/grøn, ASSET=Aktiv/teal, LIABILITY=Gæld/amber, EQUITY/INVENTORY/FINANCIAL/TAX/YEAR_END/STATISTICAL). Auto-map har nu 4 faser: (0) hårdkodet FSR-til-officiel mapping-tabel (64 konti, 100 % valideret mod `OFFICIAL_STANDARD_CHART`), (1) `suggestStandardMapping()` med validering, (2) type-/gruppe-heuristikker og (3) LLM via Hermes/OpenRouter for semantisk mapping. LLM-mappede konti markeres med lilla **AI**-badge, heuristisk-mappede med gråt **Auto**-badge. Bogførte e-fakturaer flyttes til ny fane **Købsfakturaer** på Posteringer-siden med en **Vis XML**-knap, der viser både rå modtaget XML og genereret svar XML (InvoiceResponse for Peppol BIS, Application Response for OIOUBL, MLR for Message Level Response) med type-badge. Ved bogføring af Peppol BIS-fakturaer genereres nu en **InvoiceResponse** (UBL 2.1, InvoiceResponse-2.1 namespace) med per-line OK-respons og beskrivelsen *"Posted to journal: {kontonavn}"* — så afsenderen får præcis viden om accepterede fakturalinjer. Ny rich **toast-notifikation** (`EInvoiceToast`) ved modtagelse af e-faktura via Sproom-webhook (kræver notification-ws-service på port 3001 og `HERMES_ADMIN_KEY`). Kanal-validering fix: API'et accepterer nu både korte aliases (`PEPPOL`, `OIOUBL`) og fulde enum-værdier (`PEPPOL_BIS`, `NEMHANDEL_OIOUBL`, `SPROOM_AUTO`) — "Sproom (Peppol)"-kanalen virker nu korrekt (tidligere afvist med "Ugyldig kanal"). **AR-afklaring §6.6.4 (Oktober 2026):** Nyt afsnit 6.6.4 præciserer at Application Response (AR) og Message Level Response (MLR) genereres **lokalt** ved modtagelse og gemmes i DB, men først **sendes til afsenderen via Sproom når brugeren aktivt godkender eller afviser fakturaen** — AlphaFlow sender IKKE auto-kvittering umiddelbart ved modtagelse. **"Registreret" rettelse (Oktober 2026):** Afsnit 17.x fastslår at AlphaFlow er **registreret** som digitalt standardbogføringssystem hos Erhvervsstyrelsen (ikke "godkendt" — bogføringssystemer anmeldes og registreres, de "godkendes" ikke). Sproom (dansk selskab — https://sproom.net) er eneste e-faktura Access Point; integrationen er live mod Sproom staging, produktion via env-switch. Legacy Storecove-kode (klient + 5 `/api/storecove/`-ruter) er fuldt fjernet — Sproom er nu eneste Access Point. ⚠️ Rettelse (dokumentationsnøjagtighed): legacy-koden (`storecove-client.ts` + 5 `/api/storecove/*`-ruter) er faktisk bevaret som inaktiv legacy i kodebasen — ikke fysisk slettet; koden rutes ikke (Sproom er eneste aktiv Access Point), og backward-compat DB-felter bevares for historiske rækker. Se aktuelle tilstand i brødtekst/leverandørstabel. |
+| 3.3 | Oktober 2026 | **AI-assisteret standardkonto-mapping + e-faktura-forbedringer:** StandardMappingPanel bruger nu en **søgbar `StandardAccountCombobox`** (Popover + cmdk) med alle officielle 2026-standardkonti (603 konti via `OFFICIAL_STANDARD_CHART` — legacy `PUBLIC_STANDARD_CHART` er helt fjernet per Bilag 12 U-24) og farvede type-badges pr. konto (EXPENSE=Omkostning/rød, REVENUE=Indtægt/grøn, ASSET=Aktiv/teal, LIABILITY=Gæld/amber, EQUITY/INVENTORY/FINANCIAL/TAX/YEAR_END/STATISTICAL). Auto-map har nu 4 faser: (0) hårdkodet FSR-til-officiel mapping-tabel (64 konti, 100 % valideret mod `OFFICIAL_STANDARD_CHART`), (1) `suggestStandardMapping()` med validering, (2) type-/gruppe-heuristikker og (3) LLM via Hermes/OpenRouter for semantisk mapping. LLM-mappede konti markeres med lilla **AI**-badge, heuristisk-mappede med gråt **Auto**-badge. Bogførte e-fakturaer flyttes til ny fane **Købsfakturaer** på Posteringer-siden med en **Vis XML**-knap, der viser både rå modtaget XML og genereret svar XML (InvoiceResponse for Peppol BIS, Application Response for OIOUBL, MLR for Message Level Response) med type-badge. Ved bogføring af Peppol BIS-fakturaer genereres nu en **InvoiceResponse** (UBL 2.1, InvoiceResponse-2.1 namespace) med per-line OK-respons og beskrivelsen *"Posted to journal: {kontonavn}"* — så afsenderen får præcis viden om accepterede fakturalinjer. Ny rich **toast-notifikation** (`EInvoiceToast`) ved modtagelse af e-faktura via Sproom-webhook (kræver notification-ws-service på port 3001 og `HERMES_ADMIN_KEY`). Kanal-validering fix: API'et accepterer nu både korte aliases (`PEPPOL`, `OIOUBL`) og fulde enum-værdier (`PEPPOL_BIS`, `NEMHANDEL_OIOUBL`, `SPROOM_AUTO`) — "Sproom (Peppol)"-kanalen virker nu korrekt (tidligere afvist med "Ugyldig kanal"). **AR-afklaring §6.6.4 (Oktober 2026):** Nyt afsnit 6.6.4 præciserer at Application Response (AR) og Message Level Response (MLR) genereres **lokalt** ved modtagelse og gemmes i DB, men først **sendes til afsenderen via Sproom når brugeren aktivt godkender eller afviser fakturaen** — AlphaFlow sender IKKE auto-kvittering umiddelbart ved modtagelse. **"Registreret" rettelse (Oktober 2026):** Afsnit 17.x fastslår at AlphaFlow er **registreret** som digitalt standardbogføringssystem hos Erhvervsstyrelsen (ikke "godkendt" — bogføringssystemer anmeldes og registreres, de "godkendes" ikke). Sproom (dansk selskab — https://sproom.net) er eneste e-faktura Access Point; integrationen er live mod Sproom staging, produktion via env-switch. Legacy Storecove-kode (klient + 5 `/api/storecove/`-ruter) er fuldt fjernet — Sproom er nu eneste Access Point. |
 | 3.2 | September 2026 | **Sproom-migrering:** Sproom (dansk selskab, sproom.net) har erstattet Storecove som AlphaFlows eneste e-invoicing Access Point og dækker begge netværk — NemHandel (OIOUBL 2.1) og Peppol (BIS Billing 3.0). Automatisk Sproom-tilmelding pr. virksomhed (child company + registrering i begge netværk), afsendelse som rå XML, udvidet leveringsstatus pr. dokument (inkl. IN_TRANSIT, PENDING_APPROVAL, REJECTED, PAID) med fuld statushistorik og auto-retry, samt godkend/afvis i e-faktura-indbakken med Application Response tilbage til afsenderen. Afsendelse via Sproom kræver nu et betalende abonnement (alle betalende planer — tidligere Business+). Tilføjet månedlige forbrugskvoter (e-faktura 10/30/50/100/150; Hermes 0/0/200/500/1.000) med tilkøbspakker. Tink beskrevet som reel bankintegration (Tink Link-flow). |
 | 3.1 | 2026 | Forrige udgave — e-fakturering beskrevet med Storecove som aktivt Access Point. |
 

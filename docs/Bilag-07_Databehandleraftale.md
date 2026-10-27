@@ -82,11 +82,11 @@ Levering af cloud-baseret bogføringsservice til kunden, herunder:
 
 ### 2.2 Varighed
 
-Aftalen gælder for kundens abonnementsperiode (jvf. AlphaFlows generelle vilkår) **+** den lovpligtige opbevaringsperiode jf. Bogføringsloven §§ 10-12 og § 15 (minimum 5 år fra regnskabsårets udløb). Efter ophør af abonnementet fortsætter opbevaring som beskrevet i § 8.
+Aftalen gælder for kundens abonnementsperiode (jvf. AlphaFlows generelle vilkår) **+** den lovpligtige opbevaringsperiode jf. Bogføringsloven §§ 10-12 og § 15 (minimum 5 år fra regnskabsårets udløb — platformen bevarer 5 år+ (62 måneder) for at dække forskudte regnskabsperioder). Efter ophør af abonnementet fortsætter opbevaring som beskrevet i § 8.
 
 ### 2.3 Behandlingens art
 
-Behandlingen er begrænset til det i § 2.1 anførte. Behandlingen sker udelukkende på grundlag af kundens instrukser afgivet gennem platformens brugergrænseflade, undtagen hvor dansk lovgivning (særligt Bogføringsloven) pålægger AlphaAi Consult ApS at udføre specifikke handlinger (f.eks. opretholdelse af immutabel audit-log og 5-års backup-retention).
+Behandlingen er begrænset til det i § 2.1 anførte. Behandlingen sker udelukkende på grundlag af kundens instrukser afgivet gennem platformens brugergrænseflade, undtagen hvor dansk lovgivning (særligt Bogføringsloven) pålægger AlphaAi Consult ApS at udføre specifikke handlinger (f.eks. opretholdelse af immutabel audit-log og 5 år+ backup-retention (62 måneder)).
 
 ---
 
@@ -402,7 +402,7 @@ AlphaFlow opretholder et 5-lags backup-system:
 | 2. AlphaFlow hourly backup | node-cron (`5 * * * *`) — AES-256-GCM ZIP pr. tenant på IONOS VPS | 25 timer (24 stykker) |
 | 3. AlphaFlow daily backup | node-cron (`15 2 * * *`) | 31 dage (30 stykker) |
 | 4. AlphaFlow weekly backup | node-cron (`30 3 * * 1`) | 53 dage (52 stykker) |
-| 5. AlphaFlow monthly backup | node-cron (`0 4 1 * *`) | **5 år** (60 stykker) — Bogføringsloven § 12 |
+| 5. AlphaFlow monthly backup | node-cron (`0 4 1 * *`) | **5 år+** (62 stykker — 2 måneders margin for forskudte regnskabsperioder) — Bogføringsloven § 12 |
 | (manuelle backups) | Bruger-initierede | 90 dage (999 stykker) |
 
 **Format:** ZIP pr. tenant + manifest.json v2 + SHA-256 checksum + AES-256-GCM `.zip.enc`.
@@ -415,7 +415,7 @@ AlphaFlow opretholder et 5-lags backup-system:
 
 ### 8.1 Bogføringslovens 5-års opbevaringspligt
 
-I henhold til Bogføringsloven §§ 10-12 og § 15 skal bogføringsdata, bilag, fakturaer, bankudtog og audit-log opbevares i **minimum 5 år** fra regnskabsårets udløb. Dette har forrang over GDPR's slettepligt (art. 17(3)(c)).
+I henhold til Bogføringsloven §§ 10-12 og § 15 skal bogføringsdata, bilag, fakturaer, bankudtog og audit-log opbevares i **minimum 5 år** fra regnskabsårets udløb. Dette har forrang over GDPR's slettepligt (art. 17(3)(c)). Platformens faktiske retention er 5 år+ (62 måneder) for at dække forskudte regnskabsperioder (jf. Erhvervsstyrelsen).
 
 ### 8.2 Konto-deaktivering (ikke hard-delete)
 
@@ -441,7 +441,7 @@ Dette sikrer fuld sporbarhed jf. Bogføringsloven §§ 10-12.
 
 ### 8.4 Backup-retention
 
-Som beskrevet i § 7.7. Monthly backups opbevares i 5 år (60 måneder) for at opfylde Bogføringsloven § 12.
+Som beskrevet i § 7.7. Monthly backups opbevares i 5 år+ (62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder) for at opfylde Bogføringsloven § 12.
 
 ### 8.5 Audit-log — slettes aldrig
 
@@ -457,7 +457,7 @@ Ved ophør af abonnement:
 | 2 | Kunde foretager portabel eksport | Før ophør |
 | 3 | Konto deaktiveres (ikke hard-delete) | Ved ophør |
 | 4 | Backups opbevares i 5 år jf. Bogføringsloven | 5 år fra regnskabsårets udløb |
-| 5 | Efter 5 år: monthly backups slettes via retention policy | Automatisk |
+| 5 | Efter 5 år+ (62 måneder): monthly backups slettes via retention policy | Automatisk |
 
 Kunden kan anmode om hard-delete af data, der ikke længere er under Bogføringslovens opbevaringspligt, forudsat at data er eksporteret og overført til en anden godkendt bogføringsudbyder jf. Bogføringsloven § 15, stk. 3.
 
@@ -558,7 +558,7 @@ Sletningsanmodninger afvejes mod Bogføringslovens 5-års opbevaringspligt (jf. 
 | Bogføringsdata (posteringer, fakturaer, journaler) | Nej — kun modpostering | Bogføringsloven §§ 10-12 |
 | Bilag (PDF, kvitteringer) | Nej | Bogføringsloven § 15 |
 | Audit-log | Nej | Bogføringsloven §§ 10-12 |
-| Backups (monthly) | Efter 5 år | Automatisk retention |
+| Backups (monthly) | Efter 5 år+ (62 måneder) | Automatisk retention |
 | Identitetsdata (navn, email, telefon) | Konto-deaktivering | Soft-delete |
 | Brugerkonto-data (adgangskode, 2FA) | Kan slettes ved kontodeaktivering | Ikke bogføringsdata |
 | Hermes-samtalehistorik | Ja (efter samtale-rulning) | Ikke bogføringsdata |
@@ -792,7 +792,7 @@ Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
 | § 10 | Uforanderlighed af registreringer | Audit trail 3-niveau immutability, soft-delete via modpostering |
 | § 11 | Klarhed og overskuelighed | Struktureret JSON + manifest v2 |
 | § 12 | Fortløbende registrering | Automatisk dato- og tidsstempling, fortløbende bilagsnummer (`journalPrefix` + `nextJournalSequence`) |
-| § 15 | 5-års opbevaringspligt | Monthly backups 60 stk. (5 år), Konto-deaktivering i stedet for sletning |
+| § 15 | 5-års opbevaringspligt | Monthly backups 62 stk. (5 år+ — 2 måneders margin), Konto-deaktivering i stedet for sletning |
 
 ---
 
@@ -807,8 +807,8 @@ Disse integrationer vil blive tilføjet Bilag A, hvis de aktiveres.
 | 3.2 | 2026 | **Dokumentationsnøjaktighed:** Rettet RBAC permissions 18→23 i 7 kategorier (§7.3); tilføjet SuperDev oversight-nuance (admin endpoints `/api/oversight/subscription` og `/api/oversight/trial` forbliver kaldbare); opdateret §5.1.G og Bilag A.2 — Tink nu korrekt beskrevet som reel implementering, `z-ai-web-dev-sdk`-række erstattet af aktiv AI-bankafstemning via OpenRouter (`matching-engine.ts`); opdateret §6.1 Hermes-consent til toggle-baseret beskrivelse (enable/disable + `dataAccessEnabled` toggles, audit `action: UPDATE`); `FSR-38`-navngivning rettet til `FSR-baseret`. |
 | 3.3 | 2026 | **Bilagsstruktur-konsolidering:** Underbehandler-DPA'er (Bilag 14–18) samlet til ét bilagspunkt (Bilag 14). Tjeklisten renummereret fra Bilag 19 til Bilag 3. Alle krydsreferencer til specifikke DPA-bilag (Neon, IONOS, Storecove, Flatpay/Frisbii, OpenRouter, Simply/Brevo) opdateret til Bilag 14. |
 | 3.4 | September 2026 | **Sproom-migrering:** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som e-faktura Access Point (underbehandler) — Sproom dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Tekniske detaljer opdateret (raw XML POST /api/documents, RSA-webhook-signatur i X-Signature-header, child companies pr. tenant/CVR). Webhook-signatur for e-faktura-AP ændret fra HMAC (X-Storecove-Signature) til RSA-SHA256; env-vars ændret til SPROOM_API_URL/SPROOM_API_TOKEN/SPROOM_WEBHOOK_PUBLIC_KEY/SPROOM_WEBHOOK_REQUIRE_SIGNATURE. Legacy Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) markeret som supersederet (bevaret for bagudkompatibilitet — Bilag A.2). §1.3 bank-forbindelser rettet til Tink som reel implementering. Datamodel-reference 40→45 modeller (27 enums). |
-| 3.6 | Oktober 2026 | **Storecove fuldt fjernet — fysisk sletning + DB-felt-oprydning:** Den endelige oktober-oprydning gennemført — (1) Tidligere `src/lib/storecove-client.ts` og 5 `/api/storecove/*`-ruter (connect, create-legal-entity, participants, status, webhook) er **fysisk slettet fra kodebasen** (v3.5-rækkens ⚠️ Rettelse om "faktisk bevaret som inaktiv legacy" er dermed ikke længere sand). (2) Tidligere Storecove-specifikke DB-felter er **fjernet fra Prisma-schemaet** (`storecoveConnected`, `storecoveApiKeyId`, `storecoveLegalEntityId`, `storecoveConnectedAt`, `storecoveLastTestedAt`, `storecoveStorecoveId`) — v3.5-rækkens påstand om at disse "bevares fortsat for bagudkompatibilitet" er dermed ikke længere sand. (3) E-faktura dokument-ID-felt er omdøbt fra `storecoveSubmissionId` til `sproomDocumentId` på `EInvoiceSending`-modellen. (4) E-faktura-kanal-enum er omdøbt fra `STORECOVE` til `SPROOM_AUTO`. (5) DB-migration (`bun run db:push`) er kørt på VPS — Prisma-schema er i sync med produktions-DB. Bilag A.2-række (Storecove legacy) og §5.1-note vedr. Peppol/NemHandel Access Point bekræftet afspejle fysisk sletning + sproomDocumentId + SPROOM_AUTO. Ingen funktionel ændring (Sproom er fortsat eneste aktivt e-faktura Access Point). |
-| 3.5 | Oktober 2026 | **Storecove legacy-kode slettet:** `src/lib/storecove-client.ts` og `/api/storecove/*`-ruterne (5 endpoints: connect, create-legal-entity, participants, status, webhook) er **helt fjernet** fra kodebasen — koden er nu DELETET, ikke længere "supersederet legacy / bevaret for bagudkompatibilitet". Bilag A.2-række (Storecove legacy) opdateret til at afspejle sletningen; §5.1-note vedr. Peppol/NemHandel Access Point opdateret. DB-felter (`storecoveSubmissionId`, `storecoveConnected`, `storecoveLegalEntityId`, `storecoveApiKeyId`, `storecoveConnectedAt`) bevares fortsat for bagudkompatibilitet med historiske databaserækker — de slettes ikke. Ingen funktionel ændring (Sproom er fortsat eneste aktivt e-faktura Access Point). ⚠️ Rettelse (dokumentationsnøjagtighed): legacy-koden (`storecove-client.ts` + 5 `/api/storecove/*`-ruter) er faktisk bevaret som inaktiv legacy i kodebasen — ikke fysisk slettet; koden rutes ikke (Sproom er eneste aktiv Access Point), og backward-compat DB-felter bevares for historiske rækker. Se aktuelle tilstand i brødtekst/leverandørstabel. |
+| 3.6 | Oktober 2026 | **Storecove fuldt fjernet — fysisk sletning + DB-felt-oprydning:** Den endelige oktober-oprydning gennemført — (1) Tidligere `src/lib/storecove-client.ts` og 5 `/api/storecove/*`-ruter (connect, create-legal-entity, participants, status, webhook) er **fysisk slettet fra kodebasen** (Sproom er dermed eneste aktivt e-faktura Access Point). (2) Tidligere Storecove-specifikke DB-felter er **fjernet fra Prisma-schemaet** (`storecoveConnected`, `storecoveApiKeyId`, `storecoveLegalEntityId`, `storecoveConnectedAt`, `storecoveLastTestedAt`, `storecoveStorecoveId`) — v3.5-rækkens påstand om at disse "bevares fortsat for bagudkompatibilitet" er dermed ikke længere sand. (3) E-faktura dokument-ID-felt er omdøbt fra `storecoveSubmissionId` til `sproomDocumentId` på `EInvoiceSending`-modellen. (4) E-faktura-kanal-enum er omdøbt fra `STORECOVE` til `SPROOM_AUTO`. (5) DB-migration (`bun run db:push`) er kørt på VPS — Prisma-schema er i sync med produktions-DB. Bilag A.2-række (Storecove legacy) og §5.1-note vedr. Peppol/NemHandel Access Point bekræftet afspejle fysisk sletning + sproomDocumentId + SPROOM_AUTO. Ingen funktionel ændring (Sproom er fortsat eneste aktivt e-faktura Access Point). |
+| 3.5 | Oktober 2026 | **Storecove legacy-kode slettet:** `src/lib/storecove-client.ts` og `/api/storecove/*`-ruterne (5 endpoints: connect, create-legal-entity, participants, status, webhook) er **helt fjernet** fra kodebasen — koden er nu DELETET, ikke længere "supersederet legacy / bevaret for bagudkompatibilitet". Bilag A.2-række (Storecove legacy) opdateret til at afspejle sletningen; §5.1-note vedr. Peppol/NemHandel Access Point opdateret. DB-felter (`storecoveSubmissionId`, `storecoveConnected`, `storecoveLegalEntityId`, `storecoveApiKeyId`, `storecoveConnectedAt`) bevares fortsat for bagudkompatibilitet med historiske databaserækker — de slettes ikke. Ingen funktionel ændring (Sproom er fortsat eneste aktivt e-faktura Access Point). |
 
 ---
 
