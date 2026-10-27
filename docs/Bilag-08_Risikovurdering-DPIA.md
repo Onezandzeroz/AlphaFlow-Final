@@ -193,7 +193,7 @@ Nedenstående sårbarheder og tekniske kontroller danner grundlag for risici i a
 1. Content-Security-Policy (CSP) header implementeret via buildCspPolicy() i next.config.ts.
 2. Antivirus-scanning af uploads via ClamAV INSTREAM TCP-protokol.
 3. Key rotation/versioning via keyring med version-prefixed ciphertext.
-4. Immutability via AuditLog 3-niveau + PostgreSQL-triggers (ingen hash-chain).
+4. Immutability via AuditLog 3-niveau + PostgreSQL-triggers + SHA-256 hash-chain på posteringer (U-15 — se R-04).
 5. Rate-limiting på auth-endpoints (IP-baseret, in-memory).
 6. Password minimum 6 tegn.
 7. Rate-limiting via Caddy planlagt (plugin konfigureres).

@@ -13,7 +13,7 @@ import { EInvoiceSendStatus } from '@prisma/client';
 // Query params:
 //   ?status=SENT|IN_TRANSIT|DELIVERED|PENDING_APPROVAL|ACCEPTED|REJECTED|PAID|FAILED|CANCELLED
 //   ?search=<recipient name or invoice number>
-//   ?channel=NEMHANDEL_OIOUBL|PEPPOL_BIS|STORECOVE
+//   ?channel=NEMHANDEL_OIOUBL|PEPPOL_BIS|SPROOM_AUTO
 //   ?page=1&limit=50
 //   ?includeStats=true (returnerer pipeline-statistik: count pr. status)
 //

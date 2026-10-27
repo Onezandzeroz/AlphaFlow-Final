@@ -125,7 +125,7 @@ export interface NemHandelClientConfig {
   /** Whether to use simulation mode (default: true) */
   simulationMode?: boolean;
   /** Whether Sproom is being used as the Access Point (default: true) */
-  useStorecove?: boolean;
+  useSproom?: boolean;
 }
 
 // ─── CONSTANTS ────────────────────────────────────────────────────
@@ -197,13 +197,13 @@ export class NemHandelClient {
   private baseUrl: string;
   private apiKey: string;
   private simulationMode: boolean;
-  private useStorecove: boolean;
+  private useSproom: boolean;
 
   constructor(config: NemHandelClientConfig = {}) {
     this.baseUrl = config.baseUrl || process.env.NEMHANDEL_API_URL || NHR_SMP_URL;
     this.apiKey = config.apiKey || process.env.NEMHANDEL_API_KEY || '';
     this.simulationMode = config.simulationMode ?? true;
-    this.useStorecove = config.useStorecove ?? true;
+    this.useSproom = config.useSproom ?? true;
   }
 
   // ─── PARTICIPANT LOOKUP ──────────────────────────────────────
@@ -396,8 +396,8 @@ export class NemHandelClient {
   /**
    * Check if the client is configured to use Sproom as the AP.
    */
-  get isUsingStorecove(): boolean {
-    return this.useStorecove;
+  get isUsingSproom(): boolean {
+    return this.useSproom;
   }
 
   /**
@@ -532,5 +532,5 @@ export class NemHandelClient {
  */
 export const nemHandelClient = new NemHandelClient({
   simulationMode: process.env.NEMHANDEL_SIMULATION_MODE !== 'false',
-  useStorecove: true, // Always use Sproom for production eDelivery
+  useSproom: true, // Always use Sproom for production eDelivery
 });

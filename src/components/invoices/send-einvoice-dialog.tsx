@@ -126,7 +126,7 @@ export function SendEInvoiceDialog({
 
   // ── State ──
   const [channel, setChannel] = useState<string>(
-    einvoiceConfig?.defaultChannel || 'STORECOVE'
+    einvoiceConfig?.defaultChannel || 'SPROOM_AUTO'
   );
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
@@ -141,7 +141,7 @@ export function SendEInvoiceDialog({
   const [isLoadingXml, setIsLoadingXml] = useState(false);
 
   // ── Pre-flight participant reachability check ──
-  // Runs when an e-invoice channel (STORECOVE/PEPPOL) is selected and the
+  // Runs when an e-invoice channel (SPROOM_AUTO/PEPPOL) is selected and the
   // customer has a CVR. Always calls /api/sproom/participants (Sproom is
   // the only Access Point). If the recipient is NOT on the
   // Peppol/NemHandel network, we show a warning with a one-click switch
@@ -158,10 +158,10 @@ export function SendEInvoiceDialog({
 
   const isEmailChannel = channel === 'EMAIL';
   // Sproom is the only Access Point. Two e-invoice channels:
-  //   - 'STORECOVE' = Sproom Auto (default — OIOUBL for DK, Peppol BIS for cross-border)
-  //   - 'PEPPOL'    = Sproom Peppol (force Peppol BIS 3)
+  //   - 'SPROOM_AUTO' = Sproom Auto (default — OIOUBL for DK, Peppol BIS for cross-border)
+  //   - 'PEPPOL'      = Sproom Peppol (force Peppol BIS 3)
   // Both route through sproomClient.sendDocument() in processEInvoiceSend().
-  const isEInvoiceChannel = channel === 'STORECOVE' || channel === 'PEPPOL';
+  const isEInvoiceChannel = channel === 'SPROOM_AUTO' || channel === 'PEPPOL';
   const showPreflightWarning =
     isEInvoiceChannel &&
     preflightResult?.exists === false &&
@@ -170,7 +170,7 @@ export function SendEInvoiceDialog({
     apConnected;
 
   // ── Pre-flight: check if the recipient can receive e-invoices ──
-  // Only runs for e-invoice channels (STORECOVE/PEPPOL) when Sproom is
+  // Only runs for e-invoice channels (SPROOM_AUTO/PEPPOL) when Sproom is
   // connected and the customer has a CVR. Non-blocking: if it fails or
   // says "not reachable", the user can still force the send.
   const runPreflight = useCallback(async (cvr: string) => {
@@ -322,8 +322,8 @@ export function SendEInvoiceDialog({
             isDa ? `E-${docNounDa} afsendt!` : `E-${docNounEn} sent!`,
             {
               description: isDa
-                ? `${invoice.invoiceNumber} sendes via ${channel === 'STORECOVE' ? `${apName} (Auto)` : `${apName} (Peppol)`}. Klik "Send-historik" for at se status.`
-                : `${invoice.invoiceNumber} sending via ${channel === 'STORECOVE' ? `${apName} (Auto)` : `${apName} (Peppol)`}. Click "Send history" to see status.`,
+                ? `${invoice.invoiceNumber} sendes via ${channel === 'SPROOM_AUTO' ? `${apName} (Auto)` : `${apName} (Peppol)`}. Klik "Send-historik" for at se status.`
+                : `${invoice.invoiceNumber} sending via ${channel === 'SPROOM_AUTO' ? `${apName} (Auto)` : `${apName} (Peppol)`}. Click "Send history" to see status.`,
             },
           );
         }
@@ -514,7 +514,7 @@ export function SendEInvoiceDialog({
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{isDa ? 'Kanal' : 'Channel'}</span>
                       <Badge variant="outline" className="text-[10px] px-2 border-emerald-300 dark:border-emerald-700">
-                        {sendResult.channel === 'EMAIL' ? (isDa ? 'E-mail (PDF)' : 'Email (PDF)') : sendResult.channel === 'STORECOVE' ? `${apName} (Auto)` : `${apName} (Peppol)`}
+                        {sendResult.channel === 'EMAIL' ? (isDa ? 'E-mail (PDF)' : 'Email (PDF)') : sendResult.channel === 'SPROOM_AUTO' ? `${apName} (Auto)` : `${apName} (Peppol)`}
                       </Badge>
                     </div>
                     {sendResult.messageId && (
@@ -597,7 +597,7 @@ export function SendEInvoiceDialog({
                     </div>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="STORECOVE">
+                    <SelectItem value="SPROOM_AUTO">
                       <div className="flex items-center gap-2">
                         <Link2 className="h-3.5 w-3.5 text-violet-500" />
                         <span>Sproom ({isDa ? 'Auto Peppol+NemHandel' : 'Auto Peppol+NemHandel'})</span>
@@ -624,14 +624,14 @@ export function SendEInvoiceDialog({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {channel === 'STORECOVE' && isDa && 'Standard. Sproom vælger automatisk OIOUBL for danske modtagere (NemHandel) og Peppol BIS 3 for internationale modtagere.'}
-                  {channel === 'STORECOVE' && !isDa && 'Default. Sproom auto-selects OIOUBL for Danish recipients (NemHandel) and Peppol BIS 3 for international recipients.'}
+                  {channel === 'SPROOM_AUTO' && isDa && 'Standard. Sproom vælger automatisk OIOUBL for danske modtagere (NemHandel) og Peppol BIS 3 for internationale modtagere.'}
+                  {channel === 'SPROOM_AUTO' && !isDa && 'Default. Sproom auto-selects OIOUBL for Danish recipients (NemHandel) and Peppol BIS 3 for international recipients.'}
                   {channel === 'PEPPOL' && isDa && 'Tving Peppol BIS 3-format. Brug kun til internationale sends hvor modtageren eksplicit kræver Peppol.'}
                   {channel === 'PEPPOL' && !isDa && 'Force Peppol BIS 3 format. Only use for international sends where the recipient explicitly requires Peppol.'}
                   {channel === 'EMAIL' && isDa && 'Sender fakturaen som PDF vedhæftning til kundens e-mailadresse. Kræver ikke Sproom/NemHandel.'}
                   {channel === 'EMAIL' && !isDa && 'Sends the invoice as a PDF attachment to the customer\'s email address. Does not require Sproom/NemHandel.'}
                 </p>
-                {channel === 'STORECOVE' && !apConnected && (
+                {channel === 'SPROOM_AUTO' && !apConnected && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40 p-2 mt-1.5 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                     {isDa

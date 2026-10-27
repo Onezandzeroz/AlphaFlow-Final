@@ -42,7 +42,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { PUBLIC_STANDARD_CHART } from '@/lib/standard-chart-of-accounts';
 import { useHermesEnabled } from '@/components/hermes/hermes-context';
 import { useHermesChatStore } from '@/lib/hermes-chat-store';
 

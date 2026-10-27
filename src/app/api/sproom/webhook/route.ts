@@ -512,10 +512,9 @@ async function handleSubmissionStatusChanged(event: SproomWebhookEvent) {
   }
 
   // The EInvoiceSending record stores the Sproom documentId in the
-  // storecoveSubmissionId column (legacy field name, kept for backward
-  // compat — it's just the AP's tracking ID now).
+  // sproomDocumentId column (the AP's tracking ID).
   const sending = await db.eInvoiceSending.findFirst({
-    where: { storecoveSubmissionId: submissionId },
+    where: { sproomDocumentId: submissionId },
   });
 
   if (!sending) {

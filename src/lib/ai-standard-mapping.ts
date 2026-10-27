@@ -14,18 +14,14 @@
  *      scores and reasoning.
  *
  * Why LLM for this:
- *   The old heuristic-only mapper used the LEGACY PUBLIC_STANDARD_CHART
- *   (69 accounts, 0xxx-9xxx public-sector numbering) instead of the
- *   OFFICIAL_STANDARD_CHART (603 accounts, 1xxx-8xxx). This caused
- *   catastrophic mismatches — e.g. "Bank" (FSR 1100) was mapped to
- *   standard account 3200, which in the official chart is "Øvrige
- *   indtægter af kapitalandele i tilknyttede virksomheder" (financial
- *   income) — not "Bankindeståender" as the old chart said.
- *
- *   The LLM reads the account NAME and understands semantics — it knows
- *   that "Bankkonto" should map to 3120 (Bankindeståender) in the official
- *   chart, not 3200 (financial income). This is especially valuable for
- *   accounts with non-obvious names like "Driftskonto" or "Fælleskonto".
+ *   Heuristic-only mapping against the OFFICIAL_STANDARD_CHART (603 konti,
+ *   1xxx-8xxx) kan ikke håndtere tilpassede konti med semantiske navne —
+ *   f.eks. "Bank" (FSR 1100) kræver forståelse af kontekst for at matches
+ *   til den korrekte officielle standardkonto. LLM'en (Hermes/OpenRouter)
+ *   læser kontiets NAVN og forstår semantik — den ved at "Bankkonto"
+ *   skal mappes til 3120 (Bankindeståender) i den officielle kontoplan,
+ *   ikke 3200 (finansielle indtægter). Dette er specielt værdifuldt for
+ *   konti med ikke-indlysende navne som "Driftskonto" eller "Fælleskonto".
  */
 
 import { callOpenRouter, LLMError } from '@/lib/openrouter';

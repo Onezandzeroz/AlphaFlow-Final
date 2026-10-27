@@ -66,7 +66,7 @@ Følgende funktionelle afgrænsninger er relevante for anmeldelsesomfanget:
 | Område | Status |
 |---|---|
 | **Reelle bank-API-kald** | Delvist — Tink er en reel integration (sandbox- og produktionstilstande; aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET`; DPA med Tink indgås før produktion); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. PSD2 consent-flow virker for Tink. |
-| **E-faktura Access Point (Sproom)** | Integreret — live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch (https://sproom.net). Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) i samme integration. Tidligere Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*`) er **fuldt slettet** fra kodebasen (oktober 2026). |
+| **E-faktura Access Point (Sproom)** | Integreret — live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch (https://sproom.net). Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) i samme integration. Tidligere Storecove-kode (`src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*`) er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. |
 | **MitID / NemID / BankID** | Autentificering via email + password + TOTP 2FA. |
 
 ---
@@ -199,7 +199,7 @@ Følgende sikkerhedsarkitektoniske detaljer og funktionelle afgrænsninger er re
 8. **MitID / NemID / BankID** — autentificering via email + password + TOTP 2FA.
 9. **Uploads** gemmes på VPS-disk med disk-encryption og adgangskontrol. Backup-filer er AES-256-GCM-krypterede.
 10. **AI non-determinisme** — AI-output er ikke deterministisk. Aktivering og dataadgang audit-logges; ved lav VLM-konfidens markeres output 'Kræver gennemsyn'; AI-output overstyrer aldrig automatisk bogførte posteringer. Se Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 13 og Bilag 8 (Bilag-08_Risikovurdering-DPIA.md) R-21.
-11. **E-faktura Access Point (Sproom)** — Sproom-integrationen er live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch til https://sproom.net (med `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true`). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering samt MLR/AR håndteres af Sproom som Access Point. Tidligere Storecove-kode (`src/lib/storecove-client.ts` + `/api/storecove/*` — 5 routes) er **fuldt slettet** fra kodebasen (oktober 2026) — al e-fakturering foregår udelukkende via Sproom (`src/lib/sproom-client.ts` + `/api/sproom/*`). Backward-compat DB-felter (`storecoveSubmissionId`, `storecoveConnected` etc.) er bevaret for historiske posteringer.
+11. **E-faktura Access Point (Sproom)** — Sproom-integrationen er live mod Sproom staging (https://staging.sproom.net); produktion aktiveres via env-switch til https://sproom.net (med `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true`). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering samt MLR/AR håndteres af Sproom som Access Point. Tidligere Storecove-kode (`src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*`) er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. Al e-fakturering foregår udelukkende via Sproom (`src/lib/sproom-client.ts` + `/api/sproom/*`). Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); dokument-ID-feltet er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. DB-migration kræves i produktion.
 
 ---
 

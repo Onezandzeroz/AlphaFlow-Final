@@ -110,9 +110,14 @@ Integrationen er færdig og live mod Sproom staging
 (`SPROOM_API_URL=https://sproom.net` + `SPROOM_API_TOKEN` +
 `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true`).
 
-Ved afsendelse til demo-miljøet anvendes et test-modtager-endepunkt fra tabellen
-ovenfor. Se Bilag 4 (Compliance-rapport) afsnit 2.1 og Bilag 6 (Brugsvejledning)
-afsnit 6.4 for den fulde tekniske dokumentation.
+Ved afsendelse til demo-miljøet rutes dokumentet gennem Sproom (Access Point),
+som varetager AS4-transport, SMP/NHR-opslag og levering til modtagerens
+adgangspunkt. AlphaFlow adresserer altid afsenderens/modtagerens reelle CVR
+som routing-endepunkt (`0184:<CVR>`); de fire demo-endepunkter ovenfor er de
+officielle test-modtagere i NemHandels demo-miljø, som kan anvendes som
+modtagere ved test-afsendelse via Sproom staging. Se Bilag 4 (Compliance-rapport)
+afsnit 2.1 og Bilag 6 (Brugsvejledning) afsnit 6.4 for den fulde tekniske
+dokumentation.
 
 ---
 

@@ -9,19 +9,18 @@ import { notifyDataChange } from '@/lib/notify-data-change';
 import { db } from '@/lib/db';
 import { getEInvoiceUsage } from '@/lib/usage-quotas';
 
-// NOTE: The Prisma `EInvoiceSendChannel` enum still includes `STORECOVE`
-// for backward-compat with existing DB rows — renaming it would require
-// a migration. Functionally, the `STORECOVE` channel now maps to Sproom
-// (the only Access Point). Both `STORECOVE` and `PEPPOL_BIS` route
-// through `sproomClient.sendDocument()` in `processEInvoiceSend()`.
-const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoiceSendChannel.PEPPOL_BIS, EInvoiceSendChannel.STORECOVE];
+// NOTE: The Prisma `EInvoiceSendChannel` enum uses `SPROOM_AUTO`
+// for the auto-routing channel (Sproom is the only Access Point). Both
+// `SPROOM_AUTO` and `PEPPOL_BIS` route through
+// `sproomClient.sendDocument()` in `processEInvoiceSend()`.
+const VALID_CHANNELS: string[] = [EInvoiceSendChannel.NEMHANDEL_OIOUBL, EInvoiceSendChannel.PEPPOL_BIS, EInvoiceSendChannel.SPROOM_AUTO];
 
 /**
  * Normalise UI channel aliases to canonical Prisma enum values.
  *
  * The send-einvoice dialog (src/components/invoices/send-einvoice-dialog.tsx)
- * sends short aliases: 'OIOUBL' / 'PEPPOL' / 'STORECOVE'. The Prisma enum
- * uses canonical names: 'NEMHANDEL_OIOUBL' / 'PEPPOL_BIS' / 'STORECOVE'.
+ * sends short aliases: 'OIOUBL' / 'PEPPOL' / 'SPROOM_AUTO'. The Prisma enum
+ * uses canonical names: 'NEMHANDEL_OIOUBL' / 'PEPPOL_BIS' / 'SPROOM_AUTO'.
  * Without this normalisation, selecting "Sproom (Peppol)" in the UI sends
  * channel='PEPPOL', which fails validation with "Ugyldig kanal".
  */
@@ -31,7 +30,7 @@ const CHANNEL_ALIAS_TO_ENUM: Record<string, EInvoiceSendChannel> = {
   NEMHANDEL_OIOUBL: EInvoiceSendChannel.NEMHANDEL_OIOUBL,
   PEPPOL: EInvoiceSendChannel.PEPPOL_BIS,
   PEPPOL_BIS: EInvoiceSendChannel.PEPPOL_BIS,
-  STORECOVE: EInvoiceSendChannel.STORECOVE,
+  SPROOM_AUTO: EInvoiceSendChannel.SPROOM_AUTO,
 };
 
 function normalizeChannelToEnum(channel: string): EInvoiceSendChannel | null {
@@ -179,7 +178,7 @@ export const POST = withGuard(
           recipientName: true,
           recipientCvr: true,
           recipientEndpointId: true,
-          storecoveSubmissionId: true,
+          sproomDocumentId: true,
           errorMessage: true,
           errorCode: true,
           sentAt: true,

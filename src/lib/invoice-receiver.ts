@@ -3,8 +3,7 @@
  *
  * Used by BOTH:
  *  - Manual XML upload  → POST /api/invoices/receive  (authenticated user)
- *  - AP webhook → POST /api/sproom/webhook  (new Sproom, no user, system event)
- *    or the legacy POST /api/storecove/webhook (kept for backward compat).
+ *  - AP webhook → POST /api/sproom/webhook  (Sproom, no user, system event)
  *
  * Erhvervsstyrelsen requires a platform to both SEND and RECEIVE e-invoices.
  * This module is the single source of truth for the receive-and-store path:
@@ -24,7 +23,7 @@ import { generateApplicationResponse, generateMessageLevelResponse } from '@/lib
 import { logger } from '@/lib/logger';
 import { notifyDataChange } from '@/lib/notify-data-change';
 
-export type ReceiveSource = 'manual_upload' | 'storecove_webhook' | 'ap_webhook' | 'ap_poller';
+export type ReceiveSource = 'manual_upload' | 'ap_webhook' | 'ap_poller';
 
 export interface StoreReceivedInvoiceParams {
   /** Tenant that owns the received invoice. */
@@ -34,10 +33,12 @@ export interface StoreReceivedInvoiceParams {
   /** Raw UBL 2.1 / OIOUBL XML string. */
   xml: string;
   /**
-   * Where this invoice came from. The `'storecove_webhook'` value is a
-   * legacy string kept for backward compat with existing DB rows; the
-   * active Sproom webhook uses `'ap_webhook'`; the safety-net inbox puller
+   * Where this invoice came from. The active Sproom webhook uses
+   * `'ap_webhook'`; the safety-net inbox puller
    * (src/lib/sproom-inbox-scheduler.ts) uses `'ap_poller'`.
+   * Historical DB rows may have a legacy source value stored in their
+   * audit metadata — that legacy string is preserved as data but no
+   * longer emitted by active code.
    */
   source: ReceiveSource;
   /** Access Point document GUID (when source is a webhook delivery). */
@@ -145,15 +146,14 @@ export async function storeReceivedInvoice(
   }
 
   // Traceability note for webhook-delivered invoices. The string in the
-  // note is what the inbox UI matches on (see einvoice-inbox.tsx). For
-  // legacy DB rows we still emit "Storecove webhook" so the inbox badge
-  // continues to render for invoices received before the Sproom migration.
+  // note is what the inbox UI matches on (see einvoice-inbox.tsx) — the
+  // badge UI matches any notes containing "webhook" so both new rows and
+  // historical rows (which carry a legacy AP-name prefix in their notes)
+  // continue to render the auto-received badge.
   const notes =
     source === 'ap_webhook' && documentGuid
       ? `Automatisk modtaget via Sproom webhook · document_guid: ${documentGuid}`
-      : source === 'storecove_webhook' && documentGuid
-        ? `Automatisk modtaget via Storecove webhook · document_guid: ${documentGuid}`
-        : undefined;
+      : undefined;
 
   // ── 5. Persist ───────────────────────────────────────────────────
   const invoice = await db.receivedInvoice.create({

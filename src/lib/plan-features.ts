@@ -289,11 +289,9 @@ export function isProjectsAvailable(ctx: AuthContext | null): boolean {
 /**
  * Auto e-invoice availability: ANY paid plan tier (Månedlig/annual/
  * twoyear/threeyear all include Feature.AutoEinvoice) AND Sproom is
- * connected. Gratis only has manual OIOUBL download. The
- * storecoveConnected flag is a legacy technical
- * config flag kept for backward compat (Sproom connection is now tracked
- * via sproomChildCompanyId), but auto-send still requires the company to
- * be connected to Sproom.
+ * connected. Gratis only has manual OIOUBL download. The Sproom
+ * connection is tracked via sproomChildCompanyId, and auto-send still
+ * requires the company to be connected to Sproom.
  */
 export function isAutoEinvoiceAvailable(ctx: AuthContext | null): boolean {
   if (!ctx) return false;

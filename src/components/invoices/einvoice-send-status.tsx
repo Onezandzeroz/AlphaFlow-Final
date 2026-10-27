@@ -207,14 +207,14 @@ function getChannelIcon(channel: string) {
 }
 
 function getChannelLabel(channel: string, isDa: boolean) {
-  // Sproom Auto (alias 'STORECOVE' / 'OIOUBL' / 'NEMHANDEL') — auto-selects
+  // Sproom Auto (alias 'SPROOM_AUTO' / 'OIOUBL' / 'NEMHANDEL') — auto-selects
   // OIOUBL for Danish recipients, Peppol BIS 3 for international.
   // Sproom Peppol (alias 'PEPPOL' / 'PEPPOL_BIS') — forces Peppol BIS 3.
   if (
     channel === 'OIOUBL' ||
     channel === 'NEMHANDEL' ||
     channel === 'NEMHANDEL_OIOUBL' ||
-    channel === 'STORECOVE'
+    channel === 'SPROOM_AUTO'
   ) {
     return isDa ? 'Sproom (Auto)' : 'Sproom (Auto)';
   }
@@ -815,12 +815,11 @@ export function EInvoiceSendStatus({ invoiceId }: EInvoiceSendStatusProps) {
                                 CVR: {record.supplierCvr}
                               </span>
                             )}
-                            {/* Auto-received badge */}
-                            {record.notes && (
-                              record.notes.includes('Sproom webhook') ||
-                              record.notes.includes('ap_webhook') ||
-                              record.notes.includes('Storecove webhook')
-                            ) && (
+                            {/* Auto-received badge — matches any notes containing "webhook"
+                                (current "Sproom webhook" rows plus historical rows whose notes
+                                carry a legacy AP-name prefix). */}
+                            {record.notes &&
+                              record.notes.toLowerCase().includes('webhook') && (
                               <Badge
                                 variant="outline"
                                 className="mt-0.5 w-fit text-[9px] py-0 px-1.5 font-normal text-emerald-700 border-emerald-300 bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:bg-emerald-950/40"

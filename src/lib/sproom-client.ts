@@ -2598,7 +2598,7 @@ export class SproomClient {
     if (format === 'html') {
       return `<!DOCTYPE html><html><body><h1>Simulated invoice ${documentId}</h1></body></html>`;
     }
-    // Return a minimal Peppol BIS 3 invoice XML for simulation parity with the legacy StorecoveClient.
+    // Return a minimal Peppol BIS 3 invoice XML for simulation parity with the legacy AP client.
     const now = new Date();
     const issueDate = now.toISOString().slice(0, 10);
     const dueDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);

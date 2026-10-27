@@ -117,7 +117,10 @@ denne Peppol-rapports omfang.)*
 (RSA-SHA256 `X-Signature` verificeret) → `invoice-receiver.ts`
 `storeReceivedInvoice()` → `parseEInvoiceXml()` (fortolker `<Invoice>`
 InvoiceTypeCode 380) → persistering af `ReceivedInvoice` i database →
-auto-generering af **Message Level Response (MLR)** til afsender.
+generering af **Message Level Response (MLR)** lokalt (gemmes i DB på
+`ReceivedInvoice.responseXml`). MLR/ApplicationResponse returneres til afsender
+via Sproom (`setDocumentState`) når brugeren efterfølgende godkender eller
+afviser fakturaen i indbakken — ikke automatisk ved modtagelse.
 
 **Sikkerhed & idempotens:**
 
@@ -135,7 +138,7 @@ auto-generering af **Message Level Response (MLR)** til afsender.
 |---|---|
 | Indgående faktura | Modtaget, fortolket, persisteret som `ReceivedInvoice` |
 | Kvantitative totale-checks | Udført — net/moms/total balance OK |
-| Automatisk kvittering | MLR (Peppol BIS 3.0) genereret og returneret til afsender |
+| Lokal kvittering | MLR (Peppol BIS 3.0) genereret og gemt i DB; returneres til afsender ved godkendelse/afvisning |
 | Status | ✅ Modtagelse verificeret |
 
 ---
@@ -172,14 +175,14 @@ oprindelige fakturanummer (via `originalInvoiceNumber`).
 **Flow:** Samme modtagelsespipeline som scenarie 2. Parseren
 `parseEInvoiceXml()` fortolker `<Invoice>` med `InvoiceTypeCode = 381`
 som kreditnota, udtrækker `BillingReference` (oprindeligt fakturanummer)
-og persisterer med `documentType = CREDIT_NOTE`. Automatisk MLR returneres.
+og persisterer med `documentType = CREDIT_NOTE`. MLR genereres lokalt og gemmes.
 
 | Parameter | Værdi |
 |---|---|
 | UBL root-element | `<Invoice>` (InvoiceTypeCode 381) |
 | Fortolkning | `parseEInvoiceXml` → `documentType = CREDIT_NOTE` |
 | BillingReference | Udtrækkes og persisteres (`originalInvoiceNumber`) |
-| Kvittering | MLR (Peppol BIS 3.0) auto-genereret |
+| Kvittering | MLR (Peppol BIS 3.0) genereret lokalt (gemmes i DB) |
 | Safety-net | Inbox-poller hvert 5. min |
 
 **Resultat:**
@@ -188,7 +191,7 @@ og persisterer med `documentType = CREDIT_NOTE`. Automatisk MLR returneres.
 |---|---|
 | Indgående kreditnota | Modtaget, fortolket, persisteret som `ReceivedInvoice` (type CREDIT_NOTE) |
 | Oprindelseskæde | `BillingReference` koblet til oprindeligt fakturanummer |
-| Automatisk kvittering | MLR genereret og returneret til afsender |
+| Lokal kvittering | MLR genereret og gemt i DB; returneres til afsender ved godkendelse/afvisning |
 | Status | ✅ Modtagelse verificeret |
 
 ---
@@ -270,8 +273,10 @@ verificeret mod Peppol TEST-netværket (Sproom staging).
 * Bemærk:* `X-Sproom-DocumentId` (GUID) regenereres pr. kørsel — nye kørsler
 giver et nyt ID, mens valideringsresultatet (23+ kontroller) er deterministisk.
 Det tidligere Storecove-baserede test-script (`scripts/peppol-testbed-report.ts`)
-er **slettet** fra kodebasen (oktober 2026) — det refererede til den nu slettede
-`src/lib/storecove-client.ts`. Den aktuelle Peppol-test køres via Sproom-klienten.
+er **slettet** fra kodebasen (oktober 2026) — det refererede til
+`src/lib/storecove-client.ts`, som nu er **fuldt fjernet** fra kodebasen
+(sammen med 5 ruter under `/api/storecove/*`) — Sproom er eneste Access Point.
+Den aktuelle Peppol-test køres via Sproom-klienten.
 Se Bilag 4 (Compliance-rapport) afsnit 2.1 og Bilag 6 (Brugsvejledning) afsnit 6.4
 for fuld dokumentation.
 

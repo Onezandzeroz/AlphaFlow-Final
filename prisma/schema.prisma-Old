@@ -138,6 +138,7 @@ enum ReceivedInvoiceStatus {
   APPROVED // User approved for booking
   REJECTED // User rejected
   POSTED // Journal entry created from e-invoice
+  SETTLED // Bank reconciliation matched the payment → supplier paid (afregnet)
 }
 
 enum EInvoiceFormat {
@@ -159,13 +160,24 @@ enum EInvoiceSendChannel {
 }
 
 enum EInvoiceSendStatus {
-  PENDING // Queued for sending
-  QUEUED // Handed off to mini-service
-  SENDING // Actively being transmitted
-  DELIVERED // Successfully delivered to recipient
-  ACCEPTED // Recipient acknowledged (positive response)
-  FAILED // Transmission or delivery failed
-  REJECTED // Recipient rejected the invoice
+  // ── Pre-send (queued) ──
+  PENDING // Queued for sending (locally)
+  QUEUED // Handed off to mini-service (legacy — kept for backward compat)
+  SENDING // Actively being transmitted (Sproom upload in flight)
+
+  // ── Sproom accepted the document into its network ──
+  SENT // Sproom accepted the XML (201 Created) — document is in Sproom's pipeline
+
+  // ── In-network lifecycle (driven by Sproom DocumentStatusChanged webhooks) ──
+  IN_TRANSIT // Sproom is transmitting the document to the receiving Access Point (TransmissionStarted)
+  DELIVERED // Receiving Access Point has acknowledged receipt (TransmissionCompleted / Sent)
+  PENDING_APPROVAL // Recipient's AP has the document; awaiting explicit accept/reject by recipient
+  ACCEPTED // Recipient explicitly approved the invoice (positive ApplicationResponse)
+  REJECTED // Recipient explicitly rejected the invoice (negative ApplicationResponse)
+
+  // ── Out-of-band terminal states ──
+  PAID // Tenant marked the parent Invoice as PAID locally — synthesised onto the sending for end-to-end tracking
+  FAILED // Transmission or delivery failed (validation error, endpoint not found, send error, etc.)
   CANCELLED // Cancelled by user before sending
 }
 
@@ -209,6 +221,34 @@ enum PlanTier {
   threeyear // Business Extended — 145 kr./md., 36-month binding (frontend id: "3year")
 }
 
+// ─── SUBSCRIPTION LIFECYCLE STATUS (FASE 6 — billing compliance) ──
+// Tracks the lifecycle state of a tenant's subscription independently of
+// planTier. planTier says WHICH plan; planStatus says whether it is active,
+// pending renewal, cancelled (running out the binding), expired, or past_due
+// (failed payment during recurring renewal).
+
+enum PlanStatus {
+  active // Plan is in good standing
+  cancelled // User cancelled — access retained until planExpiresAt
+  expired // Binding period ended, no renewal
+  past_due // Renewal payment failed — grace period
+}
+
+// ─── CONSENT TRACKING (FASE 6 — PSD2 / Forbrugeraftaleloven compliance) ──
+// Explicit consent must be captured BEFORE a recurring/subscription payment
+// is created. Each consent event is logged immutably with the terms version,
+// timestamp, IP, and user-agent so it can be produced as evidence on request
+// from the bank, the Danish Consumer Ombudsman (Forbrugerombudsmanden), or
+// Card scheme disputes (Visa/MC).
+
+enum ConsentType {
+  TERMS_OF_SERVICE // Generelle forretningsbetingelser
+  RECURRING_BILLING // Samtykke til tilbagevendende opkrævninger
+  AUTO_RENEWAL // Udtrykkeligt samtykke til automatisk fornyelse (Forbrugeraftaleloven §18-19)
+  PRIVACY_POLICY // Persondatapolitik
+  MARKETING // Markedsførings-samtykke (GDPR Art. 7)
+}
+
 // ─── COMPANY (TENANT ENTITY) ──────────────────────────────────────
 // Replaces the old CompanyInfo model. This IS the tenant boundary.
 
@@ -219,7 +259,10 @@ model Company {
   showCompanyLogo Boolean @default(false) // Show company logo in AlphaFlow sidebar instead of AlphaFlow logo
 
   // Business registration
-  address       String    @default("")
+  address       String    @default("") // Street address line (vej + husnr.)
+  postalCode    String    @default("") // Postnummer (4 digits DK) — required for NemHandel/OIOUBL/PEppol
+  city          String    @default("") // By — required for NemHandel/OIOUBL/PEppol
+  country       String    @default("DK") // ISO 3166-1 alpha-2 country code — required for NemHandel/OIOUBL/PEppol
   phone         String    @default("")
   email         String    @default("")
   cvrNumber     String    @default("")
@@ -270,12 +313,25 @@ model Company {
   einvoiceAutoSendOnFinalize Boolean              @default(false) // Auto-send when invoice is finalized
   einvoiceDeliveryMode       String? // 'manual' or 'automatic' — null = not yet chosen
 
-  // Storecove Access Point integration (Peppol delivery)
+  // Storecove Access Point integration (Peppol delivery — LEGACY)
   storecoveConnected     Boolean   @default(false) // Whether Storecove API is configured
   storecoveApiKeyId      String? // Storecove API key ID (last 4 chars stored for identification)
   storecoveLegalEntityId Int? // Storecove legal entity ID for this company
   storecoveConnectedAt   DateTime? // When Storecove was connected
   storecoveLastTestedAt  DateTime? // Last successful connection test
+
+  // Sproom Access Point integration (Peppol + NemHandel delivery)
+  sproomChildCompanyId   String? // Sproom child company ID for this tenant
+  sproomConnectedAt      DateTime? // When Sproom was connected
+  sproomLastTestedAt     DateTime? // Last successful Sproom connection test
+  sproomNemHandelRegistered Boolean @default(false) // Registered in NemHandel network
+  sproomPeppolRegistered Boolean @default(false) // Registered in Peppol network
+  // ── NemHandel notice deduplication ──
+  // Timestamp of the first NemHandel registration-notice email sent to this
+  // tenant AFTER they saved company info with a verified CVR on a
+  // qualifying plan (Pro / Business / Business Extended). Null = not yet sent.
+  // Prevents re-sending the notice on every subsequent company-info save.
+  nemhandelNoticeSentAt DateTime?
 
   // ── Project Mode gating (FASE 4 — SuperDev controls per-tenant visibility) ──
   // When false, the Projects section, ProjectSelector dropdowns, project
@@ -293,6 +349,28 @@ model Company {
   planExpiresAt   DateTime? // End of binding period (null for free + monthly)
   planActivatedBy String? // userId of the App Owner who set the paid plan (audit trail)
   planNotes       String? // SuperDev free-text note (e.g. "granted as courtesy")
+
+  // ── Forbrugstilkøb (usage add-ons) ──
+  // Ekstra månedligt forbrug oveni planens grundkvote (se lib/usage-quotas.ts).
+  // Aktiveres af App Owner via /api/oversight/usage-addons efter kunde-
+  // henvendelse — derved er tilkøb nemt og hurtigt (minutter). Indtil et
+  // selvbetjenings-flow (Flatpay) er bygget, faktureres tilkøb uden for
+  // appen efter aftale med kunden.
+  addonHermesQuota   Int @default(0) // ekstra Hermes-beskeder/md. oveni planens kvote
+  addonEinvoiceQuota Int @default(0) // ekstra e-fakturaer/md. (send+modtag) oveni planens kvote
+
+  // ── Subscription lifecycle (FASE 6 — billing compliance) ──
+  // planStatus tracks whether the subscription is active, cancelled (running
+  // out the binding period), expired, or past_due. Decoupled from planTier so
+  // we can keep "which plan" + "what state" separate. Used by the billing
+  // scheduler to decide who needs pre-renewal reminders and by access-guard to
+  // decide whether to grant/restrict write access.
+  planStatus             PlanStatus @default(active)
+  planCancelledAt        DateTime? // Set when user cancels — access retained until planExpiresAt
+  planCancellationReason String? // 'user_request' | 'payment_failed' | 'admin_action' | 'expired'
+  nextRenewalAt          DateTime? // When the next recurring charge will be attempted (monthly plan)
+  lastReminderSentAt     DateTime? // Anti-spam: tracks the last pre-renewal/pre-billing reminder
+  lastReceiptSentAt      DateTime? // Tracks the last payment-receipt email (avoids duplicate sends on webhook retries)
 
   // Meta
   isDemo    Boolean  @default(false) // Demo company flag — only the shared demo company should be true
@@ -319,16 +397,22 @@ model Company {
   oversightSessions       Session[]                @relation("OversightCompany")
   hermesAgent             HermesAgent?
   standardAccountMappings StandardAccountMapping[]
+  customVatCodes           CustomVatCode[]
   receivedInvoices        ReceivedInvoice[]
   eInvoiceSendings        EInvoiceSending[]
   vatSubmissions          VATSubmission[]
   projects                Project[]
   payments                Payment[]
+  consentLogs             ConsentLog[]
+  webhookEvents           WebhookEvent[]
 
   @@unique([name])
   @@index([isActive])
   @@index([cvrNumber])
   @@index([planTier])
+  @@index([planStatus])
+  @@index([planExpiresAt])
+  @@index([nextRenewalAt])
 }
 
 // ─── USER-COMPANY JUNCTION ────────────────────────────────────────
@@ -397,11 +481,11 @@ model User {
   // twoFactorSecret: AES-256-GCM encrypted TOTP secret (base32-encoded)
   // twoFactorBackupCodes: AES-256-GCM encrypted JSON array of hashed backup codes
   // encryptionKeyVersion: tracks which key version encrypted the 2FA fields
-  twoFactorSecret       String?
-  twoFactorBackupCodes  String? // Encrypted JSON: [hashedCode1, hashedCode2, ...]
-  twoFactorEnabled      Boolean   @default(false)
-  twoFactorEnabledAt    DateTime?
-  encryptionKeyVersion  Int       @default(1) // Key version for twoFactorSecret + twoFactorBackupCodes
+  twoFactorSecret      String?
+  twoFactorBackupCodes String? // Encrypted JSON: [hashedCode1, hashedCode2, ...]
+  twoFactorEnabled     Boolean   @default(false)
+  twoFactorEnabledAt   DateTime?
+  encryptionKeyVersion Int       @default(1) // Key version for twoFactorSecret + twoFactorBackupCodes
 
   // Account deactivation — replaces hard deletion to preserve audit trail
   // per Bogføringsloven §10-12 (5-year retention obligation takes precedence
@@ -409,6 +493,13 @@ model User {
   // A deactivated user cannot log in, but all their data and audit logs are preserved.
   deactivatedAt      DateTime? // Null = active account. Set = account deactivated at this timestamp.
   deactivationReason String? // 'self_request' | 'admin_action' | 'sole_company_cleanup'
+
+  // Reactivation token — emailed to the user when they self-deactivate, so they
+  // can undo the deactivation within 30 days via a one-click email link.
+  // Single-use: cleared on reactivation. Follows the same pattern as
+  // resetPasswordToken / resetPasswordExpires.
+  reactivationToken  String?  @unique
+  reactivationExpires DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -435,6 +526,7 @@ model User {
   vatSubmissions     VATSubmission[]
   projects           Project[]
   payments           Payment[]
+  consentLogs        ConsentLog[]
 }
 
 // ─── SESSION (with activeCompanyId) ───────────────────────────────
@@ -471,45 +563,52 @@ model Session {
 // ─── TRANSACTIONS ─────────────────────────────────────────────────
 
 model Transaction {
-  id           String          @id @default(cuid())
-  date         DateTime
-  type         TransactionType @default(SALE)
-  amount       Decimal         @db.Decimal(18, 2)
-  currency     String          @default("DKK")
-  exchangeRate Decimal?        @db.Decimal(12, 6)
-  amountDKK    Decimal?        @db.Decimal(18, 2)
-  description  String
-  vatPercent   Decimal         @default(25.0) @db.Decimal(5, 2)
-  receiptImage String?
-  invoiceId    String?
-  accountId    String?
-  projectId    String? // FASE 4: project this transaction belongs to (null = tenant-level)
-  cancelled    Boolean         @default(false)
-  cancelReason String?
-  originalId   String?
+  id                    String          @id @default(cuid())
+  date                  DateTime
+  type                  TransactionType @default(SALE)
+  amount                Decimal         @db.Decimal(18, 2)
+  currency              String          @default("DKK")
+  exchangeRate          Decimal?        @db.Decimal(12, 6)
+  amountDKK             Decimal?        @db.Decimal(18, 2)
+  description           String
+  vatPercent            Decimal         @default(25.0) @db.Decimal(5, 2)
+  receiptImage          String?
+  invoiceId             String?
+  accountId             String?
+  projectId             String? // FASE 4: project this transaction belongs to (null = tenant-level)
+  cancelled             Boolean         @default(false)
+  cancelReason          String?
+  originalId            String?
   // Document sub-type — distinguishes a purchase credit note (PURCHASE_CREDIT_NOTE)
   // received from a supplier from a regular PURCHASE. Kept as a free-form string
   // (not an enum) so we don't have to migrate the TransactionType enum that's
   // used heavily across the app. Null/empty = regular document of `type`.
-  documentType       String?
+  documentType          String?
   // For purchase credit notes that reference an original purchase: FK to the
   // credited Transaction. Null = freestanding purchase credit note.
   originalTransactionId String?
-  originalTransaction   Transaction? @relation("PurchaseCreditNoteOriginal", fields: [originalTransactionId], references: [id], onDelete: SetNull)
-  creditNotes           Transaction[] @relation("PurchaseCreditNoteOriginal")
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  userId       String?
-  user         User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  invoice      Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  account      Account?        @relation(fields: [accountId], references: [id])
-  project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  companyId    String
-  company      Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  originalTransaction   Transaction?    @relation("PurchaseCreditNoteOriginal", fields: [originalTransactionId], references: [id], onDelete: SetNull)
+  creditNotes           Transaction[]   @relation("PurchaseCreditNoteOriginal")
+  // ─── Hash-chain integrity (Bogføringsloven §10-12, BEK 97) ───
+  // SHA-256 chain over the transaction's immutable fields, sealed at creation.
+  // Once set, the row is immutable (enforced by DB trigger — see prisma/journal-immutability.sql).
+  recordHash            String?
+  previousHash          String?
+  hashedAt              DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  userId                String?
+  user                  User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  invoice               Invoice?        @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  account               Account?        @relation(fields: [accountId], references: [id])
+  project               Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  companyId             String
+  company               Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, date])
   @@index([companyId, type, date])
   @@index([companyId, documentType])
+  @@index([companyId, hashedAt])
   @@index([userId])
   @@index([accountId])
   @@index([projectId])
@@ -518,50 +617,50 @@ model Transaction {
 // ─── INVOICES ─────────────────────────────────────────────────────
 
 model Invoice {
-  id               String            @id @default(cuid())
-  invoiceNumber    String
+  id                String            @id @default(cuid())
+  invoiceNumber     String
   // Document type distinguishes commercial invoices (INVOICE) from credit
   // notes (CREDIT_NOTE). Defaults to INVOICE so all existing rows + the
   // normal "Opret faktura" flow keep working unchanged. Credit notes reuse
   // the same model/flow but get their own numbering (creditNotePrefix) and
   // mirrored bookkeeping (debit/credit swapped) — see PUT /api/invoices/[id].
-  documentType     EInvoiceType      @default(INVOICE)
+  documentType      EInvoiceType      @default(INVOICE)
   // For credit notes that reference (credit) an existing invoice: the FK to
   // the original Invoice. Null = freestanding credit note (no original).
   // Surfaced in the OIOUBL BillingReference (cbc:ID) for e-invoicing.
   originalInvoiceId String?
   originalInvoice   Invoice?          @relation("CreditNoteOriginal", fields: [originalInvoiceId], references: [id], onDelete: SetNull)
   creditNotes       Invoice[]         @relation("CreditNoteOriginal")
-  customerName     String
-  customerAddress  String?
-  customerEmail    String?
-  customerPhone    String?
-  customerCvr      String?
-  issueDate        DateTime
-  dueDate          DateTime
-  paidDate         DateTime? // Date the invoice was paid (user-selectable; null until status → PAID)
-  lineItems        Json
-  subtotal         Decimal           @db.Decimal(18, 2)
-  vatTotal         Decimal           @db.Decimal(18, 2)
-  total            Decimal           @db.Decimal(18, 2)
-  currency         String            @default("DKK")
-  exchangeRate     Decimal?          @db.Decimal(12, 6)
-  status           InvoiceStatus     @default(DRAFT)
-  notes            String?
-  cancelled        Boolean           @default(false)
-  cancelReason     String?
-  contactId        String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  userId           String?
-  user             User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-  contact          Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  transactions     Transaction[]
-  eInvoiceSendings EInvoiceSending[]
-  projectId        String?
-  project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  companyId        String
-  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  customerName      String
+  customerAddress   String?
+  customerEmail     String?
+  customerPhone     String?
+  customerCvr       String?
+  issueDate         DateTime
+  dueDate           DateTime
+  paidDate          DateTime? // Date the invoice was paid (user-selectable; null until status → PAID)
+  lineItems         Json
+  subtotal          Decimal           @db.Decimal(18, 2)
+  vatTotal          Decimal           @db.Decimal(18, 2)
+  total             Decimal           @db.Decimal(18, 2)
+  currency          String            @default("DKK")
+  exchangeRate      Decimal?          @db.Decimal(12, 6)
+  status            InvoiceStatus     @default(DRAFT)
+  notes             String?
+  cancelled         Boolean           @default(false)
+  cancelReason      String?
+  contactId         String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  userId            String?
+  user              User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  contact           Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  transactions      Transaction[]
+  eInvoiceSendings  EInvoiceSending[]
+  projectId         String?
+  project           Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  companyId         String
+  company           Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, invoiceNumber])
   @@index([companyId, status, issueDate])
@@ -616,25 +715,25 @@ model AuditLog {
 // ─── BACKUP ───────────────────────────────────────────────────────
 
 model Backup {
-  id           String   @id @default(cuid())
-  userId       String?
-  userEmail    String? // denormalized: tenant owner email for quick reference in DB dashboards
-  triggerType  String
-  backupType   String
-  scope        String   @default("tenant") // "tenant" = tenant-specific JSON snapshot
-  filePath     String
-  fileSize     Int
-  sha256       String?
-  encrypted    Boolean  @default(false) // true = AES-256-GCM encrypted .zip.enc file
-  encryptionKeyVersion Int @default(1) // Key version used to encrypt the backup file
-  status       String   @default("completed")
-  errorMessage String?
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  companyId    String
-  companyName  String? // denormalized: company name for quick reference in DB dashboards
-  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(cuid())
+  userId               String?
+  userEmail            String? // denormalized: tenant owner email for quick reference in DB dashboards
+  triggerType          String
+  backupType           String
+  scope                String   @default("tenant") // "tenant" = tenant-specific JSON snapshot
+  filePath             String
+  fileSize             Int
+  sha256               String?
+  encrypted            Boolean  @default(false) // true = AES-256-GCM encrypted .zip.enc file
+  encryptionKeyVersion Int      @default(1) // Key version used to encrypt the backup file
+  status               String   @default("completed")
+  errorMessage         String?
+  expiresAt            DateTime
+  createdAt            DateTime @default(now())
+  user                 User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId            String
+  companyName          String? // denormalized: company name for quick reference in DB dashboards
+  company              Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, backupType])
   @@index([companyId, createdAt])
@@ -726,6 +825,49 @@ model StandardAccountMapping {
   @@index([accountId])
 }
 
+// ─── CUSTOM VAT CODES (brugerdefinerede momssatser) ──────────────
+// Ladér brugere oprette egne momssatser (udover de 10 indbyggede)
+// og mappe dem til officielle SKAT momskoder fra Momskoder Bruttoliste.
+// Dette muliggør f.eks. special-satser som 5% (kunstneres førstegangssalg),
+// 20% (leasingbiler), eller brugerspecifikke delvise fradrags-koder.
+
+model CustomVatCode {
+  id              String   @id @default(cuid())
+  companyId       String
+
+  // Brugerdefineret kode (f.eks. "S5", "K33", "REVERSE")
+  // Skal være unik pr. virksomhed. Må IKKE kollidere med indbyggede
+  // koder (S25, S12, S0, SEU, K25, K12, K0, KEU, KUF, NONE).
+  code            String
+
+  // Visningsnavn (f.eks. "Kunstneres førstegangssalg 5%")
+  name            String
+
+  // Momssats som heltal (0, 5, 12, 20, 25)
+  rate            Int
+
+  // Retning: "output" (salg) eller "input" (køb)
+  direction       String   @default("output") // "output" | "input"
+
+  // Mapping til officiel SKAT momskode fra Momskoder Bruttoliste
+  // (f.eks. "S87" for kunstneres førstegangssalg, "K040" for fastnettelefon 50%)
+  // Null = ikke mappet endnu (brugeren skal vælge en officiel kode)
+  standardVatCode String?  // Officiel kode (f.eks. "S87", "K040")
+
+  // Beskrivelse / vejledning (valgfrit)
+  description     String?
+
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@index([companyId, isActive])
+}
+
 // ─── JOURNAL ENTRIES ──────────────────────────────────────────────
 
 model JournalEntry {
@@ -737,6 +879,18 @@ model JournalEntry {
   status        JournalEntryStatus @default(DRAFT)
   cancelled     Boolean            @default(false)
   cancelReason  String?
+  // ─── Hash-chain integrity (Bogføringsloven §10-12, BEK 97) ───
+  // SHA-256 chain: hash = SHA256(prevHash + canonical(entry fields + lines))
+  // NULL until status becomes POSTED. Once set, immutable (enforced by DB trigger).
+  recordHash    String? // This entry's hash
+  previousHash  String? // Previous POSTED entry's recordHash (chain link)
+  hashedAt      DateTime? // When the hash was computed (audit)
+  // ─── Foreign currency (valuta) ───
+  // When a transaction is in a foreign currency, the journal entry stores
+  // the original currency and exchange rate used to convert line amounts
+  // to DKK. All debit/credit amounts on the lines are always in DKK.
+  currency     String     @default("DKK")
+  exchangeRate Decimal?   @db.Decimal(12, 6) // Multiply foreign amount by this to get DKK
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
   userId        String?
@@ -748,8 +902,14 @@ model JournalEntry {
 
   @@index([companyId, date])
   @@index([companyId, status, date])
+  @@index([companyId, status, hashedAt])
   @@index([userId, date])
   @@index([companyId, voucherNumber])
+  // Partial unique constraint — kun voucherNumber der ikke er NULL skal være
+  // unik pr. tenant (Bogføringsloven §14 + BEK 97 Bilag 2, række 11).
+  // DRAFT entries har voucherNumber = NULL og er ikke underlagt kravet.
+  // PostgreSQL implementerer dette via en partial unique index med WHERE-klausul.
+  @@unique([companyId, voucherNumber])
 }
 
 model JournalEntryLine {
@@ -1006,33 +1166,33 @@ model EmailLog {
 // ─── BANK CONNECTIONS ─────────────────────────────────────────────
 
 model BankConnection {
-  id                 String               @id @default(cuid())
-  bankName           String
-  provider           String
-  registrationNumber String?
-  accountNumber      String
-  iban               String?
-  accountName        String?
-  currentBalance     Decimal?             @db.Decimal(18, 2)
-  lastSyncAt         DateTime?
-  nextSyncAt         DateTime?
-  syncFrequency      String               @default("daily")
-  status             BankConnectionStatus @default(PENDING)
-  consentId          String?
-  consentExpiresAt   DateTime?
-  accessToken        String?
-  refreshToken       String?
-  encryptionKeyVersion Int                @default(1) // Key version for accessToken + refreshToken
-  retryCount         Int                  @default(0)
-  lastError          String?
-  createdAt          DateTime             @default(now())
-  updatedAt          DateTime             @updatedAt
-  userId             String?
-  user               User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
-  syncs              BankConnectionSync[]
-  bankStatements     BankStatement[]
-  companyId          String
-  company            Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  id                   String               @id @default(cuid())
+  bankName             String
+  provider             String
+  registrationNumber   String?
+  accountNumber        String
+  iban                 String?
+  accountName          String?
+  currentBalance       Decimal?             @db.Decimal(18, 2)
+  lastSyncAt           DateTime?
+  nextSyncAt           DateTime?
+  syncFrequency        String               @default("daily")
+  status               BankConnectionStatus @default(PENDING)
+  consentId            String?
+  consentExpiresAt     DateTime?
+  accessToken          String?
+  refreshToken         String?
+  encryptionKeyVersion Int                  @default(1) // Key version for accessToken + refreshToken
+  retryCount           Int                  @default(0)
+  lastError            String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  userId               String?
+  user                 User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  syncs                BankConnectionSync[]
+  bankStatements       BankStatement[]
+  companyId            String
+  company              Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, accountNumber])
   @@index([companyId, status])
@@ -1073,6 +1233,10 @@ model HermesAgent {
   enabled           Boolean  @default(false) // App Owner enables Hermes for this tenant
   dataAccessEnabled Boolean  @default(false) // Tenant owner opts in to sharing accounting data
   personality       String   @default("professional") // professional | friendly | concise
+  // Response mode toggled per-tenant in the chat UI.
+  // 'complex' (default) = full detailed answers; 'simplified' = short, plain-
+  // language answers (~1/3 length, lower lixtal) for owners new to accounting.
+  responseMode      String   @default("complex") // complex | simplified
   greeting          String?
   systemPrompt      String?
   createdAt         DateTime @default(now())
@@ -1082,16 +1246,53 @@ model HermesAgent {
   // Defaults: 10/min burst, 40/hour, 120/day, 2000/month.
   // See Hermes AI Modelanbefalinger PDF §8.4 for rationale.
   // When rateLimitEnabled=false, all requests are allowed (no enforcement).
-  rateLimitEnabled Boolean  @default(true)
-  rateLimitBurst    Int      @default(10)    // max requests per minute (flood/script protection)
-  rateLimitHour     Int      @default(40)    // max requests per hour
-  rateLimitDay      Int      @default(120)   // max requests per day (fair-use quota)
-  rateLimitMonth    Int      @default(2000)  // max requests per month (cost predictability)
+  rateLimitEnabled Boolean @default(true)
+  rateLimitBurst   Int     @default(10) // max requests per minute (flood/script protection)
+  rateLimitHour    Int     @default(40) // max requests per hour
+  rateLimitDay     Int     @default(120) // max requests per day (fair-use quota)
+  rateLimitMonth   Int     @default(2000) // max requests per month (cost predictability)
+  // true = App Owner har manuelt overskrevet rate limits via oversight-siden
+  // (manuelle værdier vinder over plan-kvoten fra lib/usage-quotas.ts).
+  // false (default) = månedskvoten følger virksomhedens planTier.
+  rateLimitCustom  Boolean @default(false)
 
-  company   Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company   Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
   reminders AgentReminder[]
   messages  AgentMessage[]
   skills    HermesAgentSkill[]
+  usageRecord HermesUsageRecord?
+}
+
+// ─── HERMES USAGE COUNTERS (persisted, survives restarts) ──────
+// The rate-limiter's in-memory counters reset on every service restart,
+// which made the oversight dashboard show 0/0 after every PM2 reload.
+// This model persists the four rolling-window counters (minute/hour/day/
+// month) per tenant so usage survives restarts and can be queried by the
+// oversight API even when the hermes-agent process is down.
+//
+// windowStart = epoch-ms when the current window began.
+// count       = requests accumulated in that window so far.
+// Rollover happens lazily in the rate-limiter when now - windowStart >= duration.
+model HermesUsageRecord {
+  id              String   @id @default(cuid())
+  companyId       String   @unique
+  // Minute window (burst protection)
+  minuteStart     DateTime @default(now())
+  minuteCount     Int      @default(0)
+  // Hour window
+  hourStart       DateTime @default(now())
+  hourCount       Int      @default(0)
+  // Day window
+  dayStart        DateTime @default(now())
+  dayCount        Int      @default(0)
+  // Month window (30-day rolling)
+  monthStart      DateTime @default(now())
+  monthCount      Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  agent HermesAgent @relation(fields: [companyId], references: [companyId], onDelete: Cascade)
+
+  @@index([companyId])
 }
 
 // ─── HERMES RAG KNOWLEDGE BASE (pgvector) ──────────────────────
@@ -1111,18 +1312,18 @@ model HermesAgent {
 // --------------------------------------------------------------
 
 model KnowledgeDocument {
-  id          String   @id @default(cuid())
-  title       String                       // Human-readable title (e.g. "AlphaFlow Brugsvejledning")
-  source      String   @default("manual")  // manual | upload | url — how it was added
-  category    String   @default("general") // general | manual | faq | tax-rules | tenant-note
-  tenantId    String?                      // null = global; set = tenant-private note
-  description String?                      // Optional description shown in admin UI
-  content     String   @db.Text            // Full raw text (Markdown). Chunks are derived from this.
-  chunkCount  Int      @default(0)         // Number of chunks currently embedded
-  status      String   @default("active")  // active | processing | error | archived
-  errorMessage String?                      // Populated when status='error'
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  title        String // Human-readable title (e.g. "AlphaFlow Brugsvejledning")
+  source       String   @default("manual") // manual | upload | url — how it was added
+  category     String   @default("general") // general | manual | faq | tax-rules | tenant-note
+  tenantId     String? // null = global; set = tenant-private note
+  description  String? // Optional description shown in admin UI
+  content      String   @db.Text // Full raw text (Markdown). Chunks are derived from this.
+  chunkCount   Int      @default(0) // Number of chunks currently embedded
+  status       String   @default("active") // active | processing | error | archived
+  errorMessage String? // Populated when status='error'
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   chunks KnowledgeChunk[]
 
@@ -1132,16 +1333,16 @@ model KnowledgeDocument {
 }
 
 model KnowledgeChunk {
-  id         String   @id @default(cuid())
+  id         String                       @id @default(cuid())
   documentId String
-  chunkIndex Int                              // 0-based position within the document
-  content    String  @db.Text                  // The chunk text (sent to LLM as context)
+  chunkIndex Int // 0-based position within the document
+  content    String                       @db.Text // The chunk text (sent to LLM as context)
   // pgvector column — 1536 dims for OpenAI text-embedding-3-small.
   // Prisma doesn't natively support `vector`, so we use Unsupported("vector(1536)")
   // and read/write it via raw SQL in the knowledge-service.
   embedding  Unsupported("vector(1536)")?
-  tokenCount Int      @default(0)              // Approximate token count of content
-  createdAt  DateTime @default(now())
+  tokenCount Int                          @default(0) // Approximate token count of content
+  createdAt  DateTime                     @default(now())
 
   document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
@@ -1172,11 +1373,17 @@ model AgentMessage {
   agentId   String
   role      String // "user" | "assistant"
   content   String
+  // Chat session identifier (client-generated UUID). Groups messages into
+  // discrete conversations so the LLM only sees the current session's history
+  // — not every message ever exchanged with the tenant. NULL = legacy rows
+  // written before sessions existed (excluded from session-filtered queries).
+  sessionId String?
   createdAt DateTime @default(now())
 
   agent HermesAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([agentId, createdAt])
+  @@index([agentId, sessionId, createdAt])
 }
 
 // ─── HERMES SKILLS (App Owner installs, tenants enable) ────────
@@ -1184,22 +1391,22 @@ model AgentMessage {
 // SuperDev manages the skill catalog; each tenant can enable/disable.
 
 model HermesSkill {
-  id              String   @id @default(cuid())
-  name            String   @unique        // e.g. "stop-slop"
-  version         String   @default("1.0.0")
-  descriptionEn   String                  // English description
-  descriptionDa   String?                 // Danish description (falls back to en)
-  author          String?
-  sourceUrl       String?                 // e.g. GitHub URL
+  id               String   @id @default(cuid())
+  name             String   @unique // e.g. "stop-slop"
+  version          String   @default("1.0.0")
+  descriptionEn    String // English description
+  descriptionDa    String? // Danish description (falls back to en)
+  author           String?
+  sourceUrl        String? // e.g. GitHub URL
   // System prompt fragments — injected when the skill is active
-  promptEn        String                  // English prompt fragment
-  promptDa        String?                 // Danish prompt fragment (falls back to en)
+  promptEn         String // English prompt fragment
+  promptDa         String? // Danish prompt fragment (falls back to en)
   // Metadata
-  enabledByDefault Boolean @default(false) // Auto-enabled for new tenants
-  isBuiltIn       Boolean @default(false)  // Cannot be deleted (shipped with app)
-  category        String   @default("writing") // writing | compliance | analysis | productivity
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  enabledByDefault Boolean  @default(false) // Auto-enabled for new tenants
+  isBuiltIn        Boolean  @default(false) // Cannot be deleted (shipped with app)
+  category         String   @default("writing") // writing | compliance | analysis | productivity
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   agentSkills HermesAgentSkill[]
 }
@@ -1283,6 +1490,7 @@ model ReceivedInvoice {
 
   // Workflow
   status          ReceivedInvoiceStatus @default(RECEIVED)
+  readAt          DateTime? // When the user viewed the inbox (null = unread, for the badge counter)
   rejectionReason String? // User-provided reason if rejected
   approvedBy      String? // userId who approved
   approvedAt      DateTime?
@@ -1290,9 +1498,44 @@ model ReceivedInvoice {
   postedAt        DateTime?
   journalEntryId  String? // JournalEntry created from this e-invoice
 
+  // Settlement tracking — when a bank reconciliation match links a bank
+  // payment to this e-invoice's PAYABLES journal line, the status flips
+  // POSTED → SETTLED (afregnet). Reversed on unmatch.
+  settledAt                  DateTime? // when the bank recon match settled this invoice
+  settledBy                  String?  // userId who triggered the settlement (often the import/match user)
+  settledByBankStatementLineId String? // FK to BankStatementLine (bare string, no @relation)
+
   // Response XML — generated after receiving
   responseXml  String? // Application Response / Message Level Response XML
   responseType String? // "APPLICATION_RESPONSE" | "MESSAGE_LEVEL_RESPONSE" | "INVOICE_RESPONSE"
+
+  // ── Sproom document ID (GAP I-7 fix) ──
+  // The Sproom GUID identifying this document on the Sproom Access Point.
+  // Used to send ApplicationResponse back to the sender when the recipient
+  // approves/rejects the invoice (via sproomClient.setDocumentState()).
+  //
+  // For invoices received via the Sproom webhook, this is the `documentId`
+  // from the webhook payload. For manual XML uploads it's null (no Sproom
+  // tracking). Older rows (pre-this-field) have null — the approve/reject
+  // flow extracts the GUID from the notes string as a fallback.
+  sproomDocumentId String?
+
+  // ── Credit note original invoice reference ──────────────────────────
+  // For received credit notes (documentType = CREDIT_NOTE), this stores
+  // the invoice number from the cac:BillingReference/cbc:ID element in
+  // the XML — i.e. the invoice this credit note is crediting.
+  //
+  // Used by the auto-settlement matching logic in the received-invoice
+  // post route: when a credit note has an originalInvoiceNumber, we
+  // match it to the invoice with that exact number from the same
+  // supplier — NOT just by amount + supplier (which was the old, error-
+  // prone logic that could match the wrong invoice if multiple invoices
+  // from the same supplier had similar amounts).
+  //
+  // Null for regular invoices and for freestanding credit notes (no
+  // BillingReference in the XML). In the freestanding case, the auto-
+  // settlement falls back to amount + supplier matching.
+  originalInvoiceNumber String?
 
   // Validation
   validationErrors   String? // JSON array of errors from parsing
@@ -1308,6 +1551,7 @@ model ReceivedInvoice {
 
   @@unique([companyId, invoiceNumber]) // Prevent duplicate invoice numbers within a tenant
   @@index([companyId, status])
+  @@index([companyId, readAt])
   @@index([companyId, issueDate])
   @@index([companyId, supplierCvr])
   @@index([userId])
@@ -1316,13 +1560,17 @@ model ReceivedInvoice {
 
 // ─── VAT SUBMISSION (FASE 5) ──────────────────────────────────
 // Tracks VAT report submissions to Skattestyrelsen (Danish Tax Authority).
-// Supports quarterly reporting with OAuth2 authentication.
+// Uses the RSU B2B SOAP web service gateway (NemVirksomhed):
+//   1. VirksomhedKalenderHent        — verify delegation + get periods
+//   2. ModtagMomsangivelseForeloebig — submit DRAFT VAT return (17 fields)
+//   3. MomsangivelseKvitteringHent   — fetch receipt after user approval
+// Auth: mutual TLS (mTLS) with VOCES3 System (S1) certificate + WS-Security XML signature.
 
 enum VATSubmissionStatus {
   DRAFT // Prepared but not yet submitted
-  SUBMITTED // Successfully sent to Skattestyrelsen
-  ACCEPTED // Acknowledged by Skattestyrelsen
-  REJECTED // Rejected by Skattestyrelsen
+  SUBMITTED // Draft sent to Skattestyrelsen — awaiting user approval via TastSelv
+  ACCEPTED // User approved in TastSelv — receipt available
+  REJECTED // Rejected by Skattestyrelsen or user
   ERROR // Transmission error
 }
 
@@ -1353,10 +1601,30 @@ model VATSubmission {
   status       VATSubmissionStatus @default(DRAFT)
   submittedAt  DateTime?
   submittedBy  String? // userId who submitted
-  referenceId  String? // Skattestyrelsen reference/receipt number
-  responseXml  String? // Response from Skattestyrelsen
+  referenceId  String? // Legacy field — kept for backward compat
+  responseXml  String? // Full SOAP response from Skattestyrelsen
   errorMessage String?
   errorCode    String?
+
+  // SKAT RSU B2B SOAP integration fields
+  // transactionIdentifier: returned by ModtagMomsangivelseForeloebig, needed
+  //   for MomsangivelseKvitteringHent (receipt retrieval). This is SKAT's
+  //   internal transaction ID, NOT the same as our submission ID.
+  transactionIdentifier String?
+
+  // deepLink: the Dybtlink URL returned by ModtagMomsangivelseForeloebig.
+  //   The user clicks this to go to TastSelv Erhverv and approve the draft
+  //   with MitID. Stored so we can re-display it until the user approves.
+  deepLink              String?
+
+  // receiptPdfBase64: the receipt PDF (base64-encoded) fetched via
+  //   MomsangivelseKvitteringHent after the user has approved. Null until
+  //   the receipt has been retrieved.
+  receiptPdfBase64      String?
+
+  // advisoryCode: 5001 = ordinary draft, 5002 = subsequent declaration.
+  //   Helps the UI distinguish between a regular filing and an "efterangivelse".
+  advisoryCode          String?
 
   // Meta
   createdAt       DateTime @default(now())
@@ -1369,6 +1637,7 @@ model VATSubmission {
   @@index([companyId, status])
   @@index([companyId, year])
   @@index([submittedAt])
+  @@index([transactionIdentifier])
 }
 
 // ─── E-INVOICE SENDINGS (FASE 4) ──────────────────────────────
@@ -1394,9 +1663,13 @@ model EInvoiceSending {
 
   // Status tracking
   status      EInvoiceSendStatus @default(PENDING)
-  sentAt      DateTime? // When the transmission started
-  deliveredAt DateTime? // When delivery confirmation received
-  acceptedAt  DateTime? // When recipient acknowledged
+  sentAt      DateTime? // When the transmission started (Sproom upload began)
+  inTransitAt DateTime? // When Sproom signalled transmission started to recipient AP
+  deliveredAt DateTime? // When the receiving AP acknowledged receipt
+  pendingApprovalAt DateTime? // When the document entered pending-approval state at the recipient
+  acceptedAt  DateTime? // When recipient explicitly acknowledged
+  rejectedAt  DateTime? // When recipient explicitly rejected
+  paidAt      DateTime? // When the parent Invoice was locally marked PAID (PAID-syntese)
 
   // Error handling
   errorCode    String? // Machine-readable error code
@@ -1413,6 +1686,14 @@ model EInvoiceSending {
   storecoveSubmissionId String? // Storecove submission ID (for status polling)
   storecoveStorecoveId  String? // Storecove internal ID (numeric, stored as string)
 
+  // ── Sproom raw status (GAP I-11) ──
+  // The raw Sproom DocumentStatusType string (e.g. 'EndpointNotFound',
+  // 'SchematronValidationError', 'DuplicateFileError') — preserved so the
+  // UI can show WHY a sending failed (vs. the collapsed 'FAILED' enum).
+  // Updated by einvoice-status-tracker whenever a webhook/poller observes a
+  // new state.
+  sproomRawStatus String?
+
   // Audit
   sentBy    String // userId who initiated the send
   createdAt DateTime @default(now())
@@ -1420,12 +1701,112 @@ model EInvoiceSending {
   companyId String
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
+  // ── Status history (GAP I-3) ──
+  // Append-only event log of every Sproom state transition observed for
+  // this sending (webhook + poller). Drives the timeline UI.
+  events EInvoiceSendEvent[]
+
   @@index([companyId, status])
   @@index([invoiceId])
   @@index([companyId, channel])
   @@index([companyId, createdAt])
   @@index([sentBy])
   @@index([nextRetryAt])
+  @@index([status, updatedAt])
+}
+
+// ─── E-INVOICE STATUS HISTORY (GAP I-3) ───────────────────────────────
+//
+// Append-only event log capturing every Sproom document state transition
+// observed for an EInvoiceSending — driven by:
+//   1. DocumentStatusChanged webhooks (push — primary)
+//   2. The outbox safety-net poller (pull — fallback when webhooks miss)
+//   3. Local transitions (e.g. PAID-syntese when Invoice is marked paid)
+//
+// This is the data source for the timeline UI in einvoice-send-status.tsx
+// and the global /api/einvoice-sends/[id] endpoint. Without this table,
+// Sproom's getDocumentState() data is fetched + discarded on each webhook
+// (the old behaviour — only the latest status was persisted).
+//
+// Multiple events per sending is normal — a typical happy-path is:
+//   SENT → IN_TRANSIT → DELIVERED → ACCEPTED → PAID
+//
+// Sproom's full DocumentStatusType enum has ~60 values; we preserve the
+// raw state string + statusCode + message + failedProperties so the UI
+// can show schematron validation errors, endpoint-not-found reasons, etc.
+
+model EInvoiceSendEvent {
+  id String @id @default(cuid())
+
+  // ── FK to the sending this event belongs to ──
+  sendingId String
+  sending   EInvoiceSending @relation(fields: [sendingId], references: [id], onDelete: Cascade)
+
+  // ── The mapped AlphaFlow status this event represents ──
+  // One of EInvoiceSendStatus (e.g. SENT, IN_TRANSIT, DELIVERED,
+  // PENDING_APPROVAL, ACCEPTED, REJECTED, PAID, FAILED, CANCELLED).
+  // This is what the UI badge renders — the user-facing bucket.
+  status EInvoiceSendStatus
+
+  // ── Raw Sproom state (GAP I-11) ──
+  // The exact Sproom DocumentStatusType string (e.g. 'TransmissionStarted',
+  // 'Sent', 'Approved', 'SchematronValidationError', 'EndpointNotFound').
+  // Preserved verbatim so the UI can show the precise reason for a failure
+  // or the exact sub-state of an in-transit document. Null for local
+  // events (e.g. PAID-syntese) that have no Sproom counterpart.
+  sproomRawState String?
+
+  // ── Sproom status code ──
+  // Numeric Sproom status code (e.g. 101=Created, 301=TransmissionStarted,
+  // 302=Sent, 303=Received, 304=TransmissionCompleted). Null for local events.
+  sproomStatusCode Int?
+
+  // ── Delivery type ──
+  // 'sproom' (NemHandel) or 'peppol'. Null for local events.
+  deliveryType String?
+
+  // ── Human-readable message ──
+  // From Sproom's state-entry message field, or synthesised locally.
+  // For failures, this is the error description. For accepts/rejects,
+  // it may carry the recipient's reason text.
+  message String?
+
+  // ── Schematron validation errors (failedProperties) ──
+  // When Sproom rejects a document due to schematron validation, the
+  // state-entry includes a `failedProperties` array with rule names +
+  // attempted values. Preserved as JSON so the UI can render them
+  // precisely (e.g. "BR-CL-10: Invoice number shall be unique").
+  failedProperties Json?
+
+  // ── Event source ──
+  // Where this event was observed:
+  //   'sproom_webhook' — DocumentStatusChanged webhook (push)
+  //   'sproom_poller'  — outbox safety-net poller (pull fallback)
+  //   'local_send'     — processEInvoiceSend succeeded (local)
+  //   'local_paid'     — PAID-syntese (Invoice marked PAID locally)
+  //   'local_retry'   — retry attempt logged (local)
+  //   'local_cancel'  — user cancelled the sending (local)
+  source String
+
+  // ── When the event occurred (Sproom timestamp) ──
+  // For Sproom-driven events: the dateTime from the state entry (high-precision
+  // ISO-8601 from Sproom). For local events: when the event was recorded.
+  eventTimestamp DateTime
+
+  // ── When AlphaFlow recorded this event ──
+  // createdAt is when we wrote the row — useful for debugging latency between
+  // Sproom observing the event and us persisting it.
+  createdAt DateTime @default(now())
+
+  // ── Optional metadata ──
+  // Free-form JSON for additional context (e.g. the full webhook payload
+  // for forensics, or the retry attempt number).
+  metadata Json?
+
+  @@index([sendingId, eventTimestamp])
+  @@index([sendingId, createdAt])
+  @@index([status, eventTimestamp])
+  @@index([source])
 }
 
 // ─── PROJECT ACCOUNTING ──────────────────────────────────────────
@@ -1523,6 +1904,8 @@ model Payment {
   // Flatpay's payment/session identifier (returned when the session is created)
   flatpayPaymentId  String? // Flatpay's payment ID
   flatpaySessionUrl String? // Hosted checkout URL the user is redirected to
+  // Sequential invoice number (e.g. "AF-0001") — assigned on payment success
+  invoiceNumber     String?
   // Status tracking
   status            PaymentStatus @default(pending)
   // Metadata from Flatpay (raw webhook payload, error messages, etc.)
@@ -1532,13 +1915,15 @@ model Payment {
   updatedAt         DateTime      @updatedAt
   completedAt       DateTime? // When the payment was confirmed/failed
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  consentLogs ConsentLog[]
 
   @@index([userId])
   @@index([companyId])
   @@index([status])
   @@index([flatpayPaymentId])
+  @@index([invoiceNumber])
 }
 
 // ─── Contact Form Submissions ───────────────────────────────────────
@@ -1562,4 +1947,85 @@ model ContactMessage {
   @@index([status])
   @@index([createdAt])
   @@index([email])
+}
+
+// ─── CONSENT LOG (FASE 6 — explicit consent tracking) ──────────────
+// Immutable record of every explicit consent the user has given. Each consent
+// captures the terms version, timestamp, IP, and user-agent so we can produce
+// evidence on demand for the bank, the Card schemes, the Danish Consumer
+// Ombudsman, or a court. This is the legal anchor for recurring billing
+// under Betalingsloven §100-102 and Forbrugeraftaleloven §18-19.
+
+model ConsentLog {
+  id               String      @id @default(cuid())
+  userId           String
+  companyId        String
+  consentType      ConsentType
+  // Version string of the document the user agreed to (e.g. "2025-07-01-v1")
+  // Resolved at accept-time from lib/legal.ts CURRENT_TERMS_VERSION.
+  consentVersion   String
+  consentedAt      DateTime    @default(now())
+  consentIp        String?
+  consentUserAgent String?
+  withdrawnAt      DateTime? // Set if the user later revokes this consent
+  // Optional relation to the Payment that this consent authorized. Makes it
+  // possible to trace from a disputed charge back to the exact consent event.
+  paymentId        String?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([userId, consentType])
+  @@index([companyId])
+  @@index([consentType])
+  @@index([consentVersion])
+  @@index([consentedAt])
+  @@index([paymentId])
+}
+
+// ─── WEBHOOK EVENT LOG (FASE 6 — idempotency + audit) ──────────────
+// Stores every incoming payment-provider webhook (Frisbii/Flatpay) so we can:
+//   1. Detect duplicate deliveries (idempotency — providers retry webhooks)
+//   2. Reconcile missed events by replaying the log
+//   3. Produce an audit trail for the bank / Card scheme disputes
+// The (source, eventId) pair is unique — a second delivery of the same event
+// is rejected at insert time.
+
+model WebhookEvent {
+  id           String    @id @default(cuid())
+  // "frisbii" | "flatpay" | "reepay" — which provider sent it
+  source       String
+  // The provider's event ID (e.g. Frisbii's "evt_..."). Used for idempotency.
+  eventId      String
+  // Event type from the provider (e.g. "invoice_settled", "invoice_failed")
+  eventType    String
+  // Full raw payload (JSON) for audit/debugging
+  payload      Json
+  // Processing status: "processed" | "ignored" | "error"
+  status       String    @default("processed")
+  errorMessage String?
+  receivedAt   DateTime  @default(now())
+  processedAt  DateTime?
+
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  companyId String?
+
+  @@unique([source, eventId])
+  @@index([source, eventType])
+  @@index([companyId])
+  @@index([receivedAt])
+  @@index([status])
+}
+
+// ─── INVOICE COUNTER (sequential AF-XXXX numbering) ──────────────────
+// Single-row table that holds the next sequential invoice number.
+// Uses atomic SQL UPDATE ... RETURNING for concurrency-safe incrementing.
+// The singleton row is seeded on first use (upsert in generateSequentialInvoiceNumber).
+
+model InvoiceCounter {
+  id         String   @id @default("singleton")
+  nextNumber Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }

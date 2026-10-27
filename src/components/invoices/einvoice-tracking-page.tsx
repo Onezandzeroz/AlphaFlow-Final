@@ -196,7 +196,7 @@ function getDocumentTypeIcon(docType: string) {
 }
 
 function getChannelLabel(channel: string, isDa: boolean) {
-  if (channel === 'OIOUBL' || channel === 'NEMHANDEL' || channel === 'NEMHANDEL_OIOUBL' || channel === 'STORECOVE') {
+  if (channel === 'OIOUBL' || channel === 'NEMHANDEL' || channel === 'NEMHANDEL_OIOUBL' || channel === 'SPROOM_AUTO') {
     return isDa ? 'Sproom (Auto)' : 'Sproom (Auto)';
   }
   if (channel === 'PEPPOL' || channel === 'PEPPOL_BIS') {
@@ -553,8 +553,8 @@ export function EInvoiceTrackingPage({ onInvoiceClick }: EInvoiceTrackingPagePro
             <SelectItem value="all">{isDa ? 'Alle kanaler' : 'All channels'}</SelectItem>
             <SelectItem value="NEMHANDEL_OIOUBL">Sproom (NemHandel / OIOUBL)</SelectItem>
             <SelectItem value="PEPPOL_BIS">Sproom (Peppol BIS 3)</SelectItem>
-            {/* STORECOVE hidden from filter — legacy channel replaced by NEMHANDEL_OIOUBL.
-                Existing rows with channel=STORECOVE still match the "all" filter. */}
+            {/* Sproom Auto channel hidden from filter — replaced by NEMHANDEL_OIOUBL.
+                Existing rows with the legacy channel still match the "all" filter. */}
           </SelectContent>
         </Select>
       </div>

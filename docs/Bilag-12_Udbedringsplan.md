@@ -1,7 +1,7 @@
 # AlphaFlow — Udbedringsplan før indsendelse
 
 **AlphaAi Consult ApS** (CVR 46312058)
-**Dokumentversion:** 3.8
+**Dokumentversion:** 3.10
 **Dato:** Oktober 2026
 **Bilag 12 i anmeldelsespakken
 **Ansvarlig:** Jess Martin Christoffersen, Direktør
@@ -39,6 +39,7 @@ Tiltagene er inddelt i tre kategorier:
 | U-21 | Ingen CSRF-token — SameSite=Lax + Bearer kompenserer | C | Lav restrisiko |
 | U-22 | SQLite i mini-services ukrypteret — VPS disk-encryption dækker | C | Lav restrisiko |
 | U-23 | Uploads ukrypteret på VPS-disk — VPS disk-encryption dækker | C | Lav restrisiko |
+| U-24 | Udfas legacy `PUBLIC_STANDARD_CHART` så kun `OFFICIAL_STANDARD_CHART` (2026) forbliver | ✅ Gennemført (Oktober 2026) | BEK 97 Bilag 4 pkt 1 — "kun den nyeste reviderede standardkontoplan" |
 
 ---
 
@@ -69,7 +70,7 @@ AI-ydelser (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service V
 **Acceptkriterier:** `hasSkatCredentials()` returnerer true; test-momsangivelse successfuld.
 
 ### U-9 — NemHandel Access Point-aftale (Sproom)
-**Status:** ✅ Aftalen er indgået. Sproom (dansk selskab — Sproom A/S, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker begge netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Integrationen er færdig og live mod Sproom staging (https://staging.sproom.net) via `src/lib/sproom-client.ts` (2.799 LOC) og `/api/sproom/*`-ruterne (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Som dansk selskab behandler Sproom data i Danmark/EU — ingen SCC påkrævet. (Den tidligere planlagte Storecove B.V.-aftale er supersederet; `src/lib/storecove-client.ts` + `/api/storecove/*` er **fuldt slettet** fra kodebasen — oktober 2026. Backward-compat DB-felter bevares for historiske rækker.)
+**Status:** ✅ Aftalen er indgået. Sproom (dansk selskab — Sproom A/S, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker begge netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Integrationen er færdig og live mod Sproom staging (https://staging.sproom.net) via `src/lib/sproom-client.ts` (2.799 LOC) og `/api/sproom/*`-ruterne (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Som dansk selskab behandler Sproom data i Danmark/EU — ingen SCC påkrævet. (Den tidligere planlagte Storecove B.V.-aftale er supersederet; tidligere Storecove-kode — `src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*` (webhook, participants, status, connect, create-legal-entity) — er **fuldt fjernet** fra kodebasen. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet — Sproom har egne ækvivalenter. E-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO` (Sproom Auto-kanal der vælger OIOUBL for DK og Peppol BIS for international). Sproom er eneste Access Point. DB-migration kræves i produktion (`bun run db:push`/`db:migrate` + data-migration `UPDATE "EInvoiceSending" SET channel = 'SPROOM_AUTO' WHERE channel = 'STORECOVE';`).)
 
 **Resterende handling (produktionsaktivering — env-switch):**
 - Sæt `SPROOM_API_URL=https://sproom.net` + `SPROOM_API_TOKEN` i produktions-`.env` (default er staging: `https://staging.sproom.net`).
@@ -93,6 +94,21 @@ AlphaAi Consult ApS indsender med åbenheds-erklæring (Bilag 1 afsnit 8) og for
 | U-13 | Password min. 8 tegn | Hæv fra 6 til 8 (NIST 800-63B) + strength-meter | 3 måneder |
 | U-16 | Persondata-kryptering i DB (hvile) | Udvidet AES-256-GCM på udvalgte felter | 6 måneder |
 | U-17 | Backup-scheduler uafhængig | Adskil fra applikationsproces til separat PM2-app/systemd/crontab | 6 måneder |
+| U-24 | Udfas legacy `PUBLIC_STANDARD_CHART` | ✅ **Gennemført (Oktober 2026)** — legacy `PUBLIC_STANDARD_CHART` (~50 konti) er helt fjernet fra kodebasen; helpers (`getStandardAccount`, `getStandardAccountsByType`, `getVATAccounts`, `suggestStandardMapping`, `buildAutoMapping`) omskrevet til kun at benytte `OFFICIAL_STANDARD_CHART` (603 konti, version 20260101). | ✅ Gennemført |
+
+### U-24 — Udfas legacy `PUBLIC_STANDARD_CHART` — ✅ Gennemført (Oktober 2026)
+
+**Status:** ✅ Gennemført. Legacy `PUBLIC_STANDARD_CHART`-arrayet (~50 konti) i `src/lib/standard-chart-of-accounts.ts` er **helt fjernet** fra kodebasen. Helpers (`getStandardAccount`, `getStandardAccountsByType`, `getVATAccounts`, `suggestStandardMapping`, `buildAutoMapping`) er omskrevet til **kun** at benytte `OFFICIAL_STANDARD_CHART` (603 konti, version 20260101) i `src/lib/official-standard-chart.ts`.
+
+**Baggrund (historisk):** Erhvervsstyrelsen kræver, at der "kun er den nyeste reviderede standardkontoplan" i brug. Kildebasen havde tidligere to versioner side-om-side: `OFFICIAL_STANDARD_CHART` (20260101, 603 konti) OG en legacy `PUBLIC_STANDARD_CHART` (~50 konti). `OFFICIAL_STANDARD_CHART` havde precedence, men `PUBLIC_STANDARD_CHART` blev brugt som fallback i 5 helper-funktioner.
+
+**Gennemførte handlinger (Oktober 2026):**
+- Fjernede `PUBLIC_STANDARD_CHART`-arrayet fra merge-stierne i `getStandardAccount()`/`getStandardAccountsByType()`/`getVATAccounts()`/`suggestStandardMapping()`/`buildAutoMapping()` (så disse nu udelukkende returnerer officielle konti).
+- Verificerede at `buildAutoMapping()` Phase 1+2 (som allerede filtrerede til OFFICIAL) ikke ændrede adfærd.
+- Standardkonto-UI viser nu udelukkende officielle 2026-konti.
+
+**Ansvarlig:** Teknisk (refactor) · **Tidsramme:** Gennemført
+**Acceptkriterier:** ✅ `PUBLIC_STANDARD_CHART` indgår ikke længere i kodebasen; `OFFICIAL_STANDARD_CHART` (603 konti) er eneste standardkontoplan; standardkonto-UI viser udelukkende officielle 2026-konti.
 
 ---
 
@@ -164,6 +180,8 @@ Før indsendelse bekræftes at:
 | 3.6 | 2026 | Bilagsstruktur-konsolidering: underbehandler-DPA’er samlet til Bilag 14; Tjekliste renummereret fra Bilag 19 til Bilag 3. Krydsreferencer opdateret. |
 | 3.7 | September 2026 | Sproom (DK) har erstattet Storecove (NL) som Peppol+NemHandel Access Point; U-9 opdateret (aftale indgået, staging aktiv, produktion via env-switch). |
 | 3.8 | Oktober 2026 | U-15 (hash-chain på posteringer) markeret som gennemført — SHA-256 chain via `recordHash`/`previousHash` på `JournalEntry` og `Transaction` er implementeret (se Bilag 04 afsnit 2.10); fjernet U-15 fra §2/§4-tabeller. Sproom `sproom-client.ts` LOC rettet 2.646 → 2.799 (faktisk `wc -l`). |
+| 3.9 | Oktober 2026 | Tilføjet U-24 (udfas legacy `PUBLIC_STANDARD_CHART` så kun `OFFICIAL_STANDARD_CHART` 2026 forbliver) — afspejler at to versioner af standardkontoplanen eksisterer side-om-side i koden, og at Erhvervsstyrelsen kræver "kun den nyeste reviderede". Samtidig rettet aktuelle tilstandspåstande om Storecove: koden er legacy/inaktiv (bevaret for bagudkompatibilitet) — ikke slettet. |
+| 3.10 | Oktober 2026 | Storecove legacy-kode fysisk slettet fra kodebasen (`storecove-client.ts` + 5 `/api/storecove/*`-ruter); 5 redundante Company-felter fjernet; `EInvoiceSending.storecoveSubmissionId` omdøbt til `sproomDocumentId`; `storecoveStorecoveId` slettet; enum-værdi `STORECOVE` omdøbt til `SPROOM_AUTO`; legacy `PUBLIC_STANDARD_CHART` fjernet — U-24 gennemført (kun `OFFICIAL_STANDARD_CHART` 2026 forbliver). DB-migration kræves i produktion. |
 
 ---
 

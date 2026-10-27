@@ -674,7 +674,7 @@ const ALL_ACCOUNTS: Array<{ number: number; name: string; type: StandardAccountT
 /**
  * Officiel Standardkontoplan (version 20260101) — 603 konti.
  * Eksporteret i det format som StandardAccount-interfacet forventer.
- * Brug denne i stedet for det gamle manuelle PUBLIC_STANDARD_CHART-array.
+ * Brug denne som den eneste standardkontoplan i AlphaFlow.
  */
 export const OFFICIAL_STANDARD_CHART: StandardAccount[] = ALL_ACCOUNTS.map((a) => ({
   number: a.number.toString(),

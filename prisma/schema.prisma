@@ -156,7 +156,7 @@ enum EInvoiceType {
 enum EInvoiceSendChannel {
   NEMHANDEL_OIOUBL // OIOUBL via NemHandel network
   PEPPOL_BIS // Peppol BIS Billing 3.0 via Access Point
-  STORECOVE // Peppol BIS Billing 3.0 via Storecove Access Point
+  SPROOM_AUTO // Sproom Auto — OIOUBL for DK recipients (NemHandel), Peppol BIS 3 for international
 }
 
 enum EInvoiceSendStatus {
@@ -312,13 +312,6 @@ model Company {
   einvoiceRegisteredAt       DateTime? // When registered in NemHandelsregisteret
   einvoiceAutoSendOnFinalize Boolean              @default(false) // Auto-send when invoice is finalized
   einvoiceDeliveryMode       String? // 'manual' or 'automatic' — null = not yet chosen
-
-  // Storecove Access Point integration (Peppol delivery — LEGACY)
-  storecoveConnected     Boolean   @default(false) // Whether Storecove API is configured
-  storecoveApiKeyId      String? // Storecove API key ID (last 4 chars stored for identification)
-  storecoveLegalEntityId Int? // Storecove legal entity ID for this company
-  storecoveConnectedAt   DateTime? // When Storecove was connected
-  storecoveLastTestedAt  DateTime? // Last successful connection test
 
   // Sproom Access Point integration (Peppol + NemHandel delivery)
   sproomChildCompanyId   String? // Sproom child company ID for this tenant
@@ -1682,9 +1675,8 @@ model EInvoiceSending {
   messageId   String? // Message ID from NemHandel/Peppol network
   responseXml String? // Response XML from the network/receiver
 
-  // Storecove-specific tracking
-  storecoveSubmissionId String? // Storecove submission ID (for status polling)
-  storecoveStorecoveId  String? // Storecove internal ID (numeric, stored as string)
+  // Sproom document tracking
+  sproomDocumentId String? // Sproom document ID (GUID) — used for status polling
 
   // ── Sproom raw status (GAP I-11) ──
   // The raw Sproom DocumentStatusType string (e.g. 'EndpointNotFound',

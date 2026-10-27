@@ -93,13 +93,13 @@ function markChecked(sendingId: string, documentId: string): void {
  */
 async function pollSendingStatus(sending: {
   id: string;
-  storecoveSubmissionId: string | null;
+  sproomDocumentId: string | null;
   companyId: string;
   invoiceId: string;
   recipientName: string;
   status: string;
 }): Promise<{ applied: number; changed: number; finalStatus: string | null }> {
-  if (!sending.storecoveSubmissionId) {
+  if (!sending.sproomDocumentId) {
     // No Sproom document ID — can't poll state. This happens for sends that
     // failed before Sproom returned a 201 (e.g. simulation mode).
     return { applied: 0, changed: 0, finalStatus: null };
@@ -133,7 +133,7 @@ async function pollSendingStatus(sending: {
     let lastError: unknown = null;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        states = await sproomClient.getDocumentState(sending.storecoveSubmissionId, {
+        states = await sproomClient.getDocumentState(sending.sproomDocumentId, {
           childCompanyId: company.sproomChildCompanyId,
         });
         lastError = null;
@@ -145,7 +145,7 @@ async function pollSendingStatus(sending: {
         if (!isAbort || attempt === MAX_ATTEMPTS) throw err;
         logger.warn('[SPROOM-OUTBOX] getDocumentState timed out, retrying', {
           sendingId: sending.id,
-          documentId: sending.storecoveSubmissionId,
+          documentId: sending.sproomDocumentId,
           attempt,
           maxAttempts: MAX_ATTEMPTS,
           error: errMsg,
@@ -157,7 +157,7 @@ async function pollSendingStatus(sending: {
   } catch (err) {
     logger.warn('[SPROOM-OUTBOX] getDocumentState failed', {
       sendingId: sending.id,
-      documentId: sending.storecoveSubmissionId,
+      documentId: sending.sproomDocumentId,
       error: err instanceof Error ? err.message : String(err),
     });
     return { applied: 0, changed: 0, finalStatus: null };
@@ -344,11 +344,11 @@ export async function runSproomOutboxCycle(): Promise<{
     where: {
       status: { in: ['SENT', 'IN_TRANSIT', 'DELIVERED', 'PENDING_APPROVAL'] },
       updatedAt: { lt: stalenessCutoff },
-      storecoveSubmissionId: { not: null },
+      sproomDocumentId: { not: null },
     },
     select: {
       id: true,
-      storecoveSubmissionId: true,
+      sproomDocumentId: true,
       companyId: true,
       invoiceId: true,
       recipientName: true,
@@ -380,7 +380,7 @@ export async function runSproomOutboxCycle(): Promise<{
     try {
       const result = await pollSendingStatus({
         id: sending.id,
-        storecoveSubmissionId: sending.storecoveSubmissionId,
+        sproomDocumentId: sending.sproomDocumentId,
         companyId: sending.companyId,
         invoiceId: sending.invoiceId,
         recipientName: sending.recipientName,

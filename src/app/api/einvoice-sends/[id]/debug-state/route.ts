@@ -23,7 +23,7 @@ import { applyStateHistory } from '@/lib/einvoice-status-tracker';
 //
 // Response:
 //   {
-//     sending: { id, status, sproomRawStatus, storecoveSubmissionId, ... },
+//     sending: { id, status, sproomRawStatus, sproomDocumentId, ... },
 //     sproomStates: SproomDocumentStateEntry[],   // rå data fra Sproom
 //     ourEvents: EInvoiceSendEvent[],              // hvad vi har persisteret
 //     discrepancy: { missingEvents: number, ... }, // forskel mellem Sproom og os
@@ -52,7 +52,7 @@ export const POST = withGuard(
           id: true,
           status: true,
           sproomRawStatus: true,
-          storecoveSubmissionId: true,
+          sproomDocumentId: true,
           messageId: true,
           sentAt: true,
           deliveredAt: true,
@@ -74,7 +74,7 @@ export const POST = withGuard(
         );
       }
 
-      if (!sending.storecoveSubmissionId) {
+      if (!sending.sproomDocumentId) {
         return NextResponse.json({
           sending,
           sproomStates: [],
@@ -106,15 +106,14 @@ export const POST = withGuard(
       if (sproomClient?.isConfigured) {
         try {
           sproomStates = await sproomClient.getDocumentState(
-            sending.storecoveSubmissionId,
+            sending.sproomDocumentId,
             { childCompanyId: company.sproomChildCompanyId },
           );
         } catch (err) {
           sproomError = err instanceof Error ? err.message : String(err);
           logger.warn('[DEBUG-STATE] getDocumentState failed', {
             sendingId: sending.id,
-            documentId: sending.storecoveSubmissionId,
-            error: sproomError,
+            documentId: sending.sproomDocumentId,
           });
         }
       } else {
@@ -192,7 +191,7 @@ export const POST = withGuard(
           id: sending.id,
           status: sending.status,
           sproomRawStatus: sending.sproomRawStatus,
-          storecoveSubmissionId: sending.storecoveSubmissionId,
+          sproomDocumentId: sending.sproomDocumentId,
           messageId: sending.messageId,
           timestamps: {
             sentAt: sending.sentAt,
@@ -211,7 +210,7 @@ export const POST = withGuard(
         },
         sproom: {
           configured: sproomClient?.isConfigured ?? false,
-          documentId: sending.storecoveSubmissionId,
+          documentId: sending.sproomDocumentId,
           stateCount: sproomStates.length,
           latestState: sproomLatestState
             ? {

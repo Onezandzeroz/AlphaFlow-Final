@@ -56,7 +56,7 @@ export const GET = withGuard(
           maxRetries: true,
           nextRetryAt: true,
           messageId: true,
-          storecoveSubmissionId: true,
+          sproomDocumentId: true,
           createdAt: true,
           updatedAt: true,
           sentBy: true,

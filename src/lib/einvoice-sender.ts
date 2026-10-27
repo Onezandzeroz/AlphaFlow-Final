@@ -86,8 +86,7 @@ export interface EInvoiceSending {
   createdAt: string;
   updatedAt: string;
   companyId: string;
-  storecoveSubmissionId: string | null;
-  storecoveStorecoveId: string | null;
+  sproomDocumentId: string | null;
 }
 
 /** Serializable company e-invoice configuration */
@@ -101,13 +100,9 @@ export interface CompanyEInvoiceConfig {
   registeredAt: string | null;
   autoSendOnFinalize: boolean;
   deliveryMode: 'manual' | 'automatic' | null;
-  // Storecove (LEGACY — kept in the DB schema for backward compat, no
-  // longer used by active code). These remain null going forward.
-  storecoveConnected: boolean;
-  storecoveApiKeyId: string | null;
-  storecoveLegalEntityId: number | null;
-  storecoveConnectedAt: string | null;
   // Sproom (Access Point — Peppol + NemHandel)
+  // sproomConnected is derived from whether sproomChildCompanyId is set.
+  sproomConnected: boolean;
   sproomChildCompanyId: string | null;
   sproomConnectedAt: string | null;
   sproomNemHandelRegistered: boolean;
@@ -149,11 +144,11 @@ function generateMessageId(): string {
  * Map send channel to OIOUBL format.
  *
  * The UI exposes three e-invoice channels to the user:
- *   - 'OIOUBL'    (alias for NEMHANDEL_OIOUBL) — Danish NemHandel format
- *   - 'PEPPOL'    (alias for PEPPOL_BIS)       — International Peppol BIS 3
- *   - 'STORECOVE' (legacy alias for Sproom)    — "Auto" — let Sproom pick
+ *   - 'OIOUBL'      (alias for NEMHANDEL_OIOUBL) — Danish NemHandel format
+ *   - 'PEPPOL'      (alias for PEPPOL_BIS)       — International Peppol BIS 3
+ *   - 'SPROOM_AUTO' (alias for Sproom Auto)      — "Auto" — let Sproom pick
  *
- * The STORECOVE channel is the default in the send dialog when the
+ * The SPROOM_AUTO channel is the default in the send dialog when the
  * tenant hasn't set a default. All three channels route through Sproom,
  * which accepts both OIOUBL 2.1 and Peppol BIS 3 XML and delivers via the
  * appropriate network (Peppol for international recipients, NemHandel
@@ -169,12 +164,12 @@ function generateMessageId(): string {
  * are now emitted by the generator's OIOUBL branch.
  *
  * Channel → format mapping:
- *   - STORECOVE (default/auto)        → OIOUBL (Danish-to-Danish default)
+ *   - SPROOM_AUTO (default/auto)       → OIOUBL (Danish-to-Danish default)
  *   - NEMHANDEL_OIOUBL               → OIOUBL (explicit OIOUBL channel)
  *   - PEPPOL_BIS                     → PEPPOL_BIS (explicit Peppol channel)
  *   - default (unknown channel)      → OIOUBL (safe Danish default)
  *
- * The "Auto" STORECOVE channel defaults to OIOUBL because the majority
+ * The "Auto" SPROOM_AUTO channel defaults to OIOUBL because the majority
  * of AlphaFlow's sends are Danish-to-Danish (where OIOUBL is the native
  * NemHandel format). For cross-border sends, the user should select the
  * PEPPOL channel explicitly. The inbox format label now correctly shows
@@ -188,7 +183,7 @@ function channelToFormat(channel: EInvoiceSendChannel): EInvoiceFormat {
     case EInvoiceSendChannel.PEPPOL_BIS:
       // Peppol BIS Billing 3.0 — cross-border sends via Peppol network.
       return EInvoiceFormat.PEPPOL_BIS;
-    case EInvoiceSendChannel.STORECOVE:
+    case EInvoiceSendChannel.SPROOM_AUTO:
       // "Auto" channel — default to OIOUBL (Danish NemHandel). The vast
       // majority of AlphaFlow sends are Danish-to-Danish where OIOUBL is
       // the native format. Sproom routes correctly based on the
@@ -227,8 +222,7 @@ function serializeSending(record: {
   createdAt: Date;
   updatedAt: Date;
   companyId: string;
-  storecoveSubmissionId: string | null;
-  storecoveStorecoveId: string | null;
+  sproomDocumentId: string | null;
 }): EInvoiceSending {
   return {
     id: record.id,
@@ -254,8 +248,7 @@ function serializeSending(record: {
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
     companyId: record.companyId,
-    storecoveSubmissionId: record.storecoveSubmissionId,
-    storecoveStorecoveId: record.storecoveStorecoveId,
+    sproomDocumentId: record.sproomDocumentId,
   };
 }
 
@@ -857,14 +850,13 @@ export async function processEInvoiceSend(sendingId: string): Promise<void> {
         errorMessage: sproomResult.errorMessage,
       };
 
-      // Store Sproom document ID in storecoveSubmissionId (legacy
-      // column name — it's the AP tracking ID now, used by the
-      // /api/sproom/webhook handler to match status updates).
+      // Store Sproom document ID in sproomDocumentId (the AP tracking ID
+      // used by the /api/sproom/webhook handler to match status updates).
       if (sproomResult.success && sproomResult.documentId) {
         await db.eInvoiceSending.update({
           where: { id: sendingId },
           data: {
-            storecoveSubmissionId: sproomResult.documentId,
+            sproomDocumentId: sproomResult.documentId,
           },
         });
       }
@@ -1352,28 +1344,26 @@ export async function getInvoiceReceiveHistory(
  *
  * Sproom is the ONLY Access Point. The UI exposes two e-invoice channels:
  *
- *   - 'STORECOVE' (alias, default) → "Sproom (Auto Peppol+NemHandel)"
+ *   - 'SPROOM_AUTO' (alias, default) → "Sproom (Auto Peppol+NemHandel)"
  *       - Auto-selects OIOUBL for Danish recipients (NemHandel network)
  *       - Auto-selects Peppol BIS 3 for international recipients
- *       - DB enum: EInvoiceSendChannel.STORECOVE (legacy name kept for
- *         backward compat with existing rows — renaming would require a
- *         Prisma migration)
+ *       - DB enum: EInvoiceSendChannel.SPROOM_AUTO
  *
  *   - 'PEPPOL' (alias) → "Sproom (Peppol)"
  *       - Forces Peppol BIS 3 format (cross-border sends)
  *       - DB enum: EInvoiceSendChannel.PEPPOL_BIS
  *
  *   - 'OIOUBL' (alias, settings-only) → "Sproom (Auto Peppol+NemHandel)"
- *       - Same as STORECOVE but goes through the NEMHANDEL_OIOUBL enum
+ *       - Same as SPROOM_AUTO but goes through the NEMHANDEL_OIOUBL enum
  *       - DB enum: EInvoiceSendChannel.NEMHANDEL_OIOUBL
  *       - Kept as a settings-page option for legacy tenants that
  *         selected it before the channel dropdown was simplified.
  *
- * The settings UI uses short aliases ('OIOUBL' / 'PEPPOL' / 'STORECOVE')
+ * The settings UI uses short aliases ('OIOUBL' / 'PEPPOL' / 'SPROOM_AUTO')
  * because they match the document-format vocabulary users know. The
  * database column `einvoiceDefaultChannel` is typed as the Prisma enum
  * `EInvoiceSendChannel` whose members are NEMHANDEL_OIOUBL | PEPPOL_BIS |
- * STORECOVE. These helpers translate at the lib boundary so callers may
+ * SPROOM_AUTO. These helpers translate at the lib boundary so callers may
  * freely use either the alias or the canonical enum name.
  */
 const CHANNEL_ALIAS_TO_ENUM: Record<string, EInvoiceSendChannel> = {
@@ -1382,13 +1372,13 @@ const CHANNEL_ALIAS_TO_ENUM: Record<string, EInvoiceSendChannel> = {
   NEMHANDEL_OIOUBL: 'NEMHANDEL_OIOUBL',
   PEPPOL: 'PEPPOL_BIS',
   PEPPOL_BIS: 'PEPPOL_BIS',
-  STORECOVE: 'STORECOVE',
+  SPROOM_AUTO: 'SPROOM_AUTO',
 };
 
 const ENUM_TO_CHANNEL_ALIAS: Record<EInvoiceSendChannel, string> = {
   NEMHANDEL_OIOUBL: 'OIOUBL',
   PEPPOL_BIS: 'PEPPOL',
-  STORECOVE: 'STORECOVE',
+  SPROOM_AUTO: 'SPROOM_AUTO',
 };
 
 /**
@@ -1417,7 +1407,7 @@ function normalizeChannelToEnum(
 /**
  * Reverse-map a stored enum value back to the UI alias so the settings
  * Select (and the send-einvoice dialog) can match it against 'OIOUBL' /
- * 'PEPPOL' / 'STORECOVE'.
+ * 'PEPPOL' / 'SPROOM_AUTO'.
  */
 function enumToChannelAlias(
   channel: EInvoiceSendChannel | null,
@@ -1451,10 +1441,6 @@ export async function getCompanyEInvoiceSettings(
       einvoiceRegisteredAt: true,
       einvoiceAutoSendOnFinalize: true,
       einvoiceDeliveryMode: true,
-      storecoveConnected: true,
-      storecoveApiKeyId: true,
-      storecoveLegalEntityId: true,
-      storecoveConnectedAt: true,
       sproomChildCompanyId: true,
       sproomConnectedAt: true,
       sproomNemHandelRegistered: true,
@@ -1476,10 +1462,7 @@ export async function getCompanyEInvoiceSettings(
     registeredAt: company.einvoiceRegisteredAt?.toISOString() ?? null,
     autoSendOnFinalize: company.einvoiceAutoSendOnFinalize,
     deliveryMode: (company.einvoiceDeliveryMode as 'manual' | 'automatic' | null) ?? null,
-    storecoveConnected: company.storecoveConnected,
-    storecoveApiKeyId: company.storecoveApiKeyId,
-    storecoveLegalEntityId: company.storecoveLegalEntityId,
-    storecoveConnectedAt: company.storecoveConnectedAt?.toISOString() ?? null,
+    sproomConnected: !!company.sproomChildCompanyId,
     sproomChildCompanyId: company.sproomChildCompanyId,
     sproomConnectedAt: company.sproomConnectedAt?.toISOString() ?? null,
     sproomNemHandelRegistered: company.sproomNemHandelRegistered,
@@ -1510,8 +1493,8 @@ export async function updateCompanyEInvoiceSettings(
     updateData.einvoiceEnabled = settings.enabled;
   }
   if (settings.defaultChannel !== undefined) {
-    // Normalise UI aliases ('OIOUBL'/'PEPPOL') to canonical Prisma enum
-    // members (NEMHANDEL_OIOUBL / PEPPOL_BIS / STORECOVE).
+    // Normalise UI aliases ('OIOUBL'/'PEPPOL'/'SPROOM_AUTO') to canonical Prisma enum
+    // members (NEMHANDEL_OIOUBL / PEPPOL_BIS / SPROOM_AUTO).
     updateData.einvoiceDefaultChannel = normalizeChannelToEnum(settings.defaultChannel);
   }
   if (settings.endpointId !== undefined) {
@@ -1528,12 +1511,6 @@ export async function updateCompanyEInvoiceSettings(
   }
   if (settings.deliveryMode !== undefined) {
     updateData.einvoiceDeliveryMode = settings.deliveryMode;
-  }
-  if (settings.storecoveConnected !== undefined) {
-    updateData.storecoveConnected = settings.storecoveConnected;
-  }
-  if (settings.storecoveLegalEntityId !== undefined) {
-    updateData.storecoveLegalEntityId = settings.storecoveLegalEntityId;
   }
 
   // Get old settings for audit trail
@@ -1553,10 +1530,6 @@ export async function updateCompanyEInvoiceSettings(
       einvoiceRegisteredAt: true,
       einvoiceAutoSendOnFinalize: true,
       einvoiceDeliveryMode: true,
-      storecoveConnected: true,
-      storecoveApiKeyId: true,
-      storecoveLegalEntityId: true,
-      storecoveConnectedAt: true,
       sproomChildCompanyId: true,
       sproomConnectedAt: true,
       sproomNemHandelRegistered: true,
@@ -1574,10 +1547,7 @@ export async function updateCompanyEInvoiceSettings(
     registeredAt: company.einvoiceRegisteredAt?.toISOString() ?? null,
     autoSendOnFinalize: company.einvoiceAutoSendOnFinalize,
     deliveryMode: (company.einvoiceDeliveryMode as 'manual' | 'automatic' | null) ?? null,
-    storecoveConnected: company.storecoveConnected,
-    storecoveApiKeyId: company.storecoveApiKeyId,
-    storecoveLegalEntityId: company.storecoveLegalEntityId,
-    storecoveConnectedAt: company.storecoveConnectedAt?.toISOString() ?? null,
+    sproomConnected: !!company.sproomChildCompanyId,
     sproomChildCompanyId: company.sproomChildCompanyId,
     sproomConnectedAt: company.sproomConnectedAt?.toISOString() ?? null,
     sproomNemHandelRegistered: company.sproomNemHandelRegistered,
