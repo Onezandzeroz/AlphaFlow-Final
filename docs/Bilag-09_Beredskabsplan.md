@@ -1,8 +1,8 @@
 # Beredskabsplan — AlphaFlow
 
 **AlphaAi Consult ApS** (CVR 46312058)
-**Dokumentversion:** 3.3
-**Dato:** September 2026
+**Dokumentversion:** 3.4
+**Dato:** Oktober 2026
 **Klassifikation:** Fortroligt — Compliance-dokumentation
 **System:** AlphaFlow (`alphaai-accounting` v1.0.0) — alphaflow.dk
 

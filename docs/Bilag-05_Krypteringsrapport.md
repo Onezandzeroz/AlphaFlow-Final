@@ -1,9 +1,9 @@
 # AlphaFlow — Krypteringsrapport
 
 **Dokumenttype:** Teknisk krypteringsrapport (data-at-rest, data-in-transit, key management)
-**Version:** 2.3
-**Dato:** September 2026
-**Versionshistorik:** 2.3 (september 2026): Sproom A/S erstatter Storecove som e-faktura Access Point — Sproom-webhooks verificeres nu med RSA-SHA256 (`X-Signature`) i stedet for HMAC; Tink tilføjet til eksterne HTTPS-kald. 2.2: tidligere udgave (Storecove-baseret).
+**Version:** 2.4
+**Dato:** Oktober 2026
+**Versionshistorik:** 2.4 (oktober 2026): Storecove-kode fuldt fjernet fra kodebasen — `STORECOVE_WEBHOOK_SECRET` env-var reference fjernet fra §3.8 dev-fallback-beskrivelse (Storecove-integrationen eksisterer ikke længere). 2.3 (september 2026): Sproom A/S erstatter Storecove som e-faktura Access Point — Sproom-webhooks verificeres nu med RSA-SHA256 (`X-Signature`) i stedet for HMAC; Tink tilføjet til eksterne HTTPS-kald. 2.2: tidligere udgave (Storecove-baseret).
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
 **Compliance-mål:** Erhvervsstyrelsen — Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023) og Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023)
 **Dataansvarlig:** AlphaAi Consult ApS (App Owner)
@@ -217,7 +217,7 @@ AlphaFlow verificerer signaturer på indgående webhooks fra fire integrationer 
 | TokenPay | `x-tokenpay-signature` | HMAC-SHA256 + `crypto.timingSafeEqual`. ✅ Udbedret (U-6/U-14). |
 | Flatpay webhook | `frisbii-signature` | `src/lib/flatpay-client.ts` — `createHmac('sha256')` + `timingSafeEqual` (Buffer) |
 
-**Dev-fallback:** ✅ Udbedret (U-6/U-14). Tidligere accepteredes alle webhooks hvis `STORECOVE_WEBHOOK_SECRET` (legacy Storecove-integration) eller `FLATPAY_WEBHOOK_SECRET` manglede. Dette er nu rettet — manglende secrets afvises i produktion (fail-closed). Efter Sproom-migreringen (september 2026) verificeres Sproom-webhooks asymmetrisk med Sprooms RSA-offentlige nøgle (`X-Signature`-header; nøgle hentes fra GET /api/webhooks/key eller pins via `SPROOM_WEBHOOK_PUBLIC_KEY`), og `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` håndhæver fail-closed adfærd i produktion. TokenPay bruger nu `crypto.timingSafeEqual` i stedet for string XOR.
+**Dev-fallback:** ✅ Udbedret (U-6/U-14). Tidligere accepteredes alle webhooks hvis `FLATPAY_WEBHOOK_SECRET` (eller den nu fuldt fjernede `STORECOVE_WEBHOOK_SECRET` fra den tidligere Storecove-integration, der er slettet fra kodebasen i oktober 2026) manglede. Dette er nu rettet — manglende secrets afvises i produktion (fail-closed). Efter Sproom-migreringen (september 2026) verificeres Sproom-webhooks asymmetrisk med Sprooms RSA-offentlige nøgle (`X-Signature`-header; nøgle hentes fra GET /api/webhooks/key eller pins via `SPROOM_WEBHOOK_PUBLIC_KEY`), og `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` håndhæver fail-closed adfærd i produktion. TokenPay bruger nu `crypto.timingSafeEqual` i stedet for string XOR.
 
 ### 3.9 Bilag-immutability & checksums
 

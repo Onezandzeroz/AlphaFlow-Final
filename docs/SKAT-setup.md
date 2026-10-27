@@ -1,5 +1,10 @@
 # SKAT RSU B2B Setup — NemVirksomhed Momsindberetning
 
+**Version:** 1.0
+**Dato:** Oktober 2026
+**Ansvarlig:** AlphaAi Consult ApS (CVR 46312058)
+**Omfang:** SKAT RSU B2B Web Service Gateway — momsindberetning (momsangivelse) for AlphaFlow-kunders virksomheder. **Kun momsindberetning** — årsopgørelse/selskabsskat dækkes ikke af denne integration.
+
 This document covers onboarding, certificate preparation, configuration, and
 testing of AlphaFlow's integration with Skattestyrelsen's RSU B2B Web Service
 Gateway for submitting Danish VAT returns (momsangivelse).
@@ -110,21 +115,25 @@ openssl pkcs12 -in certs/skat/client.p12 -clcerts -nokeys  -out certs/skat/clien
 # Then set SKAT_CERT_PATH + SKAT_KEY_PATH instead of SKAT_KEYSTORE_PATH
 ```
 
-### Truststore (CA bundle) — ✅ already in place
+### Truststore (CA bundle)
 
-The TLS CA bundles for both TEST and PROD environments have been downloaded
-from [github.com/skat/rsu-b2b-sample-client-java/pem](https://github.com/skat/rsu-b2b-sample-client-java/tree/master/pem)
-into `certs/skat/tls/`:
+The TLS CA bundle must be downloaded from
+[github.com/skat/rsu-b2b-sample-client-java/pem](https://github.com/skat/rsu-b2b-sample-client-java/tree/master/pem)
+or obtained from SKAT's onboarding email (`app.conf`), and placed in
+`certs/skat/` as `skat-ca.pem`:
 
-- **TEST environment**: `certs/skat/tls/skat-test-ca.pem` (GlobalSign intermediate + root)
-- **PROD environment**: `certs/skat/tls/skat-prod-ca.pem` (server + intermediate + root)
+- **TEST environment**: download `skat-test-ca.pem` from SKAT's GitHub repo
+  (GlobalSign intermediate + root) and save as `certs/skat/skat-ca.pem`
+- **PROD environment**: download `skat-prod-ca.pem` from SKAT's GitHub repo
+  (server + intermediate + root) and save as `certs/skat/skat-ca.pem`
+  (overwrite the test bundle when switching to production)
 
-Set `SKAT_TRUSTSTORE_PATH` in `.env` to the one matching your `SKAT_ENV`. The
-default in `.env.example` already points to the TEST bundle.
+Set `SKAT_TRUSTSTORE_PATH` in `.env` to `certs/skat/skat-ca.pem`. The
+default in `.env.example` already points to this path.
 
 > The `certs/skat/` directory is **gitignored** and has `chmod 700`. The
-> individual CA certs in `tls/` and `ws-security/` are public (from SKAT's
-> GitHub repo), but your future `client.p12` will be confidential. See
+> CA bundle is public (from SKAT's GitHub repo), but your future `client.p12`
+> will be confidential. See
 > `certs/skat/README.md` for the full file map.
 
 ---
@@ -151,9 +160,9 @@ SKAT_KEY_PASSWORD=<key passphrase>
 # SKAT_CERT_PATH=certs/skat/client.crt
 # SKAT_KEY_PATH=certs/skat/client.key
 
-# Truststore (already in place — downloaded from SKAT's GitHub repo)
-# Use skat-test-ca.pem for TEST env, skat-prod-ca.pem for PROD env
-SKAT_TRUSTSTORE_PATH=certs/skat/tls/skat-test-ca.pem
+# Truststore (download from SKAT's GitHub repo — see docs/SKAT-setup.md §3)
+# Save as certs/skat/skat-ca.pem (same file for TEST and PROD; overwrite when switching)
+SKAT_TRUSTSTORE_PATH=certs/skat/skat-ca.pem
 
 # AlphaFlow's own CVR (the RSU identifier registered with SKAT)
 ALPHAFLOW_CVR=<AlphaFlow CVR>
@@ -263,15 +272,17 @@ If SKAT rejects the request with a signature error:
 For production on Ubuntu with PM2:
 
 1. Store the production VOCES3 S1 `.p12` in `certs/skat/client.p12` (the
-   project's gitignored cert directory). The truststore (`skat-prod-ca.pem`)
-   is already in `certs/skat/tls/` — switch `SKAT_TRUSTSTORE_PATH` to it.
+   project's gitignored cert directory). Download the production truststore
+   (`skat-prod-ca.pem` from SKAT's GitHub repo) and save it as
+   `certs/skat/skat-ca.pem` (overwriting the test bundle) — then
+   `SKAT_TRUSTSTORE_PATH` already points to the correct path.
    Ensure the PM2 process user owns the keystore:
 
    ```bash
    chown -R <pm2-user>:<pm2-group> certs/skat
-   chmod 700 certs certs/skat certs/skat/tls certs/skat/ws-security
+   chmod 700 certs certs/skat
    chmod 600 certs/skat/client.p12                         # private keystore: owner-only
-   chmod 644 certs/skat/tls/*.pem certs/skat/ws-security/*.pem  # public CA certs
+   chmod 644 certs/skat/skat-ca.pem  # public CA bundle
    ```
 
 2. Set the production environment variables in the PM2 ecosystem config

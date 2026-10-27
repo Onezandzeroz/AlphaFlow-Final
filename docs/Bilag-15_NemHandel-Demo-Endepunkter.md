@@ -3,7 +3,8 @@
 **Fremsendt som bilag til anmodning om oplysninger — Hovedkrav nr. 3 (Bilag 2, 1, a, afsnit 10.1)**
 
 **Fremsendt af:** AlphaAi Consult ApS (CVR 46312058)
-**Dato:** September 2026
+**Version:** 1.0
+**Dato:** Oktober 2026
 **Kilde:** https://www.digitaliser.dk/nemhandel/vejledninger-nemhandel/vejledning-til-nemhandel-demo-miljoe
 **Senest opdateret af Digitaliseringsstyrelsen:** 07-03-2025
 

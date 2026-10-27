@@ -3,7 +3,8 @@
 **Fremsendt som bilag til anmodning om oplysninger — Hovedkrav nr. 3 (Bilag 2, 2, a, afsnit 10.1)**
 
 **Fremsendt af:** AlphaAi Consult ApS (CVR 46312058)
-**Dato:** September 2026
+**Version:** 1.0
+**Dato:** Oktober 2026
 **Adgangspunkt:** Sproom (Danmark) — certificeret Peppol Access Point (https://sproom.net)
 
 ---
@@ -226,9 +227,9 @@ persisteres på `EInvoiceSendEvent.failedProperties`.
 | # | Scenarie | Validering | Netværk | Status |
 |---|---|---|---|---|
 | 1 | Afsendelse af e-faktura | 0 fejl / 0 advarsler | 201 Created, leveret til Peppol TEST-modtager | ✅ BESTÅET |
-| 2 | Modtagelse af e-faktura | Totaler OK | RSA-verificeret webhook, MLR returneret | ✅ BESTÅET |
+| 2 | Modtagelse af e-faktura | Totaler OK | RSA-verificeret webhook, MLR genereret lokalt (sendes ved godkend/afvis) | ✅ BESTÅET |
 | 3 | Afsendelse af e-kreditnota | 0 fejl / 0 advarsler | 201 Created, leveret til Peppol TEST-modtager | ✅ BESTÅET |
-| 4 | Modtagelse af e-kreditnota | Totaler OK | RSA-verificeret webhook, MLR returneret | ✅ BESTÅET |
+| 4 | Modtagelse af e-kreditnota | Totaler OK | RSA-verificeret webhook, MLR genereret lokalt (sendes ved godkend/afvis) | ✅ BESTÅET |
 
 **✅ TESTBED-RAPPORT: ALLE FIRE SCENARIER BESTÅET**
 

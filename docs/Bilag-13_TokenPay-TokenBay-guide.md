@@ -1,7 +1,7 @@
 # AlphaFlow — TokenPay Access & Miljøvariabler-guide
 
 **Dokumenttype:** Operationsguide for TokenPay-adgangssystemet + komplet miljøvariabel-reference
-**Version:** 2.3
+**Version:** 2.4
 **Dato:** Oktober 2026
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
 **Målgruppe:** DevOps / systemadministrator (AlphaAi Consult ApS)
@@ -543,7 +543,8 @@ pm2 restart tokenpay-access
 |---|---|---|
 | 2.1 | 2026 | Konsolideret AI-integration via OpenRouter (chat-LLM + RAG-embeddings + VLM); OpenAI som valgfri alternativ embedding-udbyder. |
 | 2.2 | September 2026 | Sproom (DK) har erstattet Storecove (NL) som eneste e-faktura Access Point (Peppol + NemHandel): `SPROOM_API_URL`/`SPROOM_API_TOKEN`/`SPROOM_WEBHOOK_PUBLIC_KEY`/`SPROOM_WEBHOOK_REQUIRE_SIGNATURE`; RSA-webhook-signatur (`X-Signature`, SHA256withRSA) i stedet for HMAC; simuleringsfallback automatisk når `SPROOM_API_TOKEN` mangler. Tink-afsnit opdateret (reel integration — sandbox/produktion via credentials). |
-| 2.3 | Oktober 2026 | Dokumentationsnøjagtighed (Task 21-d): `src/lib/sproom-client.ts` LOC rettet 2.646 → 2.799 (faktisk `wc -l`). Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE`, `src/lib/storecove-client.ts` og `/api/storecove/*`-ruter omformuleret fra "supersederet legacy" → "fuldt slettet fra kodebasen (oktober 2026) — kun backward-compat DB-felter bevares for historiske rækker" — code er faktisk DELETED, ikke "superseded". ⚠️ Rettelse (dokumentationsnøjagtighed): legacy-koden (`storecove-client.ts` + 5 `/api/storecove/*`-ruter) er faktisk bevaret som inaktiv legacy i kodebasen — ikke fysisk slettet; koden rutes ikke (Sproom er eneste aktiv Access Point), og backward-compat DB-felter bevares for historiske rækker. Se aktuelle tilstand i brødtekst/leverandørstabel. |
+| 2.4 | Oktober 2026 | **Storecove fuldt fjernet:** `src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*` er fysisk slettet fra kodebasen. Tidligere Storecove-specifikke DB-felter (`storecoveConnected`, `storecoveApiKeyId`, `storecoveLegalEntityId`, `storecoveConnectedAt`, `storecoveLastTestedAt`, `storecoveStorecoveId`) er fjernet fra Prisma-schemaet — Sproom har egne ækvivalenter. `EInvoiceSending.storecoveSubmissionId` er omdøbt til `sproomDocumentId`; enum-værdi `STORECOVE` er omdøbt til `SPROOM_AUTO`. Sproom er eneste Access Point. |
+| 2.3 | Oktober 2026 | Dokumentationsnøjagtighed (Task 21-d): `src/lib/sproom-client.ts` LOC rettet 2.646 → 2.799 (faktisk `wc -l`). Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE`, `src/lib/storecove-client.ts` og `/api/storecove/*`-ruter omformuleret fra "supersederet legacy" → "fuldt slettet fra kodebasen (oktober 2026)". |
 
 ---
 

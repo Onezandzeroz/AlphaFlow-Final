@@ -3,8 +3,8 @@
 | **Felt** | **Oplysning** |
 |---|---|
 | **Dokumenttype** | Konsekvensanalyse / Data Protection Impact Assessment (DPIA) jf. GDPR Art. 35 + IT-risikovurdering jf. ISO/IEC 27005:2022 |
-| **Version** | 3.3 |
-| **Dato** | 2026 |
+| **Version** | 3.4 |
+| **Dato** | Oktober 2026 |
 | **Dataansvarlig** | AlphaAi Consult ApS (CVR 46312058) |
 | **System** | AlphaFlow (`alphaai-accounting` v1.0.0) — alphaflow.dk |
 | **Klassifikation** | Fortroligt — Compliance-dokumentation |
