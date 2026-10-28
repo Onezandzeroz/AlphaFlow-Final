@@ -1,6 +1,6 @@
 # AlphaFlow — Brugsvejledning
 
-**Version 3.3 — Oktober 2026**
+**Version 3.4 — Oktober 2026**
 
 > Komplet brugermanual for AlphaFlow, den danskudviklede cloud-baserede bogføringsplatform til små og mellemstore virksomheder. Udviklet af AlphaAi Consult ApS til overholdelse af Lov om bogføring (LOV nr. 700 af 24. maj 2022), BEK nr. 97 af 26. januar 2023 (Kravbekendtgørelsen), BEK nr. 98 af 26. januar 2023 (Anmeldelsesbekendtgørelsen) og GDPR.
 
@@ -61,15 +61,7 @@ AlphaFlow er **multi-tenant**: din virksomheds data er fuldt adskilt fra andre k
 
 ### Abonnementsplaner (korte)
 
-| Plan | Pris | Binding | Sæder | Nøglefunktioner |
-|------|------|---------|-------|-----------------|
-| Gratis | 0 kr./md. | Ingen | 1 | Basisbogføring, manuel OIOUBL, demo-bank |
-| Månedlig | 199 kr./md. | Ingen | 3 | Bankintegration (Demo + Tink), avancerede rapporter, dataeksport, iXBRL |
-| Pro (årlig) | 169 kr./md. | 12 md. | 5 | Alt i Månedlig + Hermes AI |
-| Business (2-årig) | 149 kr./md. | 24 md. | Ubegrænset | Alt i Pro + ubegrænsede sæder og større forbrugskvoter |
-| Business Extended (3-årig) | 145 kr./md. | 36 md. | Ubegrænset | Alt i Business + projektregnskab |
-
-Detaljer om funktioner pr. plan findes i afsnit 16. Alle nye brugere får 60 dages gratis prøveperiode.
+AlphaFlow tilbydes i flere abonnementsplaner (Gratis, Månedlig, Pro, Business, Business Extended) med forskelligt funktionsomfang og antal sæder. Aktuelle priser og bindingsperioder fremgår af AlphaFlows hjemmeside (alphaflow.dk/pricing). Nye brugere får 60 dages gratis prøveperiode.
 
 ---
 
@@ -487,9 +479,9 @@ Videnbasen er baseret på Bogføringsloven (Lov nr. 700 af 24. maj 2022) og stan
 
 Systemet indeholder to typer af konteringsvejledning, der tilsammen opfylder kravet:
 
-**1. Indbygget konteringsvejledning i standardkontoplanen.** Den Fællesoffentlige Standardkontoplan er repræsenteret af konstanten `OFFICIAL_STANDARD_CHART` (603 konti — 21 hovedkonto + 97 gruppekonto + 485 underkonti fra Erhvervsstyrelsens officielle 2026 Standardkontoplan-JSON, version 20260101) i `src/lib/official-standard-chart.ts`. `OFFICIAL_STANDARD_CHART` er eneste standardkontoplan i brug — Erhvervsstyrelsen kræver, at der *kun* er den nyeste reviderede standardkontoplan i brug (Bilag 12 U-24 gennemført Oktober 2026). Tidligere eksisterede også en legacy `PUBLIC_STANDARD_CHART` (~69 konti med 0xxx–9xxx-nummerering) i `src/lib/standard-chart-of-accounts.ts`, men denne er **helt fjernet** fra kodebasen (Bilag 12 U-24). Hver standardkonto har et indbygget `description`-felt (på dansk) samt et engelsk navn (`nameEn`) og forslag til tilsvarende FSR-konti (`suggestedFSR`). Eksempelvis er konto `5610 — Momsgæld til Skattestyrelsen` beskrevet som *"Skyldig udgående moms til Skattestyrelsen (netto)"*. Standardkontoplanen omfatter konti fordelt på driftsomkostninger (0xxx), driftsindtægter (1xxx), varelager/vareforbrug (2xxx), aktiver (3xxx), gæld (4xxx), egenkapital (5xxx), finansielle poster (6xxx), skat og moms (7xxx), årsafslutning (8xxx) og statistiske konti (9xxx).
+**1. Indbygget konteringsvejledning i standardkontoplanen.** Den Fællesoffentlige Standardkontoplan er repræsenteret af konstanten `OFFICIAL_STANDARD_CHART` (603 konti — 21 hovedkonto gruppekonto underkonti fra Erhvervsstyrelsens officielle 2026 Standardkontoplan-JSON, version 20260101) i `src/lib/official-standard-chart.ts`. `OFFICIAL_STANDARD_CHART` er eneste standardkontoplan i brug — Erhvervsstyrelsen kræver, at der *kun* er den nyeste reviderede standardkontoplan i brug (Bilag 12 U-24 gennemført Oktober 2026). Tidligere eksisterede også en legacy `PUBLIC_STANDARD_CHART` (~69 konti med 0xxx–9xxx-nummerering) i `src/lib/standard-chart-of-accounts.ts`, men denne er **helt fjernet** fra kodebasen (Bilag 12 U-24). Hver standardkonto har et indbygget `description`-felt (på dansk) samt et engelsk navn (`nameEn`) og forslag til tilsvarende FSR-konti (`suggestedFSR`). Eksempelvis er konto `5610 — Momsgæld til Skattestyrelsen` beskrevet som *"Skyldig udgående moms til Skattestyrelsen (netto)"*. Standardkontoplanen omfatter konti fordelt på driftsomkostninger (0xxx), driftsindtægter (1xxx), varelager/vareforbrug (2xxx), aktiver (3xxx), gæld (4xxx), egenkapital (5xxx), finansielle poster (6xxx), skat og moms (7xxx), årsafslutning (8xxx) og statistiske konti (9xxx).
 
-Auto-mapping har nu 4 faser: (0) hårdkodet FSR-til-officiel mapping-tabel (`FSR_TO_OFFICIAL_MAPPING` i `src/lib/fsr-official-mapping.ts` — dækker alle 64 standard AlphaFlow-konti, 100 % valideret mod `OFFICIAL_STANDARD_CHART`), (1) `suggestStandardMapping()` med validering (afviser forældede 0xxx-numre), (2) type-/gruppe-heuristikker for tilpassede konti og (3) LLM-assisteret semantisk mapping via Hermes/OpenRouter (`buildAiMapping()` i `src/lib/ai-standard-mapping.ts`) for konti, som heuristikken ikke kan placere. LLM-mappede konti markeres i UI'et med et lilla **AI**-badge (med `Sparkles`-ikon), mens heuristisk-mappede konti viser et gråt **Auto**-badge. Se detaljer i afsnit 5.1.2.
+Auto-mapping har nu 4 faser: (0) hårdkodet FSR-til-officiel mapping-tabel (`FSR_TO_OFFICIAL_MAPPING` i `src/lib/fsr-official-mapping.ts` — dækker alle 64 standard AlphaFlow-konti, 100 % valideret mod `OFFICIAL_STANDARD_CHART`), (1) `suggestStandardMapping` med validering (afviser forældede 0xxx-numre), (2) type-/gruppe-heuristikker for tilpassede konti og (3) LLM-assisteret semantisk mapping via Hermes/OpenRouter (`buildAiMapping` i `src/lib/ai-standard-mapping.ts`) for konti, som heuristikken ikke kan placere. LLM-mappede konti markeres i UI'et med et lilla **AI**-badge (med `Sparkles`-ikon), mens heuristisk-mappede konti viser et gråt **Auto**-badge. Se detaljer i afsnit 5.1.2.
 
 **2. Links til officielle 3.-partskilder.** PostingGuideAssistant-komponenten indeholder en konstant `SKAT_REFERENCES` med direkte links til de officielle danske konteringsvejledninger. Links vises i et dedikeret kort mærket *"Officiel konteringsvejledning (3. part)"* med `ExternalLink`-ikoner, og åbner i en ny fane (`target="_blank"`, `rel="noopener noreferrer"`):
 
@@ -504,10 +496,10 @@ Auto-mapping har nu 4 faser: (0) hårdkodet FSR-til-officiel mapping-tabel (`FSR
 > *(Vil blive indsat ved produktionsgennemgang — viser kortet med de fire officielle referencelinks)*
 
 **Filreferencer:**
-- Standardkontoplan-helpers (4-fase auto-mapping): `src/lib/standard-chart-of-accounts.ts` (type `StandardAccount`, `buildAutoMapping()` m.fl. — udelukkende `OFFICIAL_STANDARD_CHART`; legacy `PUBLIC_STANDARD_CHART` er helt fjernet, jf. Bilag 12 U-24).
+- Standardkontoplan-helpers (4-fase auto-mapping): `src/lib/standard-chart-of-accounts.ts` (type `StandardAccount`, `buildAutoMapping` m.fl. — udelukkende `OFFICIAL_STANDARD_CHART`; legacy `PUBLIC_STANDARD_CHART` er helt fjernet, jf. Bilag 12 U-24).
 - Officiel 2026 Standardkontoplan (603 konti — eneste standardkontoplan i brug): `src/lib/official-standard-chart.ts` (konstanten `OFFICIAL_STANDARD_CHART`, genereret fra Erhvervsstyrelsens JSON).
 - Hårdkodet FSR-til-officiel mapping-tabel (64 konti): `src/lib/fsr-official-mapping.ts` (konstanterne `FSR_TO_OFFICIAL_MAPPING` og `VALIDATED_MAPPING`).
-- LLM-assisteret mapping: `src/lib/ai-standard-mapping.ts` (funktionen `buildAiMapping()` — OpenRouter/Hermes, validering mod `OFFICIAL_STANDARD_CHART`, max 80 konti pr. kald).
+- LLM-assisteret mapping: `src/lib/ai-standard-mapping.ts` (funktionen `buildAiMapping` — OpenRouter/Hermes, validering mod `OFFICIAL_STANDARD_CHART`, max 80 konti pr. kald).
 - Søgbar combobox + type-badges: `src/components/chart-of-accounts/standard-account-combobox.tsx` og `src/components/chart-of-accounts/standard-mapping-data.ts` (kun `OFFICIAL_STANDARD_CHART` — 603 konti — via `MERGED_STANDARD_CHART`).
 - Auto-map-API: `src/app/api/accounts/standard-mapping/auto/route.ts` (kører 2 faser — heuristik + LLM — og returnerer `heuristicMapped`, `aiMapped`, `usedLlm` og per-konto LLM-begrundelse).
 - 3.-partslinks: `src/components/chart-of-accounts/posting-guide-assistant.tsx` (konstanten `SKAT_REFERENCES`).
@@ -591,12 +583,12 @@ Datagrundlaget er `MERGED_STANDARD_CHART` i `src/components/chart-of-accounts/st
 
 ##### b) Auto-map med 4 faser (inkl. AI)
 
-Klik på **Auto-map** for at lade systemet foreslå mapping for alle umappede konti. Auto-mappingen er implementeret i `buildAutoMapping()` (`src/lib/standard-chart-of-accounts.ts`) og API-ruten `/api/accounts/standard-mapping/auto` (`src/app/api/accounts/standard-mapping/auto/route.ts`) med 4 faser:
+Klik på **Auto-map** for at lade systemet foreslå mapping for alle umappede konti. Auto-mappingen er implementeret i `buildAutoMapping` (`src/lib/standard-chart-of-accounts.ts`) og API-ruten `/api/accounts/standard-mapping/auto` (`src/app/api/accounts/standard-mapping/auto/route.ts`) med 4 faser:
 
 | Fase | Metode | Beskrivelse |
 |------|--------|-------------|
 | 0 | Hårdkodet FSR-mapping | `FSR_TO_OFFICIAL_MAPPING` i `src/lib/fsr-official-mapping.ts` dækker alle 64 standard AlphaFlow-konti med korrekte 2026-numre (Bankkonto → 6480, Salg af varer → 1010, Varekøb → 1610, Lønninger → 2842, Husleje → 2030 osv.). 100 % valideret mod `OFFICIAL_STANDARD_CHART`. |
-| 1 | `suggestStandardMapping()` med validering | Foreslår mapping baseret på type/gruppe og kontonavn. Afviser forældede 0xxx-numre, der ikke findes i 2026-planen. |
+| 1 | `suggestStandardMapping` med validering | Foreslår mapping baseret på type/gruppe og kontonavn. Afviser forældede 0xxx-numre, der ikke findes i 2026-planen. |
 | 2 | Type-/gruppe-heuristikker | For tilpassede konti, der ikke er i FSR-tabellen: vælger en standardkonto ud fra kontotype (f.eks. ASSET → 6010 Anlægsaktiv, LIABILITY → 7330 Gæld til banker). |
 | 3 | LLM (Hermes/OpenRouter) | For konti, som heuristikken ikke kan placere: sender kontonavn + type + den fulde 603-konti officielle kontoplan som kontekst til Hermes-LLM'et, der semantisk forstår kontonavnet og foreslår den rette 2026-standardkonto. Maksimalt 80 konti pr. LLM-kald (token-sikkerhed). Hvert LLM-forslag valideres mod `OFFICIAL_STANDARD_CHART` — ukendte numre afvises. |
 
@@ -634,12 +626,22 @@ Journal-formularen auto-gemmer via `useDraftSync` og advarer ved navigation væk
 
 ### 5.3 Bilagsnummerering (journalPrefix)
 
-I overensstemmelse med Bogføringsloven forsynes hver journalpost automatisk med et fortløbende bilagsnummer. Formatet bestemmes af:
+I overensstemmelse med Bogføringsloven §§ 10-12 + §14 + BEK 97 Bilag 2 række 11 forsynes hver journalpost automatisk med et fortløbende bilagsnummer. Formatet bestemmes af:
 
 - `Company.journalPrefix` — standard præfiks er `"BIL"`.
-- `Company.nextJournalSequence` — fortløbende tæller, der inkrementeres pr. post.
+- `Company.nextJournalSequence` — fortløbende tæller, der inkrementeres atomisk pr. post.
 
-Du kan ændre præfikset i **Indstillinger → Virksomhed**. Tælleren kan ikke nulstilles (compliance-krav om fortløbende nummerering).
+Du kan ændre præfikset i **Indstillinger → Virksomhed**. Tælleren kan ikke nulstilles (compliance-krav om fortløbende nummerering) — der findes ingen UI-knap og intet admin-endpoint der kan nulstille `nextJournalSequence`. Tælleren fortsætter uendeligt (kun begrænset af PostgreSQLs `Int4` max ≈ 2,1 mia. bilag pr. tenant).
+
+**Sikkerhed af fuldstændighed (svar på Erhvervsstyrelsen kolonne I, række 2):**
+
+| Mekanisme | Implementering | Filkilde |
+|-----------|----------------|----------|
+| **Unikhed** | `@@unique([companyId, voucherNumber])` på `JournalEntry` — partial unique index der ekskluderer NULL (DRAFT-entries har `voucherNumber = NULL`). To POSTED entries kan aldrig få samme nummer — DB afviser med `P2002 unique constraint violation`. | `prisma/schema.prisma` |
+| **Fuldstændighed (verify-numbering)** | `GET /api/journal-entries/verify-numbering` — revisor-endpoint der bekræfter at nummerserien er ubrudt. Gennemgår alle POSTED JournalEntries pr. tenant, grupperer pr. år, parser voucherNumber (understøtter både `"BIL-2026-0042"` og rent numerisk `"42"`), og returnerer rapport med `totalGaps`, `totalDuplicates`, `totalOutOfOrder`. **Forventet resultat:** `totalGaps: 0, totalDuplicates: 0, totalOutOfOrder: 0`. RBAC: `DATA_READ` (VIEWER+, ACCOUNTANT, ADMIN, OWNER, AUDITOR). Rate-limited 2/min/user. Audit-logger hver kørsel. | `src/app/api/journal-entries/verify-numbering/route.ts` |
+| **Skærmbilleder** | Bilag-20a indeholder 3 skærmbilleder: (1) posteringsoversigt med fortløbende voucherNumber, (2) verify-numbering JSON-respons med `totalGaps: 0`, (3) DB-schema med `@@unique([companyId, voucherNumber])`. | `upload/Guide-Bilag-19a-20a-20b-20e.md` afsnit "BILAG 20a" |
+
+**Forskel på verify-numbering og verify-integrity:** `verify-numbering` tjekker **sekvens-integritet** (ingen huller i numre), mens `verify-integrity` (se Bilag-04 afsnit 2.10.5) tjekker **hash-chain integritet** (at bilag ikke er tamperet med). Begge endpoints er nødvendige for overholdelse af Bogføringsloven §14 + BEK 97 Bilag 2, række 11.
 
 ### 5.4 Hovedbog
 
@@ -756,14 +758,38 @@ Systemet opretter en automatisk journalpost, der overfører årets resultat til 
 
 ### 5.10 Annullering af poster (soft delete)
 
-I overensstemmelse med Bogføringsloven slettes bogførte poster aldrig fysisk. I stedet annulleres de (soft delete):
+I overensstemmelse med Bogføringsloven §§ 10-12 slettes bogførte poster aldrig fysisk. I stedet annulleres de (soft delete). AlphaFlow har to adskilte funktioner afhængigt af posteringens status:
 
-1. Find den bogførte post.
-2. Klik på **Annuller**.
+**For DRAFT-kladder (ikke-bogførte):** Brugeren kan klikke **Slet** i journal-UI. Dette kalder `DELETE /api/journal-entries/[id]`, der sætter `cancelled=true`, `status='CANCELLED'`, og `cancelReason=<reason>`. DRAFT-rækker er endnu ikke bogført (har ikke voucherNumber eller recordHash), så de kan slettes uden at påvirke regnskabet.
+
+**For POSTED-poster (bogførte):** Slet-knappen vises **ikke** i UI for POSTED. Hvis brugeren forsøger at slette via API direkte, afvises kaldet med HTTP 400 + fejlmeddelelsen **`"Only DRAFT journal entries can be cancelled"`** (filkilde: `src/app/api/journal-entries/[id]/route.ts`). For POSTED-transaktioner skal brugeren i stedet bruge **Annuller postering**-knappen i `/transactions`, som udfører en **modpostering (reverse)**:
+
+1. Find den POSTED post.
+2. Klik på **Annuller postering**.
 3. Angiv en årsag (f.eks. "Fejlbogføring — dobbeltkontering").
-4. Systemet opretter en modpost, der neutraliserer den oprindelige post.
+4. Systemet opretter en **modpostering** med reference **`REVERSAL-TX-<id8>`** hvor:
+   - Dato = originalposteringens dato (samme regnskabsperiode)
+   - Debet og kredit er **byttet om** på hver linje
+   - Samme momskode, samme projekt, samme valuta
+   - `status = 'POSTED'` — modposteringen er en fuldt bogført post
+5. Originalposteringen markeres `cancelled=true` (men slettes ikke — beløbsfelter forbliver intakte).
+6. Begge posteringer forbliver synlige i `/journal` med notice: *"Denne postering er annulleret — en modpostering har neutraliseret den (bogføringsloven §10-12)"*.
+
+I alle finansielle rapporter (hovedbog, P&L, balance, momsrapport, bankafstemning) netto-nulstiller original + modpostering til 0.
 
 Annullerede poster forbliver synlige i revisionsloggen med dato, bruger og årsag. Dette opfylder Bogføringslovens krav om uigendrkelig dokumentation.
+
+**Tre-niveau uforanderlighed for POSTED-poster:**
+
+| Niveau | Beskyttelse | Filkilde |
+|--------|-------------|----------|
+| 1. API-niveau | `"Only DRAFT journal entries can be cancelled"` ved DELETE på POSTED | `src/app/api/journal-entries/[id]/route.ts` |
+| 2. DB-triggers | PostgreSQL blokkerer UPDATE/DELETE på rækker hvor `recordHash IS NOT NULL` — selv for DBA | `prisma/journal-immutability.sql` |
+| 3. Hash-chain | SHA-256 chain via `recordHash`/`previousHash` — enhver mutation detekteres af `verify-integrity` | `src/lib/journal-hash-chain.ts` |
+
+**Tilbagedateringsbeskyttelse:** POSTED-poster kan ikke bogføres med dato i en **CLOSED** `FiscalPeriod` — API afviser med HTTP 400 *"Kan ikke bogføre i en lukket periode (YYYY-MM)"* (se afsnit 5.8).
+
+> **Skærmbilleder (Bilag-20b):** 4 skærmbilleder der visualiserer uforanderlighed: (1A) API-fejl `"Only DRAFT journal entries can be cancelled"` fra curl, (1B) DB-trigger-fejl fra `psql DELETE`, (2) modpostering med `REVERSAL-TX-<id8>`-reference i `/journal`, (3) kildekode for hash-chain + DB-triggers. Se `upload/Guide-Bilag-19a-20a-20b-20e.md` afsnit "BILAG 20b" for produktion. Se også Bilag-04 afsnit 2.3.1.10 for teknisk dokumentation.
 
 ### 5.11 Bilagsvedhæftning
 
@@ -843,13 +869,13 @@ Fra faktura-preview-dialogen klik på **Send e-faktura** (`SendEInvoiceDialog`):
 2. Har kunden et CVR-nummer, udfører systemet automatisk et pre-flight tjek af, at modtageren er tilmeldt netværket (participant-opslag via Sproom).
 3. Klik på **Send**.
 
-> **Kanal-validering (v3.3):** API'et (`/api/invoices/[id]/send-einvoice/route.ts`) accepterer nu både korte aliases og fulde enum-værdier for afsendelseskanalen. Tidligere blev den korte værdi `PEPPOL` afvist med fejlen *"Ugyldig kanal"*, fordi API'et kun accepterede den fulde enum-værdi `PEPPOL_BIS` (og tilsvarende `NEMHANDEL_OIOUBL`). Normaliseringsfunktionen `normalizeChannelToEnum()` (i `src/app/api/invoices/[id]/send-einvoice/route.ts`) mapper nu aliases til canonical enum-værdier: `OIOUBL → NEMHANDEL_OIOUBL`, `PEPPOL → PEPPOL_BIS` (case-insensitiv). Det betyder, at **Sproom (Peppol)**-kanalen i dropdownen nu virker korrekt. Gyldige kanal-værdier: `NEMHANDEL_OIOUBL`, `PEPPOL_BIS`, `SPROOM_AUTO` (Sproom Auto — vælger OIOUBL for DK modtagere og Peppol BIS 3 for international) — eller aliases `OIOUBL`, `PEPPOL`.
+> **Kanal-validering (v3.3):** API'et (`/api/invoices/[id]/send-einvoice/route.ts`) accepterer nu både korte aliases og fulde enum-værdier for afsendelseskanalen. Tidligere blev den korte værdi `PEPPOL` afvist med fejlen *"Ugyldig kanal"*, fordi API'et kun accepterede den fulde enum-værdi `PEPPOL_BIS` (og tilsvarende `NEMHANDEL_OIOUBL`). Normaliseringsfunktionen `normalizeChannelToEnum` (i `src/app/api/invoices/[id]/send-einvoice/route.ts`) mapper nu aliases til canonical enum-værdier: `OIOUBL → NEMHANDEL_OIOUBL`, `PEPPOL → PEPPOL_BIS` (case-insensitiv). Det betyder, at **Sproom (Peppol)**-kanalen i dropdownen nu virker korrekt. Gyldige kanal-værdier: `NEMHANDEL_OIOUBL`, `PEPPOL_BIS`, `SPROOM_AUTO` (Sproom Auto — vælger OIOUBL for DK modtagere og Peppol BIS 3 for international) — eller aliases `OIOUBL`, `PEPPOL`.
 
 Fakturaen konverteres til OIOUBL- eller Peppol BIS-XML (kreditnotaer som type 381 med reference til den oprindelige faktura) og sendes som rå XML til AlphaFlows integrerede Access Point **Sproom** (dansk selskab), som videresender i det valgte format. Sproom håndterer som Access Point den tekniske distribution: NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag samt schema/schematron-validering og MLR/AR-svar (Message Level Response/Application Response).
 
 Leveringsstatus spores pr. dokument i `EInvoiceSending`-tabellen (kanal, format, status, retry-count, messageId) med en komplet, append-only statushistorik (`EInvoiceSendEvent`). Status opdateres i realtid via Sprooms webhooks, og en outbox-poller (hver 10. minut) fungerer som sikkerhedsnet med automatisk genforsøg af fejlede afsendelser. Se leveringsstatusser i afsnit 6.5.
 
-> **Begrænsning:** Afsendelse via Sproom (alle e-faktura-kanaler) kræver `AUTO_EINVOICE`-feature — dvs. et betalende abonnement (Månedlig eller derover). Gratis-planen kan modtage e-fakturaer og downloade OIOUBL-XML manuelt, men ikke afsende. Auto-e-faktura ved finalize aktiveres i Indstillinger → E-faktura (afsnit 16.3). Der gælder en månedlig forbrugskvote pr. plan (afsendelser + modtagelser): Gratis 10, Månedlig 30, Pro 50, Business 100, Business Extended 150 — ekstra forbrug kan tilkøbes (se afsnit 16.9).
+> **Begrænsning:** Afsendelse via Sproom (alle e-faktura-kanaler) kræver `AUTO_EINVOICE`-feature — dvs. et betalende abonnement (Månedlig eller derover). Gratis-planen kan modtage e-fakturaer og downloade OIOUBL-XML manuelt, men ikke afsende. Auto-e-faktura ved finalize aktiveres i Indstillinger → E-faktura (afsnit 16.3). Der gælder månedlige forbrugskvoter pr. plan (afsendelser + modtagelser) — se aktuelle tal i appen eller på alphaflow.dk/pricing.
 
 ### 6.5 Leveringsstatus (e-faktura afsendelse)
 
@@ -897,7 +923,7 @@ Klik på **Vis XML** åbner en dialog med to faner:
 | Fane | Indhold | Kilde |
 |------|---------|-------|
 | **Rå XML** | Den oprindelige XML, der blev modtaget fra Sproom — dvs. den ubehandlede Peppol BIS 3.0- eller OIOUBL 2.1-faktura, som afsenderen sendte. Anvendes til fejlfinding og afstemning. | `EInvoiceReceived.rawXml` (gemt ved modtagelse fra Sprooms DocumentReceived-webhook) |
-| **Svar XML** | Den XML, AlphaFlow genererede som svar ved bogføringen. For Peppol BIS-fakturaer er det en **InvoiceResponse** (UBL 2.1, namespace `urn:oasis:names:specification:ubl:schema:xsd:InvoiceResponse-2.1`) med per-line response codes. For OIOUBL-fakturaer genereres en **Application Response**, og for MLR (Message Level Response) genereres et MESSAGE_LEVEL_RESPONSE-dokument. | Genereret af `generateInvoiceResponse()` i `src/lib/einvoice-response.ts` (linje 193–282), kaldet fra API-ruten `/api/invoices/received/[id]` (linje 510–526) ved bogføring. |
+| **Svar XML** | Den XML, AlphaFlow genererede som svar ved bogføringen. For Peppol BIS-fakturaer er det en **InvoiceResponse** (UBL 2.1, namespace `urn:oasis:names:specification:ubl:schema:xsd:InvoiceResponse-2.1`) med per-line response codes. For OIOUBL-fakturaer genereres en **Application Response**, og for MLR (Message Level Response) genereres et MESSAGE_LEVEL_RESPONSE-dokument. | Genereret af `generateInvoiceResponse` i `src/lib/einvoice-response.ts`, kaldet fra API-ruten `/api/invoices/received/[id]` ved bogføring. |
 
 Svar XML'et har et badge der viser dokumenttypen: `INVOICE_RESPONSE` (Peppol BIS), `APPLICATION_RESPONSE` (OIOUBL) eller `MESSAGE_LEVEL_RESPONSE` (MLR) — dette gør det nemt at se, hvilken responsstandard der blev genereret lokalt hos AlphaFlow (se afsnit 6.6.4 for hvornår svaret rent faktisk sendes til afsenderen).
 
@@ -908,7 +934,7 @@ Når en Peppol BIS-faktura bogføres i AlphaFlow, genereres automatisk en **Invo
 - **OK-respons** pr. linje med beskrivelsen *"Posted to journal: {kontonavn}"* — hvor `{kontonavn}` er navnet på den FSR-konto, linjen er blevet bogført på (f.eks. *"Posted to journal: Varekøb"*).
 - Dette giver afsenderen præcis viden om, hvilke fakturalinjer der er accepteret og bogført, og hvilken konto de er landet på.
 
-InvoiceResponse'en genereres af `generateInvoiceResponse()` i `src/lib/einvoice-response.ts` (linje 193–282) og kaldes fra bogførings-API-ruten `/api/invoices/received/[id]` (linje 510–526). Den rå XML gemmes på fakturaen og kan ses via "Vis XML"-knappen (se afsnit 6.6.1).
+InvoiceResponse'en genereres af `generateInvoiceResponse` i `src/lib/einvoice-response.ts` og kaldes fra bogførings-API-ruten `/api/invoices/received/[id]`. Den rå XML gemmes på fakturaen og kan ses via "Vis XML"-knappen (se afsnit 6.6.1).
 
 > **Bemærkning:** For OIOUBL 2.1-fakturaer genereres en tilsvarende Application Response (samme struktur, andet namespace), og for MLR-svar genereres et MESSAGE_LEVEL_RESPONSE-dokument. Type-badgeet i "Vis XML"-dialogen viser, hvilken responsstandard der blev brugt.
 
@@ -922,9 +948,9 @@ Modtagelse og håndtering af e-fakturaer genererer flere forskellige slags "svar
 
 | Tidspunkt | Hvad genereres | Hvad sendes til afsenderen |
 |-----------|---------------|----------------------------|
-| **Ved modtagelse** (`src/lib/invoice-receiver.ts` linje 112–133) | En OIOUBL **Application Response** (for OIOUBL-fakturaer) eller en Peppol **Message Level Response (MLR)** (for Peppol BIS-fakturaer) genereres lokalt og gemmes i feltet `responseXml` på `ReceivedInvoice`-rækken. | **Ingenting** sendes automatisk til afsenderen ved modtagelse. AR/MLR er kun gemt lokalt som udkast. |
-| **Ved godkend/afvis** (`src/app/api/invoices/received/[id]/route.ts` linje 215–285 → `notifySproomOfDecision()` → `sproomClient.setDocumentState()`) | — | Sproom informeres om beslutningen via `POST /api/documents/{id}/state` (positiv: `TransmissionCompleted`; negativ: `ApplicationReponseBusinessReject`), hvorefter Sproom sender en Application Response til afsenderens Access Point. |
-| **Ved bogføring** (`/api/invoices/received/[id]` linje 510–526 → `generateInvoiceResponse()`) | En Peppol BIS **InvoiceResponse** (UBL 2.1, `InvoiceResponse-2.1`) genereres med per-line OK-respons (`Posted to journal: {kontonavn}`) og gemmes lokalt (`responseXml`, `responseType='INVOICE_RESPONSE'`). | **Ingenting** sendes automatisk til afsenderen ved bogføring — InvoiceResponse er intern dokumentation. |
+| **Ved modtagelse** (`src/lib/invoice-receiver.ts`) | En OIOUBL **Application Response** (for OIOUBL-fakturaer) eller en Peppol **Message Level Response (MLR)** (for Peppol BIS-fakturaer) genereres lokalt og gemmes i feltet `responseXml` på `ReceivedInvoice`-rækken. | **Ingenting** sendes automatisk til afsenderen ved modtagelse. AR/MLR er kun gemt lokalt som udkast. |
+| **Ved godkend/afvis** (`src/app/api/invoices/received/[id]/route.ts` → `notifySproomOfDecision` → `sproomClient.setDocumentState`) | — | Sproom informeres om beslutningen via `POST /api/documents/{id}/state` (positiv: `TransmissionCompleted`; negativ: `ApplicationReponseBusinessReject`), hvorefter Sproom sender en Application Response til afsenderens Access Point. |
+| **Ved bogføring** (`/api/invoices/received/[id]` → `generateInvoiceResponse`) | En Peppol BIS **InvoiceResponse** (UBL 2.1, `InvoiceResponse-2.1`) genereres med per-line OK-respons (`Posted to journal: {kontonavn}`) og gemmes lokalt (`responseXml`, `responseType='INVOICE_RESPONSE'`). | **Ingenting** sendes automatisk til afsenderen ved bogføring — InvoiceResponse er intern dokumentation. |
 
 > **Vigtigt:** AlphaFlow sender **IKKE** en automatisk Application Response / MLR umiddelbart ved modtagelse af en e-faktura. Svar sendes først, når brugeren aktivt godkender eller afviser fakturaen i E-faktura Indbakken. Hvis Erhvervsstyrelsen/skemaet kræver en auto-kvittering ved modtagelse (schematron-fejl eller ren modtagelsesbekræftelse), er dette et implementationsgap, der skal løses separat.
 
@@ -1122,19 +1148,56 @@ Gå til **Moms & Årsregnskab → Momsrapport** (eller `/annual-report` med VAT-
 
 ### 9.3 Indsendelse af momsangivelse via SKAT-API
 
-AlphaFlow integrerer med Skattestyrelsens Moms-API (OAuth2 client_credentials) til automatisk indsendelse af momsangivelse.
+AlphaFlow integrerer med Skattestyrelsens **RSU B2B Web Service Gateway (NemVirksomhed)** for automatisk indsendelse af momsangivelse. Integrationen implementerer de samme 3 SOAP-web services som Skattestyrelsens officielle Java-sample-klient (`github.com/skat/rsu-b2b-sample-client-java`) — i TypeScript med native mTLS + WS-Security signering.
 
 > **Bemærkning:** Integrationen omfatter **kun momsangivelse**. Der er **ikke** indberetning af årsopgørelse, e-indkomst, AM-bidrag eller løn via SKAT-API i AlphaFlow.
 
-**Indsendelse:**
+**Sikkerhedsstack:**
+
+| Lag | Implementering | Filkilde |
+|-----|----------------|----------|
+| **Transport** | HTTPS med **mutual TLS (mTLS)** — AlphaFlow præsenterer sit **VOCES3 System (S1)**-certifikat; SKAT verificerer det; SKAT præsenterer sit server-certifikat; AlphaFlow verificerer det mod truststore (CA bundle). | `src/lib/skat-keystore.ts` |
+| **Message** | **WS-Security** XML-DSig signatur over `<wsu:Timestamp>` + `<soap:Body>` + `<wsse:BinarySecurityToken>` med rsa-sha1 signatur-algoritme, exclusive C14N canonicalization, sha1 digest, DirectReference key identifier. | `src/lib/skat-ws-security.ts` |
+| **SOAP-services** | 3 services (se tabel nedenfor) | `src/lib/skat-soap-client.ts` |
+| **Orkestrering** | `prepareVATSubmission` → `submitVATToSkat` → `fetchVATReceipt` med DB-persistens + audit-log | `src/lib/vat-submit.ts` |
+
+**De 3 SOAP-services:**
+
+| # | Service | Formål |
+|---|---------|--------|
+| 1 | `VirksomhedKalenderHent` | Hent momsrapporteringsperioder + frister for et SE-nummer |
+| 2 | `ModtagMomsangivelseForeloebig` | Indsend en DRAFT momsangivelse (17 MomsAngivelse-felter) |
+| 3 | `MomsangivelseKvitteringHent` | Hent kvitterings-PDF efter kunden har godkendt med MitID |
+
+**Indsendelsesflow (3-trin):**
+
+```
+AlphaFlow ──(1) ModtagMomsangivelseForeloebig──▶ SKAT test/prod
+                    (SOAP + mTLS + WS-Security)
+          ◀── transactionId + deep link ──
+
+Customer ──(2) approves with MitID on TastSelv Erhverv──▶ SKAT
+
+AlphaFlow ──(3) MomsangivelseKvitteringHent──▶ SKAT
+          ◀── receipt PDF (base64) ──
+```
+
+AlphaFlow er en **Registered System Provider (RSU)** og indsender en **DRAFT** momsangivelse på vegne af kundens virksomhed. Den juridiske enhed (kunden) skal derefter godkende kladden med **MitID** på **TastSelv Erhverv** via en deep link som AlphaFlow returnerer. Først efter godkendelse er momsangivelsen juridisk indsendt. AlphaFlow henter automatisk kvitterings-PDF efter godkendelse.
+
+**Indsendelse via UI:**
 
 1. Gå til **Moms & Årsregnskab → Momsrapport**.
-2. Vælg periode og gennemgå beregningen.
+2. Vælg periode (kvartal eller årligt) og gennemgå beregningen.
 3. Klik på **Indberet til Skattestyrelsen**.
-4. Systemet sender momsangivelsen via `/api/vat-report/submissions`.
-5. Modtag kvittering med reference-ID og indsendelsesdato.
+4. Systemet sender momsangivelsen via `POST /api/vat-report/submit` (SOAP-kald til `ModtagMomsangivelseForeloebig`).
+5. UI viser en **"Gå til TastSelv Erhverv"**-knap med den deep link SKAT returnerede.
+6. Kunden godkender med MitID på TastSelv Erhverv.
+7. Tilbage i AlphaFlow, klik **"Hent kvittering"** — kalder `MomsangivelseKvitteringHent` og gemmer kvitterings-PDF.
+8. Kvittering kan downloades fra `/api/vat-report/<submissionId>/receipt.pdf`.
 
-> **Forudsætning:** Moms-API-integrationen kræver, at `SKAT_CLIENT_ID` og `SKAT_CLIENT_SECRET` er konfigureret på serveren, og at virksomheden er tilmeldt TastSelv Erhverv. Hvis API-nøgler mangler, falder integrationen tilbage til en simulation.
+> **Forudsætning:** Moms-API-integrationen kræver at **VOCES3 System (S1)-certifikat** er konfigureret på serveren (`SKAT_KEYSTORE_PATH` + `SKAT_KEYSTORE_PASSWORD` + `SKAT_KEY_PASSWORD` + `SKAT_TRUSTSTORE_PATH` + `SKAT_ENV` SOAP-endpoints) — se `docs/SKAT-setup.md` for fuld opsætning. Hvis credentials mangler, kører integrationen i **simuleringstilstand** (UI'en virker end-to-end, men ingen reelle kald til SKAT). Dette er default for udvikling.
+
+> **Aftale-status:** AlphaAi Consult ApS har modtaget **instruktioner og test-certifikat (Integrationstest S1)** fra Skattestyrelsen (kontakt: `momsapi@sktst.dk`) og har implementeret integrationen i produktion-klar stand. Den **formelle aftale med Skattestyrelsen** er under indgåelse og fremsendes som separat bilag så snart den er underskrevet. Se Bilag-12 Udbedringsplan U-8 for status og tidsplan.
 
 ### 9.4 VATSubmission-statusser
 
@@ -1240,16 +1303,45 @@ Systemet validerer filen før eksport (obligatoriske felter, CVR-format, landeko
 
 ### 10.9 Årlig XBRL/CSV-rapport
 
-AlphaFlow kan generere årsrapporten i to formater:
+AlphaFlow kan generere årsrapporten i to formater, der tilsammen opfylder Erhvervsstyrelsens krav om "Regnskab Basis" (CSV) og "Regnskab Special" (iXBRL):
 
 | Format | Endpoint | Brug |
 |--------|----------|------|
-| XBRL | `/api/reports/annual-xbrl` | Årsrapport til Erhvervsstyrelsen |
-| CSV | `/api/reports/annual-csv` | Årsrapport i regnearksformat |
+| **Regnskab Basis (CSV)** | `GET /api/reports/annual-csv` | Årsrapport i regnearksformat (SKAT-format) til Erhvervsstyrelsen |
+| **Regnskab Special (iXBRL)** | `GET /api/reports/annual-xbrl` | Årsrapport som iXBRL med DCCA-taxonomy tagging |
 
 Tilgås fra **Moms & Årsregnskab → Årsrapport**-tabben. Klik på **Download iXBRL** eller **Download CSV**.
 
 > **Krav:** iXBRL-eksport kræver `ANNUAL_REPORT_IXBRL`-feature (Månedlig+).
+
+**CSV-format (Regnskab Basis) — tekniske detaljer:**
+
+| Egenskab | Værdi | Filkilde |
+|----------|-------|----------|
+| Encoding | **UTF-8 med BOM** (`\uFEFF` i starten — sikrer korrekt visning af danske tegn ÆØÅ i Excel) | `src/lib/annual-report-csv.ts` |
+| Separator | **Semikolon (`;`)** — Excel-kompatibelt for danske locale | `src/lib/annual-report-csv.ts` |
+| Linjeskift | `\n` (Unix) | `src/lib/annual-report-csv.ts` |
+| Sektioner | (1) RESULTATOPGØRELSE (indkomstopgørelse), (2) BALANCE (balanceopgørelse), (3) STATUSOPGØRELSE (ændringer i egenkapital) + momsoplysninger | `src/lib/annual-report-csv.ts` |
+| Beløbsformat | Heltal uden decimaler (avrundet via `Math.round(n * 100) / 100`) | `src/lib/annual-report-csv.ts` + `fmt`-helper |
+| Footer | "Genereret af AlphaFlow — Regnskab Basis (SKAT format)" + CVR-reference | `src/lib/annual-report-csv.ts` |
+| Indhold | Resultatopgørelse: nettoomsætning, øvrige indtægter, vareforbrug, bruttofortjeneste, lønninger, øvrige driftsomkostninger, finansielle poster, årets resultat før skat, skat, årets resultat. Balance: likvide beholdninger, bank, tilgodehavender, varelager, anlægsaktiver, øvrige aktiver, total aktiver, kreditorer, kortfristet gæld, langfristet gæld, total gæld, egenkapital. Statusopgørelse: egenkapital pr. 1. jan, årets resultat, private hævninger, egenkapital pr. 31. dec. Momsoplysninger: udgående, indgående, netto moms. | `src/lib/annual-report-csv.ts` |
+| Validering | Genereres udelukkende fra POSTED, ikke-annullerede JournalEntries for valgt år — reversals (`REVERSAL-TX-*`) udelukkes automatisk fra beløbene | `src/lib/vat-utils.ts` |
+
+**iXBRL-format (Regnskag Special) — tekniske detaljer:**
+
+| Egenskab | Værdi | Filkilde |
+|----------|-------|----------|
+| Taxonomy | **DCCA (Danish Commerce and Companies Agency)** basis — namespace `http://xbrl.dcca.dk/dk-gaap/ci/2020-01-01` | `src/lib/annual-report-xbrl.ts` |
+| Scope | **Basis DCCA-taxonomy-eksport — IKKE en fuld dimensionel DCCA-indberetning.** Outputtet indeholder ca. 21 kerne-facts (revenue, costOfGoods, grossProfit, operatingExpenses, operatingProfit, financialIncome, financialExpenses, profitBeforeTax, tax, netResult, cash, receivables, inventory, fixedAssets, totalAssets, payables, shortTermDebt, longTermDebt, totalLiabilities, shareCapital, retainedEarnings, totalEquity) uden dimensionelle facts (sektorer/segmenter), footnotes eller supplerende tabeller. Filen kan derfor kræve manuel komplettering før endelig indsendelse til Erhvervsstyrelsen. | `src/lib/annual-report-xbrl.ts` |
+| Kontekster | 2 kontekster: `c1` (instant pr. 31/12) + `c2` (duration 1/1–31/12) | `src/lib/annual-report-xbrl.ts` |
+| Unit | 1 unit: `iso4217:DKK` | `src/lib/annual-report-xbrl.ts` |
+| Identifier | CVR med scheme `http://cvr.dk` (paddes til 9 cifre) | `src/lib/annual-report-xbrl.ts` |
+| Tagging | `ix:nonFraction`-tagging per fact | `src/lib/annual-report-xbrl.ts` |
+| RBAC | Endpoint er RBAC-beskyttet (`REPORTS_EXPORT`) | `src/app/api/reports/annual-xbrl/route.ts` |
+
+> **Bilag-19a-rev:** Ved indsendelse til Erhvervsstyrelsen vedhæftes en aktuel CSV-fil (`Bilag-19a-rev-regnskab-basis.csv`) produceret fra demo-tenantens 2026-regnskab. Filen genereres på VPS via endpointet `GET /api/reports/annual-csv?year=2026` (se `upload/Guide-Bilag-19a-20a-20b-20e.md` afsnit "BILAG 19a rev." for trin-for-trin guide). Filen verificerer at det faktiske output opfylder formatkravene (UTF-8 BOM, semikolon-separator, danske overskrifter, sektioner).
+
+> **Præcisering af iXBRL (Regnskab Special):** Eksporten er en **basis DCCA-taxonomy-eksport**, ikke en fuld dimensionel DCCA-indberetning. Dette er bevidst valgt for at levere de kerne-krævede facts uden kompleks dimensionel tagging. Virksomheder med behov for dimensionel indberetning (f.eks. koncern-segmenter) skal komplettere filen manuelt før endelig indsendelse. Se Bilag-04 afsnit 2.8 for yderligere teknisk dokumentation.
 
 ### 10.10 Andre rapporter og widgets
 
@@ -1497,7 +1589,7 @@ AlphaFlow udfører automatisk krypteret backup af din virksomheds data via node-
 | Timebackup | `5 * * * *` | Hver time | Seneste 24 |
 | Dagsbackup | `15 2 * * *` | Hver dag kl. 02:15 | Seneste 30 |
 | Ugebackup | `30 3 * * 1` | Hver mandag kl. 03:30 | Seneste 52 |
-| Månedsbackup | `0 4 1 * *` | 1. i måneden kl. 04:00 | Seneste 62 / **5 år+** (62 måneder = 5 år + 2 måneder margin) |
+| Månedsbackup | `0 4 1 * *` | 1. i måneden kl. 04:00 | Seneste 62 / **5 år+** (62 måneder = 5 år måneder margin) |
 | Oprydning | `0 3 * * *` | Daglig kl. 03:00 | Sletter udløbne |
 | Manuel | (on-demand) | Når du klikker | 90 dage |
 
@@ -1548,7 +1640,7 @@ Backup-siden (`BackupPage`) viser:
 - Alle backupper (manuelle, automatiske, planlagte).
 - SHA-256 checksum pr. fil.
 - Filstørrelse.
-- Udløbsdato (typisk 62 måneder for månedlige (5 år + 2 måneder margin)).
+- Udløbsdato (typisk 62 måneder for månedlige (5 år måneder margin)).
 - Status (completed / failed).
 - Scheduler-status.
 
@@ -1737,12 +1829,11 @@ Standardindstillinger:
 | Årsrapport iXBRL | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Hermes AI-assistent | ❌ | ❌ | ✅ | ✅ | ✅ |
 | Auto e-faktura (afsendelse via Sproom — Peppol/NemHandel) | ❌ | ✅ | ✅ | ✅ | ✅ |
-| E-faktura-forbrug pr. md. (send + modtag) | 10 | 30 | 50 | 100 | 150 |
-| Hermes AI-beskeder pr. md. | 0 | 0 | 200 | 500 | 1.000 |
+| Månedlige forbrugskvoter (e-faktura + Hermes AI) | Basis | Højere | Højere | Høj | Højst |
 | Ubegrænsede sæder | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Projektregnskab | ❌ | ❌ | ❌ | ❌ | ✅ |
 
-> **Forbrugskvoter og tilkøb:** E-faktura-forbruget (afsendelser + modtagelser, inkl. kreditnotaer) og Hermes-beskeder måles pr. måned. Gratis-planen kan **modtage** e-fakturaer og downloade OIOUBL-XML manuelt — **afsendelse** via Sproom kræver en betalende plan. Ekstra e-faktura-forbrug tilkøbes i faste pakker à 200/500/1.000/2.000 transaktioner til 1,0 kr. pr. transaktion; Hermes-pakker (250/500/1.000/2.000 beskeder) aftales via supporten. Pakkerne aktiveres i dag af App Ejer via oversight — selvbetjent tilkøb i appen er endnu ikke tilgængeligt (🚧).
+> **Forbrugskvoter og tilkøb:** E-faktura-forbruget (afsendelser + modtagelser, inkl. kreditnotaer) og Hermes-beskeder måles pr. måned. Gratis-planen kan **modtage** e-fakturaer og downloade OIOUBL-XML manuelt — **afsendelse** via Sproom kræver en betalende plan. Ekstra e-faktura-forbrug og Hermes-beskeder kan tilkøbes i faste pakker — se aktuelle priser og pakkestørrelser i appen eller på alphaflow.dk/pricing. Pakkerne aktiveres i dag af App Ejer via oversight — selvbetjent tilkøb i appen er endnu ikke tilgængeligt (🚧).
 
 > **Prisforbehold:** Specifikke priser og bindingsperioder fremgår af `/pricing`. Priser for årlige og flerårige planer opkræves som et samlet beløb for bindingsperioden. Gratis og Månedlig har ingen binding; årlige planer fornyes automatisk til Månedlig ved udløb, medmindre andet er aftalt.
 
@@ -1832,6 +1923,22 @@ Kunden tilmelder sig frivilligt ved at:
 Når samtykket er givet, håndterer AlphaFlow automatisk tilmeldingen via den integrerede Sproom Access Point (`src/lib/sproom-client.ts` + ruterne `/api/sproom/register-nemhandel` og `/api/sproom/peppol` — med participant-verificering i Peppol). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport og SMP/NHR-opslag varetages af Sproom som Access Point. Se også afsnit 16.3 (E-faktura).
 
 > **Henvisning:** Kravene er defineret i Bilag 2 (Erhvervsstyrelsen Gennemgang) række 47 (Krav 8) og række 48 (Krav 9).
+
+**Tre meddelelsesveje (svar på Erhvervsstyrelsen kolonne G+I, række 16):**
+
+AlphaFlow informerer kunderne om NemHandelsregisteret via **tre adskilte meddelelsesveje**, så både nye og eksisterende kunder når effektivt:
+
+| # | Meddelelsesvej | Hvem rammes | Implementering | Filkilde |
+|---|----------------|-------------|-----------------|----------|
+| 1 | **Global banner** | Alle brugere der ser en side hvor `einvoiceEnabled === false` (vises bl.a. på `/dashboard`, `/invoices`, `/settings-edelivery`) | `NemHandelGlobalBanner`-komponent øverst på siden med teksten *"AlphaFlow er **registreret** som digitalt standardbogføringssystem hos Erhvervsstyrelsen"* + CTA-knap til e-faktura-indstillinger | `src/components/layout/nemhandel-global-banner.tsx` |
+| 2 | **Indstillings-kort** | Brugere der besøger `/settings-edelivery` og ikke har aktiveret e-faktura | `NemHandelRegistrationNotice`-komponent — afviseligt kort der forklarer fordelene ved NemHandelsregisteret + CTA-knap | `src/components/settings/nemhandel-registration-notice.tsx` |
+| 3 | **E-mail** | (a) Nye kunder — automatisk umiddelbart efter verifikations-e-mail ved registrering (`trigger: 'new_customer'`); (b) Eksisterende kunder — batch-udsendelse af App Ejer via `POST /api/oversight/notify-nemhandel` (`trigger: 'existing_customer_batch'`) | `notifyNewCustomerAboutNemHandel` + `notifyExistingCustomersBatch` med e-mail-skabelon *"AlphaFlow er **registreret** som digitalt standardbogføringssystem hos Erhvervsstyrelsen"* | `src/lib/nemhandel-notification.ts` + `src/lib/email-templates.ts` |
+
+**"Godkendt" → "registreret" rettelse (svar på Erhvervsstyrelsen kolonne I, række 16):**
+
+Erhvervsstyrelsen bemærkede i runde 2: *"Systemet er registreret ikke godkendt, venligst ret godkendt til registreret i både meddelelse og banner."* Dette er **gennemført** i alle 3 kildefiler — ordlyden er nu konsekvent *"AlphaFlow er **registreret** som digitalt standardbogføringssystem hos Erhvervsstyrelsen"* (ikke "godkendt"). Bekræftet via grep i `src/components/layout/nemhandel-global-banner.tsx`, `src/components/settings/nemhandel-registration-notice.tsx` og `src/lib/email-templates.ts`. Bogføringssystemer **anmeldes og registreres** hos Erhvervsstyrelsen — de "godkendes" ikke (jvf. Anmeldelsesbekendtgørelsen BEK 98).
+
+> **Skærmbilleder (Bilag-20e):** 3 skærmbilleder der visualiserer de 3 meddelelsesveje: (1) global banner på `/settings-edelivery` med "registreret"-ordlyd, (2) NemHandelsregisteret-kort i indstillinger med "registreret"-badge, (3) e-mail-skabelon med "registreret"-ordlyd. Se `upload/Guide-Bilag-19a-20a-20b-20e.md` afsnit "BILAG 20e" for produktion.
 
 ---
 
@@ -1979,11 +2086,7 @@ Disse begrænsninger er anført for at hjælpe dig med at vurdere, om AlphaFlow 
 
 ### 18.8 Versionshistorik
 
-| Version | Dato | Væsentlige ændringer |
-|---------|------|----------------------|
-| 3.3 | Oktober 2026 | **AI-assisteret standardkonto-mapping + e-faktura-forbedringer:** StandardMappingPanel bruger nu en **søgbar `StandardAccountCombobox`** (Popover + cmdk) med alle officielle 2026-standardkonti (603 konti via `OFFICIAL_STANDARD_CHART` — legacy `PUBLIC_STANDARD_CHART` er helt fjernet per Bilag 12 U-24) og farvede type-badges pr. konto (EXPENSE=Omkostning/rød, REVENUE=Indtægt/grøn, ASSET=Aktiv/teal, LIABILITY=Gæld/amber, EQUITY/INVENTORY/FINANCIAL/TAX/YEAR_END/STATISTICAL). Auto-map har nu 4 faser: (0) hårdkodet FSR-til-officiel mapping-tabel (64 konti, 100 % valideret mod `OFFICIAL_STANDARD_CHART`), (1) `suggestStandardMapping()` med validering, (2) type-/gruppe-heuristikker og (3) LLM via Hermes/OpenRouter for semantisk mapping. LLM-mappede konti markeres med lilla **AI**-badge, heuristisk-mappede med gråt **Auto**-badge. Bogførte e-fakturaer flyttes til ny fane **Købsfakturaer** på Posteringer-siden med en **Vis XML**-knap, der viser både rå modtaget XML og genereret svar XML (InvoiceResponse for Peppol BIS, Application Response for OIOUBL, MLR for Message Level Response) med type-badge. Ved bogføring af Peppol BIS-fakturaer genereres nu en **InvoiceResponse** (UBL 2.1, InvoiceResponse-2.1 namespace) med per-line OK-respons og beskrivelsen *"Posted to journal: {kontonavn}"* — så afsenderen får præcis viden om accepterede fakturalinjer. Ny rich **toast-notifikation** (`EInvoiceToast`) ved modtagelse af e-faktura via Sproom-webhook (kræver notification-ws-service på port 3001 og `HERMES_ADMIN_KEY`). Kanal-validering fix: API'et accepterer nu både korte aliases (`PEPPOL`, `OIOUBL`) og fulde enum-værdier (`PEPPOL_BIS`, `NEMHANDEL_OIOUBL`, `SPROOM_AUTO`) — "Sproom (Peppol)"-kanalen virker nu korrekt (tidligere afvist med "Ugyldig kanal"). **AR-afklaring §6.6.4 (Oktober 2026):** Nyt afsnit 6.6.4 præciserer at Application Response (AR) og Message Level Response (MLR) genereres **lokalt** ved modtagelse og gemmes i DB, men først **sendes til afsenderen via Sproom når brugeren aktivt godkender eller afviser fakturaen** — AlphaFlow sender IKKE auto-kvittering umiddelbart ved modtagelse. **"Registreret" rettelse (Oktober 2026):** Afsnit 17.x fastslår at AlphaFlow er **registreret** som digitalt standardbogføringssystem hos Erhvervsstyrelsen (ikke "godkendt" — bogføringssystemer anmeldes og registreres, de "godkendes" ikke). Sproom (dansk selskab — https://sproom.net) er eneste e-faktura Access Point; integrationen er live mod Sproom staging, produktion via env-switch. Legacy Storecove-kode (klient + 5 `/api/storecove/`-ruter) er fuldt fjernet — Sproom er nu eneste Access Point. |
-| 3.2 | September 2026 | **Sproom-migrering:** Sproom (dansk selskab, sproom.net) har erstattet Storecove som AlphaFlows eneste e-invoicing Access Point og dækker begge netværk — NemHandel (OIOUBL 2.1) og Peppol (BIS Billing 3.0). Automatisk Sproom-tilmelding pr. virksomhed (child company + registrering i begge netværk), afsendelse som rå XML, udvidet leveringsstatus pr. dokument (inkl. IN_TRANSIT, PENDING_APPROVAL, REJECTED, PAID) med fuld statushistorik og auto-retry, samt godkend/afvis i e-faktura-indbakken med Application Response tilbage til afsenderen. Afsendelse via Sproom kræver nu et betalende abonnement (alle betalende planer — tidligere Business+). Tilføjet månedlige forbrugskvoter (e-faktura 10/30/50/100/150; Hermes 0/0/200/500/1.000) med tilkøbspakker. Tink beskrevet som reel bankintegration (Tink Link-flow). |
-| 3.1 | 2026 | Forrige udgave — e-fakturering beskrevet med Storecove som aktivt Access Point. |
+> **Seneste ændring (v3.4, Oktober 2026):** Opdateret for Erhvervsstyrelsen runde 2-svar — §5.3 (bilagsnummerering), §5.10 (cancel/reverse), §9.3 (SKAT SOAP/mTLS), §10.9 (CSV/iXBRL), §16.11 (NemHandel meddelelse).
 
 ---
 

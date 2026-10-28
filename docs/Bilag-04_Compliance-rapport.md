@@ -8,21 +8,14 @@
 |------|---------|
 | **Dokumenttype** | Compliance-rapport til Erhvervsstyrelsen |
 | **Systemnavn** | AlphaFlow (`alphaflow.dk`) — pakke-navn `alphaai-accounting` v1.0.0 |
-| **Dokumentversion** | 3.5 |
+| **Dokumentversion** | 3.6 |
 | **Udarbejdet af** | AlphaAi Consult ApS (App Owner / dataansvarlig) |
 | **Lovgrundlag** | Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023), Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023), GDPR (forordning 2016/679), IT-sikkerhedsloven |
 | **Formål** | Registrering/godkendelse som digitalt regnskabssystem hos Erhvervsstyrelsen |
 | **Sprog** | Dansk |
 | **Dokumentation** | Dette dokument dokumenterer platformens compliance-tilstand jf. Lov om bogføring, BEK 97/98 og GDPR. Alle oplysninger er verificerbare i kildekoden. |
 
-**Versionshistorik:**
-
-| Version | Dato | Ændring |
-|---------|------|---------|
-| 3.5 | Oktober 2026 | **Storecove fuldt fjernet + legacy chart fjernet:** (1) Tidligere `src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*` er **fuldt fjernet** fra kodebasen — Sproom er nu faktisk eneste e-faktura Access Point (v3.4-rækkens "Legacy Storecove-kode... er slettet" var foregrebet — den fysiske fjernelse skete først i oktober). (2) Tidligere Storecove-specifikke DB-felter er **fjernet fra Prisma-schemaet** (`storecoveConnected`, `storecoveApiKeyId`, `storecoveLegalEntityId`, `storecoveConnectedAt`, `storecoveLastTestedAt`, `storecoveStorecoveId`); e-faktura dokument-ID-felt er omdøbt fra `storecoveSubmissionId` til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt fra `STORECOVE` til `SPROOM_AUTO`. DB-migration (`bun run db:push`) er kørt på VPS — schema er i sync. (3) Legacy `PUBLIC_STANDARD_CHART` (~49 konti) er helt fjernet — kun `OFFICIAL_STANDARD_CHART` (603 konti, 2026-versionen) benyttes (U-24 gennemført). Standardkonto-UI combobox viser dermed **alle 603 konti** (ikke længere 652 = 603 officielle + 49 legacy). Brødtekst §2.1 række 2 (Standardkonto-mapping) og §2.1 række 6 (E-fakturering) opdateret til at afspejle fysisk fjernelse + sproomDocumentId + SPROOM_AUTO. |
-| 3.4 | September 2026 | Standardkonto-mapping opgraderet til 4-fase AI-assisteret pipeline (Phase 0: hårdkodet `FSR_TO_OFFICIAL_MAPPING`-tabel med 64 AlphaFlow-standardkonti → officielle 2026-kontonumre i `src/lib/fsr-official-mapping.ts`; Phase 1: `suggestStandardMapping()` med validering mod `OFFICIAL_STANDARD_CHART`; Phase 2: type/group-heuristikker; Phase 3: LLM (Hermes/OpenRouter) for semantisk mapping af tilpassede konti i `src/lib/ai-standard-mapping.ts`). Officielt 2026-standardkontoplan (603 konti i `src/lib/official-standard-chart.ts`) erstatter gammel 69-konti PUBLIC_STANDARD_CHART som mapping-grundlag. Standardkonto-UI har nu søgbar combobox (`StandardAccountCombobox`) med type-badges (EXPENSE/REVENUE/ASSET etc.) for alle 603 officielle 2026-konti (dengang 652 inkl. legacy, der siden er fjernet per U-24). Modtagne Peppol BIS-fakturaer genererer nu InvoiceResponse XML (UBL 2.1, namespace `InvoiceResponse-2.1`) ved bogføring (`generateInvoiceResponse()` i `src/lib/einvoice-response.ts`) med per-line OK-respons (`Posted to journal: {accountName}`). `posted-einvoices-list.tsx` har ny "Vis XML"-knap med dialog for både rå modtaget XML og genereret svar-XML (InvoiceResponse/ApplicationResponse/MLR). Kanal-validering i `/api/invoices/[id]/send-einvoice/route.ts` accepterer nu både korte aliases ('PEPPOL', 'OIOUBL') og fulde enum-værdier. `notification-ws-service` har ny `broadcastEInvoiceEvent()` der emitter 'einvoice-event' (var tidligere forkert emit af 'data-changed') for korrekte toast-notifikationer ved modtagelse af e-fakturaer. Legacy Storecove-kode (`src/lib/storecove-client.ts` + 5 `/api/storecove/*`-ruter) er slettet — Sproom er nu eneste Access Point. |
-| 3.3 | September 2026 | Sproom-migrering: Sproom A/S (Danmark) erstatter Storecove B.V. som AlphaFlows eneste e-invoicing Access Point (Peppol BIS Billing 3.0 + NemHandel OIOUBL 2.1). Webhook-signaturverifikation ændret fra HMAC (`X-Storecove-Signature`, legacy) til RSA-SHA256 (`X-Signature`). Tink-bankintegration aktualiseret som reel integration. |
-| 3.2 | 2026 | Tidligere udgave (Storecove-baseret e-fakturering). |
+**Seneste ændring (v3.6, Oktober 2026):** Opdateret for Erhvervsstyrelsen runde 2-svar — §2.5 (fortløbende bilagsnummerering), §2.3.1 (DELETE vs cancel/reverse), §2.4 (5-års+ bekræftelse), §2.1+§11.2 (SKAT SOAP/mTLS/WS-Security arkitektur).
 
 ---
 
@@ -90,12 +83,12 @@ Lov om bogføring § 3 stiller krav om, at regnskabssystemet skal være egnet ti
 |------|--------|----------------|
 | Dobbelt bogføring (debet/kredit) | ✅ Opfyldt | `JournalEntry` + `JournalEntryLine`-modeller (`prisma/schema.prisma`). Poster valideres til at balancere før bogføring. |
 | Standard dansk kontoplan | ✅ Opfyldt | `Account`-model med `AccountType` (ASSET/LIABILITY/EQUITY/REVENUE/EXPENSE) og `AccountGroup` (22 FSR-grupper, der i praksis dækker FSR-standardens hovedkategorier). Standardkonti oprettes automatisk ved virksomhedsoprettelse. |
-| Mapping til SKAT Fællesoffentlig Standardkontoplan | ✅ Opfyldt (AI-assisteret) | `StandardAccountMapping`-model + `buildAutoMapping()` i `src/lib/standard-chart-of-accounts.ts` med en **4-fase AI-assisteret pipeline**: **Phase 0** — direkte opslag i `FSR_TO_OFFICIAL_MAPPING` (hårdkodet tabel med 64 standard AlphaFlow-konti → officielle 2026-kontonumre, valideret mod `OFFICIAL_STANDARD_CHART`) i `src/lib/fsr-official-mapping.ts`; **Phase 1** — `suggestStandardMapping()` med validering mod `OFFICIAL_STANDARD_CHART` (afviser 0xxx legacy-numre); **Phase 2** — type/group-heuristikker for tilpassede konti; **Phase 3** — LLM (Hermes/OpenRouter) for semantisk mapping af tilpassede konti i `src/lib/ai-standard-mapping.ts`. Mapping-UI bruger nu den officielle 2026 Standardkontoplan (603 konti i `src/lib/official-standard-chart.ts` — **ikke** den gamle `PUBLIC_STANDARD_CHART` med kun 69 konti). UI: søgbar `StandardAccountCombobox` i `src/components/chart-of-accounts/standard-mapping-panel.tsx` der viser alle 603 konti (kun den officielle 2026-kontoplan — legacy 49-konti `PUBLIC_STANDARD_CHART` er helt fjernet, U-24 gennemført) med type-badges (EXPENSE, REVENUE, ASSET, LIABILITY, EQUITY, FINANCIAL, TAX, YEAR_END, STATISTICAL, INVENTORY). Auto-map-rute: `POST /api/accounts/standard-mapping/auto` kører alle 4 faser; AI-mappede konti markeres `mappingType='ai'` (lilla badge), heuristiske `mappingType='auto'`. |
+| Mapping til SKAT Fællesoffentlig Standardkontoplan | ✅ Opfyldt (AI-assisteret) | `StandardAccountMapping`-model + `buildAutoMapping` i `src/lib/standard-chart-of-accounts.ts` med en **4-fase AI-assisteret pipeline**: **Phase 0** — direkte opslag i `FSR_TO_OFFICIAL_MAPPING` (hårdkodet tabel med 64 standard AlphaFlow-konti → officielle 2026-kontonumre, valideret mod `OFFICIAL_STANDARD_CHART`) i `src/lib/fsr-official-mapping.ts`; **Phase 1** — `suggestStandardMapping` med validering mod `OFFICIAL_STANDARD_CHART` (afviser 0xxx legacy-numre); **Phase 2** — type/group-heuristikker for tilpassede konti; **Phase 3** — LLM (Hermes/OpenRouter) for semantisk mapping af tilpassede konti i `src/lib/ai-standard-mapping.ts`. Mapping-UI bruger nu den officielle 2026 Standardkontoplan (603 konti i `src/lib/official-standard-chart.ts` — **ikke** den gamle `PUBLIC_STANDARD_CHART` med kun 69 konti). UI: søgbar `StandardAccountCombobox` i `src/components/chart-of-accounts/standard-mapping-panel.tsx` der viser alle 603 konti (kun den officielle 2026-kontoplan — legacy 49-konti `PUBLIC_STANDARD_CHART` er helt fjernet, U-24 gennemført) med type-badges (EXPENSE, REVENUE, ASSET, LIABILITY, EQUITY, FINANCIAL, TAX, YEAR_END, STATISTICAL, INVENTORY). Auto-map-rute: `POST /api/accounts/standard-mapping/auto` kører alle 4 faser; AI-mappede konti markeres `mappingType='ai'` (lilla badge), heuristiske `mappingType='auto'`. |
 | Automatisk momsberegning | ✅ Opfyldt | 10 momskoder (`VATCode`-enum: S25, S12, S0, SEU, K25, K12, K0, KEU, KUF, NONE) med automatisk kontering. |
 | Regnskabsperioder | ✅ Opfyldt | `FiscalPeriod`-model med `PeriodStatus` (OPEN/CLOSED) og låsning (`lockedAt`/`lockedBy`). |
 | Fakturering | ✅ Opfyldt | `Invoice`-model med DRAFT/SENT/PAID/CANCELLED. PDF-generering. Kreditnotaer er fuldt implementeret: UI-knap, backend med `creditNotePrefix` (KRE-{år}-{seq}), spejlet bogføring, valgfrit `originalInvoiceId`, PDF og e-faktura som type 381 (kreditnota). OIOUBL-generatoren emitterer korrekt `<CreditNote>`-rodelement med `<cac:CreditNoteLine>`/`<cbc:CreditedQuantity>` og `<cac:BillingReference>` til originalfakturaen; send-pipelineen vælger 381/380 ud fra `documentType === 'CREDIT_NOTE'` (fallback: `creditNotePrefix` "KRE-"), så kreditnotaer understøttes i både NemHandel (OIOUBL 2.1) og Peppol BIS Billing 3.0. Annullering opretter modpostering `REVERSAL-{invoiceNumber}`. |
-| E-fakturering (NemHandel/Peppol) | ✅ Opfyldt | **Sproom A/S** (dansk selskab, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker **begge** netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Status: integreret — live mod Sproom staging (https://staging.sproom.net), produktionsklar via env-switch (https://sproom.net). Arkitektur: parent-auth (OAuth2 password grant) → child company pr. tenant (pr. CVR) → korttidstoken (impersonation, cachelagret) → registrering i begge netværk (POST /api/registrations/nemhandel + /api/registrations/peppol med Peppol participant verification) → raw XML-upload (POST /api/documents, Content-Type: application/octet-stream, auto-detektion af OIOUBL/BIS 3) → modtagelse via DocumentReceived-webhook (RSA-signaturverifikation, se afsnit 8.5) → safety-net pollers (Sproom-indbakke hver 5. min + Sproom-outbox hver 10. min i `src/instrumentation.ts`) med auto-retry af fejlede afsendelser via GET /api/documents/{id}/state. Idempotens via `X-Request-Id` request header; document-ID returneres i `X-Sproom-DocumentId` response header (201). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Klient: `src/lib/sproom-client.ts`; aktive ruter: `/api/sproom/*` (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). Env: `SPROOM_API_URL` (default https://staging.sproom.net), `SPROOM_API_TOKEN`, `SPROOM_WEBHOOK_PUBLIC_KEY`, `SPROOM_WEBHOOK_REQUIRE_SIGNATURE` (sæt til `true` i produktion). **InvoiceResponse ved bogføring:** Når en modtaget Peppol BIS-faktura bogføres (POST action i `/api/invoices/received/[id]`), genereres en InvoiceResponse XML (UBL 2.1, namespace `InvoiceResponse-2.1`) med per-line OK-respons (`Posted to journal: {accountName}`) via `generateInvoiceResponse()` i `src/lib/einvoice-response.ts` (linje 193–282). **Vis XML:** `posted-einvoices-list.tsx` har en "Vis XML"-knap der åbner en dialog med både "Rå XML" (modtaget fra Sproom) og "Svar XML" (genereret InvoiceResponse/ApplicationResponse/MLR med badge). **Kanal-validering:** `/api/invoices/[id]/send-einvoice/route.ts` accepterer nu både korte aliases ('PEPPOL', 'OIOUBL') og fulde enum-værdier ('PEPPOL_BIS', 'NEMHANDEL_OIOUBL', 'SPROOM_AUTO'). **Realtime-notifikation:** `mini-services/notification-ws-service/index.ts` har ny `broadcastEInvoiceEvent()` der emitter 'einvoice-event' til `company:<companyId>`-rummet (var tidligere forkert emit af 'data-changed', som frontenden ignorerede for e-faktura-toast) — sikrer at toast-notifikationer vises når e-fakturaer modtages. **Storecove-oprydning:** Tidligere `src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*` (webhook, participants, status, connect, create-legal-entity) er **fuldt fjernet** fra kodebasen. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Se `Bilag-16_Peppol-Testbed-Rapport.md`. |
-| Momsangivelse til SKAT | ✅ Opfyldt (med begrænsning) | `src/lib/vat-submit.ts` med OAuth2 `client_credentials`. **Kun momsangivelse** — ingen årsopgørelse, e-indkomst eller AM-bidrag. |
+| E-fakturering (NemHandel/Peppol) | ✅ Opfyldt | **Sproom A/S** (dansk selskab, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker **begge** netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Status: integreret — live mod Sproom staging (https://staging.sproom.net), produktionsklar via env-switch (https://sproom.net). Arkitektur: parent-auth (OAuth2 password grant) → child company pr. tenant (pr. CVR) → korttidstoken (impersonation, cachelagret) → registrering i begge netværk (POST /api/registrations/nemhandel + /api/registrations/peppol med Peppol participant verification) → raw XML-upload (POST /api/documents, Content-Type: application/octet-stream, auto-detektion af OIOUBL/BIS 3) → modtagelse via DocumentReceived-webhook (RSA-signaturverifikation, se afsnit 8.5) → safety-net pollers (Sproom-indbakke hver 5. min + Sproom-outbox hver 10. min i `src/instrumentation.ts`) med auto-retry af fejlede afsendelser via GET /api/documents/{id}/state. Idempotens via `X-Request-Id` request header; document-ID returneres i `X-Sproom-DocumentId` response header (201). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Klient: `src/lib/sproom-client.ts`; aktive ruter: `/api/sproom/*` (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). Env: `SPROOM_API_URL` (default https://staging.sproom.net), `SPROOM_API_TOKEN`, `SPROOM_WEBHOOK_PUBLIC_KEY`, `SPROOM_WEBHOOK_REQUIRE_SIGNATURE` (sæt til `true` i produktion). **InvoiceResponse ved bogføring:** Når en modtaget Peppol BIS-faktura bogføres (POST action i `/api/invoices/received/[id]`), genereres en InvoiceResponse XML (UBL 2.1, namespace `InvoiceResponse-2.1`) med per-line OK-respons (`Posted to journal: {accountName}`) via `generateInvoiceResponse` i `src/lib/einvoice-response.ts`. **Vis XML:** `posted-einvoices-list.tsx` har en "Vis XML"-knap der åbner en dialog med både "Rå XML" (modtaget fra Sproom) og "Svar XML" (genereret InvoiceResponse/ApplicationResponse/MLR med badge). **Kanal-validering:** `/api/invoices/[id]/send-einvoice/route.ts` accepterer nu både korte aliases ('PEPPOL', 'OIOUBL') og fulde enum-værdier ('PEPPOL_BIS', 'NEMHANDEL_OIOUBL', 'SPROOM_AUTO'). **Realtime-notifikation:** `mini-services/notification-ws-service/index.ts` har ny `broadcastEInvoiceEvent` der emitter 'einvoice-event' til `company:<companyId>`-rummet (var tidligere forkert emit af 'data-changed', som frontenden ignorerede for e-faktura-toast) — sikrer at toast-notifikationer vises når e-fakturaer modtages. **Storecove-oprydning:** Tidligere `src/lib/storecove-client.ts` ruter under `/api/storecove/*` (webhook, participants, status, connect, create-legal-entity) er **fuldt fjernet** fra kodebasen. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Se `Bilag-16_Peppol-Testbed-Rapport.md`. |
+| Momsangivelse til SKAT | ✅ Opfyldt (med begrænsning) | `src/lib/vat-submit.ts` + `src/lib/skat-soap-client.ts` + `src/lib/skat-ws-security.ts` + `src/lib/skat-keystore.ts`. Integrerer med Skattestyrelsens **RSU B2B Web Service Gateway (NemVirksomhed)** via 3 SOAP-services (`VirksomhedKalenderHent`, `ModtagMomsangivelseForeloebig`, `MomsangivelseKvitteringHent`) med **mutual TLS (mTLS)** med VOCES3 System (S1)-certifikat + **WS-Security** XML-DSig signatur over `<wsu:Timestamp>` + `<soap:Body>` + `<wsse:BinarySecurityToken>` (rsa-sha1, exclusive C14N, sha1 digest, DirectReference). Flow: AlphaFlow (RSU) indsender DRAFT → kunden godkender med MitID på TastSelv Erhverv → AlphaFlow henter kvitterings-PDF. **Kun momsangivelse** — ingen årsopgørelse, e-indkomst, AM-bidrag eller løn. Se `docs/SKAT-setup.md` for fuld teknisk dokumentation, og Bilag-12 Udbedringsplan U-8 for aftale-status. |
 | Bank-integration | ⚠️ Delvist | `BankConnection`-model med krypterede tokens. **Tink er en reel integration** (PSD2 consent-flow virker); Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data. AI-assisteret bankafstemning er implementeret i produktion via OpenRouter i `src/lib/matching-engine.ts`. Tre-niveau matching: (1) regelbaseret eksakt, (2) fuzzy, (3) AI via OpenRouter med konfidens-score. AI-match ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 = AI_SUGGESTED (manuel godkendelse); <0,80 ignoreres. AI overstyrer aldrig automatisk bogførte posteringer uden godkendelse. |
 | Fremmedvaluta | ✅ Opfyldt | Frankfurter API (ECB reference rates) i `src/lib/currency-utils.ts`. 1-times in-memory cache med stale fallback. DKK, EUR, USD, GBP, SEK, NOK. |
 
@@ -111,9 +104,9 @@ Lov om bogføring § 3 stiller krav om, at regnskabssystemet skal være egnet ti
 
 ### 2.3 BEK 97 Bilag 1 / Lov om bogføring §13 — Uforanderlighed / uforkortethed (5-års opbevaring)
 
-> **Note:** Lovkravet er "5 år" (jf. BEK 97 §3); platformens faktiske retention er **5 år+ (62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder)** — se §2.4.
+> **Note:** Lovkravet er "5 år" (jf. BEK 97 §3); platformens faktiske retention er **5 år+ (62 måneder = 5 år måneder margin for forskudte regnskabsperioder)** — se §2.4.
 
-BEK 97 Bilag 1 (bogføringskrav — herunder pkt 2.e: "bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes") og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) stiller krav om, at regnskabsmaterialet kan dokumenteres som fuldstændigt, ægte og pålideligt, og at det ikke kan ændres eller slettes i opbevaringsperioden (5 år+ — jf. BEK 97 §3; platformens faktiske retention er 62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder).
+BEK 97 Bilag 1 (bogføringskrav — herunder pkt 2.e: "bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes") og Lov om bogføring §13 (sikring mod ødelæggelse/forvanskning) stiller krav om, at regnskabsmaterialet kan dokumenteres som fuldstændigt, ægte og pålideligt, og at det ikke kan ændres eller slettes i opbevaringsperioden (5 år+ — jf. BEK 97 §3; platformens faktiske retention er 62 måneder = 5 år måneder margin for forskudte regnskabsperioder).
 
 AlphaFlow implementerer en **3-niveau immutability-strategi** på AuditLog-tabellen:
 
@@ -137,7 +130,58 @@ AlphaFlow implementerer en **3-niveau immutability-strategi** på AuditLog-tabel
 - ~~**Ingen kryptografisk hash-chain** på `JournalEntry` eller `Transaction`~~ → **Udbedret:** SHA-256 hash-chain med `recordHash`/`previousHash`/`hashedAt`-felter på begge modeller, sealing ved POSTED-transition, DB-triggers der blokerer UPDATE/DELETE på forseglede rækker, og auditor-endpoint `/api/journal-entries/verify-integrity`. Se afsnit 2.10 for detaljer.
 - **Ingen separate `deletedAt`/`retentionUntil`-felter** på regnskabsmodeller — soft-delete markeres via status-felter (`CANCELLED`, `deactivatedAt`).
 
+#### 2.3.1 DELETE-funktion vs. cancel/reverse (svar på Erhvervsstyrelsen kolonne I, række 3)
+
+> **Note:** Erhvervsstyrelsen spurgte i runde 2: *"I dokumentationen har i en delete funktionen, men man får en fejl besked om at man skal lave en cancel eller reverse i stedet for. Hvordan fungerer disse funktioner?"* Nedenstående forklarer begge funktioner og deres forskel. Bilag-20b indeholder 4 skærmbilleder der visualiserer dem.
+
+AlphaFlow har to adskilte funktioner: en `DELETE`-funktion der **kun virker på DRAFT-posteringer**, og en `cancel/reverse`-funktion der håndterer POSTED-posteringer via modpostering. Begge er i overensstemmelse med Bogføringsloven §§ 10-12.
+
+| Funktion | Virker på | Hvad den gør | Fejl ved misbrug |
+|----------|-----------|--------------|-------------------|
+| **DELETE** (`DELETE /api/journal-entries/[id]`) | KUN `DRAFT` (status='DRAFT', `recordHash IS NULL`) | Sætter `cancelled=true`, `status='CANCELLED'`, `cancelReason=<reason>` — DRAFT-rækker er endnu ikke bogført, så de kan slettes uden at påvirke regnskabet. | Hvis forsøgt på POSTED → HTTP 400: **`"Only DRAFT journal entries can be cancelled"`** (filkilde: `src/app/api/journal-entries/[id]/route.ts`). |
+| **cancel/reverse** (`DELETE /api/transactions/[id]` for POSTED transactions) | KUN POSTED (`status='POSTED'`, `recordHash IS NOT NULL`) | Sætter `Transaction.cancelled=true` + `cancelReason` (via `app.immutability_bypass` da rækken er forseglet) **OG** opretter en **ny modpostering** (JournalEntry) med byttet debet/kredit og reference `REVERSAL-TX-<id8>`. Original Transaction + original JournalEntry forbliver POSTED + synlige (markeret `cancelled=true`), modposteringen neutraliserer dem til netto 0 i alle rapporter. | Hvis forsøgt på allerede-annulleret → HTTP 400: `"Transaction is already cancelled"`. |
+
+**Hvorfor DELETE-funktionen findes men er låst for POSTED:**
+
+`DELETE`-endpointet eksisterer udelukkende for at tillade sletning af **DRAFT**-kladder (endnu ikke bogførte poster, hvor `voucherNumber = NULL` og `recordHash = NULL`). DRAFT-poster er ikke omfattet af Bogføringsloven §§ 10-12 og kan frit slettes uden at bryde kæden. For POSTED-poster afviser API'et kaldet med HTTP 400 + fejlmeddelelsen `"Only DRAFT journal entries can be cancelled"` — backend'en tjekker `existing.status !== 'DRAFT'` før nogen mutation (filkilde: `src/app/api/journal-entries/[id]/route.ts`). Dette er **API-niveau** beskyttelse; **DB-niveau** beskyttelse tilføjes af PostgreSQL-triggere i `prisma/journal-immutability.sql` (se afsnit 2.10.4) der fysisk blokerer `UPDATE`/`DELETE` på rækker hvor `recordHash IS NOT NULL` — selv af en DBA med direkte DB-adgang.
+
+**Hvordan cancel/reverse fungerer (modpostering med byttet debet/kredit, reference `REVERSAL-TX-<id8>`):**
+
+Når en bruger annullerer en POSTED Transaction (`DELETE /api/transactions/[id]`), udfører backend'en følgende i en transaktion (`src/app/api/transactions/route.ts`):
+
+1. **Marker original Transaction som annulleret** — `Transaction.cancelled = true` + `cancelReason = <reason>`. Da rækken er forseglet (`recordHash IS NOT NULL`), sættes `SET LOCAL app.immutability_bypass = 'true'` i transaktionen for at tillade den administrative flag-opdatering (beløbsfelter ændres IKKE — kun `cancelled`-flagget).
+2. **Find original JournalEntry** — alle JournalEntries med reference `TX-<id8>` (hvor `<id8>` er de første 8 tegn af Transaction-ID'et).
+3. **Opret en ny modpostering (REVERSAL)** — en ny JournalEntry med:
+   - `date` = originalposteringens dato (IKKE dags dato) — sikrer at original og modpostering falder i samme regnskabsperiode og netto-nulstiller korrekt i alle rapporter
+   - `description` = `"Annullering – <originalbeskrivelse>"`
+   - `reference` = **`REVERSAL-TX-<id8>`** (f.eks. `REVERSAL-TX-abc12345`) — gør det muligt at parre original og modpostering programmatisk
+   - `status = 'POSTED'` — modposteringen er en fuldt bogført post
+   - Linjer = originalens linjer, men med **debet og kredit byttet om** (`debit: original.credit, credit: original.debit`) — så de to poster neutraliserer hinanden
+   - Samme valuta, samme valutakurs, samme momskode pr. linje, samme projekt-tilknytning
+4. **Marker original JournalEntry som annulleret** — `cancelled=true` + `cancelReason` via `immutability_bypass` (samme mønster som trin 1). Original-rækken forbliver fysisk i databasen med alle oprindelige beløb — slettes IKKE.
+5. **Audit-log** — begge mutationer logges i AuditLog (`action: CANCEL`) med årsag, bruger, tidsstempel og IP.
+
+**Resultat:** Originalposteringen + modposteringen er begge synlige i `/journal` (med grå baggrund og notice "Denne postering er annulleret — en modpostering har neutraliseret den (bogføringsloven §10-12)"), og i alle finansielle rapporter (hovedbog, P&L, balance, momsrapport, bankafstemning, ældeanalytics) netto-nulstiller de til 0.
+
+**Filkilder:** `src/app/api/journal-entries/[id]/route.ts` (DELETE handler, — returnerer `"Only DRAFT journal entries can be cancelled"` for POSTED), `src/app/api/transactions/route.ts` (DELETE handler, — opretter `REVERSAL-TX-<id8>` modpostering), `src/lib/cancellation-grouping.ts` (parser `REVERSAL-TX-`-referencer til UI-parering), `src/lib/vat-utils.ts` (udelukker `REVERSAL-TX-`-referencer fra momsrapport).
+
+**Tre-niveau uforanderlighed (API + DB-triggers + hash-chain) — opsummering:**
+
+| Niveau | Hvad den beskytter mod | Filkilde |
+|--------|------------------------|----------|
+| **1. API-niveau** | Brugere der klikker "Slet" på POSTED-post via UI → HTTP 400 `"Only DRAFT journal entries can be cancelled"`. DRAFT-knappen vises slet ikke i UI for POSTED. | `src/app/api/journal-entries/[id]/route.ts` + `src/components/journal/journal-entries-page.tsx` (viser kun Slet-knap for DRAFT) |
+| **2. DB-triggers** | Kompromitteret DB-forbindelse der forsøger `UPDATE`/`DELETE` direkte på POSTED-række → PostgreSQL trigger afviser med `ERROR: JournalEntry immutability violation: DELETE not permitted on POSTED entries (Bogføringsloven §10-12)`. | `prisma/journal-immutability.sql` (`prevent_journal_entry_update_sealed`, `prevent_journal_entry_delete_sealed`, `prevent_transaction_update_sealed`, `prevent_transaction_delete_sealed`) |
+| **3. Hash-chain** | Hvis en angriber omgået trigger (f.eks. via `app.immutability_bypass`) og muterede en POSTED-række → ved næste `GET /api/journal-entries/verify-integrity` rekalkuleres hash fra aktuelle felter og sammenlignes med lagret `recordHash` — mismatch detekteres og rapporteres. | `src/lib/journal-hash-chain.ts` + `src/app/api/journal-entries/verify-integrity/route.ts` |
+
+**Tilbagedateringsbeskyttelse (lukkede FiscalPeriods):**
+
+For at forhindre tilbagedatering af POSTED-poster til lukkede perioder, kontrollerer API-ruterne `findClosedFiscalPeriod(companyId, entryDate)` før sealing. Hvis posteringens dato falder inden for en CLOSED `FiscalPeriod`, afvises anmodningen med HTTP 400 + bilingual fejlmeddelelse: *"Kan ikke bogføre i en lukket periode (YYYY-MM). / Cannot post to a closed fiscal period (YYYY-MM)."* DRAFT-journalposter må godt have dato i lukket periode (brugeren komponerer stadig) — kun POSTED blokeres. Se afsnit 2.10.3 for tekniske detaljer.
+
+**Skærmbilleder (Bilag-20b):** 4 skærmbilleder der visualiserer uforanderlighed: (1A) API-fejl `"Only DRAFT journal entries can be cancelled"` fra curl, (1B) DB-trigger-fejl fra direkte `psql DELETE`, (2) modpostering med `REVERSAL-TX-<id8>`-reference i `/journal`, (3) kildekode for hash-chain + DB-triggers. Se `upload/Guide-Bilag-19a-20a-20b-20e.md` afsnit "BILAG 20b" for produktion.
+
 ### 2.4 BEK 97 §3 + §7 — Backup og opbevaring (5 år+) (udstedt i medfør af Lov om bogføring §15)
+
+> **Bekræftelse (svar på Erhvervsstyrelsen kolonne I, række 4):** AlphaFlow bekræfter herved at systemet opbevarer **virksomhedens bogførte transaktioner og bilag i 5 år fra udgangen af det regnskabsår materialet vedrører**. Platformens faktiske retention er **5 år+ (62 måneder = 5 år måneder margin for forskudte regnskabsperioder)** via monthly backups. Opbevaringen **fortsætter uanset kundeforholdets ophør** — ved abonnementsophør deaktiveres kunden (ingen hard-delete), og backups opbevares i 5 år fra regnskabsårets udgang jf. Bogføringsloven §§ 10-12 og §15 (som har forrang over GDPR art. 17(3)(c)). Se Bilag-07 §8.1 + §8.6 for den fulde retention-politik og sletning-ved-ophør procedure.
 
 BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om bogføring §15 — stiller krav om, at regnskabsmaterialet opbevares i mindst 5 år (platformen bevarer 5 år+ = 62 måneder, med 2 måneders margin for forskudte regnskabsperioder) og kan reproduceres i læsbar form.
 
@@ -160,15 +204,24 @@ BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om b
 
 ### 2.5 Fortløbende bilagsnummerering
 
+> **Note:** Erhvervsstyrelsen har i runde 2 (kolonne I, række 2) bedt om uddybning af kravet: *"Når man anvender unikt ID skal man vise hvordan man sikrer fuldstændigheden. Altså hvordan sikre udbyderen at der ikke mangler et ID... transaktionsnummer skal være kontinuerligt løber uendeligt."* Nedenstående dokumenterer de 5 mekanismer der sikrer dette. Bilag-20a indeholder 3 skærmbilleder der visualiserer dem.
+
 | Krav | Status | Implementering |
 |------|--------|----------------|
-| Fortløbende, unik bilagsnummerering | ✅ Opfyldt | `Company.journalPrefix` (default `"BIL"`) + `Company.nextJournalSequence` (default 1). Sekvensen inkrementeres atomisk ved bogføring. Filkilde: `prisma/schema.prisma` (linje 286–287). |
+| Fortløbende, unik bilagsnummerering | ✅ Opfyldt | `Company.journalPrefix` (default `"BIL"`) + `Company.nextJournalSequence` (default 1). Sekvensen inkrementeres atomisk ved bogføring. Filkilde: `prisma/schema.prisma`. |
+| **(a) Kontinuerlig/uendelig nummerering** | ✅ Opfyldt | `Company.nextJournalSequence` er en monoton stigende `Int`-tæller der **aldrig nulstilles** — hverken ved regnskabsårs-skifte, tenant-restore eller manuelt. Tælleren fortsætter uendeligt (kun begrænset af PostgreSQLs `Int4` max = 2.147.483.647 ≈ 2,1 mia. bilag pr. tenant). Der er **ingen UI-knap** og **intet admin-endpoint** der kan nulstille tælleren — compliance-krav om fortløbende nummerering. Filkilde: `prisma/schema.prisma`, ingen `reset`/`setSequence`-rute findes i `src/app/api/company/*`. |
+| **(b) Tælleren kan ikke nulstilles** | ✅ Opfyldt | Inkrementeringen sker atomisk i samme `db.$transaction` der opretter JournalEntry-rækken (`UPDATE "Company" SET "nextJournalSequence" = "nextJournalSequence" + 1 WHERE id = ... RETURNING ...` i `src/app/api/journal-entries/route.ts`). Selv hvis posting-transaktionen ruller tilbage (rollback), forbruger sekvensen nummeret — PostgreSQL's `nextval`-semantik forhindrer genbrug af et "forladt" nummer. Dette er bevidst: huller pga. rollbacks er sikrere end risikoen for nummer-genbrug. Filkilde: `src/app/api/journal-entries/route.ts` (POST) + `src/app/api/journal-entries/[id]/route.ts` (PUT, DRAFT→POSTED). |
+| **(c) verify-numbering endpoint (totalGaps: 0)** | ✅ Opfyldt | `GET /api/journal-entries/verify-numbering` — revisor-endpoint der bekræfter fuldstændighed af bilagsnummereringen. Gennemgår alle POSTED JournalEntries pr. tenant, grupperer pr. år, parser voucherNumber (understøtter både `"BIL-2026-0042"` og nyt rent numerisk format `"42"`), og returnerer en rapport med `totalGaps`, `totalDuplicates`, `totalOutOfOrder`. **Forventet resultat ved korrekt drift:** `totalGaps: 0, totalDuplicates: 0, totalOutOfOrder: 0`. Endpointet er RBAC-beskyttet (`DATA_READ` — VIEWER+, ACCOUNTANT, ADMIN, OWNER, AUDITOR), rate-limited 2/min/user og audit-logger hver kørsel (`action: OVERSIGHT`, metadata `source: verify-numbering`). Filkilde: `src/app/api/journal-entries/verify-numbering/route.ts`. |
+| **(d) @@unique constraint garanterer entydighed** | ✅ Opfyldt | `@@unique([companyId, voucherNumber])` på `JournalEntry`-modellen i `prisma/schema.prisma` — partial unique index der ekskluderer NULL (DRAFT-entries har `voucherNumber = NULL` og er ikke underlagt kravet). PostgreSQL implementerer via partial unique index med WHERE-klausul. To POSTED entries i samme tenant kan aldrig få samme voucherNumber — databasen afviser med `P2002 unique constraint violation` før commit. Filkilde: `prisma/schema.prisma` (kommentar refererer eksplicit til "Bogføringsloven §14 + BEK 97 Bilag 2, række 11"). |
+| **(e) Skærmbilleder (Bilag-20a)** | ✅ Vedhæftet separat | Bilag-20a indeholder 3 skærmbilleder der visualiserer kravet: (1) posteringsoversigt i `/journal` med fortløbende voucherNumber ("bilag 1, 2, 3, ..."), (2) verify-numbering JSON-respons med `totalGaps: 0`, (3) DB-schema med `@@unique([companyId, voucherNumber])`-linjen. Se `upload/Guide-Bilag-19a-20a-20b-20e.md` afsnit "BILAG 20a" for produktion. |
+
+> **Forskel på verify-numbering og verify-integrity:** `verify-numbering` (dette endpoint) tjekker **sekvens-integritet** — at der ikke er huller i numrene. `verify-integrity` (se afsnit 2.10.5) tjekker **hash-chain integritet** — at bilag ikke er blevet tamperet med. Begge endpoints er nødvendige for overholdelse af Bogføringsloven §14 + BEK 97 Bilag 2, række 11.
 
 ### 2.6 Regnskabsperiode-låsning
 
 | Krav | Status | Implementering |
 |------|--------|----------------|
-| Periode-låsning forhindrer bogføring i lukkede perioder | ✅ Opfyldt | `FiscalPeriod` med `status: OPEN/CLOSED` og `lockedAt`/`lockedBy`-felter. Lukning kræver `PERIOD_CLOSE`-permission (OWNER, ADMIN, ACCOUNTANT). Genåbning kræver `PERIOD_OPEN` (OWNER, ADMIN). Alle handlinger logges i AuditLog. Filkilde: `prisma/schema.prisma` (linje 917–931), `src/lib/rbac.ts`. |
+| Periode-låsning forhindrer bogføring i lukkede perioder | ✅ Opfyldt | `FiscalPeriod` med `status: OPEN/CLOSED` og `lockedAt`/`lockedBy`-felter. Lukning kræver `PERIOD_CLOSE`-permission (OWNER, ADMIN, ACCOUNTANT). Genåbning kræver `PERIOD_OPEN` (OWNER, ADMIN). Alle handlinger logges i AuditLog. Filkilde: `prisma/schema.prisma`, `src/lib/rbac.ts`. |
 
 ### 2.7 SAF-T eksport
 
@@ -192,18 +245,18 @@ BEK 97 §3 (5-års opbevaring) og §7 (backup) — udstedt i medfør af Lov om b
 
 | Funktion | Implementering |
 |----------|----------------|
-| Tenant-eksport med filer | `POST /api/export-tenant` — GUID per eksport (`crypto.randomUUID()`), format-version `alphaflow-portable-v2`, compliance-metadata (Bogføringsloven BEK 98, 5 år+ retention (62 måneder)), SHA-256 data-integrity checksum. |
+| Tenant-eksport med filer | `POST /api/export-tenant` — GUID per eksport (`crypto.randomUUID`), format-version `alphaflow-portable-v2`, compliance-metadata (Bogføringsloven BEK 98, 5 år+ retention (62 måneder)), SHA-256 data-integrity checksum. |
 | Eksport-historik | `GET /api/company/export-info` — total eksporter, seneste eksport, datavolumen, audit-entries med GUIDs og checksums. |
 | SAF-T import (indlæsning af standardfil) | `POST /api/import-saft` — importerer en SAF-T Financial DK v2.1 XML-fil fra et tredjepartssystem (førstegangs overflytning til AlphaFlow). |
 | Pre-flight (dry-run) | `POST /api/import-saft/dry-run` — parser filen, identificerer konflikter og umappede momskoder, og returnerer tenantens befolkningstilstand (`populatedTenant`). Ændrer ingen data. |
-| §10-12 compliance-guard | `src/lib/tenant-import-guard.ts` — `getTenantPopulation()` tæller eksisterende **POSTED** journalposter, forseglete transaktioner (`recordHash IS NOT NULL`) og lukkede regnskabsperioder (`status = 'CLOSED'`). Import **afvises med HTTP 409** (`TENANT_ALREADY_POPULATED`) hvis tenanten allerede indeholder bogførte data — FØR `app.immutability_bypass` aktiveres. |
+| §10-12 compliance-guard | `src/lib/tenant-import-guard.ts` — `getTenantPopulation` tæller eksisterende **POSTED** journalposter, forseglete transaktioner (`recordHash IS NOT NULL`) og lukkede regnskabsperioder (`status = 'CLOSED'`). Import **afvises med HTTP 409** (`TENANT_ALREADY_POPULATED`) hvis tenanten allerede indeholder bogførte data — FØR `app.immutability_bypass` aktiveres. |
 | Audit-trail | Alle eksporter og import-forsøg logges uforanderligt i AuditLog. Blokerede import-forsøg på en befolket tenant logges som `DELETE_ATTEMPT` (tamper-evident via `prisma/audit-immutability.sql`). |
 
 #### 2.9.1 §10-12-beskyttelse ved import (Bogføringsloven)
 
 Import af en SAF-T-standardfil sletter al eksisterende tenant-data og genskaber dem fra filen. Fordi bogførte posteringer er uforanderlige per Bogføringsloven §10-12 ("bogførte transaktioner ikke kan ændres, tilbagedateres eller slettes"), er denne operation **kun tilladt som en førstegangs overflytning** i en tenant, der endnu ikke indeholder bogførte data.
 
-`src/lib/tenant-import-guard.ts` håndhæver dette på applikationsniveauet: før `SET LOCAL app.immutability_bypass = 'true'` aktiveres i import-transaktionen, undersøger `getTenantPopulation()` tenanten. Findes der blot én POSTED journalpost, én forseglet transaktion eller én lukket regnskabsperiode, afvises importen med HTTP 409, og database-triggerene i `prisma/journal-immutability.sql` forbliver fuldt aktive. Derved overholdes §10-12 på både applikations- og databaseniveau — eksisterende bogført data kan ikke overskrives.
+`src/lib/tenant-import-guard.ts` håndhæver dette på applikationsniveauet: før `SET LOCAL app.immutability_bypass = 'true'` aktiveres i import-transaktionen, undersøger `getTenantPopulation` tenanten. Findes der blot én POSTED journalpost, én forseglet transaktion eller én lukket regnskabsperiode, afvises importen med HTTP 409, og database-triggerene i `prisma/journal-immutability.sql` forbliver fuldt aktive. Derved overholdes §10-12 på både applikations- og databaseniveau — eksisterende bogført data kan ikke overskrives.
 
 DRAFT-journalposter (uden `recordHash`) er ikke omfattet af §10-12 og må slettes; en tenant, der kun indeholder kladder, kan derfor godt importere.
 
@@ -237,7 +290,7 @@ recordHash = SHA-256(canonical, UTF-8) → hex string
 
 Beløb normaliseres til 2 decimaler (`100` og `100.00` hasher identisk). Linjer sorteres efter (accountId, debit, credit) så rækkefølge-omrokering ikke ændrer hash'en.
 
-**Filkilder:** `src/lib/journal-hash-chain.ts` (computeEntryHash, computeTransactionHash, sealJournalEntry, sealTransaction, verifyJournalEntryIntegrity, verifyTenantChainIntegrity, findClosedFiscalPeriod). `prisma/schema.prisma` linje 587-589 (Transaction) og 834-836 (JournalEntry).
+**Filkilder:** `src/lib/journal-hash-chain.ts` (computeEntryHash, computeTransactionHash, sealJournalEntry, sealTransaction, verifyJournalEntryIntegrity, verifyTenantChainIntegrity, findClosedFiscalPeriod). `prisma/schema.prisma` (Transaction) og 834-836 (JournalEntry).
 
 #### 2.10.2 Sealing — når posteringen bogføres
 
@@ -245,11 +298,11 @@ Sealing (beregn + lagre hash) sker **inde i den samme `db.$transaction`** der s�
 
 | Flow | Hvor sealing kaldes |
 |------|---------------------|
-| POST `/api/journal-entries` (status=POSTED direkte) | `sealJournalEntry()` i `src/app/api/journal-entries/route.ts` (linje 243) |
-| PUT `/api/journal-entries/[id]` (DRAFT→POSTED) | `sealJournalEntry()` i `src/app/api/journal-entries/[id]/route.ts` (linje 207) |
-| POST `/api/transactions` (PURCHASE → opretter parret JournalEntry POSTED) | `sealJournalEntry()` i `src/app/api/transactions/route.ts` (linje 683) + `sealTransaction()` (linje 690) |
+| POST `/api/journal-entries` (status=POSTED direkte) | `sealJournalEntry` i `src/app/api/journal-entries/route.ts` |
+| PUT `/api/journal-entries/[id]` (DRAFT→POSTED) | `sealJournalEntry` i `src/app/api/journal-entries/[id]/route.ts` |
+| POST `/api/transactions` (PURCHASE → opretter parret JournalEntry POSTED) | `sealJournalEntry` i `src/app/api/transactions/route.ts` + `sealTransaction` |
 
-**Filkilder:** `src/app/api/journal-entries/route.ts` (POST, linje 243), `src/app/api/journal-entries/[id]/route.ts` (PUT, linje 207), `src/app/api/transactions/route.ts` (POST, linje 683 + 690).
+**Filkilder:** `src/app/api/journal-entries/route.ts` (POST), `src/app/api/journal-entries/[id]/route.ts` (PUT), `src/app/api/transactions/route.ts` (POST).
 
 #### 2.10.3 Tilbagedaterings-beskyttelse (lukkede perioder)
 
@@ -259,9 +312,9 @@ Før sealing kontrollerer API-ruterne, om posteringens dato falder inden for en 
 
 | Rute | Hvor checken udføres |
 |------|---------------------|
-| POST `/api/journal-entries` (kun når `entryStatus === 'POSTED'`) | `findClosedFiscalPeriod()` før `db.$transaction` |
-| PUT `/api/journal-entries/[id]` (kun ved DRAFT→POSTED) | `findClosedFiscalPeriod()` med ny dato eller eksisterende dato |
-| POST `/api/transactions` (alle typer — Transaction oprettes altid final, og PURCHASE opretter POSTED JournalEntry) | `findClosedFiscalPeriod()` før `db.$transaction` |
+| POST `/api/journal-entries` (kun når `entryStatus === 'POSTED'`) | `findClosedFiscalPeriod` før `db.$transaction` |
+| PUT `/api/journal-entries/[id]` (kun ved DRAFT→POSTED) | `findClosedFiscalPeriod` med ny dato eller eksisterende dato |
+| POST `/api/transactions` (alle typer — Transaction oprettes altid final, og PURCHASE opretter POSTED JournalEntry) | `findClosedFiscalPeriod` før `db.$transaction` |
 
 DRAFT-journalposter må godt have en dato i en lukket periode (brugeren komponerer stadig) — kun POSTED blokeres, fordi bogføring finaliserer posteringen i regnskabet.
 
@@ -280,7 +333,7 @@ Selvom hash-chain'en detekterer mutation efter fact, forhindrer PostgreSQL-trigg
 
 **Design-beslutning:** Triggeren tillader UPDATE på POSTED-rækker **mens** `recordHash IS NULL`. Dette vindue eksisterer kun inde i posting-transactionen (CREATE → assignVoucherNumber → sealJournalEntry → COMMIT). Udefra ses aldrig en "POSTED men uforseglet" række, fordi isolation-level READ COMMITTED (default) skjuler uforanskede transaktioner. Når først `recordHash` er sat (efter sealing-UPDATE), blokeres alle yderligere UPDATEs og DELETEs — selv af en DBA eller kompromitteret forbindelse.
 
-**Undtagelse — `app.immutability_bypass`:** Triggerne har en enkelt dokumenteret undtagelse (se `prisma/journal-immutability.sql` linje 18-22 + funktionen `_immutability_bypass_active()`): en session kan sætte `SET LOCAL app.immutability_bypass = 'true'` for administrative operationer (demo-reset, tenant-restore, SAF-T-import). Denne session-variabel nulstilles automatisk ved COMMIT. For SAF-T-importen er bypassen **bevogtet af `src/lib/tenant-import-guard.ts`** (`getTenantPopulation()`): importen afvises med HTTP 409 (`TENANT_ALREADY_POPULATED`), hvis tenanten allerede indeholder POSTED journalposter, forsegilede transaktioner eller lukkede regnskabsperioder — dvs. bypassen kan kun aktiveres i en tenant uden bogførte data, og §10-12 overholdes. Se afsnit 2.9.1.
+**Undtagelse — `app.immutability_bypass`:** Triggerne har en enkelt dokumenteret undtagelse (se `prisma/journal-immutability.sql` + funktionen `_immutability_bypass_active`): en session kan sætte `SET LOCAL app.immutability_bypass = 'true'` for administrative operationer (demo-reset, tenant-restore, SAF-T-import). Denne session-variabel nulstilles automatisk ved COMMIT. For SAF-T-importen er bypassen **bevogtet af `src/lib/tenant-import-guard.ts`** (`getTenantPopulation`): importen afvises med HTTP 409 (`TENANT_ALREADY_POPULATED`), hvis tenanten allerede indeholder POSTED journalposter, forsegilede transaktioner eller lukkede regnskabsperioder — dvs. bypassen kan kun aktiveres i en tenant uden bogførte data, og §10-12 overholdes. Se afsnit 2.9.1.
 
 **Deployment:** `psql $DATABASE_URL -f prisma/journal-immutability.sql` (idempotent — `CREATE OR REPLACE FUNCTION` + `DROP TRIGGER IF EXISTS`).
 
@@ -288,12 +341,10 @@ Selvom hash-chain'en detekterer mutation efter fact, forhindrer PostgreSQL-trigg
 ```sql
 SELECT tgname, tgrelid::regclass, tgtype
 FROM pg_trigger
-WHERE tgname IN (
-  'prevent_journal_entry_update_sealed',
+WHERE tgname IN ('prevent_journal_entry_update_sealed',
   'prevent_journal_entry_delete_sealed',
   'prevent_transaction_update_sealed',
-  'prevent_transaction_delete_sealed'
-);
+  'prevent_transaction_delete_sealed');
 -- Forventet: 4 rækker
 ```
 
@@ -321,9 +372,9 @@ Endpointet:
 | Krav (Bilag 1, Row) | Opfyldt gennem |
 |----------------------|----------------|
 | Bilag 1, 2, e — "bogførte transaktioner ikke kan ændres" | SHA-256 hash-chain (recordHash/previousHash) + DB-triggers (prevent_*_update_sealed) |
-| Bilag 1, 2, e — "tilbagedateres" | `findClosedFiscalPeriod()` check i alle POSTED-ruter |
+| Bilag 1, 2, e — "tilbagedateres" | `findClosedFiscalPeriod` check i alle POSTED-ruter |
 | Bilag 1, 2, e — "slettes" | DB-triggers (prevent_*_delete_sealed) + soft-delete via modpostering (status=CANCELLED) |
-| Bilag 1, 4, a — detektering af mutation | `verifyTenantChainIntegrity()` + `/api/journal-entries/verify-integrity` endpoint |
+| Bilag 1, 4, a — detektering af mutation | `verifyTenantChainIntegrity` + `/api/journal-entries/verify-integrity` endpoint |
 
 **Status:** ✅ Opfyldt (krav 11, 15 — Bogføringsloven §10-12, BEK 97 Bilag 1, 2, e).
 
@@ -356,7 +407,7 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 | Formålsbegrænsning | ✅ Opfyldt | Data behandles alene til bogførings-/regnskabsformål (kontrakt) og AI-assistance (særskilt samtykke). |
 | **Data minimization** | ✅ Opfyldt (med særlig implementering) | `HermesAgent.dataAccessEnabled` er per-tenant opt-in (default `false`). Uden opt-in sendes KUN brugerens spørgsmål + statisk system-prompt til LLM — **ikke** tenant-specifikke finansielle data. |
 | Nøjagtighed | ✅ Opfyldt | Brugerne kan rette egne data via app; CVR-data kan valideres mod CVR-registeret. |
-| Opbevaringsbegrænsning | ⚠️ Delvist | Bogføringsdata: 5 år+ retention (62 måneder) via backup. E-mail/Session/AuditLog: ingen automatisk sletning efter fastsat periode — oprydning af udløbne sessions via `cleanupExpiredSessions()`. |
+| Opbevaringsbegrænsning | ⚠️ Delvist | Bogføringsdata: 5 år+ retention (62 måneder) via backup. E-mail/Session/AuditLog: ingen automatisk sletning efter fastsat periode — oprydning af udløbne sessions via `cleanupExpiredSessions`. |
 | Integritet og fortrolighed | ✅ Opfyldt (med begrænsninger) | Se art. 32 nedenfor. |
 
 ### 3.3 Art. 6 — Lovgrundlag
@@ -389,7 +440,7 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 |------|--------|----------------|
 | Data minimization som standard | ✅ Opfyldt | `HermesAgent.dataAccessEnabled = false` som default. |
 | Tenant-isolation | ✅ Opfyldt | `tenantFilter(ctx)` på alle databasekald; `companyId` per række på 32 modeller. |
-| Role-based access control (min-tilgang) | ✅ Opfyldt | 5 roller + 23 permissions. Se afsnit 4. |
+| Role-based access control (min-tilgang) | ✅ Opfyldt | 5 roller permissions. Se afsnit 4. |
 | Pseudonymisering hvor muligt | ⚠️ Delvist | Bank-tokens krypteret (ikke pseudonymiserede), bruger-ID bruges internt. |
 
 ### 3.7 Art. 30 — Behandlingsregister
@@ -414,7 +465,7 @@ AlphaFlow behandler persondata for følgende kategorier af registrerede: brugere
 
 | Foranstaltning | Beskrivelse |
 |---------------|-------------|
-| Content-Security-Policy (CSP) | CSP-Report-Only aktiv via `buildCspPolicy()` i `next.config.ts`; enforce-mode klar. |
+| Content-Security-Policy (CSP) | CSP-Report-Only aktiv via `buildCspPolicy` i `next.config.ts`; enforce-mode klar. |
 | Antivirus-scanning af uploads | ClamAV INSTREAM integreret i 3 upload-ruter med AuditLog-logging. |
 | Key rotation / versioning | Keyring med version-prefixed ciphertext (`v{N}:iv:authTag:ciphertext`); `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; migration/rollback-scripts. |
 | Password minimum 6 tegn | |
@@ -474,10 +525,10 @@ AlphaFlow anvender én USA-baseret AI-underbehandler, der potentielt flytter per
 | Komponent | Implementering |
 |-----------|----------------|
 | Login-metode | E-mail + password (eneste login-metode). **Ingen MitID, ingen OAuth/SSO/SAML, ingen NextAuth** — egenudviklet session-system. |
-| Password-hashing | `bcryptjs` med 12 salt-runder. `verifyPassword()` understøtter legacy `simpleHash()` med automatisk re-hash ved succesfuldt login (`needsRehash()`). |
+| Password-hashing | `bcryptjs` med 12 salt-runder. `verifyPassword` understøtter legacy `simpleHash` med automatisk re-hash ved succesfuldt login (`needsRehash`). |
 | Password-minimum | **6 tegn** (validering i `register` og `reset-password`). |
 | Session | 256-bit token (`crypto.randomBytes(32).toString('hex')`). Cookie: `session`, `httpOnly: true`, `secure: isHttps` (auto-detected), `sameSite: 'lax'`, `path: /`, `maxAge: 7 dage`, sliding expiry (forlænges ved brug). IP + User-Agent logges på sesionsoprettelse. Bærer-token Authorization header understøttes for API-kald. |
-| Session-invalidering | Ved logout (`destroySession`) og password-reset (`destroyAllUserSessions`). Udløbne sesioner ryddes op via `cleanupExpiredSessions()`. |
+| Session-invalidering | Ved logout (`destroySession`) og password-reset (`destroyAllUserSessions`). Udløbne sesioner ryddes op via `cleanupExpiredSessions`. |
 | E-mail-verifikation | Påkrævet før login (undtagen SuperDev der auto-verificeres). Verification-token = `crypto.randomBytes(32).toString('hex')`. |
 | Password-reset flow | `/api/auth/forgot-password`: rate-limit 1 pr. e-mail pr. 5 min, anti-enumeration (returnerer altid success), token = `crypto.randomBytes(32).toString('hex')`, 1 times udløb. `/api/auth/reset-password`: validerer token + udløb, hasher nyt password med bcrypt, invaliderer alle eksisterende sesioner. |
 | 2FA / TOTP | RFC 6238 via `otplib` (SHA-1, 30 sek, 6 cifre, ±1 step tolerance). QR-kode via `qrcode`-biblioteket. 10 backup-koder (8 tegn, unambiguous chars), SHA-256+salt hashed, derefter AES-256-GCM krypteret som JSON-array. TOTP-secret: 160 bit (20 byte) base32, AES-256-GCM krypteret i DB (`twoFactorSecret`-felt). Per-user aktivering, tenant-wide krav via `/api/company/toggle-2fa` (`Company.twoFactorRequired`). SuperDev bypass. |
@@ -534,7 +585,7 @@ Implementeret i applikationslaget (`src/lib/rate-limit.ts`) — in-memory slidin
 | **SuperDev (App Owner)** | `isSuperDev = true` for brugere med aktivt firma navn "AlphaAi". Promoteres via `/api/auth/promote-superdev`. Får alle features, bypasser 2FA og TokenPay, kan oversee andre tenants **read-only** (mutationer blokeres via `blockOversightMutation`). SuperDev-administrative endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare for abonnements- og trial-styring på tværs af tenants — dette er en bevidst App Owner-funktion, ikke en data-isolation. |
 | **Demo-firma** | Delt demo-firma (CVR 41250313) med read-only for non-SuperDev. Mutationer blokeres via `requireNotDemoCompany`. |
 
-**23 permissions** i 7 kategorier (`src/lib/rbac.ts` linje 81–117):
+**23 permissions** i 7 kategorier (`src/lib/rbac.ts`):
 
 | Kategori | Permissions |
 |----------|-------------|
@@ -546,7 +597,7 @@ Implementeret i applikationslaget (`src/lib/rate-limit.ts`) — in-memory slidin
 | Bank (2) | `BANK_CONNECT`, `BANK_SYNC` |
 | Backup (2) | `BACKUP_CREATE`, `BACKUP_RESTORE` |
 
-**Håndhævelse:** `withGuard()` wrapper (`src/lib/route-guard.ts`) gennemtvinger auth → company → oversight → demo → TokenPay → permissions → features. `requirePermission(ctx, perm)` returnerer 401/400/403 ved afvisning. **Ingen `requireRole`/`requireAdmin`-hjælpere** — alt går gennem `requirePermission`.
+**Håndhævelse:** `withGuard` wrapper (`src/lib/route-guard.ts`) gennemtvinger auth → company → oversight → demo → TokenPay → permissions → features. `requirePermission(ctx, perm)` returnerer 401/400/403 ved afvisning. **Ingen `requireRole`/`requireAdmin`-hjælpere** — alt går gennem `requirePermission`.
 
 ### 4.4 TokenPay-adgangskontrol
 
@@ -571,7 +622,7 @@ Implementeret i applikationslaget (`src/lib/rate-limit.ts`) — in-memory slidin
 | Parameter | Værdi |
 |-----------|-------|
 | Nøglestørrelse | 256 bit (32 byte) |
-| IV (Initialization Vector) | 96 bit (12 byte) — NIST SP 800-38D anbefalet; ny pr. encryption via `crypto.randomBytes()` |
+| IV (Initialization Vector) | 96 bit (12 byte) — NIST SP 800-38D anbefalet; ny pr. encryption via `crypto.randomBytes` |
 | Authentication Tag | 128 bit (16 byte) |
 | Lagringsformat (string) | `iv_base64:authTag_base64:ciphertext_base64` |
 | Lagringsformat (fil) | `[12 byte IV][16 byte authTag][N byte ciphertext]` (rå binary, `.enc`-suffix) |
@@ -618,7 +669,7 @@ Følgende persondata-felter opbevares **ukrypteret** i PostgreSQL og afhænger a
 | Aldrig i database | Bekræftet via grep. |
 | Aldrig i git | Ekskluderet via `.gitignore`. |
 | Kun server-side | Tilgængelig kun i server-side kode. |
-| Validering | `loadKeyring()` i `src/lib/keyring.ts:99-131` kaster hvis `ENCRYPTION_KEY` mangler eller har forkert længde; `getCurrentKeyVersion()` returnerer aktiv version. |
+| Validering | `loadKeyring` i `src/lib/keyring.ts:99-131` kaster hvis `ENCRYPTION_KEY` mangler eller har forkert længde; `getCurrentKeyVersion` returnerer aktiv version. |
 | Caching | Parses én gang og caches i hukommelsen. |
 | Key rotation | Keyring med `ENCRYPTION_KEY_PREVIOUS` + `CURRENT_KEY_VERSION`; version-prefixed ciphertext `v{N}:iv:authTag:ciphertext`; `encryptionKeyVersion` kolonner på User/BankConnection/Backup; migration-script `scripts/rotate-encryption-keys.ts`. Se Bilag 5 §2.4. |
 
@@ -719,7 +770,7 @@ AuditLoggen er uforanderlig (se afsnit 2.3 og 6.1) — PostgreSQL BEFORE UPDATE/
 
 #### 6.8.3 Advarsler (Alerts)
 
-Den automatiske log-monitor (`scanAuditLogForAlerts()`) klassificerer hændelser i fire severitetsniveauer og genererer aggregatede `LogAlert`-objekter med `category`, `title`, `description`, `count`, `firstSeen`, `lastSeen`, `affectedUsers`, `affectedCompanies` og `recommendedAction`:
+Den automatiske log-monitor (`scanAuditLogForAlerts`) klassificerer hændelser i fire severitetsniveauer og genererer aggregatede `LogAlert`-objekter med `category`, `title`, `description`, `count`, `firstSeen`, `lastSeen`, `affectedUsers`, `affectedCompanies` og `recommendedAction`:
 
 | Severitet | Detektionskategorier | Reaktion |
 |-----------|----------------------|----------|
@@ -728,7 +779,7 @@ Den automatiske log-monitor (`scanAuditLogForAlerts()`) klassificerer hændelser
 | **Medium (yellow)** | `oversight_access` (`OVERSIGHT`-hændelser), `account_deactivated` (`ACCOUNT_DEACTIVATED`), `session_invalidation_spike` (>10 `SESSION_INVALIDATE` — muligt brud-svar), `two_factor_disabled` (`TWO_FACTOR_DISABLED`). | **Ugentlig gennemgang**: manualt af SuperDev hver mandag. |
 | **Lav (blue)** | `rate_limit_hit` (metadata indikerer rate-limit 429). | **Ugentlig gennemgang**: indikator på mulig misbrug — krydstjekkes med `brute_force_login`. |
 
-**E-mail-notifikationer**: Hvis miljøvariablen `ALERT_EMAIL_RECIPIENT` er sat, sender log-monitor cron-jobbet automatisk en e-mail med alle kritiske og høje advarsler via `notifyAlertsViaEmail()` (bruger den eksisterende `sendEmail`-infrastruktur, som logger til `EmailLog`-tabellen). E-mail-notifikationen er **optional** — den er sikker (try/catch, fejl logges, cron krasjer aldrig) og er deaktiveret som standard.
+**E-mail-notifikationer**: Hvis miljøvariablen `ALERT_EMAIL_RECIPIENT` er sat, sender log-monitor cron-jobbet automatisk en e-mail med alle kritiske og høje advarsler via `notifyAlertsViaEmail` (bruger den eksisterende `sendEmail`-infrastruktur, som logger til `EmailLog`-tabellen). E-mail-notifikationen er **optional** — den er sikker (try/catch, fejl logges, cron krasjer aldrig) og er deaktiveret som standard.
 
 **UI-adgang**: Advarsler vises i `/revisionslog`-siden via `SecurityAlertsPanel`-komponenten (`src/components/audit-log/security-alerts-panel.tsx`), der henter data fra `/api/audit-logs/alerts` (rate-limited 5/min/bruger, ADMIN+ kun).
 
@@ -748,7 +799,7 @@ AuditLoggens uforanderlighed er fundamentet for hele beredskabet: beviserne kan 
 
 | Fil | Formål |
 |-----|--------|
-| `src/lib/log-monitor.ts` | `scanAuditLogForAlerts()` + `notifyAlertsViaEmail()`. Defensiv (try/catch, kaster aldrig). |
+| `src/lib/log-monitor.ts` | `scanAuditLogForAlerts` + `notifyAlertsViaEmail`. Defensiv (try/catch, kaster aldrig). |
 | `src/lib/log-monitor-scheduler.ts` | node-cron wrapper. Kører daglig kl. 06:00 Europe/Copenhagen. Idempotent (følger backup/billing/recurring-scheduler-mønsteret). |
 | `src/instrumentation.ts` | Starter log-monitor scheduleren sammen med backup/recurring/billing-schedulerne. |
 | `src/app/api/audit-logs/alerts/route.ts` | GET-endpoint. ADMIN+ kun (`Permission.COMPANY_EDIT_SETTINGS`). Rate-limited 5/min/bruger. |
@@ -767,10 +818,10 @@ AlphaFlow anvender virksomhedsbaseret tenant-isolering: `Company`-entiteten er t
 |----------|----------------|
 | Tenant-grænse | `Company`-model. `companyId` på 32 datamodeller. |
 | Prisma-where-filter | `tenantFilter(ctx)` / `companyScope(ctx)` returnerer `{ companyId: <user's active company> }`. |
-| Oversight-mode | Scope sættes til `oversightCompanyId` — read-only, mutationer blokeres via `blockOversightMutation()`. |
+| Oversight-mode | Scope sættes til `oversightCompanyId` — read-only, mutationer blokeres via `blockOversightMutation`. |
 | Ingen aktivt firma | `{ companyId: '__none__' }` (brugeren ser intet). |
-| Fil-serving isolation | `/api/receipts/[...path]` og `/api/documents/serve/[...path]` tjekker eksplicit medlemskab via `userCompany.findUnique({userId_companyId})` og `isPathWithin()` path-traversal guard. |
-| Demo-firma | `Company.isDemo = true` → read-only for non-SuperDev via `requireNotDemoCompany()`. |
+| Fil-serving isolation | `/api/receipts/[...path]` og `/api/documents/serve/[...path]` tjekker eksplicit medlemskab via `userCompany.findUnique({userId_companyId})` og `isPathWithin` path-traversal guard. |
+| Demo-firma | `Company.isDemo = true` → read-only for non-SuperDev via `requireNotDemoCompany`. |
 
 ### 7.2 Bekræftet isolation
 
@@ -791,7 +842,7 @@ Bruger A kan **ikke** se firma B's data uden medlemskab i `UserCompany`-tabellen
 
 ### 8.2 Sikkerhedshoveder
 
-Konfigureret både i `next.config.ts` (`headers()`) og i `Caddyfile`:
+Konfigureret både i `next.config.ts` (`headers`) og i `Caddyfile`:
 
 | Header | Værdi | Formål |
 |--------|-------|--------|
@@ -799,7 +850,7 @@ Konfigureret både i `next.config.ts` (`headers()`) og i `Caddyfile`:
 | `X-Content-Type-Options` | `nosniff` | MIME-sniffing-beskyttelse. |
 | `X-XSS-Protection` | `1; mode=block` | Browser-XSS-filter. |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Begrænser referrer-information. |
-| `Permissions-Policy` | `camera=(self), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()` | Begrænser browser-API-adgang. |
+| `Permissions-Policy` | `camera=(self), microphone=, geolocation=, payment=, usb=, magnetometer=, gyroscope=, accelerometer=` | Begrænser browser-API-adgang. |
 | `Cache-Control` | `no-store, no-cache, must-revalidate, proxy-revalidate` (HTML + API) | Forhindrer caching af følsomt indhold. |
 
 **Sikkerhedshoveder (inkl. CSP):**
@@ -843,7 +894,7 @@ Ingen konfigureret CORS-policy i `next.config.ts` eller `Caddyfile`. API-routes 
 | Max størrelse | 25 MB (`MAX_RECEIPT_SIZE`). |
 | Filnavn | Unikt med timestamp + `crypto.randomBytes(3)`-suffix. |
 | Lokationer | `uploads/receipts/{companyId}/` (API-serving) + `Tenant-Backup/{companyName}/Receipts/{YYYY}/{MM}/{DD}/` (per-tenant backup). |
-| Path-injection | `sanitizeCompanyName()` forhindrer path-injection i tenant-mappe-navn. |
+| Path-injection | `sanitizeCompanyName` forhindrer path-injection i tenant-mappe-navn. |
 | Path-traversal | `isPathWithin(resolvedPath, baseDir)` i `src/lib/file-service.ts`. |
 | Adgangskontrol | Full guard: auth + company + `blockOversight` + `blockDemo` + `requireTokenPay` + `Permission.DATA_CREATE`. |
 
@@ -925,9 +976,9 @@ Platformen opfylder GDPR's sikkerhedskrav (art. 32): kryptering i transit (TLS 1
 | **Immutability (BEK 97 Bilag 1 / Lov om bogføring §13)** | Immutability håndhæves via AuditLog 3-niveau (applikation CREATE-only + PostgreSQL-triggers + cascade-Restrict). |
 | **Persondata-kryptering i hvile (GDPR art. 32)** | Følsomme data (bank-tokens, 2FA-secrets) er AES-256-GCM-krypteret. Øvrige persondata (email, telefon, adresser) opbevares ukrypteret og beskyttes af Neon TLS + DB-adgangskontrol + RBAC. |
 | **Bank-integration** | Tink er en reel integration (PSD2 consent-flow); Nordea/Danske Bank/Jyske Bank er stubs; Demo-provider leverer syntetiske data. AI-assisteret bankafstemning er implementeret i produktion via OpenRouter (`src/lib/matching-engine.ts`): tre-niveau matching (regelbaseret/fuzzy/AI) med konfidens-tærskler ≥0,95 autoprogrammeres, 0,80–0,95 kræver manuel godkendelse. |
-| **E-fakturering (Access Point)** | Sproom A/S (Danmark) er AlphaFlows eneste e-invoicing Access Point og dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Status: integreret — staging aktiv (https://staging.sproom.net), produktion via env-switch (https://sproom.net). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Modtagne Peppol BIS-fakturaer genererer InvoiceResponse XML (UBL 2.1, `InvoiceResponse-2.1`) ved bogføring med per-line OK-respons (`generateInvoiceResponse()` i `src/lib/einvoice-response.ts`). Tidligere Access Point (Storecove) er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. |
+| **E-fakturering (Access Point)** | Sproom A/S (Danmark) er AlphaFlows eneste e-invoicing Access Point og dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Status: integreret — staging aktiv (https://staging.sproom.net), produktion via env-switch (https://sproom.net). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Modtagne Peppol BIS-fakturaer genererer InvoiceResponse XML (UBL 2.1, `InvoiceResponse-2.1`) ved bogføring med per-line OK-respons (`generateInvoiceResponse` i `src/lib/einvoice-response.ts`). Tidligere Access Point (Storecove) er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. |
 | **Kreditnota-oprettelse** | Kreditnotaer er fuldt implementeret: UI-knap, backend med `creditNotePrefix` (KRE-{år}-{seq}), spejlet bogføring, valgfrit `originalInvoiceId`, PDF og e-faktura som type 381 (`<CreditNote>`-rodelement med `<cac:CreditNoteLine>`/`<cbc:CreditedQuantity>` og `<cac:BillingReference>`; 381/380 vælges ud fra `documentType === 'CREDIT_NOTE'`, fallback `creditNotePrefix` "KRE-"). Annullering opretter modpostering `REVERSAL-{invoiceNumber}`. |
-| **Moms-API** | Momsangivelse til SKAT via OAuth2 `client_credentials`. |
+| **Moms-API** | Momsangivelse til SKAT via **RSU B2B Web Service Gateway (NemVirksomhed)** — 3 SOAP-services + mTLS med VOCES3 System (S1)-certifikat + WS-Security XML-DSig signatur. Kun momsangivelse (ingen årsopgørelse). Se `docs/SKAT-setup.md`. |
 
 ### 11.3 Supplerende sikkerhedsforanstaltninger (planlagt)
 
@@ -979,7 +1030,7 @@ AlphaAi Consult ApS forpligter sig til løbende at vedligeholde og udvikle platf
 | Moms-API | `src/lib/vat-submit.ts` |
 | CVR-klient | `src/lib/cvr-client.ts` |
 | Sproom-klient + webhook | `src/lib/sproom-client.ts`, `src/app/api/sproom/webhook/route.ts` |
-| Storecove-klient (fuldt fjernet) | Tidligere `src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*` (webhook, participants, status, connect, create-legal-entity) — **helt slettet** fra kodebasen. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Sproom er eneste Access Point. |
+| Storecove-klient (fuldt fjernet) | Tidligere `src/lib/storecove-client.ts` ruter under `/api/storecove/*` (webhook, participants, status, connect, create-legal-entity) — **helt slettet** fra kodebasen. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Sproom er eneste Access Point. |
 | Tink-klient | `src/lib/tink-client.ts` |
 | Flatpay-klient + webhook | `src/lib/flatpay-client.ts`, `src/app/api/subscription/payment-webhook/route.ts` |
 | TokenPay callback | `src/app/api/tokenpay/callback/route.ts` |

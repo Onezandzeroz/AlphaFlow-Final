@@ -30,7 +30,7 @@ AlphaAi Consult ApS er dataansvarlig (App Owner) for AlphaFlow-platformen. Alpha
 Dokumentet omfatter:
 
 - **Neon PostgreSQL** — primært datalager for alle bogføringsdata, brugere, fakturaer, audit-log, bank-tokens (AES-256-GCM-krypteret), TOTP-secrets (AES-256-GCM-krypteret), Hermes-konversationer, knowledge-base.
-- **IONOS VPS** — applikationsserver (Next.js + 5 mini-services + Caddy + PM2) + lokal backup-lagring (`Tenant-Backup/`) + fil-uploads (`uploads/`).
+- **IONOS VPS** — applikationsserver (Next.js mini-services + Caddy + PM2) + lokal backup-lagring (`Tenant-Backup/`) + fil-uploads (`uploads/`).
 
 > Dokumentet dækker **ikke** de AI-underbehandlere (OpenRouter — AlphaFlows eneste AI-databehandler) — disse er dokumenteret i `docs/Bilag-07_Databehandleraftale.md` og `docs/Bilag-10_Leverandørstyring.md`. Se afsnit 7 for en kort note om fysisk sikkerhed, der gælder på tværs.
 
@@ -41,7 +41,7 @@ Dokumentet omfatter:
 | Komponent | Udbyder | Lokation | Rolle |
 |---|---|---|---|
 | **Neon PostgreSQL** (serverless) | Neon, Inc. (US-virksomhed, EU-hosting) | EU/EEA — Frankfurt (Tyskland) + Amsterdam (Holland) per Neon-dokumentation | Primært datalager — alle tenant-data, audit-log, bank-tokens, TOTP-secrets, Hermes-konversationer, knowledge-base. |
-| **IONOS VPS** (applikationsserver) | IONOS SE | EU (Tyskland) | Hosting af Next.js + 5 mini-services + Caddy (reverse proxy/TLS) + PM2 (proces-manager). |
+| **IONOS VPS** (applikationsserver) | IONOS SE | EU (Tyskland) | Hosting af Next.js mini-services + Caddy (reverse proxy/TLS) + PM2 (proces-manager). |
 | **IONOS VPS** (backup-lagring) | IONOS SE | EU (Tyskland) — samme VPS-instans | Lokal lagring af `Tenant-Backup/{companyName}/*.zip.enc` (AES-256-GCM-krypterede tenant-backups). |
 | **IONOS VPS** (uploads) | IONOS SE | EU (Tyskland) — samme VPS-instans | Lokal lagring af `uploads/receipts/{companyId}/` + `uploads/documents/{userId}/`. Ukrypteret på disk (afhænger af disk-encryption + adgangskontrol — se afsnit 4 og 9). |
 | **Caddy** (reverse proxy / TLS) | Self-hosted på IONOS VPS | EU (Tyskland) | Eneste eksterne entry-point (port 443/80). TLS 1.2/1.3, Let's Encrypt, security headers, routing til mini-services. |
@@ -104,7 +104,7 @@ Neon leverer managed **Point-in-Time Recovery** med op til **7 dages retention**
 | Backup-lag | Ansvarlig | Formål | Retention |
 |---|---|---|---|
 | **Lag 1** — Neon PITR (managed) | Neon, Inc. | Defense-in-depth — gendannelse af databasen til ethvert tidspunkt inden for PITR-vinduet | 7 dage |
-| **Lag 2** — AlphaFlow tenant-backups | AlphaAi Consult ApS | Per-tenant ZIP-backups (AES-256-GCM + SHA-256), lagret på IONOS VPS i `Tenant-Backup/` | 25 timer (hourly) / 31 dage (daily) / 53 dage (weekly) / **5 år+** (62 måneder = 5 år + 2 måneder margin, monthly) |
+| **Lag 2** — AlphaFlow tenant-backups | AlphaAi Consult ApS | Per-tenant ZIP-backups (AES-256-GCM + SHA-256), lagret på IONOS VPS i `Tenant-Backup/` | 25 timer (hourly) / 31 dage (daily) / 53 dage (weekly) / **5 år+** (62 måneder = 5 år måneder margin, monthly) |
 
 > AlphaFlow kalder ikke Neons backup-API — lag 1 er udelukkende en managed service fra Neon, der fungerer som supplement til AlphaFlows egne tenant-backups. Den fulde backup-strategi er dokumenteret i `docs/Bilag-09_Beredskabsplan.md` og `docs/Bilag-04_Compliance-rapport.md`.
 
@@ -154,7 +154,7 @@ Neon offentliggør en liste over underbehandlere på https://neon.com/subprocess
 
 IONOS VPS fungerer som AlphaFlows **applikationsserver** og **lokal backup-lagring**:
 
-- **Applikationsserver:** Next.js (port 3000) + 5 mini-services (hermes-agent 3004, knowledge-service 3006, notification-ws 3001, scanner-service 3005, tokenpay-access 3100) + Caddy (reverse proxy/TLS) + PM2 (proces-manager).
+- **Applikationsserver:** Next.js (port 3000) mini-services (hermes-agent 3004, knowledge-service 3006, notification-ws 3001, scanner-service 3005, tokenpay-access 3100) + Caddy (reverse proxy/TLS) + PM2 (proces-manager).
 - **Lokal backup-lagring:** `Tenant-Backup/{companyName}/` — AES-256-GCM-krypterede `.zip.enc`-filer pr. tenant.
 - **Fil-uploads:** `uploads/receipts/{companyId}/` + `uploads/documents/{userId}/` — ukrypteret på disk (afhænger af disk-encryption + adgangskontrol — se afsnit 9).
 
@@ -228,7 +228,7 @@ Caddy er **den eneste eksterne entry-point** på VPS:
 
 ### 4.9 PM2 — proces-manager
 
-PM2 (fork-mode) administrerer 6 processer (1 Next.js + 5 mini-services) med følgende konfiguration:
+PM2 (fork-mode) administrerer 6 processer (1 Next.js mini-services) med følgende konfiguration:
 
 | Parameter | Værdi | Kilde |
 |---|---|---|
@@ -275,7 +275,7 @@ Caddy er **self-hosted** på IONOS VPS og er AlphaFlows eneste eksterne entry-po
 | Parameter | Værdi | Kilde |
 |---|---|---|
 | **Site-blok** | `alphaflow.dk, www.alphaflow.dk` | `Caddyfile` |
-| **TLS-protokoller** | `tls1.2 tls1.3` (min TLS 1.2, preferred TLS 1.3) | `Caddyfile` linje 103–105 |
+| **TLS-protokoller** | `tls1.2 tls1.3` (min TLS 1.2, preferred TLS 1.3) | `Caddyfile` |
 | **Certifikater** | Let's Encrypt (automatisk via Caddy ACME) | — |
 | **HTTP→HTTPS redirect** | Automatisk af Caddy | — |
 
@@ -290,7 +290,7 @@ Caddy sætter følgende HTTP-security headers på alle responses:
 | `X-Content-Type-Options` | `nosniff` (MIME-sniffing-beskyttelse) |
 | `X-XSS-Protection` | `1; mode=block` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+| `Permissions-Policy` | `camera=, microphone=, geolocation=` |
 
 > **Mangler:** Ingen `Content-Security-Policy` (CSP) header er konfigureret — hverken i Caddy eller `next.config.ts`. Se afsnit 9.
 
@@ -320,7 +320,7 @@ Alle `reverse_proxy`-blokke sætter `Host`, `X-Forwarded-For`, `X-Forwarded-Prot
 
 ### 5.6 Rate-limiting — UDKOMMENTERET
 
-**Caddy's `rate_limit`-plugin er IKKE installeret.** Konfigurationen i `Caddyfile` (linje 86–97) er udkommenteret med følgende note:
+**Caddy's `rate_limit`-plugin er IKKE installeret.** Konfigurationen i `Caddyfile` er udkommenteret med følgende note:
 
 > "Rate limiting — handled at application level (`src/lib/rate-limit.ts`). Caddy's `rate_limit` plugin is not installed; if needed, install caddy-rate-limit and uncomment the block below."
 
@@ -571,4 +571,4 @@ Neon PostgreSQL og IONOS VPS udgør tilsammen AlphaFlows primære produktionsinf
 
 ---
 
-*Dette dokument opdateres årligt eller ved væsentlige ændringer i AlphaFlows infrastruktur eller udbydernes servicevilkår. Seneste revision: Oktober 2026 (Task 21-d dokumentationsnøjagtighed: fjernet reference til ikke-eksisterende `mini-services/pg-service`. September 2026: Sproom A/S har erstattet Storecove B.V. som e-faktura Access Point — udgående HTTPS-kald til Sproom samt DocumentReceived-webhook med RSA-SHA256-signaturverifikation, fail-closed i produktion; se afsnit 6).*
+*Dette dokument opdateres årligt eller ved væsentlige ændringer i AlphaFlows infrastruktur eller udbydernes servicevilkår. Seneste revision: Oktober 2026 (Sproom A/S er eneste e-faktura Access Point — udgående HTTPS-kald til Sproom samt DocumentReceived-webhook med RSA-SHA256-signaturverifikation, fail-closed i produktion; se afsnit 6).*

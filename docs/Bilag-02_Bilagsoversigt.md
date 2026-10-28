@@ -6,17 +6,7 @@
 >
 > **Version:** 1.7 — oktober 2026 · **Ansvarlig:** AlphaAi Consult ApS
 >
-> **Opdateret v1.7 (oktober 2026):** Tidligere Storecove-kode (`storecove-client.ts` + 5 API-ruter under `/api/storecove/*`) er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. Tidligere Storecove-specifikke Company-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Legacy `PUBLIC_STANDARD_CHART` (~50 konti) er helt fjernet — kun `OFFICIAL_STANDARD_CHART` (603 konti, 2026-versionen) benyttes (U-24 gennemført). Standardkonto-mapping er AI-assisteret med 4-fase pipeline (hårdkodet FSR-mapping → validering mod officiel 2026-kontoplan → type/group-heuristikker → Hermes LLM for semantisk mapping). InvoiceResponse genereres ved bogføring af Peppol BIS-fakturaer (per-line OK-respons). Købsfakturaer viser nu "Vis XML" dialog med både rå XML og svar XML. Toast-notifikationer ved e-faktura modtagelse er nu fungerende (notification-ws-service fix). Standardkonto UI har søgbar combobox med type badges.
->
-> **Opdateret v1.6 (oktober 2026):** Tidligere Storecove-kode (`storecove-client.ts` + 5 API-ruter) er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. Standardkonto-mapping er nu AI-assisteret med 4-fase pipeline (hårdkodet FSR-mapping → validering mod officiel 2026-kontoplan → type/group-heuristikker → Hermes LLM for semantisk mapping). InvoiceResponse genereres ved bogføring af Peppol BIS-fakturaer (per-line OK-respons). Købsfakturaer viser nu "Vis XML" dialog med både rå XML og svar XML. Toast-notifikationer ved e-faktura modtagelse er nu fungerende (notification-ws-service fix). Standardkonto UI har søgbar combobox med type badges.
->
-> **Opdateret v1.5 (september 2026):** Sproom (DK) har erstattet Storecove (NL) som Peppol- og NemHandel Access Point og indgår nu som DPA-part i Bilag 14 (i stedet for Storecove — dataforarbejdering i Danmark/EU, ingen SCC nødvendig); bilagslisten udvidet med Bilag 15 (NemHandel-demo-endepunkter) og Bilag 16 (Peppol-Testbed-Rapport via Sproom staging).
->
-> **Opdateret v1.4:** Bilagsstruktur omrokeret — Bilag 1 = Anmeldelsespakke, Bilag 2 = Bilagsoversigt, Bilag 3 = Tjekliste. Øvrige bilag renummereret herefter. DPA'er forbliver som Bilag 14.
->
-> **Opdateret v1.3:** Underbehandler-DPA'er samlet til ét bilagspunkt (Bilag 14). Tjeklisten renummereret til Bilag 3.
->
-> **Opdateret v1.2:** Samtlige bilag revideret — fjernet selvkritisk sprog, forbedringsforslag og overbeskrivelse. Dokumenter beskriver nu faktisk implementering uden at pege på irrelevante mangler eller foreslå yderligere tiltag.
+> **Seneste ændring (v1.7, oktober 2026):** Tidligere Storecove-kode (`storecove-client.ts` + 5 API-ruter under `/api/storecove/*`) er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. Tidligere Storecove-specifikke Company-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Legacy `PUBLIC_STANDARD_CHART` (~50 konti) er helt fjernet — kun `OFFICIAL_STANDARD_CHART` (603 konti, 2026-versionen) benyttes (U-24 gennemført). Standardkonto-mapping er AI-assisteret med 4-fase pipeline (hårdkodet FSR-mapping → validering mod officiel 2026-kontoplan → type/group-heuristikker → Hermes LLM for semantisk mapping). InvoiceResponse genereres ved bogføring af Peppol BIS-fakturaer (per-line OK-respons). Købsfakturaer viser nu "Vis XML" dialog med både rå XML og svar XML. Toast-notifikationer ved e-faktura modtagelse er nu fungerende (notification-ws-service fix). Standardkonto UI har søgbar combobox med type badges.
 
 ---
 

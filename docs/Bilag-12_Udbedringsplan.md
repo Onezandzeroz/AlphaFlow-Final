@@ -1,7 +1,7 @@
 # AlphaFlow — Udbedringsplan før indsendelse
 
 **AlphaAi Consult ApS** (CVR 46312058)
-**Dokumentversion:** 3.10
+**Dokumentversion:** 3.11
 **Dato:** Oktober 2026
 **Bilag 12 i anmeldelsespakken
 **Ansvarlig:** Jess Martin Christoffersen, Direktør
@@ -59,24 +59,27 @@ AI-ydelser (Hermes chat-LLM, knowledge-service RAG-embeddings, scanner-service V
 **Acceptkriterier:** Underskrevet OpenRouter DPA (Bilag 14) + EU-SCC (Modul 2) + TIA vedhæftet; Bilag 2 status opdateret.
 
 ### U-8 — SKAT Moms-API credentials
-`vat-submit.ts` simulerer hvis credentials mangler.
+`vat-submit.ts` simulerer hvis credentials mangler (simuleringstilstand ved manglende VOCES3-certifikat).
+
+**Status:** AlphaAi Consult ApS har modtaget **instruktioner og Integrationstest S1-test-certifikat** fra Skattestyrelsen (`momsapi@sktst.dk`) og har implementeret integrationen i TypeScript (3 SOAP-services + mTLS + WS-Security XML-DSig) i `src/lib/skat-soap-client.ts`, `src/lib/skat-ws-security.ts` og `src/lib/skat-keystore.ts`. Den **formelle aftale med Skattestyrelsen** er under indgåelse og fremsendes som separat bilag så snart den er underskrevet.
+
 **Handling:**
-- Opret/verificér NemVirksomhed-konto hos Skattestyrelsen for AlphaAi Consult ApS (CVR 46312058).
-- Ansøg om adgang til Moms-API (scope `moms:indberet`).
-- Sæt `SKAT_CLIENT_ID` + `SKAT_CLIENT_SECRET` i produktions-`.env`.
-- Test mod Skattestyrelsens test-miljø.
-- Opdater Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 9.3.
-**Ansvarlig:** Jess Martin Christoffersen (Skattestyrelsen) + teknisk (konfiguration) · **Tidsramme:** 1 dag kode + Skattestyrelsen ventetid
-**Acceptkriterier:** `hasSkatCredentials()` returnerer true; test-momsangivelse successfuld.
+- Opret/verificér NemVirksomhed-konto hos Skattestyrelsen for AlphaAi Consult ApS (CVR 46312058) — **gennemført: instruktioner + test-certifikat modtaget**.
+- Bestil **produktions-VOCES3 System (S1)-certifikat** fra MitID Erhverv (test-certifikat allerede installeret i `certs/skat/`).
+- Sæt `SKAT_ENV=production` + `SKAT_KEYSTORE_PATH=certs/skat/client.p12` + `SKAT_KEYSTORE_PASSWORD` + `SKAT_KEY_PASSWORD` + `SKAT_TRUSTSTORE_PATH=certs/skat/skat-ca.pem` SOAP-endpoints (`SKAT_ENDPOINT_VIRKSOMHEDKALENDERHENT`, `SKAT_ENDPOINT_MODTAGMOMSANGIVELSEFORELOEBIG`, `SKAT_ENDPOINT_MOMSANGIVELSEKVITTERINGHENT`) i produktions-`.env` — se `docs/SKAT-setup.md` §4.
+- Test mod Skattestyrelsens test-miljø (SE 41250313).
+- Opdater Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 9.3 — **gennemført (oktober 2026):** afsnit 9.3 nu opdateret til at afspejle SOAP/mTLS/WS-Security-arkitektur.
+**Ansvarlig:** Jess Martin Christoffersen (Skattestyrelsen aftale) + teknisk (certifikat-konfiguration) · **Tidsramme:** 1 dag konfiguration + Skattestyrelsen ventetid på formel aftale
+**Acceptkriterier:** `hasSkatCredentials` returnerer true; produktions-VOCES3-certifikat installeret; test-momsangivelse successfuld i Skattestyrelsens test-miljø; formel aftale med Skattestyrelsen underskrevet og vedhæftet.
 
 ### U-9 — NemHandel Access Point-aftale (Sproom)
-**Status:** ✅ Aftalen er indgået. Sproom (dansk selskab — Sproom A/S, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker begge netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Integrationen er færdig og live mod Sproom staging (https://staging.sproom.net) via `src/lib/sproom-client.ts` (2.799 LOC) og `/api/sproom/*`-ruterne (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Som dansk selskab behandler Sproom data i Danmark/EU — ingen SCC påkrævet. (Den tidligere planlagte Storecove B.V.-aftale er supersederet; tidligere Storecove-kode — `src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*` (webhook, participants, status, connect, create-legal-entity) — er **fuldt fjernet** fra kodebasen. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet — Sproom har egne ækvivalenter. E-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO` (Sproom Auto-kanal der vælger OIOUBL for DK og Peppol BIS for international). Sproom er eneste Access Point. DB-migration kræves i produktion (`bun run db:push`/`db:migrate` + data-migration `UPDATE "EInvoiceSending" SET channel = 'SPROOM_AUTO' WHERE channel = 'STORECOVE';`).)
+**Status:** ✅ Aftalen er indgået. Sproom (dansk selskab — Sproom A/S, https://sproom.net) er AlphaFlows eneste e-invoicing Access Point og dækker begge netværk: Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1). Integrationen er færdig og live mod Sproom staging (https://staging.sproom.net) via `src/lib/sproom-client.ts` og `/api/sproom/*`-ruterne (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Som dansk selskab behandler Sproom data i Danmark/EU — ingen SCC påkrævet. (Den tidligere planlagte Storecove B.V.-aftale er supersederet; tidligere Storecove-kode — `src/lib/storecove-client.ts` ruter under `/api/storecove/*` (webhook, participants, status, connect, create-legal-entity) — er **fuldt fjernet** fra kodebasen. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet — Sproom har egne ækvivalenter. E-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO` (Sproom Auto-kanal der vælger OIOUBL for DK og Peppol BIS for international). Sproom er eneste Access Point. DB-migration kræves i produktion (`bun run db:push`/`db:migrate` + data-migration `UPDATE "EInvoiceSending" SET channel = 'SPROOM_AUTO' WHERE channel = 'STORECOVE';`).)
 
 **Resterende handling (produktionsaktivering — env-switch):**
 - Sæt `SPROOM_API_URL=https://sproom.net` + `SPROOM_API_TOKEN` i produktions-`.env` (default er staging: `https://staging.sproom.net`).
 - Sæt `SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true` (fail-closed RSA-signaturverifikation — Sproom signerer webhooks med SHA256withRSA i `X-Signature`-headeren; offentlig nøgle hentes automatisk fra GET /api/webhooks/key og cachelagres).
 - Verificér produktions-flowet: child company pr. tenant (pr. CVR) + registrering i begge netværk (POST /api/registrations/nemhandel + POST /api/registrations/peppol med participant verification), test-afsendelse (OIOUBL type 380 + kreditnota type 381) og leveringsbevis via GET /api/documents/{id}/state.
-- Opdater Bilag 6 afsnit 6.4 + 16.3.
+- Opdater Bilag 6 afsnit 6.4.3.
 **Ansvarlig:** Jess Martin Christoffersen (Sproom-aftale, indgået) + teknisk (env-switch) · **Tidsramme:** <1 dag (env-switch + verifikation — aftalen er indgået; ingen ekstern ventetid)
 **Acceptkriterier:** Sproom-aftale indgået (✅); produktions-e-faktura afsendt via https://sproom.net (HTTP 201 Created + dokument-ID i `X-Sproom-DocumentId`); leveringsbevis hentet; NemHandel- + Peppol-registrering bekræftet i produktion.
 
@@ -89,7 +92,7 @@ AlphaAi Consult ApS indsender med åbenheds-erklæring (Bilag 1 afsnit 8) og for
 | ID | Tiltag | Handling (kort) | Mål |
 |---|---|---|---|
 | U-10 | Caddy rate_limit plugin | Installer og konfigurer plugin | 3 måneder |
-| U-11 | Next.js middleware.ts | Central auth + tenant-isolation som tillæg til `withGuard()` | 6 måneder |
+| U-11 | Next.js middleware.ts | Central auth + tenant-isolation som tillæg til `withGuard` | 6 måneder |
 | U-12 | Account-lockout | Lås efter 10 fejlede forsøg pr. 24t + email-notifikation | 3 måneder |
 | U-13 | Password min. 8 tegn | Hæv fra 6 til 8 (NIST 800-63B) + strength-meter | 3 måneder |
 | U-16 | Persondata-kryptering i DB (hvile) | Udvidet AES-256-GCM på udvalgte felter | 6 måneder |
@@ -103,8 +106,8 @@ AlphaAi Consult ApS indsender med åbenheds-erklæring (Bilag 1 afsnit 8) og for
 **Baggrund (historisk):** Erhvervsstyrelsen kræver, at der "kun er den nyeste reviderede standardkontoplan" i brug. Kildebasen havde tidligere to versioner side-om-side: `OFFICIAL_STANDARD_CHART` (20260101, 603 konti) OG en legacy `PUBLIC_STANDARD_CHART` (~50 konti). `OFFICIAL_STANDARD_CHART` havde precedence, men `PUBLIC_STANDARD_CHART` blev brugt som fallback i 5 helper-funktioner.
 
 **Gennemførte handlinger (Oktober 2026):**
-- Fjernede `PUBLIC_STANDARD_CHART`-arrayet fra merge-stierne i `getStandardAccount()`/`getStandardAccountsByType()`/`getVATAccounts()`/`suggestStandardMapping()`/`buildAutoMapping()` (så disse nu udelukkende returnerer officielle konti).
-- Verificerede at `buildAutoMapping()` Phase 1+2 (som allerede filtrerede til OFFICIAL) ikke ændrede adfærd.
+- Fjernede `PUBLIC_STANDARD_CHART`-arrayet fra merge-stierne i `getStandardAccount`/`getStandardAccountsByType`/`getVATAccounts`/`suggestStandardMapping`/`buildAutoMapping` (så disse nu udelukkende returnerer officielle konti).
+- Verificerede at `buildAutoMapping` Phase 1+2 (som allerede filtrerede til OFFICIAL) ikke ændrede adfærd.
 - Standardkonto-UI viser nu udelukkende officielle 2026-konti.
 
 **Ansvarlig:** Teknisk (refactor) · **Tidsramme:** Gennemført
@@ -167,21 +170,7 @@ Før indsendelse bekræftes at:
 
 ### Versionshistorik
 
-| Version | Dato | Ændring |
-|---|---|---|
-| 1.0 | April 2026 | Første version — 5 compliance-mangler. |
-| 2.0 | Maj 2026 | Implementeringslog for 5 mangler. |
-| 3.0 | 2026 | Udvidet med R-01..R-20 fra Bilag 8; Kategori A/B/C-struktur. |
-| 3.1 | 2026 | Simplificeret — fokuseret på konkret handlingsplan; OpenRouter som hoved-databehandler for AI (underbehandlere håndteres af OpenRouter per GDPR Art. 28(4)). |
-| 3.2 | 2026 | AI-konsolidering: kun OpenRouter som AI-udbyder (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). U-2 opdateret — scanner-VLM går nu via OpenRouter (ikke separat Anthropic DPA). |
-| 3.3 | 2026 | Kategori A-udbedringer udført: U-1 (key rotation), U-3 (CSP), U-4 (ClamAV), U-5 (Socket.IO auth), U-6 (webhook fail-closed), U-7 (voucherNumber), U-14 (timingSafeEqual). Tilsvarende bilag opdateret. |
-| 3.4 | 2026 | Fjernet implementerede tiltag (U-1, U-3, U-4, U-5, U-6, U-7, U-14) fra planen; dokumentet fokuserer nu på resterende tiltag. Reframet sprog. |
-| 3.5 | 2026 | Dokumentationsnøjagtighed: rettet permissions 18→23, kreditnota nu implementeret, AI-bankafstemning nu i produktion via OpenRouter, Hermes-consent beskrevet korrekt (toggle-baseret), webhook fail-closed reflekteret, CVR konsolideret til 46312058. |
-| 3.6 | 2026 | Bilagsstruktur-konsolidering: underbehandler-DPA’er samlet til Bilag 14; Tjekliste renummereret fra Bilag 19 til Bilag 3. Krydsreferencer opdateret. |
-| 3.7 | September 2026 | Sproom (DK) har erstattet Storecove (NL) som Peppol+NemHandel Access Point; U-9 opdateret (aftale indgået, staging aktiv, produktion via env-switch). |
-| 3.8 | Oktober 2026 | U-15 (hash-chain på posteringer) markeret som gennemført — SHA-256 chain via `recordHash`/`previousHash` på `JournalEntry` og `Transaction` er implementeret (se Bilag 04 afsnit 2.10); fjernet U-15 fra §2/§4-tabeller. Sproom `sproom-client.ts` LOC rettet 2.646 → 2.799 (faktisk `wc -l`). |
-| 3.9 | Oktober 2026 | Tilføjet U-24 (udfas legacy `PUBLIC_STANDARD_CHART` så kun `OFFICIAL_STANDARD_CHART` 2026 forbliver) — afspejler at to versioner af standardkontoplanen eksisterer side-om-side i koden, og at Erhvervsstyrelsen kræver "kun den nyeste reviderede". Samtidig rettet aktuelle tilstandspåstande om Storecove: koden er legacy/inaktiv (bevaret for bagudkompatibilitet) — ikke slettet. |
-| 3.10 | Oktober 2026 | Storecove legacy-kode fysisk slettet fra kodebasen (`storecove-client.ts` + 5 `/api/storecove/*`-ruter); 5 redundante Company-felter fjernet; `EInvoiceSending.storecoveSubmissionId` omdøbt til `sproomDocumentId`; `storecoveStorecoveId` slettet; enum-værdi `STORECOVE` omdøbt til `SPROOM_AUTO`; legacy `PUBLIC_STANDARD_CHART` fjernet — U-24 gennemført (kun `OFFICIAL_STANDARD_CHART` 2026 forbliver). DB-migration kræves i produktion. |
+> **Seneste ændring (v3.11, Oktober 2026):** U-24 gennemført (legacy PUBLIC_STANDARD_CHART fjernet); U-8 opdateret (SKAT Moms-API SOAP/mTLS/WS-Security); Storecove fuldt fjernet.
 
 ---
 

@@ -29,13 +29,13 @@ TokenPay er AlphaFlows adgangsstyringsmodul, der kontrollerer hvilke brugere der
 | **`.tbkey` proof-fil** | Binær fil (version 0x01 + 12-byte IV + 16-byte authTag + ciphertext). Produceres eksternt af TokenBay-ZIPProof og uploades af brugeren via `/api/proof-upload`. |
 | **Kryptering** | AES-256-GCM med `PROOF_ENCRYPTION_KEY` (64-char hex, delt med TokenBay-ZIPProof). |
 | **Modul** | `mini-services/tokenpay-access-service/` (Bun + Hono, port 3100). Dekrypterer `.tbkey` for at læse et ZIP-manifest med proof-metadata. |
-| **Dekrypteringslogik** | `mini-services/tokenpay-access-service/src/tbkey-decryption.ts:decryptTbkey()`. |
+| **Dekrypteringslogik** | `mini-services/tokenpay-access-service/src/tbkey-decryption.ts:decryptTbkey`. |
 
 ### 1.2 Access-niveauer
 
 | Niveau | Betydning |
 |---|---|
-| `read_only` | Bruger kan se data men ikke oprette/redigere. Håndhæves af `requireTokenPayAccess()` i `src/lib/route-guard.ts`. |
+| `read_only` | Bruger kan se data men ikke oprette/redigere. Håndhæves af `requireTokenPayAccess` i `src/lib/route-guard.ts`. |
 | `read_write` | Bruger kan oprette/redigere data (mutationer tilladt). |
 
 > **Note:** AlphaAi App Owner (SuperDev) tildeles syntetisk `read_write`-adgang via owner-bypass (`src/lib/access-guard.ts`), markeret med `isOwnerBypass: true` — ikke et tredje adgangsniveau.
@@ -45,7 +45,7 @@ TokenPay er AlphaFlows adgangsstyringsmodul, der kontrollerer hvilke brugere der
 | Tilstand | Beskrivelse |
 |---|---|
 | **Trial** | Op til 60 dages fuld `read_write`-adgang, tildelt af App Owner (SuperDev) via `/api/oversight/trial` (30 eller 60 dage). `User.trialClaimedAt` markerer tidspunktet for brugerens valg af plan (ikke trial-udløb). |
-| **Free tier** | Omsætning < 50.000 kr. pr. år — gratis read_write-adgang for små virksomheder. |
+| **Free tier** | Gratis read_write-adgang for små virksomheder (omsætningstærskel — se Tinks aktuelle vilkår). |
 | **Betalt abonnement** | Via Frisbii/Flatpay — `PlanTier`: `monthly`, `annual`, `twoyear`, `threeyear`. |
 | **Expired / Revoked** | `User.subscriptionRevokedAt` sat af App Owner — adgang blokeret. |
 
@@ -126,15 +126,20 @@ Komplet tabel over alle environment variables fra `.env.example`, kategoriseret.
 | `FLATPAY_API_KEY` | Frisbii/Flatpay abonnementsbetaling. | Nej (mock-mode hvis tom) | (tom) | EU (Tyskland). Frisbii private key starter med `priv_`. |
 | `FLATPAY_WEBHOOK_SECRET` | HMAC-SHA256 webhook (header `Reepay-Signature`/`frisbii-signature`). | **JA i prod** | (tom) | Påkrævet i produktion. Webhooks afvises (fail-closed) hvis secret mangler eller signaturen er ugyldig — U-6 implementeret. Fallback til `FLATPAY_API_KEY` som HMAC-secret hvis sat (kræver stadig valid signatur). |
 | `FLATPAY_API_BASE_URL` | Frisbii Checkout API URL. | Nej | `https://checkout-api.frisbii.com/v1` | — |
-| `SKAT_CLIENT_ID` | SKAT Moms-API OAuth2 client_id. | Nej (sim-mode) | (tom) | DK-myndighed. |
-| `SKAT_CLIENT_SECRET` | SKAT OAuth2 client_secret. | Nej (sim-mode) | (tom) | DK-myndighed. KUN moms — ingen årsopgørelse/e-indkomst. |
-| `SKAT_API_BASE` | SKAT API URL. | Nej | `https://api.skat.dk/moms` | — |
+| `SKAT_ENV` | SKAT-miljø: `test` eller `production`. | Nej (default: `test`) | `test` | DK-myndighed. |
+| `SKAT_ENDPOINT_VIRKSOMHEDKALENDERHENT` | Endpoint for `VirksomhedKalenderHent` SOAP-service (hent momsperioder + frister). | **JA i prod** | (fra app.conf) | Fra SKAT's onboarding-email. |
+| `SKAT_ENDPOINT_MODTAGMOMSANGIVELSEFORELOEBIG` | Endpoint for `ModtagMomsangivelseForeloebig` SOAP-service (indsend DRAFT momsangivelse). | **JA i prod** | (fra app.conf) | Fra SKAT's onboarding-email. |
+| `SKAT_ENDPOINT_MOMSANGIVELSEKVITTERINGHENT` | Endpoint for `MomsangivelseKvitteringHent` SOAP-service (hent kvittering efter MitID-godkendelse). | **JA i prod** | (fra app.conf) | Fra SKAT's onboarding-email. |
+| `SKAT_KEYSTORE_PATH` | PKCS12-keystore med VOCES3 System (S1)-certifikat (`.p12`/`.pfx`). | **JA i prod** (sim-mode hvis tom) | `certs/skat/client.p12` | Alternativt: separate PEM-filer via `SKAT_CERT_PATH` + `SKAT_KEY_PATH`. |
+| `SKAT_KEYSTORE_PASSWORD` | Keystore-passphrase. | **JA i prod** | (tom) | — |
+| `SKAT_KEY_PASSWORD` | Private key-passphrase (hvis forskellig fra keystore). | Nej | (tom) | — |
+| `SKAT_TRUSTSTORE_PATH` | CA bundle der verificerer SKAT's server-certifikat under mTLS. | **JA i prod** | `certs/skat/skat-ca.pem` | Download fra SKAT's GitHub repo (se `docs/SKAT-setup.md` §3). |
 | `CVR_API_USERNAME` | Erhvervsstyrelsen CVR-register (HTTP Basic Auth). | Nej (sim-mode) | (tom) | DK-myndighed. |
 | `CVR_API_PASSWORD` | CVR-register password. | Nej (sim-mode) | (tom) | DK-myndighed. |
 | `CVR_API_BASE_URL` | CVR API URL. | Nej | `http://distribution.virk.dk` | — |
 | `CVR_SIMULATION_MODE` | `true` = mock-data, `false` = rigtige opslag. | Nej | `false` | Sæt `false` i prod med credentials. |
 
-> **Note (Sproom — eneste e-faktura Access Point):** Sproom (dansk selskab, https://sproom.net) dækker **både** Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) — én Sproom child company pr. tenant dækker begge netværk. Aktiv klient: `src/lib/sproom-client.ts` (2.799 LOC); aktive ruter: `/api/sproom/*` (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). Dokumenter sendes som raw XML (POST /api/documents, `Content-Type: application/octet-stream`, auto-detektion af OIOUBL/BIS 3); modtagelse sker via DocumentReceived-webhook + safety-net-pollers i `instrumentation.ts` (indbakke hver 5. min, outbox hver 10. min med auto-retry). Idempotens via `X-Request-Id`; dokument-ID returneres i `X-Sproom-DocumentId` (HTTP 201); statuspolling via GET /api/documents/{id}/state. E-faktura-simulering sker **automatisk** når `SPROOM_API_TOKEN` mangler (fallback) — Sproom staging (`https://staging.sproom.net`) er default-endpoint. NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE`, `src/lib/storecove-client.ts` og 5 ruter under `/api/storecove/*` er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet — Sproom har egne ækvivalenter. E-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Platformens Sproom-abonnement: 399 kr./md. inkl. 500 transaktioner samlet på tværs af alle tenants; overforbrug 0,8 kr./transaktion.
+> **Note (Sproom — eneste e-faktura Access Point):** Sproom (dansk selskab, https://sproom.net) dækker **både** Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) — én Sproom child company pr. tenant dækker begge netværk. Aktiv klient: `src/lib/sproom-client.ts`; aktive ruter: `/api/sproom/*` (create-child-company, register-nemhandel, peppol, register-webhook, webhook, webhook-status, participants, status, disconnect). Dokumenter sendes som raw XML (POST /api/documents, `Content-Type: application/octet-stream`, auto-detektion af OIOUBL/BIS 3); modtagelse sker via DocumentReceived-webhook + safety-net-pollers i `instrumentation.ts` (indbakke hver 5. min, outbox hver 10. min med auto-retry). Idempotens via `X-Request-Id`; dokument-ID returneres i `X-Sproom-DocumentId` (HTTP 201); statuspolling via GET /api/documents/{id}/state. E-faktura-simulering sker **automatisk** når `SPROOM_API_TOKEN` mangler (fallback) — Sproom staging (`https://staging.sproom.net`) er default-endpoint. NemHandel-tilmelding, MitID Erhverv-certifikat, AS4-transport, SMP/NHR-opslag, schema/schematron-validering og MLR/AR håndteres af Sproom som Access Point. Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE`, `src/lib/storecove-client.ts` og 5 ruter under `/api/storecove/*` er **fuldt fjernet** fra kodebasen — Sproom er eneste Access Point. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet — Sproom har egne ækvivalenter. E-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Abonnementsvilkår aftales separat med Sproom A/S.
 
 ### 2.6 Email / SMTP
 
@@ -178,7 +183,7 @@ Disse sættes i `ecosystem.config.js` under hver mini-services `env:`-blok, **ik
 
 ### 2.9 Tink bank-integration (reel integration — sandbox/produktion via credentials)
 
-Tink er en reel integration — sandbox- og produktionstilstande; aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET` (samme credentials-flow, kun credentials adskiller miljøerne). `src/lib/tink-client.ts` (751 LOC) implementerer det fulde OAuth2 Authorization Code-flow via Tink Link (hosted consent-UI), kontoliste, transaktionshentning, token-refresh og revoke — og dækker 3.000+ europæiske banker. Aktive ruter: `/api/bank-connections/tink-callback` og `/api/bank-connections/tink-accounts`. DPA med Tink indgås før produktion (ikke i Bilag 14 endnu). Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data.
+Tink er en reel integration — sandbox- og produktionstilstande; aktiveres ved konfiguration af `TINK_CLIENT_ID`/`TINK_CLIENT_SECRET` (samme credentials-flow, kun credentials adskiller miljøerne). `src/lib/tink-client.ts` implementerer det fulde OAuth2 Authorization Code-flow via Tink Link (hosted consent-UI), kontoliste, transaktionshentning, token-refresh og revoke — og dækker 3.000+ europæiske banker. Aktive ruter: `/api/bank-connections/tink-callback` og `/api/bank-connections/tink-accounts`. DPA med Tink indgås før produktion (ikke i Bilag 14 endnu). Nordea/Danske Bank/Jyske Bank er stubs (returnerer fejl); Demo-provider leverer syntetiske data.
 
 | Variabel | Formål | Påkrævet | Dev-default | Sikkerhedsnote |
 |---|---|---|---|---|
@@ -260,8 +265,14 @@ SPROOM_WEBHOOK_REQUIRE_SIGNATURE=true
 # SPROOM_WEBHOOK_PUBLIC_KEY=<valgfri PEM-nøgle — auto-hentes fra Sproom hvis udeladt>
 FLATPAY_API_KEY=<key>
 FLATPAY_WEBHOOK_SECRET=<generated-64-hex>
-SKAT_CLIENT_ID=<id>
-SKAT_CLIENT_SECRET=<secret>
+SKAT_ENV=production
+SKAT_ENDPOINT_VIRKSOMHEDKALENDERHENT=<fra app.conf>
+SKAT_ENDPOINT_MODTAGMOMSANGIVELSEFORELOEBIG=<fra app.conf>
+SKAT_ENDPOINT_MOMSANGIVELSEKVITTERINGHENT=<fra app.conf>
+SKAT_KEYSTORE_PATH=certs/skat/client.p12
+SKAT_KEYSTORE_PASSWORD=<keystore-passphrase>
+SKAT_KEY_PASSWORD=<key-passphrase>
+SKAT_TRUSTSTORE_PATH=certs/skat/skat-ca.pem
 CVR_API_USERNAME=<user>
 CVR_API_PASSWORD=<pass>
 CVR_SIMULATION_MODE=false
@@ -388,7 +399,7 @@ Caddy konfigureret til `alphaflow.dk` og `www.alphaflow.dk` med:
 
 - TLS 1.2 / 1.3 (Let's Encrypt auto-cert).
 - HSTS preload (`max-age=31536000; includeSubDomains; preload`).
-- Security headers: `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
+- Security headers: `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=, microphone=, geolocation=`.
 - Per-service routing via `?XTransformPort=<port>`-matcher:
   - `@notification-ws` → `localhost:3001`
   - `@hermes-agent` → `localhost:3004`
@@ -448,12 +459,12 @@ Brug denne checklist ved produktionssætning og periodisk audit.
 - [ ] `OPENROUTER_API_KEY` er sat i `hermes-agent`, `knowledge-service` og `scanner-service` PM2-env (konsolideret AI-integration — ellers fejler chat-LLM, RAG-embeddings og VLM-ekstraktion).
 - [ ] `SPROOM_API_TOKEN` er sat (og `SPROOM_API_URL=https://sproom.net`) hvis rigtige e-fakturaer skal sendes — uden token kører e-faktura i simuleringsmode (automatisk fallback); staging er default-endpoint.
 - [ ] `CVR_SIMULATION_MODE=false` hvis rigtige CVR-opslag skal foretages.
-- [ ] `SKAT_CLIENT_ID` + `SKAT_CLIENT_SECRET` sat hvis rigtige momsangivelser skal indsendes.
+- [ ] `SKAT_ENV=production` + `SKAT_KEYSTORE_PATH` + `SKAT_KEYSTORE_PASSWORD` + `SKAT_TRUSTSTORE_PATH` `SKAT_ENDPOINT_*`-URL'er sat + VOCES3 S1-certifikat (`certs/skat/client.p12`) installeret hvis rigtige momsangivelser skal indsendes (se `docs/SKAT-setup.md`).
 
 ### 5.6 Adgangskontrol
 
 - [ ] SSH-nøgle-login til VPS er aktiveret; password-login deaktiveret.
-- [ ] Root-login begrænset ( kun via sudo).
+- [ ] Root-login begrænset (kun via sudo).
 - [ ] PM2-logfiler (`logs/*.log`) roteres og beskyttes mod uautoriseret læsning.
 - [ ] `Tenant-Backup/` og `uploads/` mapper har restriktive filesystem-rettigheder (f.eks. `chmod 750`).
 
@@ -539,12 +550,7 @@ pm2 restart tokenpay-access
 
 ## Versionshistorik
 
-| Version | Dato | Ændring |
-|---|---|---|
-| 2.1 | 2026 | Konsolideret AI-integration via OpenRouter (chat-LLM + RAG-embeddings + VLM); OpenAI som valgfri alternativ embedding-udbyder. |
-| 2.2 | September 2026 | Sproom (DK) har erstattet Storecove (NL) som eneste e-faktura Access Point (Peppol + NemHandel): `SPROOM_API_URL`/`SPROOM_API_TOKEN`/`SPROOM_WEBHOOK_PUBLIC_KEY`/`SPROOM_WEBHOOK_REQUIRE_SIGNATURE`; RSA-webhook-signatur (`X-Signature`, SHA256withRSA) i stedet for HMAC; simuleringsfallback automatisk når `SPROOM_API_TOKEN` mangler. Tink-afsnit opdateret (reel integration — sandbox/produktion via credentials). |
-| 2.4 | Oktober 2026 | **Storecove fuldt fjernet:** `src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*` er fysisk slettet fra kodebasen. Tidligere Storecove-specifikke DB-felter (`storecoveConnected`, `storecoveApiKeyId`, `storecoveLegalEntityId`, `storecoveConnectedAt`, `storecoveLastTestedAt`, `storecoveStorecoveId`) er fjernet fra Prisma-schemaet — Sproom har egne ækvivalenter. `EInvoiceSending.storecoveSubmissionId` er omdøbt til `sproomDocumentId`; enum-værdi `STORECOVE` er omdøbt til `SPROOM_AUTO`. Sproom er eneste Access Point. |
-| 2.3 | Oktober 2026 | Dokumentationsnøjagtighed (Task 21-d): `src/lib/sproom-client.ts` LOC rettet 2.646 → 2.799 (faktisk `wc -l`). Tidligere `STORECOVE_*`-variabler, `NEMHANDEL_SIMULATION_MODE`, `src/lib/storecove-client.ts` og `/api/storecove/*`-ruter omformuleret fra "supersederet legacy" → "fuldt slettet fra kodebasen (oktober 2026)". |
+> **Seneste ændring (v2.4, Oktober 2026):** Storecove fuldt fjernet; Sproom er eneste Access Point; SKAT env-vars opdateret til SOAP/mTLS (SKAT_ENV, SKAT_ENDPOINT_*, SKAT_KEYSTORE_PATH, SKAT_TRUSTSTORE_PATH).
 
 ---
 

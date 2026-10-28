@@ -70,7 +70,7 @@ Denne plan dækker hele AlphaFlow-platformen:
 | BEK 97 §8 stk. 4 (hovedkrav 6 / krav D4) | It-sikkerhed: Beredskab og reetablering | Denne plan |
 | GDPR Art. 32 | Sikkerhed i behandling af personoplysninger | Tekniske og organisatoriske foranstaltninger |
 | GDPR Art. 33 | Underretning af Datatilsynet inden for 72 timer ved data breach | Afsnit 6.5 |
-| GDPR Art. 34 | Underretning af berørte registrerede ved høj risiko | Afsnit 6.5 + 8 |
+| GDPR Art. 34 | Underretning af berørte registrerede ved høj risiko | Afsnit 6.5 |
 
 > Samtlige krav i BEK 97 (Kravbekendtgørelsen, BEK nr. 97 af 26. januar 2023) er udstedt i medfør af Lov om bogføring (LOV nr. 700 af 24. maj 2022) — herunder §13 og §15.
 
@@ -94,7 +94,7 @@ Følgende komponenter skal kunne genoprettes ved en hændelse:
 
 | App-navn | Port | Teknologi | Funktion | max_memory |
 |---|---|---|---|---|
-| `alphaflow` | 3000 | Next.js 16 (Node) | Host-app — alle API-routes, UI + 6 baggrundsschedulere i `instrumentation.ts` (backup, recurring, billing, log-monitor, Sproom-indbakke hver 5. min, Sproom-outbox hver 10. min) | 1500M |
+| `alphaflow` | 3000 | Next.js 16 (Node) | Host-app — alle API-routes, UI baggrundsschedulere i `instrumentation.ts` (backup, recurring, billing, log-monitor, Sproom-indbakke hver 5. min, Sproom-outbox hver 10. min) | 1500M |
 | `hermes-agent` | 3004 | Bun + Socket.IO + Prisma | AI-chat-assistent (OpenRouter LLM) | 512M |
 | `knowledge-service` | 3006 | Bun + rå HTTP + Prisma + pgvector | RAG knowledge base (embeddings via OpenRouter) | 256M |
 | `tokenpay-access` | 3100 | Bun + Hono + SQLite (bun:sqlite) | TokenPay adgangskontrol (.tbkey proofs) | 256M |
@@ -182,8 +182,8 @@ RTO/RPO-målene kan justeres ved:
 ### 4.2 AlphaFlow ZIP-backup-format (Lag 2 — verificeret)
 
 **Moduler:**
-- `src/lib/backup-engine.ts` (1482 LOC): Oprettelse, gendannelse, kryptering, checksum.
-- `src/lib/backup-scheduler.ts` (907 LOC): Cron-baseret automation, retry, health monitoring.
+- `src/lib/backup-engine.ts`: Oprettelse, gendannelse, kryptering, checksum.
+- `src/lib/backup-scheduler.ts`: Cron-baseret automation, retry, health monitoring.
 - `src/app/api/backups/` (REST API): list, create, download, restore, delete, upload-restore, scheduler-status.
 - `src/components/backup/backup-page.tsx`: Bruger-grænseflade.
 
@@ -195,7 +195,7 @@ RTO/RPO-målene kan justeres ved:
 - Sikker sletning af ukrypteret original ZIP efter kryptering.
 - Tenant-isolering: hver backup indeholder KUN én virksomheds data.
 
-**Lagringslokation:** `Tenant-Backup/{companyName}/{Hourly|Daily|Weekly|Monthly|Manual}/` relativt til `process.cwd()` på IONOS VPS.
+**Lagringslokation:** `Tenant-Backup/{companyName}/{Hourly|Daily|Weekly|Monthly|Manual}/` relativt til `process.cwd` på IONOS VPS.
 
 ### 4.3 Cron-skema (Europe/Copenhagen)
 
@@ -204,7 +204,7 @@ RTO/RPO-målene kan justeres ved:
 | `5 * * * *` | Hourly | Hver time, minut 5 | 24 | 25 timer |
 | `15 2 * * *` | Daily | Daglig kl. 02:15 | 30 | 31 dage |
 | `30 3 * * 1` | Weekly | Mandag kl. 03:30 | 52 | 53 dage |
-| `0 4 1 * *` | Monthly | 1. i måneden kl. 04:00 | 62 | **5 år+** (62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder) (BEK 97 §3 — 5-års opbevaring, udstedt i medfør af Lov om bogføring §15) |
+| `0 4 1 * *` | Monthly | 1. i måneden kl. 04:00 | 62 | **5 år+** (62 måneder = 5 år måneder margin for forskudte regnskabsperioder) (BEK 97 §3 — 5-års opbevaring, udstedt i medfør af Lov om bogføring §15) |
 | `0 3 * * *` | Cleanup | Daglig kl. 03:00 — sletter udløbne backups | — | — |
 | On-demand | Manual | Via UI `/api/backups` eller `/api/backups/upload-restore` | 999 | 90 dage |
 
@@ -217,7 +217,7 @@ Timezone: `process.env.BACKUP_TIMEZONE || 'Europe/Copenhagen'`.
 - **Retry med exponential backoff:** 3 forsøg (5s, 10s, 20s).
 - **Overlap guard:** `runningJobs`-Set forhindrer concurrent runs af samme job-type.
 - **Per-tenant in-memory dedup:** `LAST_AUTO_BACKUP` Map forhindrer duplikerede backups.
-- **`ensureInitialBackup()`:** første-data-triggeret baseline-backup når tenant først indsætter data (opretter alle 4 typer).
+- **`ensureInitialBackup`:** første-data-triggeret baseline-backup når tenant først indsætter data (opretter alle 4 typer).
 - **Pre-restore safety backup:** automatisk oprettes før enhver gendannelse (forhindrer tab ved fejl-restore).
 - **Atomisk gendannelse:** database-transaktion med rollback ved fejl.
 - **Per-tenant health monitoring:** grøn/rød indikator på `/api/backups/scheduler-status`.
@@ -363,7 +363,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
    pm2 restart alphaflow
    ```
 6. **Verificér:** `curl -s http://localhost:3000/` — forventet HTTP 200.
-7. **Hvis backup-scheduler var stoppet** (kører i alphaflow-processen): Verificér at `startBackupScheduler()` kørte ved startup (`instrumentation.node.ts`). Tjek `/api/backups/scheduler-status`. Startup catch-up vil køre oversete cron-vinduer.
+7. **Hvis backup-scheduler var stoppet** (kører i alphaflow-processen): Verificér at `startBackupScheduler` kørte ved startup (`instrumentation.node.ts`). Tjek `/api/backups/scheduler-status`. Startup catch-up vil køre oversete cron-vinduer.
 
 ### 5.4 Mini-service crash
 
@@ -454,7 +454,7 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
 10. **Hvis PROOF_ENCRYPTION_KEY er kompromitteret** — koordiner med TokenBay-ZIPProof for version `0x02` (version byte eksisterer allerede i `.tbkey`-formatet).
 11. **Roter alle andre secrets** (inter-service API-nøgler, eksterne API-keys).
 12. **Foretag sikkerhedsgennemgang** — AuditLog-gennemgang for mistænkelig aktivitet mellem kompromittering og rotation.
-13. **Underret berørte registrerede** (GDPR Art. 34 hvis høj risiko) — se afsnit 6.5 + 8.
+13. **Underret berørte registrerede** (GDPR Art. 34 hvis høj risiko) — se afsnit 6.5.
 14. **Dokumentér hændelsen** — post-incident review (se afsnit 6.6).
 
 **Rollback** (hvis migration fejler):
@@ -798,7 +798,7 @@ AlphaAi Consult ApS
 - Vær transparent — men undgå at afsløre tekniske detaljer der kan udnyttes af angribere.
 - Fokuser på hvad AlphaAi gør for at håndtere hændelsen.
 - Henvis til Datatilsynet-indberetning for formelle detaljer.
-- Designér én talsperson ( Direktør / DPO).
+- Designér én talsperson (Direktør / DPO).
 
 ---
 
@@ -944,13 +944,4 @@ pm2 list                                       # tabelleret status
 
 ### Bilag F — Dokumenthistorik
 
-| Version | Dato | Ændring | Ansvarlig |
-|---|---|---|---|
-| 1.0 | April 2026 | Første version (generisk beredskabsplan). | AlphaAi Consult ApS |
-| 2.0 | Maj 2026 | Tilføjede PM2-kommandoer, RTO/RPO-mål. | AlphaAi Consult ApS |
-| 2.4 | 2026-06 | Mindre opdateringer. | AlphaAi Consult ApS |
-| **3.0** | **2026** | **Fuld omskrivning baseret på faktisk infrastruktur. Tilføjede: 6 PM2-apps detaljeret, backup-strategi med Lag 1-4, 8 genopretningsprocedurer (DB-tab/VPS-fejl/App-crash/Mini-service-crash/ENCRYPTION_KEY-kompromitteret/Ransomware/SQLite-tab/Caddy-fejl), 6-trins incident response-procedure, kontaktliste med underbehandlere, kommunikationsplan med skabeloner, årlig DR-test + kvartalsvis review.** | **AlphaAi Consult ApS** |
-| **3.1** | **2026** | **AI-konsolidering (Task C3): Verificeret at OpenRouter er AlphaFlows eneste AI-underbehandler (OpenAI/Anthropic fjernet som selvstændige underbehandlere per GDPR Art. 28(4)). Antal eksterne integrationer opdateret fra 15 til 13. Bilag 14 (konsolideret AI-DPA — dækker chat LLM + embeddings + VLM) reference verificeret i §7.4.** | **AlphaAi Consult ApS — Task C3** |
-| **3.2** | **2026** | **Dokumentationsnøjaktighed:** Bilag C backup-API-endpoints rettet — `Permission.BACKUP_DELETE` og `Permission.BACKUP_READ` eksisterer ikke i koden; erstattet med korrekte permissions (`BACKUP_CREATE` for create/delete/download, `BACKUP_RESTORE` for restore/upload-restore, `DATA_READ` for list/scheduler-status). §4.5 og §5.1 trin 3 rettet tilsvarende. | **AlphaAi Consult ApS — doc-editor G** |
-| **3.3** | **September 2026** | **Sproom-migrering (e-fakturering):** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som AlphaFlows eneste e-faktura Access Point (Peppol BIS Billing 3.0/UBL 2.1 + NemHandel OIOUBL 2.1) — integreret og live mod Sproom staging; produktionsaktivering via env-switch. §2.1: scheduler-oversigt opdateret (6 baggrundsschedulere inkl. Sproom-indbakke/outbox-pollers). §2.4: Sproom tilføjet til afhængighedskort med failover-strategi. Ny genopretningsprocedure §5.9 (Sproom-nedetid — safety-net pollers, send-kø med retry, e-mail-PDF-fallback). §5.2/§6.2: env-vars opdateret (SPROOM_API_TOKEN/SPROOM_WEBHOOK_PUBLIC_KEY; RSA-SHA256-webhooksignatur i X-Signature). §6.5/§7.5: notifikations- og kontaktlister rettet til Sproom. | **AlphaAi Consult ApS — doc-agent (Task 2-e)** |
-| **3.4** | **Oktober 2026** | **Dokumentationsnøjagtighed (Task 21-d):** §1.2 — fjernet reference til ikke-eksisterende `mini-services/pg-service` (sandbox-hjælpeværktøj). §1.5 — "20 risici R-01..R-20" rettet til "21 risici R-01..R-21" (Bilag-08 inkluderer R-21). | **AlphaAi Consult ApS — doc-audit Task 21-d** |
+> **Seneste ændring (v3.4, Oktober 2026):** Sproom-migrering (e-fakturering); scheduler-oversigt + afhængighedskort + genopretningsprocedure §5.9 (Sproom-nedetid) opdateret.

@@ -10,9 +10,7 @@
 >
 > **Ansvarlig:** AlphaAi Consult ApS
 >
-> **Opdateret v1.2 (oktober 2026):** Storecove-kode (`src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*`) er **fuldt fjernet** fra kodebasen — Sproom er eneste e-faktura Access Point. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Legacy `PUBLIC_STANDARD_CHART` (~49 konti) er helt fjernet — kun `OFFICIAL_STANDARD_CHART` (603 konti, 2026-versionen) benyttes (U-24 gennemført). DB-migration (`bun run db:push`) er kørt på VPS — schema er i sync.
->
-> **Opdateret v1.1 (september 2026):** Sproom (DK) har erstattet Storecove (NL) som Peppol- og NemHandel Access Point (webhooks + safety-net-pollere, per-send status-tracking og auto-retry); Tink er nu en reel Open Banking-integration; kreditnota (type 381) fuldt understøttet i e-faktura-pipelinen; arkitektur-oversigt opdateret (5 mini-services, 45 Prisma-modeller/27 enums, 176 API-ruter).
+> **Seneste ændring (v1.2, oktober 2026):** Storecove-kode (`src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*`) er **fuldt fjernet** fra kodebasen — Sproom er eneste e-faktura Access Point. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Legacy `PUBLIC_STANDARD_CHART` (~49 konti) er helt fjernet — kun `OFFICIAL_STANDARD_CHART` (603 konti, 2026-versionen) benyttes (U-24 gennemført). DB-migration (`bun run db:push`) er kørt på VPS — schema er i sync.
 
 ---
 
@@ -85,7 +83,7 @@ Nedenstående tabel opsummerer AlphaFlows dækning af Bogføringslovens og BEK 9
 | **SAF-T Financial DK eksport** | BEK 98 | `/api/export-saft` — maskinlæsbar eksport af hele regnskabet. | ✅ Opfyldt |
 | **Årsrapport (XBRL/CSV)** | BEK 98 | `/api/reports/annual-xbrl` + `/api/reports/annual-csv`. | ✅ Opfyldt |
 | **E-fakturering (NemHandel/Peppol)** | BEK 98 | Send/modtag via Sproom som Access Point for både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1) — inkl. kreditnotaer (type 381). Modtagelse via webhooks + safety-net-pollere, per-send status-tracking og auto-retry. E-faktura-indbakke med godkend/afvis. | ✅ Opfyldt |
-| **Momsangivelse til SKAT** | BEK 98 | `/api/vat/submit` — OAuth2 `client_credentials`, moms:indberet-scope. **KUN moms** — ingen årsopgørelse/e-indkomst. | ✅ Opfyldt (kun moms) |
+| **Momsangivelse til SKAT** | BEK 98 | `/api/vat/submit` — SOAP/mTLS/WS-Security (RSU B2B Gateway, VOCES3 S1-certifikat). **KUN moms** — ingen årsopgørelse/e-indkomst. | ✅ Opfyldt (kun moms) |
 | **Standardkontoplan** | BEK 98 | FSR-baseret kontoplan (Account-model) + `StandardAccountMapping` til SKAT's fællesoffentlige standardkontoplan. | ✅ Opfyldt |
 | **Udbyderskift / dataeksport og -import** | Bogføringsloven §13; BEK 98 | `/api/export-tenant` (JSON + filer, SHA-256 manifest), `/api/export-saft`, `/api/company/export-info`, `/api/import-saft` + `/api/import-saft/dry-run` (SAF-T-import — førstegangs overflytning til AlphaFlow, bevogtet af `src/lib/tenant-import-guard.ts` jf. §10-12). | ✅ Opfyldt |
 | **Fortløbende bilagsnummerering** | Bogføringsloven §10 | `Company.journalPrefix` (default "BIL") + `nextJournalSequence`. | ✅ Opfyldt |

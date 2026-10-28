@@ -36,7 +36,7 @@ Vurderingen dækker hele AlphaFlow-platformen — en multi-tenant SaaS bogførin
 - **Database:** PostgreSQL på Neon (EU: Frankfurt + Amsterdam), Prisma ORM, pgvector-udvidelse.
 - **Reverse proxy/TLS:** Caddy (self-hosted på IONOS VPS), Let's Encrypt, TLS 1.2/1.3.
 - **Backup-lagring:** IONOS VPS (`Tenant-Backup/{companyName}/`), AES-256-GCM-krypterede ZIPs.
-- **12 integrationer:** 11 EU-baserede + 1 USA-baseret (OpenRouter, som videresender til model-udbydere per GDPR Art. 28(4)).
+- **12 integrationer:** 11 EU-baserede USA-baseret (OpenRouter, som videresender til model-udbydere per GDPR Art. 28(4)).
 
 Vurderingen dækker de tre sikkerhedsdimensioner i **BEK 97 §8 stk. 2 (CIA-triaden)**: sikring mod (i) hændelig tilintetgørelse, (ii) uautoriseret adgang og (iii) uautoriseret ændring af bogføringsdata — jf. Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023) §8 stk. 2. Dette er det overordnede krav som risikovurderingen i nedenstående afsnit dækker.
 
@@ -72,7 +72,7 @@ Risikoniveau = Sandsynlighed × Konsekvens.
 | **Høj (H)** | Betydelig forretningsmæssig skade | Omfattende datatab; system nede i timer; anmeldelsespligt |
 | **Kritisk (K)** | Eksistens truet; lovkrav overtrådt | Komplet datatab; GDPR-breach; bogføringslovbrud |
 
-#### Risikoniveau ( før afhjælpning )
+#### Risikoniveau (før afhjælpning)
 
 Se matrix i afsnit 6.
 
@@ -115,7 +115,7 @@ AlphaFlow behandler **ikke CPR-numre** — kun CVR. Persondatakategorier (jf. GD
 - **Identitetsdata:** navn, email, telefon, adresse (på brugere og kontakter).
 - **Finansielle data:** posteringer, fakturaer, momsangivelser, bank-transaktioner.
 - **Adgangskoder:** bcrypt 12 rounds.
-- **2FA-secrets:** AES-256-GCM-krypteret TOTP RFC6238 + 10 SHA-256+salt backup-koder.
+- **2FA-secrets:** AES-256-GCM-krypteret TOTP RFC6238 SHA-256+salt backup-koder.
 - **Bank-tokens:** AES-256-GCM-krypteret.
 - **IP/User-Agent:** audit-log og session-log.
 
@@ -181,7 +181,7 @@ Udvalgte persondatafelter (email, telefon, adresser, kontonumre) opbevares ukryp
 | **A6** | Upload-lagring (`uploads/`) | Fortroligt | Bilag, kvitteringer, dokumenter pr. tenant |
 | **A7** | Session-tokens | Fortroligt | 256-bit httpOnly+secure+sameSite=lax cookies, 7d sliding expiry |
 | **A8** | Inter-service API-nøgler | Kritisk | `TOKENPAY_API_KEY`, `SCANNER_API_KEY`, `HERMES_ADMIN_KEY`, `FLATPAY_API_KEY+WEBHOOK_SECRET`, `SPROOM_API_TOKEN`+`SPROOM_WEBHOOK_PUBLIC_KEY` |
-| **A9** | Eksterne API-secrets | Kritisk | `OPENROUTER_API_KEY`, `SKAT_CLIENT_SECRET`, `CVR_API_PASSWORD`, `SMTP_PASS` |
+| **A9** | Eksterne API-secrets | Kritisk | `OPENROUTER_API_KEY`, `SKAT_KEYSTORE_PASSWORD` (VOCES3 S1-certifikat passphrase), `CVR_API_PASSWORD`, `SMTP_PASS` |
 | **A10** | AI-data (Hermes / embeddings / scanner-billeder) | Fortroligt | Sendes til USA — se R-13 |
 | **A11** | SQLite mini-DBs (`scanner.db`, `access.db`) | Fortroligt | Scan-job-historik + access-log + proof-fil-references — ukrypteret på disk, se R-18 |
 | **A12** | AuditLog | Regulatorisk | 3-niveau immutable audit-trail — BEK 97 Bilag 1 (uforanderlighed) compliance-bevis, jf. Lov om bogføring §13 |
@@ -190,7 +190,7 @@ Udvalgte persondatafelter (email, telefon, adresser, kontonumre) opbevares ukryp
 
 Nedenstående sårbarheder og tekniske kontroller danner grundlag for risici i afsnit 5:
 
-1. Content-Security-Policy (CSP) header implementeret via buildCspPolicy() i next.config.ts.
+1. Content-Security-Policy (CSP) header implementeret via buildCspPolicy i next.config.ts.
 2. Antivirus-scanning af uploads via ClamAV INSTREAM TCP-protokol.
 3. Key rotation/versioning via keyring med version-prefixed ciphertext.
 4. Immutability via AuditLog 3-niveau + PostgreSQL-triggers + SHA-256 hash-chain på posteringer (U-15 — se R-04).
@@ -209,7 +209,7 @@ Nedenstående sårbarheder og tekniske kontroller danner grundlag for risici i a
 17. Backup-scheduler kører som process-intern node-cron i alphaflow PM2-app.
 18. SQLite mini-service-databaser på VPS-disk.
 19. notification-ws /broadcast beskyttet via HERMES_ADMIN_KEY og session-middleware.
-20. Hermes Socket.IO — io.use() session-middleware; userId/tenantId udledes fra HttpOnly cookie.
+20. Hermes Socket.IO — io.use session-middleware; userId/tenantId udledes fra HttpOnly cookie.
 
 ### 4.3 Implementerede sikkerhedskontroller
 
@@ -217,7 +217,7 @@ Følgende tekniske kontroller er implementeret og udgør den eksisterende afhjæ
 
 - ✅ AES-256-GCM kryptering (bank-tokens, TOTP-secrets, backup-koder, backup-filer, `.tbkey` proofs).
 - ✅ Bcrypt password-hashing (12 rounds).
-- ✅ TOTP 2FA RFC 6238 + 10 backup-koder (SHA-256+salt).
+- ✅ TOTP 2FA RFC 6238 backup-koder (SHA-256+salt).
 - ✅ Tenant-wide 2FA-tveng (`Company.twoFactorRequired`).
 - ✅ Multi-tenant isolation via `tenantFilter` + per-row `companyId`.
 - ✅ RBAC: 5 roller, 23 permissions i 7 kategorier, SuperDev oversight read-only for tenant-regnskabsdata (mutationer blokeres via `blockOversightMutation`); SuperDev-admin endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare.
@@ -250,7 +250,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 
 | Attribut | Værdi |
 |---|---|
-| **Beskrivelse** | Next.js app udsender CSP-Report-Only header via `buildCspPolicy()` i `next.config.ts`; enforce-mode klar. |
+| **Beskrivelse** | Next.js app udsender CSP-Report-Only header via `buildCspPolicy` i `next.config.ts`; enforce-mode klar. |
 | **Trussel** | Ekstern angriber (XSS-injection via f.eks. faktura-beskrivelse, kontakt-note, Hermes chat). |
 | **Sårbarhed** | CSP implementeret (U-3); `/api/csp-report` endpoint aktiv. |
 | **Aktiv** | A7 (session-tokens), A1 (persondata i browser). |
@@ -259,7 +259,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Risikoniveau (før)** | **Høj** |
 | **Eksisterende afhjælpning** | React/Next escape output som standard; `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection: 1; mode=block`; MIME-type whitelist på uploads forhindrer upload-af-XSS via filer; path-traversal guard. |
 | **Rest risiko** | ✅ **Lav** — CSP-Report-Only aktiv; enforce-mode klar. |
-| **Afhjælpning** | ✅ **Udbedret (U-3).** CSP-Report-Only aktiv via `buildCspPolicy()` i `next.config.ts`; `/api/csp-report` endpoint. Enforce-mode aktiveres med `CSP_REPORT_ONLY=false`. |
+| **Afhjælpning** | ✅ **Udbedret (U-3).** CSP-Report-Only aktiv via `buildCspPolicy` i `next.config.ts`; `/api/csp-report` endpoint. Enforce-mode aktiveres med `CSP_REPORT_ONLY=false`. |
 
 ### R-02 — Antivirus-scanning af uploads (implementeret, U-4)
 
@@ -302,7 +302,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Sandsynlighed** | Lav |
 | **Konsekvens** | Høj |
 | **Risikoniveau (før)** | **Mellem** |
-| **Eksisterende afhjælpning** | 3-niveau immutability: (1) app CREATE-only audit-funktioner (`src/lib/audit.ts`), (2) PostgreSQL `BEFORE UPDATE/DELETE` triggers `prevent_audit_update`/`prevent_audit_delete` på AuditLog, (3) `onDelete: Restrict` cascade — User/Company kan ikke slettes når AuditLog-entry findes. AuditLog indeholder `changes` JSON (`{field: {old, new}}`) + `metadata` (IP, userAgent, timestamp, reason). 22 AuditAction-typer, 25 EntityType-typer, 88 ruter logger. **Derudover** er posteringernes egen kryptografiske SHA-256 hash-chain implementeret (`recordHash`/`previousHash`/`hashedAt` på `JournalEntry` og `Transaction`) — kæden er per-tenant og verificerbart via revisor-endpoint `/api/journal-entries/verify-integrity`. Filkilder: `src/lib/journal-hash-chain.ts` (468 LOC) + `prisma/schema.prisma` linje 587-589 (Transaction) og 834-836 (JournalEntry). |
+| **Eksisterende afhjælpning** | 3-niveau immutability: (1) app CREATE-only audit-funktioner (`src/lib/audit.ts`), (2) PostgreSQL `BEFORE UPDATE/DELETE` triggers `prevent_audit_update`/`prevent_audit_delete` på AuditLog, (3) `onDelete: Restrict` cascade — User/Company kan ikke slettes når AuditLog-entry findes. AuditLog indeholder `changes` JSON (`{field: {old, new}}`) + `metadata` (IP, userAgent, timestamp, reason). 22 AuditAction-typer, 25 EntityType-typer, 88 ruter logger. **Derudover** er posteringernes egen kryptografiske SHA-256 hash-chain implementeret (`recordHash`/`previousHash`/`hashedAt` på `JournalEntry` og `Transaction`) — kæden er per-tenant og verificerbart via revisor-endpoint `/api/journal-entries/verify-integrity`. Filkilder: `src/lib/journal-hash-chain.ts` + `prisma/schema.prisma` (Transaction) og 834-836 (JournalEntry). |
 | **Rest risiko** | ✅ **Lav** — direkte mutation af posteringer detekteres nu både via hash-chain (verificerbart af revisor) og via PostgreSQL-triggers (blokerer UPDATE/DELETE på forseglede rækker). Backup-sammenligning forbliver en supplerende kontrol. |
 | **Afhjælpning** | ✅ **Udbedret (U-15, oktober 2026).** SHA-256 hash-chain (Bitcoin-lignende) på `JournalEntry` og `Transaction` implementeret — se Bilag-04 afsnit 2.10 og Bilag-12 §3. |
 
@@ -340,7 +340,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 
 | Attribut | Værdi |
 |---|---|
-| **Beskrivelse** | Caddyfile linje 86-97 definerer to rate-limit-zoner (`static_zone: 100 req/min`, `api_zone: 30 req/min`) — men blokken er **udkommenteret** med note om at `caddy-rate_limit` plugin ikke er installeret. Rate-limiting håndteres udelukkende i applikationslaget (`src/lib/rate-limit.ts`) med in-memory sliding window. |
+| **Beskrivelse** | Caddyfile definerer to rate-limit-zoner (`static_zone: 100 req/min`, `api_zone: 30 req/min`) — men blokken er **udkommenteret** med note om at `caddy-rate_limit` plugin ikke er installeret. Rate-limiting håndteres udelukkende i applikationslaget (`src/lib/rate-limit.ts`) med in-memory sliding window. |
 | **Trussel** | DDoS / volumetrisk angreb mod Next.js-appen (kan oversvømme in-memory rate-limit-cache). |
 | **Sårbarhed** | In-memory rate-limit nulstilles ved server-restart; ingen cross-instance koordinering (kun én VPS, så mitigations faktor); PM2 max_memory_restart 1500M for alphaflow-app kan udløses ved hukommelsesudtørring. |
 | **Aktiv** | A1 (app-tilgængelighed). |
@@ -355,14 +355,14 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 
 | Attribut | Værdi |
 |---|---|
-| **Beskrivelse** | Der findes ingen `src/middleware.ts` i Next.js-appen — ingen central request-filter. Auth, rate-limiting og tenant-isolation håndteres pr. route via `withGuard()` wrapper i `src/lib/route-guard.ts`. |
-| **Trussel** | Misconfiguration — en API-route mangler `withGuard()` og udsættes utilsigtet uden auth. |
-| **Sårbarhed** | Ingen central through-going kontrol; afhængig af at 150+ routes hver især husker `withGuard()`. |
+| **Beskrivelse** | Der findes ingen `src/middleware.ts` i Next.js-appen — ingen central request-filter. Auth, rate-limiting og tenant-isolation håndteres pr. route via `withGuard` wrapper i `src/lib/route-guard.ts`. |
+| **Trussel** | Misconfiguration — en API-route mangler `withGuard` og udsættes utilsigtet uden auth. |
+| **Sårbarhed** | Ingen central through-going kontrol; afhængig af at 150+ routes hver især husker `withGuard`. |
 | **Aktiv** | A1 (alle API-routes), A7 (session). |
 | **Sandsynlighed** | Lav |
 | **Konsekvens** | Høj |
 | **Risikoniveau (før)** | **Mellem** |
-| **Eksisterende afhjælpning** | `withGuard()` gennemtvinger auth/company/oversight/demo/TokenPay/permissions/features på alle protected routes; `tenantFilter(ctx)` på DB-queries; SuperDev oversight read-only for tenant-regnskabsdata (mutationer blokeres via `blockOversightMutation`); SuperDev-admin endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare; demo-firma read-only; AuditLog på 88 ruter. |
+| **Eksisterende afhjælpning** | `withGuard` gennemtvinger auth/company/oversight/demo/TokenPay/permissions/features på alle protected routes; `tenantFilter(ctx)` på DB-queries; SuperDev oversight read-only for tenant-regnskabsdata (mutationer blokeres via `blockOversightMutation`); SuperDev-admin endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare; demo-firma read-only; AuditLog på 88 ruter. |
 | **Rest risiko** | Lav |
 | **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — implementer `src/middleware.ts` der gennemtvinger auth-redirect på alle ikke-`/login`/`/register` routes, samt default-deny for API-routes der ikke eksplicit tillader public adgang. Kombinér med CSP-header (R-01). |
 
@@ -392,7 +392,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Sandsynlighed** | Høj (sandsynligvis vil nogle enterprise-kunder afvise) |
 | **Konsekvens** | Lav |
 | **Risikoniveau (før)** | **Mellem** |
-| **Eksisterende afhjælpning** | Email+password + TOTP 2FA RFC 6238 + 10 backup-koder; invitation-system; email-verifikation; password-reset; SuperDev oversight-mode for AlphaAi-support. |
+| **Eksisterende afhjælpning** | Email+password + TOTP 2FA RFC 6238 backup-koder; invitation-system; email-verifikation; password-reset; SuperDev oversight-mode for AlphaAi-support. |
 | **Rest risiko** | Mellem (accepteret — feature-afhængig). |
 | **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — MitID-erhverv-integration eller SAML 2.0 til enterprise-kunder. Accepteret for nu — se afsnit 7. |
 
@@ -460,7 +460,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 
 | Attribut | Værdi |
 |---|---|
-| **Beskrivelse** | `src/lib/bank-providers.ts` definerer `createRealBankProvider()` factory for Tink, Nordea, Danske Bank, Jyske Bank. Tink er en reel implementering (real OAuth2 via Tink Link, aktiveres ved konfigurerede TINK_CLIENT_ID/SECRET); Nordea/Danske Bank/Jyske Bank stubbes (`fetchTransactions` kaster `"requires production configuration"`). Demo-provider returnerer realistiske test-data. Bank-access-tokens krypteres dog alligevel med AES-256-GCM før lagring (fremtidssikring). |
+| **Beskrivelse** | `src/lib/bank-providers.ts` definerer `createRealBankProvider` factory for Tink, Nordea, Danske Bank, Jyske Bank. Tink er en reel implementering (real OAuth2 via Tink Link, aktiveres ved konfigurerede TINK_CLIENT_ID/SECRET); Nordea/Danske Bank/Jyske Bank stubbes (`fetchTransactions` kaster `"requires production configuration"`). Demo-provider returnerer realistiske test-data. Bank-access-tokens krypteres dog alligevel med AES-256-GCM før lagring (fremtidssikring). |
 | **Trussel** | Ikke en sikkerhedstrussel — feature-forventning. |
 | **Sårbarhed** | Bank-integration reklames som feature men virker kun med Demo-provider i prod. |
 | **Aktiv** | A2 (finansielle data — manglende bank-transaktioner). |
@@ -482,7 +482,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Sandsynlighed** | Lav (tre-niveau matching inkl. regelbaseret + fuzzy for-filter begrænser AI-kald til plausible kandidater) |
 | **Konsekvens** | Lav (fejl kan opdages ved gennemgang og rettes via Unlink/Link) |
 | **Risikoniveau (før)** | **Lav–Mellem** |
-| **Eksisterende afhjælpning** | Tre-niveau matching: (1) regelbaseret eksakt (beløb ±0,01 DKK, dato ±3 dage, reference), (2) fuzzy (beløb ±5 DKK, dato ±7 dage, beskrivelses-lighed >70%), (3) AI via OpenRouter med konfidens-score. Kun AI-match ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 markeres AI_SUGGESTED og kræver manuel godkendelse; <0,80 ignoreres. AI-output overstyrer aldrig automatisk bogførte posteringer uden brugergodkendelse — kun banklinje-link oprettes. Brugeren kan altid Unlink et forkert match. Manuel matching forbliver fuldt tilgængelig. Den tidligere `z-ai-web-dev-sdk`-integration (sandbox-only) er erstattet af `callOpenRouter()`. |
+| **Eksisterende afhjælpning** | Tre-niveau matching: (1) regelbaseret eksakt (beløb ±0,01 DKK, dato ±3 dage, reference), (2) fuzzy (beløb ±5 DKK, dato ±7 dage, beskrivelses-lighed >70%), (3) AI via OpenRouter med konfidens-score. Kun AI-match ≥0,95 autoprogrammeres (MATCHED); 0,80–0,95 markeres AI_SUGGESTED og kræver manuel godkendelse; <0,80 ignoreres. AI-output overstyrer aldrig automatisk bogførte posteringer uden brugergodkendelse — kun banklinje-link oprettes. Brugeren kan altid Unlink et forkert match. Manuel matching forbliver fuldt tilgængelig. Den tidligere `z-ai-web-dev-sdk`-integration (sandbox-only) er erstattet af `callOpenRouter`. |
 | **Rest risiko** | Lav (accepteret — autoprogrammering ved ≥0,95 er en bevidst value/efficiency-feature; brugeren kan altid Unlink et forkert match). |
 | **Afhjælpning** | Accepteret for nu — se afsnit 7. Fremtidigt: udvid audit-log til at inkludere AI-konfidens-score pr. match for lettere efterfølgende gennemgang. |
 
@@ -497,7 +497,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Sandsynlighed** | Mellem (app kan crash) |
 | **Konsekvens** | Mellem |
 | **Risikoniveau (før)** | **Mellem** |
-| **Eksisterende afhjælpning** | Neon PITR 7 dage (defense-in-depth lag 1, fuld DB-recovery); PM2 `autorestart:true`, `max_restarts:10`, `restart_delay:5000`; `CronExecution` DB-log med startup catch-up (oversete cron-vinduer genkendes og køres); retry 3x exp. backoff (5s/10s/20s); overlap guard via `runningJobs`-Set; per-tenant health monitoring på `/api/backups/scheduler-status`; `ensureInitialBackup()` første-data-triggeret baseline-backup. |
+| **Eksisterende afhjælpning** | Neon PITR 7 dage (defense-in-depth lag 1, fuld DB-recovery); PM2 `autorestart:true`, `max_restarts:10`, `restart_delay:5000`; `CronExecution` DB-log med startup catch-up (oversete cron-vinduer genkendes og køres); retry 3x exp. backoff (5s/10s/20s); overlap guard via `runningJobs`-Set; per-tenant health monitoring på `/api/backups/scheduler-status`; `ensureInitialBackup` første-data-triggeret baseline-backup. |
 | **Rest risiko** | Lav — Neon PITR dækker 7 dage, AlphaFlow-backup-ZIPs dækker op til 5 år+ (62 måneder). |
 | **Afhjælpning** | `Bilag-12_Udbedringsplan.md` — ekstern systemd-timer / PM2 cron_jobs / dedicated backup-cron-script som backup-of-backup. Accepteret for nu — se afsnit 7. |
 
@@ -520,7 +520,7 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 
 | Attribut | Værdi |
 |---|---|
-| **Beskrivelse** | `mini-services/notification-ws-service/index.ts` — `POST /broadcast` og `/stats` er nu beskyttet med `HERMES_ADMIN_KEY` Bearer auth. Socket.IO `io.use()` middleware validerer session via `/api/auth/me`. |
+| **Beskrivelse** | `mini-services/notification-ws-service/index.ts` — `POST /broadcast` og `/stats` er nu beskyttet med `HERMES_ADMIN_KEY` Bearer auth. Socket.IO `io.use` middleware validerer session via `/api/auth/me`. |
 | **Trussel** | Misbrug af broadcast-endpoint — angriber sender falske `DATA_CHANGED`-events for at invalidere cacher eller forårsage unødvendige re-renders. |
 | **Sårbarhed** | Caddy reverse proxy ruter `/broadcast` og `/stats` til localhost:3001; Socket.IO handshake-auth på user-socket-forbindelser. |
 | **Aktiv** | A1 (real-time notifikationer, bruger-cache). |
@@ -528,14 +528,14 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Konsekvens** | Lav |
 | **Risikoniveau (før)** | **Lav** |
 | **Eksisterende afhjælpning** | Caddy reverse proxy — `/?XTransformPort=3001` ruter til `localhost:3001`; Socket.IO handshake-auth på user-socket-forbindelser; `/broadcast` kan ikke bruges til at udløse mutationer (kun cache-invalidering). |
-| **Rest risiko** | ✅ **Minimal** — `io.use()` middleware med session-validering; `/broadcast` kræver `HERMES_ADMIN_KEY` Bearer auth. |
-| **Afhjælpning** | ✅ **Udbedret (U-5).** `io.use()` middleware med HTTP-baseret session-validering via `/api/auth/me`. `/broadcast` og `/stats` beskyttet med `HERMES_ADMIN_KEY`. Se UDBEDRINGSPLAN U-5. |
+| **Rest risiko** | ✅ **Minimal** — `io.use` middleware med session-validering; `/broadcast` kræver `HERMES_ADMIN_KEY` Bearer auth. |
+| **Afhjælpning** | ✅ **Udbedret (U-5).** `io.use` middleware med HTTP-baseret session-validering via `/api/auth/me`. `/broadcast` og `/stats` beskyttet med `HERMES_ADMIN_KEY`. Se UDBEDRINGSPLAN U-5. |
 
 ### R-20 — Hermes Socket.IO join-event ingen handshake-auth
 
 | Attribut | Værdi |
 |---|---|
-| **Beskrivelse** | Hermes-agent (`mini-services/hermes-agent/index.ts`, port 3004) — Socket.IO `io.use()` middleware validerer session-cookie mod Neon `Session`-tabel. `userId`/`tenantId` udledes fra session, ikke klient-body. |
+| **Beskrivelse** | Hermes-agent (`mini-services/hermes-agent/index.ts`, port 3004) — Socket.IO `io.use` middleware validerer session-cookie mod Neon `Session`-tabel. `userId`/`tenantId` udledes fra session, ikke klient-body. |
 | **Trussel** | Uautoriseret socket-forbindelse — angriber der kender (eller gætter) et tenantId kan forbinde og sende chat-beskeder som en anden bruger. |
 | **Sårbarhed** | Socket.IO forbindelse bag Caddy reverse proxy (`/?XTransformPort=3004`). |
 | **Aktiv** | A10 (Hermes chat-data), A1 (persondata hvis `dataAccessEnabled=true`). |
@@ -543,8 +543,8 @@ For hver risiko: ID, beskrivelse, trussel, sårbarhed, aktiv, sandsynlighed (fø
 | **Konsekvens** | Mellem |
 | **Risikoniveau (før)** | **Mellem** |
 | **Eksisterende afhjælpning** | Socket.IO forbindelse bag Caddy reverse proxy (`/?XTransformPort=3004`); tenant-data hentes via `DatabaseTenantProvider` fra Neon (kun hvis `HermesAgent.dataAccessEnabled=true`); `/admin/stats` kræver Bearer auth; per-tenant rate-limiter; samtalehistorik in-memory + DB-persistens. |
-| **Rest risiko** | ✅ **Lav** — `io.use()` middleware validerer session-cookie. userId/tenantId udledes fra session, ikke klient-body. |
-| **Afhjælpning** | ✅ **Udbedret (U-5).** `io.use()` middleware med Prisma-baseret session-validering i hermes-agent. userId/tenantId udledes fra `socket.data.auth` (session), ikke message-body. Se UDBEDRINGSPLAN U-5. |
+| **Rest risiko** | ✅ **Lav** — `io.use` middleware validerer session-cookie. userId/tenantId udledes fra session, ikke klient-body. |
+| **Afhjælpning** | ✅ **Udbedret (U-5).** `io.use` middleware med Prisma-baseret session-validering i hermes-agent. userId/tenantId udledes fra `socket.data.auth` (session), ikke message-body. Se UDBEDRINGSPLAN U-5. |
 
 ### R-21 — AI non-determinisme og hallucinationer (Hermes / VLM)
 
@@ -622,7 +622,7 @@ Følgende risici er **accepteret** af AlphaAi Consult ApS med begrundelse — ek
 | **R-16** (AI-bankafstemning auto-match) | AI-bankafstemning er implementeret i produktion via OpenRouter (`matching-engine.ts`). Autoprogrammering ved AI-konfidens ≥0,95 er en bevidst value/efficiency-feature; brugeren kan altid Unlink et forkert match. Manuel matching forbliver fuldt tilgængelig. |
 | **R-17** (Backup-scheduler process-intern) | Neon PITR 7d + AlphaFlow-backup-ZIPs (5 år+ retention — 62 måneder) + CronExecution startup catch-up + PM2 autorestart vurderes som tilstrækkelig defense-in-depth. |
 | **R-18** (SQLite ukrypteret) | VPS-disk-encryption (IONOS managed) + inter-service API-key auth vurderes som tilstrækkelig. `.tbkey` proof-fil-indhold er krypteret uafhængigt. |
-| **R-19** (notification-ws auth) | ✅ **Udbedret (U-5).** `io.use()` middleware med session-validering; `/broadcast` og `/stats` beskyttet med `HERMES_ADMIN_KEY`. |
+| **R-19** (notification-ws auth) | ✅ **Udbedret (U-5).** `io.use` middleware med session-validering; `/broadcast` og `/stats` beskyttet med `HERMES_ADMIN_KEY`. |
 | **R-21** (AI non-determinisme og hallucinationer) | AI-output er iboende non-deterministisk. Accepteret med kompenserende foranstaltninger: (a) Hermes aktiveres per tenant via en enable/disable-toggle af Owner/Admin (eller SuperDev), separat `dataAccessEnabled`-toggle (default `false`) styrer dataadgang til OpenRouter-LLM'en, (b) aktivering/deaktivering samt dataadgang-ændringer audit-logges (`action: UPDATE`, `entityType: System`), (c) VLM-output markeres "Kræver gennemsyn" ved lav konfidens, (d) AI overstyrer aldrig automatisk bogførte posteringer — brugeren confirmerer altid. Se Bilag 6 (Bilag-06_Brugsvejledning.md) §13.0 for fulde advarselstekster. |
 
 ---
@@ -677,12 +677,4 @@ Den gennemsnitlige restrisiko er acceptabel for en SMB-bogføringsplatform.
 
 ## Bilag B — Dokumenthistorik
 
-| Version | Dato | Ændring | Ansvarlig |
-|---|---|---|---|
-| 1.0 | 2026-04-01 | Første version (generisk IT-risikovurdering). | AlphaAi Consult ApS |
-| 2.0 | 2026-05-01 | Tilføjede N2-N5/D1/D15 mapping, aktivoversigt. | AlphaAi Consult ApS |
-| **3.0** | **2026** | **Fuld omskrivning til DPIA (GDPR Art. 35). 21 risici (R-01..R-21). Risikomatrix + accept-begrundelser + prioriteret afhjælpningsplan.** | **AlphaAi Consult ApS** |
-| **3.1** | **2026** | **AI-konsolidering (C2):** R-13 opdateret — 3 USA-AI-underbehandlere (OpenAI, OpenRouter, Anthropic) konsolideret til 1 (OpenRouter, Inc., som videresender til model-udbydere per GDPR Art. 28(4)). §1.2 scope: 15→13 integrationer. §2 kontekst: "Anthropic VLM" → "VLM via OpenRouter". §2.4 integrationstabel: 3 USA-rækker → 1. §3.1 trusselsaktører: OpenAI/Anthropic fjernet. §4.1 A9: `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` fjernet (de er OpenRouter-konfiguration). §4.2 sårbarhed 13 opdateret. §8.2 P1 R-13 afhjælpningsplan opdateret (DPA+SCC+TIA for OpenRouter, konsolideret). Restrisiko for R-13 bevaret som Mellem (DPA+SCC+TIA stadig påkrævet). Bilag A: ingen OpenAI/Anthropic-specifikke referencer at fjerne. | **AlphaAi Consult ApS — AI-konsolidering C2** |
-| **3.2** | **2026** | **Dokumentationsnøjaktighed:** RBAC permissions 18→23 i 7 kategorier (§2.2, §4.2, §4.3). SuperDev oversight nuance — admin-endpoints (`/api/oversight/subscription`, `/api/oversight/trial`) forbliver kaldbare (§2.2, §4.2, §4.3, R-08). AI-bankafstemning opdateret fra "sandbox-only" til "aktiv i produktion via OpenRouter" — §2.4 (13→12 integrationer, da z-ai-web-dev-sdk ikke er en selvstændig integration men en feature under OpenRouter); §4.2 sårbarhed #16 opdateret; R-16 omformuleret fra "sandbox-only" til "auto-match risiko" med nedjusteret risikoniveau (Lav–Mellem); R-16 flyttet fra Mellem-cell til Lav-cell i §6 risikomatrix; R-21 eksisterende afhjælpning og §7 accept opdateret — "tre advarsler + AI_CONSENT_ACCEPTED + fodnote på hver besked" erstattet af toggle-baseret aktivering (enable/disable + `dataAccessEnabled`) med audit `action: UPDATE`. | **AlphaAi Consult ApS — doc-editor G** |
-| **3.3** | **September 2026** | **Sproom-migrering:** Sproom A/S (Danmark) har erstattet Storecove B.V. (Holland) som e-faktura Access Point — dækker både Peppol (BIS Billing 3.0/UBL 2.1) og NemHandel (OIOUBL 2.1); live mod Sproom staging (https://staging.sproom.net), produktion via env-switch (https://sproom.net). §2: e-fakturering/bank-integration-tekst opdateret (Sproom; Tink aktiv — ikke "scaffolding"). §2.4 integrationstabel række 3: Storecove → Sproom (Danmark/EU). §3.1: Sproom tilføjet i underbehandler-kompromitterings-rækken. §4.1 A8: `STORECOVE_API_KEY+WEBHOOK_SECRET` → `SPROOM_API_TOKEN`+`SPROOM_WEBHOOK_PUBLIC_KEY`. §4.3 + R-11: webhook-verifikation opdateret — RSA-SHA256 (X-Signature, offentlig nøgle fra GET /api/webhooks key, `crypto.createVerify('RSA-SHA256')`) for Sproom ud over HMAC-SHA256 (Frisbii/TokenPay). Risiko ved manglende NemHandel-AP-aftale (Bilag 12 U-9) reduceret — Sproom-aftale indgået, staging aktiv, produktion via env-switch. §6: optælling rettet (Mellem 10→11) og R-21 tilføjet i risikomatrix-cell (Høj/Mellem-konsekvens). §8.2: "alle 20 risici" → "alle 21 risici". | **AlphaAi Consult ApS** |
-| **3.4** | **Oktober 2026** | **Dokumentationsnøjagtighed (Task 21-d):** R-04 (hash-chain på posteringer) opdateret fra "Ingen hash-chain — accepteret for nu" → "Udbedret (U-15, oktober 2026)" — SHA-256 hash-chain via `recordHash`/`previousHash`/`hashedAt` på `JournalEntry` og `Transaction` er nu implementeret (se Bilag-04 afsnit 2.10); R-04 fjernet fra §7 Accepterede risici (var accepteret, nu udbedret), tilføjet til §8.2 Udbedrede risici-liste; §6 Accepteret-count rettet 9→8. §1.3 — "20 risici (R-01..R-20)" rettet til "21 risici (R-01..R-21)" (indholdsfortegnelse var ikke opdateret da R-21 blev tilføjet i v3.3). Audit-tal rettet: "75+ API-routes" → 88 ruter (§4.3, R-04, R-08); "25 AuditAction-typer, 24 EntityType-typer" → 22 AuditAction-typer, 25 EntityType-typer (R-04) — faktisk `src/lib/audit.ts`. | **AlphaAi Consult ApS — doc-audit Task 21-d** |
+> **Seneste ændring (v3.4, Oktober 2026):** R-04 (hash-chain på posteringer) opdateret; SKAT A9 assets opdateret (SKAT_KEYSTORE_PASSWORD i stedet for SKAT_CLIENT_SECRET).

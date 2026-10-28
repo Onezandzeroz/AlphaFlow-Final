@@ -1,9 +1,7 @@
 # AlphaFlow — Krypteringsrapport
 
 **Dokumenttype:** Teknisk krypteringsrapport (data-at-rest, data-in-transit, key management)
-**Version:** 2.4
-**Dato:** Oktober 2026
-**Versionshistorik:** 2.4 (oktober 2026): Storecove-kode fuldt fjernet fra kodebasen — `STORECOVE_WEBHOOK_SECRET` env-var reference fjernet fra §3.8 dev-fallback-beskrivelse (Storecove-integrationen eksisterer ikke længere). 2.3 (september 2026): Sproom A/S erstatter Storecove som e-faktura Access Point — Sproom-webhooks verificeres nu med RSA-SHA256 (`X-Signature`) i stedet for HMAC; Tink tilføjet til eksterne HTTPS-kald. 2.2: tidligere udgave (Storecove-baseret).
+**Version:** 2.4 — Oktober 2026. Seneste ændring: Storecove-kode fuldt fjernet; Sproom-webhooks verificeres med RSA-SHA256.
 **Gyldighedsområde:** AlphaFlow produktionsmiljø (`alphaflow.dk`)
 **Compliance-mål:** Erhvervsstyrelsen — Lov om bogføring (LOV nr. 700 af 24. maj 2022), Anmeldelsesbekendtgørelsen (BEK nr. 98 af 26. januar 2023) og Kravbekendtgørelsen (BEK nr. 97 af 26. januar 2023)
 **Dataansvarlig:** AlphaAi Consult ApS (App Owner)
@@ -34,7 +32,7 @@ Dette dokument beskriver AlphaFlows faktiske krypteringsimplementering som den f
 - Hvordan krypteringsnøgler administreres.
 
 **Ansvarlig:** AlphaAi Consult ApS (CVR-oplysninger for AlphaAi Consult ApS (CVR 46312058, Skelagervej 124C, 8200 Aarhus N) fremgår af Bilag 6 (Bilag-06_Brugsvejledning.md) afsnit 18.2 og Bilag 1 (Bilag-01_Anmeldelsespakke.md) afsnit 2).
-**Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) + 5 mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL.
+**Scope:** AlphaFlow-applikationen (Next.js 16, port 3000) mini-services (hermes-agent :3004, knowledge-service :3006, tokenpay-access :3100, notification-ws :3001, scanner-service :3005) + Caddy reverse proxy + IONOS VPS-hosting + Neon PostgreSQL.
 
 ---
 
@@ -79,7 +77,7 @@ openssl rand -hex 32
   - I produktion: `ecosystem.config.js` `env:`-blokke for hver PM2-app, eller OS-brugerens environment ved manuel start.
 - **PM2 læser IKKE automatisk `.env`** — hver mini-service (`tokenpay-access`, `hermes-agent`, `knowledge-service`, `scanner-service`) har sin egen `env:`-blok i `ecosystem.config.js`, hvor nøgler skal udfyldes eksplicit. Se `Bilag-13_TokenPay-TokenBay-guide.md` for detaljer.
 - Aldrig hårdkodet i kode, aldrig i databasen, aldrig logget.
-- Validering ved opstart: `loadKeyring()` (`src/lib/keyring.ts:99-131`) kaster hvis `ENCRYPTION_KEY` mangler eller har forkert længde; `getCurrentKeyVersion()` returnerer aktiv version.
+- Validering ved opstart: `loadKeyring` (`src/lib/keyring.ts:99-131`) kaster hvis `ENCRYPTION_KEY` mangler eller har forkert længde; `getCurrentKeyVersion` returnerer aktiv version.
 - Caching: nøglen parses én gang per proces og caches (`cachedKey`).
 
 ### 2.4 Key rotation (U-1 — implementeret)
@@ -104,7 +102,7 @@ v{N}:iv_base64:authTag_base64:ciphertext_base64
 **Backup filer:**
 - Filformat er uændret: `[12B IV][16B authTag][N ciphertext]`
 - Version spores via `Backup.encryptionKeyVersion` kolonne i DB.
-- `decryptFile()` accepterer `keyVersion` parameter.
+- `decryptFile` accepterer `keyVersion` parameter.
 
 **DB kolonner:**
 - `User.encryptionKeyVersion Int @default(1)` — for `twoFactorSecret` + `twoFactorBackupCodes`
@@ -138,7 +136,7 @@ v{N}:iv_base64:authTag_base64:ciphertext_base64
 Sikkerhedsegenskaber:
 - GCM leverer både **fortrolighed** (ciphertext) og **integritet** (auth tag).
 - Manipuleret ciphertext afvises ved dekryptering.
-- IV-generering via `crypto.randomBytes()` — kryptografisk sikker PRNG.
+- IV-generering via `crypto.randomBytes` — kryptografisk sikker PRNG.
 
 ### 3.2 Streng-format (DB-felter)
 
@@ -179,7 +177,7 @@ Version-byte muliggør fremtidige format-ændringer. Implementeret i `mini-servi
 | Algoritme | bcrypt (via `bcryptjs`) |
 | Salt rounds | 12 |
 | Lagring | `User.password` (hash-streng) |
-| Legacy-kompatibilitet | `simpleHash()` (bit-shift hash) genkendes via `needsRehash()` og re-hashes automatisk ved succesfuldt login |
+| Legacy-kompatibilitet | `simpleHash` (bit-shift hash) genkendes via `needsRehash` og re-hashes automatisk ved succesfuldt login |
 
 Password min. længde: **6 tegn**.
 
@@ -383,7 +381,7 @@ Filer på IONOS VPS (`/home/<user>/alphaflow/`):
 
 ### 6.4 Backup-retention & SHA-256 checksum
 
-- **Retention:** Hourly 24/25t, Daily 30/31d, Weekly 52/53d, Monthly 62/**5 år+** (62 måneder = 5 år + 2 måneder margin for forskudte regnskabsperioder) (BEK 97 §3 — udstedt i medfør af Lov om bogføring §15), Manual 999/90d.
+- **Retention:** Hourly 24/25t, Daily 30/31d, Weekly 52/53d, Monthly 62/**5 år+** (62 måneder = 5 år måneder margin for forskudte regnskabsperioder) (BEK 97 §3 — udstedt i medfør af Lov om bogføring §15), Manual 999/90d.
 - **Checksum:** SHA-256 af den ukrypterede ZIP gemmes i `Backup.sha256`. Ved restore genberegnes checksum og sammenlignes — afviser hvis mismatch.
 - **Format:** `[ZIP-indhold]` → SHA-256 beregnes → AES-256-GCM encrypt → original ZIP slettes.
 - **Lokation:** `Tenant-Backup/{companyName}/` på IONOS VPS — ikke automatisk off-site.
@@ -417,26 +415,26 @@ encryptFile(inputPath: string): string       // → inputPath + '.enc', original
 decryptFile(encPath: string): string         // → midlertidig .zip.tmp-fil
 
 // Nøglegenerering (til initial setup)
-generateEncryptionKey(): string              // → 64-char hex
+generateEncryptionKey: string              // → 64-char hex
 ```
 
 ### 7.2 Anvendelsessteder
 
 | Funktion | Brugt i |
 |---|---|
-| `encrypt()` / `decrypt()` | `src/lib/two-factor.ts` (TOTP-secret, backup-koder), `src/app/api/bank-connections/route.ts` (bank-tokens) |
-| `encryptOrNull()` / `decryptOrNull()` | BankConnection.accessToken/refreshToken |
-| `migrateBase64Token()` | `scripts/migrate-bank-tokens.ts` (engangsmigration), runtime fallback i bank-connections/route.ts |
-| `encryptFile()` / `decryptFile()` | `src/lib/backup-engine.ts` (backup-ZIP kryptering/restore) |
-| `isEncrypted()` | `src/lib/two-factor.ts:isSecretEncrypted()`, `scripts/migrate-bank-tokens.ts` |
+| `encrypt` / `decrypt` | `src/lib/two-factor.ts` (TOTP-secret, backup-koder), `src/app/api/bank-connections/route.ts` (bank-tokens) |
+| `encryptOrNull` / `decryptOrNull` | BankConnection.accessToken/refreshToken |
+| `migrateBase64Token` | `scripts/migrate-bank-tokens.ts` (engangsmigration), runtime fallback i bank-connections/route.ts |
+| `encryptFile` / `decryptFile` | `src/lib/backup-engine.ts` (backup-ZIP kryptering/restore) |
+| `isEncrypted` | `src/lib/two-factor.ts:isSecretEncrypted`, `scripts/migrate-bank-tokens.ts` |
 
 ### 7.3 Key-håndtering i praksis
 
-Krypteringsnøglen indlæses via keyring-arkitekturen i `src/lib/keyring.ts`: `loadKeyring()` læser `ENCRYPTION_KEY` (aktuel) og valgfri `ENCRYPTION_KEY_PREVIOUS` (til rotation), tildeler hver en versions-integer (`CURRENT_KEY_VERSION`), og `getCurrentKey()`/`getKeyForVersion(version)` returnerer den korrekte nøgle. Krypterede felter gemmer den anvendte `encryptionKeyVersion` så gamle data kan dekrypteres efter rotation. Start-preflight i `src/lib/backup-scheduler.ts:629-637` kaster og afbryder opstart hvis `ENCRYPTION_KEY` mangler eller har forkert længde.
+Krypteringsnøglen indlæses via keyring-arkitekturen i `src/lib/keyring.ts`: `loadKeyring` læser `ENCRYPTION_KEY` (aktuel) og valgfri `ENCRYPTION_KEY_PREVIOUS` (til rotation), tildeler hver en versions-integer (`CURRENT_KEY_VERSION`), og `getCurrentKey`/`getKeyForVersion(version)` returnerer den korrekte nøgle. Krypterede felter gemmer den anvendte `encryptionKeyVersion` så gamle data kan dekrypteres efter rotation. Start-preflight i `src/lib/backup-scheduler.ts:629-637` kaster og afbryder opstart hvis `ENCRYPTION_KEY` mangler eller har forkert længde.
 
 - Nøglen parses én gang og caches per proces (`cachedKeyring`).
 - Hvis nøglen mangler eller har forkert længde, kastes der — applikationen fejler hurtigt ved opstart.
-- Ciphertext gemmes med version-prefix (`v{N}:...`) så `decrypt()` automatisk vælger korrekt nøgle efter rotation.
+- Ciphertext gemmes med version-prefix (`v{N}:...`) så `decrypt` automatisk vælger korrekt nøgle efter rotation.
 
 ### 7.4 .tbkey dekryptering (TokenPay-service)
 
@@ -454,7 +452,7 @@ Engangsmigration `scripts/migrate-bank-tokens.ts`:
 - Konverterer legacy base64-encoded bank-tokens → AES-256-GCM.
 - `--dry-run` (default) viser hvad der vil blive konverteret.
 - `--execute` anvender ændringerne.
-- `isEncrypted()` forhindrer dobbelt-kryptering.
+- `isEncrypted` forhindrer dobbelt-kryptering.
 
 ### 7.6 Backup-checksum
 
