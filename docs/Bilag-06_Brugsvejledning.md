@@ -1314,18 +1314,40 @@ Tilgås fra **Moms & Årsregnskab → Årsrapport**-tabben. Klik på **Download 
 
 > **Krav:** iXBRL-eksport kræver `ANNUAL_REPORT_IXBRL`-feature (Månedlig+).
 
-**CSV-format (Regnskab Basis) — tekniske detaljer:**
+**CSV-format (Regnskab Basis) — Erhvervsstyrelsen-compliant 3-kolonne format:**
+
+Filen overholder Erhvervsstyrelsens officielle vejledning (Version 3, opdateret 5. marts 2026 — https://erhvervsstyrelsen.dk/vejledning-upload-af-regnskabsfil-i-regnskab-basis).
 
 | Egenskab | Værdi | Filkilde |
 |----------|-------|----------|
-| Encoding | **UTF-8 med BOM** (`\uFEFF` i starten — sikrer korrekt visning af danske tegn ÆØÅ i Excel) | `src/lib/annual-report-csv.ts` |
-| Separator | **Semikolon (`;`)** — Excel-kompatibelt for danske locale | `src/lib/annual-report-csv.ts` |
-| Linjeskift | `\n` (Unix) | `src/lib/annual-report-csv.ts` |
-| Sektioner | (1) RESULTATOPGØRELSE (indkomstopgørelse), (2) BALANCE (balanceopgørelse), (3) STATUSOPGØRELSE (ændringer i egenkapital) + momsoplysninger | `src/lib/annual-report-csv.ts` |
-| Beløbsformat | Heltal uden decimaler (avrundet via `Math.round(n * 100) / 100`) | `src/lib/annual-report-csv.ts` + `fmt`-helper |
-| Footer | "Genereret af AlphaFlow — Regnskab Basis (SKAT format)" + CVR-reference | `src/lib/annual-report-csv.ts` |
-| Indhold | Resultatopgørelse: nettoomsætning, øvrige indtægter, vareforbrug, bruttofortjeneste, lønninger, øvrige driftsomkostninger, finansielle poster, årets resultat før skat, skat, årets resultat. Balance: likvide beholdninger, bank, tilgodehavender, varelager, anlægsaktiver, øvrige aktiver, total aktiver, kreditorer, kortfristet gæld, langfristet gæld, total gæld, egenkapital. Statusopgørelse: egenkapital pr. 1. jan, årets resultat, private hævninger, egenkapital pr. 31. dec. Momsoplysninger: udgående, indgående, netto moms. | `src/lib/annual-report-csv.ts` |
-| Validering | Genereres udelukkende fra POSTED, ikke-annullerede JournalEntries for valgt år — reversals (`REVERSAL-TX-*`) udelukkes automatisk fra beløbene | `src/lib/vat-utils.ts` |
+| Header-række | `KONTONUMMER_20260101;KONTONAVN_20260101;VAERDI_20260101` (øverste linje — påkrævet format) | `src/lib/annual-report-csv.ts` |
+| Kolonner | 3: kontonummer; kontonavn; værdi (maksimalt 3 kolonner tilladt) | `src/lib/annual-report-csv.ts` |
+| Encoding | UTF-8 med BOM (`\uFEFF` — tilladt men ikke påkrævet) | `src/lib/annual-report-csv.ts` |
+| Separator | Semikolon (`;`) — ensartet gennem hele filen | `src/lib/annual-report-csv.ts` |
+| Beløbsformat | **Kun heltal** (ingen decimaler, ingen tusindtalsseparator) — afrundet via `Math.round()` | `src/lib/annual-report-csv.ts` |
+| Fortegn | Debet = positivt (`+` eller intet), Kredit = negativt (`-`) — f.eks. omsætning (1010) vises som `-100000`, varelager (6075) som `+65000` | `src/lib/annual-report-csv.ts` |
+| Linjer | Én linje pr. officiel 2026-standardkonto (kun konti med aktivitet medtages) | `src/lib/annual-report-csv.ts` |
+| Sektionsheadere | **Ingen** — filen er en flad tabel uden overskrifter | `src/lib/annual-report-csv.ts` |
+| Sum-/total-linjer | **Ingen** — hver linje er én enkelt konto | `src/lib/annual-report-csv.ts` |
+| Tekst-intro/footer | **Ingen** — filen starter med header-rækken og slutter med den sidste kontolinje | `src/lib/annual-report-csv.ts` |
+| Blokerede klasse A-konti | Filtreres fra (37 specifikke konti: 1450, 1805, 1807, 2085, 2170, 2240, 2265, 2266, 2295, 2430, 2548, 2550, 2567, 2580, 3095, 3097, 3099, 5682–5690, 6915–6924 jf. vejledning kap. 5) | `src/lib/annual-report-csv.ts` |
+| Kontonumre | Fra den officielle 2026 Standardkontoplan (version 20260101, 603 konti) — AlphaFlows FSR-konti mappes via `FSR_TO_OFFICIAL_MAPPING` | `src/lib/fsr-official-mapping.ts` + `src/lib/official-standard-chart.ts` |
+| CVR i filen | **Ikke inkluderet** — CVR matches mod den kladde brugeren har oprettet i Erhvervsstyrelsens Regnskab Basis-løsning (ikke en del af CSV-formatet) | — |
+| Validering | Genereres udelukkende fra POSTED, ikke-annullerede JournalEntries — reversals (`REVERSAL-TX-*`) udelukkes automatisk fra beløbene | `src/lib/annual-report-csv.ts` |
+
+**Eksempel på filens indhold:**
+
+```
+KONTONUMMER_20260101;KONTONAVN_20260101;VAERDI_20260101
+1010;Salg af varer og ydelser;-100000
+1610;Varekøb;0
+2842;Lønninger;0
+2810;Øvrige driftsomkostninger;8000
+5610;Momsgæld til Skattestyrelsen;8000
+6480;Bankkonto;240000
+6183;Tilgodehavender fra salg og tjenesteydelser;50000
+...
+```
 
 **iXBRL-format (Regnskag Special) — tekniske detaljer:**
 
@@ -1339,7 +1361,7 @@ Tilgås fra **Moms & Årsregnskab → Årsrapport**-tabben. Klik på **Download 
 | Tagging | `ix:nonFraction`-tagging per fact | `src/lib/annual-report-xbrl.ts` |
 | RBAC | Endpoint er RBAC-beskyttet (`REPORTS_EXPORT`) | `src/app/api/reports/annual-xbrl/route.ts` |
 
-> **Bilag-19a-rev:** Ved indsendelse til Erhvervsstyrelsen vedhæftes en aktuel CSV-fil (`Bilag-19a-rev-regnskab-basis.csv`) produceret fra demo-tenantens 2026-regnskab. Filen genereres på VPS via endpointet `GET /api/reports/annual-csv?year=2026` (se `upload/Guide-Bilag-19a-20a-20b-20e.md` afsnit "BILAG 19a rev." for trin-for-trin guide). Filen verificerer at det faktiske output opfylder formatkravene (UTF-8 BOM, semikolon-separator, danske overskrifter, sektioner).
+> **Bilag-19a-rev:** Ved indsendelse til Erhvervsstyrelsen vedhæftes en aktuel CSV-fil (`Bilag-19a-rev-regnskab-basis.csv`) produceret fra demo-tenantens 2026-regnskab. Filen genereres på VPS via endpointet `GET /api/reports/annual-csv?year=2026` (se `upload/Guide-Bilag-19a-20a-20b-20e.md` afsnit "BILAG 19a rev." for trin-for-trin guide). Filen verificerer at det faktiske output opfylder formatkravene (header `KONTONUMMER_20260101;KONTONAVN_20260101;VAERDI_20260101`, 3 kolonner, semikolon-separator, UTF-8 BOM, heltalsbeløb, korrekt fortegn).
 
 > **Præcisering af iXBRL (Regnskab Special):** Eksporten er en **basis DCCA-taxonomy-eksport**, ikke en fuld dimensionel DCCA-indberetning. Dette er bevidst valgt for at levere de kerne-krævede facts uden kompleks dimensionel tagging. Virksomheder med behov for dimensionel indberetning (f.eks. koncern-segmenter) skal komplettere filen manuelt før endelig indsendelse. Se Bilag-04 afsnit 2.8 for yderligere teknisk dokumentation.
 
