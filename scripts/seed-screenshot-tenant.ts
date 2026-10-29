@@ -5,10 +5,15 @@
  * til Erhvervsstyrelsen-screenshots (Bilag 19a, 20a, 20b, 20e).
  *
  * Tenant-data:
- *   - Virksomhed: "AlphaFlow Screenshot Demo" (CVR 00000000, ApS, isDemo=true)
+ *   - Virksomhed: "AlphaFlow Screenshot Demo" (CVR 00000000, ApS, isDemo=false)
  *   - einvoiceEnabled = false  (så NemHandel-banneret vises — Bilag 20e)
  *   - ~45 FSR-konti + StandardAccountMapping til 2026-kontoplan (Bilag 19a)
- *   - 6 POSTED journal entries med fortløbende voucherNumber 1-6 (Bilag 20a)
+ *   - 8 POSTED journal entries med fortløbende voucherNumber 1-8 (Bilag 20a),
+ *     heraf 2 faktura-accruals (INV-{år}-0001 + INV-{år}-0002)
+ *   - 2 fakturaer (INV-…) — den ene annulleres med automatisk kreditnota
+ *     (KRE-{år}-0001) + modpostering (REVERSAL-INV-{år}-0001)
+ *   - 1 transaktion (entry 5 — TX-LEJE-JAN) annulleres med modpostering
+ *     (REVERSAL-TX-LEJE-JAN) — viser transaktionsannullering i Bilag 20b
  *   - Alle entries har SHA-256 hash-chain + er sealed (Bilag 20b kode-bevis)
  *
  * Brug:
@@ -64,13 +69,22 @@ interface CreatedEntry {
   id: string;
   voucherNumber: string;
   reference: string | null;
+  description: string;
   date: Date;
   lines: LineSpec[];
+  /** ID på tilhørende Transaction (hvis oprettet). Bruges ved annullering. */
+  transactionId?: string;
 }
 
 // ─── Entry-definitioner ────────────────────────────────────────────────────
 // Hver entry er en bogført postering med tilhørende linjer (debet/kredit).
-// Entry 5 er en normal POSTED entry — ingen annullering længere (se kommentar i ENTRIES).
+//
+// Entry 5 (TX-LEJE-JAN) annulleres længere nede i scriptet — modpostering
+// med reference REVERSAL-TX-LEJE-JAN demonstrerer transaktionsannullering.
+//
+// Entry 7 + 8 er faktura-accruals der matcher de to Invoice-records. Faktura
+// 1 (INV-{år}-0001) annulleres med automatisk kreditnota (KRE-{år}-0001) +
+// modpostering (REVERSAL-INV-{år}-0001) — se trin [8/9] længere nede.
 
 interface LineSpec {
   accountNumber: string;
@@ -85,15 +99,13 @@ interface EntrySpec {
   date: Date;
   reference?: string;
   lines: LineSpec[];
-  /** Hvis true, oprettes en tilhørende Transaction der peger på denne entry. */
+  /** Hvis sat, oprettes en tilhørende Transaction der peger på denne entry. */
   createTransaction?: {
     type: TransactionType;
     amount: number;
     vatPercent: number;
     description: string;
   };
-  /** Hvis true, vil denne entry blive markeret cancelled + få en modpostering. */
-  willBeCancelled?: boolean; // beholder typen for bagudkompatibilitet, men bruges ikke
 }
 
 const ENTRIES: EntrySpec[] = [
@@ -141,6 +153,7 @@ const ENTRIES: EntrySpec[] = [
       { accountNumber: '1200', credit: r2(75000), description: 'Frigørelse af tilgodehavende' },
     ],
   },
+  // ─── Entry 5 — Husleje januar. ANNULLERES længere nede (REVERSAL-TX-LEJE-JAN) ───
   {
     description: 'Husleje januar — kontorlokale',
     date: new Date(CURRENT_YEAR, 0, 25), // 25. januar
@@ -167,13 +180,30 @@ const ENTRIES: EntrySpec[] = [
       { accountNumber: '4510', credit: r2(10000), vatCode: VATCode.S25, description: 'Udgående moms 25%' },
     ],
   },
-  // Bemærk: Tidligere version annullerede entry 5 (husleje) med en modpostering.
-  // Dette blev fjernet fordi verify-numbering endpointet rapporterer et "gap"
-  // når en cancelled entry stadig optager et nummer i serien. Til Bilag 20b
-  // (uforingerlighed) demonstreres uforingerlighed i stedet via:
-  //   1. curl DELETE på en POSTED entry → 400 fejl "Only DRAFT can be cancelled"
-  //   2. psql DELETE direkte → DB-trigger blokerer (Bogføringsloven §10-12)
-  //   3. Kode-screenshot af hash-chain + immutability-triggere
+  // ─── Entry 7 — Faktura 1 accrual (INV-{år}-0001).
+  // Denne faktura annulleres længere nede med kreditnota KRE-{år}-0001 +
+  // modpostering REVERSAL-INV-{år}-0001. ────────────────────────────────────
+  {
+    description: 'Salg af konsulentydelse — Nordic Tech Solutions ApS',
+    date: new Date(CURRENT_YEAR, 1, 15), // 15. februar
+    reference: `INV-${CURRENT_YEAR}-0001`,
+    lines: [
+      { accountNumber: '1200', debit: r2(100000), description: 'Tilgodehavende Nordic Tech Solutions ApS' },
+      { accountNumber: '4100', credit: r2(80000), description: 'Salg af konsulentydelse' },
+      { accountNumber: '4510', credit: r2(20000), vatCode: VATCode.S25, description: 'Udgående moms 25%' },
+    ],
+  },
+  // ─── Entry 8 — Faktura 2 accrual (INV-{år}-0002). Forbliver aktiv. ─────────
+  {
+    description: 'Salg af DevOps-rådgivning — DataDrift ApS',
+    date: new Date(CURRENT_YEAR, 1, 20), // 20. februar
+    reference: `INV-${CURRENT_YEAR}-0002`,
+    lines: [
+      { accountNumber: '1200', debit: r2(37500), description: 'Tilgodehavende DataDrift ApS' },
+      { accountNumber: '4100', credit: r2(30000), description: 'Salg af DevOps-rådgivning' },
+      { accountNumber: '4510', credit: r2(7500), vatCode: VATCode.S25, description: 'Udgående moms 25%' },
+    ],
+  },
 ];
 
 // ─── Hovedfunktion ─────────────────────────────────────────────────────────
@@ -219,7 +249,7 @@ async function main() {
   }
 
   // ─── 3. Opret Company ──────────────────────────────────────────────────
-  console.log('\n[1/8] Opretter Company…');
+  console.log('\n[1/9] Opretter Company…');
   const company = await db.company.create({
     data: {
       name: TENANT_NAME,
@@ -237,7 +267,12 @@ async function main() {
       nextJournalSequence: 1,
       currentYear: CURRENT_YEAR,
       journalPrefix: 'BIL',
+      // Faktura + kreditnota nummerering (selvom schema har @default-værdier,
+      // sætter vi dem eksplicit for at gøre intent tydelig i screenshot-tenanten)
       invoicePrefix: 'INV',
+      nextInvoiceSequence: 1,
+      creditNotePrefix: 'KRE',
+      nextCreditNoteSequence: 1,
     },
   });
   console.log(`   ✅ Company ID: ${company.id}`);
@@ -246,7 +281,7 @@ async function main() {
   console.log(`   ✅ einvoiceEnabled: ${company.einvoiceEnabled} (NemHandel-banner vil vises)`);
 
   // ─── 4. Opret UserCompany-medlemskab ──────────────────────────────────
-  console.log('\n[2/8] Tilføjer bruger som OWNER…');
+  console.log('\n[2/9] Tilføjer bruger som OWNER…');
   await db.userCompany.create({
     data: {
       userId: user.id,
@@ -257,7 +292,7 @@ async function main() {
   console.log(`   ✅ ${user.email} er nu OWNER af ${company.name}`);
 
   // ─── 5. Seed FSR-kontoplan (~45 konti) ────────────────────────────────
-  console.log('\n[3/8] Seeder FSR-kontoplan (~45 konti)…');
+  console.log('\n[3/9] Seeder FSR-kontoplan (~45 konti)…');
   const accountCount = await seedChartOfAccounts(user.id, company.id);
   console.log(`   ✅ ${accountCount} konti oprettet`);
 
@@ -282,7 +317,7 @@ async function main() {
   }
 
   // ─── 6. Opret StandardAccountMapping (til Bilag 19a CSV) ─────────────
-  console.log('\n[4/8] Opretter StandardAccountMapping (FSR → 2026-kontoplan)…');
+  console.log('\n[4/9] Opretter StandardAccountMapping (FSR → 2026-kontoplan)…');
   const mappingData: Array<{
     companyId: string;
     accountId: string;
@@ -318,7 +353,7 @@ async function main() {
   console.log(`   ✅ ${mappingData.length} StandardAccountMapping oprettet`);
 
   // ─── 7. Opret FiscalPeriods for året ──────────────────────────────────
-  console.log('\n[5/8] Opretter FiscalPeriods for året…');
+  console.log('\n[5/9] Opretter FiscalPeriods for året…');
   const fiscalPeriods = [];
   for (let month = 1; month <= 12; month++) {
     fiscalPeriods.push({
@@ -332,13 +367,13 @@ async function main() {
   console.log(`   ✅ 12 FiscalPeriods oprettet (alle OPEN)`);
 
   // ─── 8. Opret Journal Entries (med voucherNumber + hash-chain) ───────
-  console.log('\n[6/8] Opretter 5 POSTED journal entries med fortløbende voucherNumber…');
+  console.log(`\n[6/9] Opretter ${ENTRIES.length} POSTED journal entries med fortløbende voucherNumber…`);
 
   const createdEntries: CreatedEntry[] = [];
 
   for (let i = 0; i < ENTRIES.length; i++) {
     const spec = ENTRIES[i];
-    console.log(`   [${i + 1}/5] ${spec.description.substring(0, 50)}…`);
+    console.log(`   [${i + 1}/${ENTRIES.length}] ${spec.description.substring(0, 50)}…`);
 
     await db.$transaction(async (tx: PrismaTransaction) => {
       // Opret selve JournalEntry først (uden linjer — linjer oprettes separat
@@ -376,15 +411,8 @@ async function main() {
         `         ✅ bilag ${voucherNumber} | hash: ${recordHash?.substring(0, 16)}…`,
       );
 
-      createdEntries.push({
-        id: entry.id,
-        voucherNumber: voucherNumber || '',
-        reference: spec.reference || null,
-        date: spec.date,
-        lines: spec.lines,
-      });
-
       // Hvis denne entry har en tilhørende Transaction, opret den og seal den
+      let transactionId: string | undefined;
       if (spec.createTransaction) {
         const transaction = await tx.transaction.create({
           data: {
@@ -402,14 +430,260 @@ async function main() {
           },
         });
         await sealTransaction(tx, transaction.id, company.id);
+        transactionId = transaction.id;
       }
+
+      createdEntries.push({
+        id: entry.id,
+        voucherNumber: voucherNumber || '',
+        reference: spec.reference || null,
+        description: spec.description,
+        date: spec.date,
+        lines: spec.lines,
+        transactionId,
+      });
     });
   }
 
-  // ─── (Tidligere trin 7/8 — annullering — er fjernet, se kommentar i ENTRIES) ──
+  // ─── 9. Opret fakturaer ────────────────────────────────────────────────
+  //
+  // Vi opretter to fakturaer:
+  //   • INV-{år}-0001 (Nordic Tech Solutions ApS) — vil blive annulleret med
+  //     automatisk kreditnota i næste trin. Viser kreditnota-automatik.
+  //   • INV-{år}-0002 (DataDrift ApS) — forbliver aktiv. Viser en normal
+  //     faktura i faktura-listen.
+  //
+  // Begge fakturaer har allerede fået deres accrual JournalEntry oprettet i
+  // trin [6/9] ovenfor (entries 7 + 8 med reference INV-{år}-0001 / -0002).
+  console.log('\n[7/9] Opretter fakturaer (INV-…)…');
 
-  // ─── 10. Valider resultat ──────────────────────────────────────────────
-  console.log('\n[8/8] Validerer resultat…');
+  const invoice1 = await db.invoice.create({
+    data: {
+      invoiceNumber: `INV-${CURRENT_YEAR}-0001`,
+      documentType: 'INVOICE',
+      customerName: 'Nordic Tech Solutions ApS',
+      customerCvr: '12345678',
+      customerAddress: 'Stationsvej 42, 2100 København Ø',
+      issueDate: new Date(CURRENT_YEAR, 1, 15), // 15. februar
+      dueDate: new Date(CURRENT_YEAR, 2, 1),    // 1. marts
+      lineItems: [
+        { description: 'Cloud migration konsulentydelse', quantity: 10, unitPrice: 8000, vatPercent: 25 },
+      ],
+      subtotal: 80000,
+      vatTotal: 20000,
+      total: 100000,
+      currency: 'DKK',
+      status: 'SENT',
+      userId: user.id,
+      companyId: company.id,
+    },
+  });
+
+  const invoice2 = await db.invoice.create({
+    data: {
+      invoiceNumber: `INV-${CURRENT_YEAR}-0002`,
+      documentType: 'INVOICE',
+      customerName: 'DataDrift ApS',
+      customerCvr: '87654321',
+      issueDate: new Date(CURRENT_YEAR, 1, 20), // 20. februar
+      dueDate: new Date(CURRENT_YEAR, 2, 5),    // 5. marts
+      lineItems: [
+        { description: 'DevOps rådgivning', quantity: 5, unitPrice: 6000, vatPercent: 25 },
+      ],
+      subtotal: 30000,
+      vatTotal: 7500,
+      total: 37500,
+      currency: 'DKK',
+      status: 'SENT',
+      userId: user.id,
+      companyId: company.id,
+    },
+  });
+
+  console.log(`   ✅ ${invoice1.invoiceNumber} — Nordic Tech Solutions ApS (vil blive annulleret med kreditnota)`);
+  console.log(`   ✅ ${invoice2.invoiceNumber} — DataDrift ApS (forbliver aktiv)`);
+
+  // ─── 10. Annulleringer (modposteringer + kreditnota) ───────────────────
+  //
+  // To annulleringer der demonstrerer henholdsvis transaktions-annullering
+  // (REVERSAL-TX-) og faktura-annullering med automatisk kreditnota
+  // (KRE-{år}-{seq} + REVERSAL-INV-). Begge følger samme mønster som
+  // src/app/api/transactions/route.ts (linje 853-928) og
+  // src/app/api/invoices/route.ts (linje 234-410).
+  console.log('\n[8/9] Opretter annulleringer (modposteringer + kreditnota)…');
+
+  // ── 10a. Transaktionsannullering — entry 5 (TX-LEJE-JAN) ──────────────
+  //
+  // Marker Transaction + original JournalEntry som cancelled=true (begge er
+  // sealed → kræver SET LOCAL app.immutability_bypass = 'true' i en
+  // $transaction — samme mønster som transactions/route.ts:853-862, 943-954).
+  // Opret derefter en ny reversal JournalEntry med:
+  //   • date = originalens dato (samme transaktionsdato — lander i rigtig
+  //     periode jf. bogføringslovens god praksis, se kommentar i
+  //     transactions/route.ts:890-899)
+  //   • reference = `REVERSAL-TX-LEJE-JAN`
+  //   • description = `Annullering – ${originalDescription}`
+  //   • status = POSTED, sealed med hash-chain, voucherNumber tildelt
+  //   • Linjer = originalens linjer med byttet debet/kredit
+  const entry5 = createdEntries.find((e) => e.reference === 'TX-LEJE-JAN');
+  if (!entry5 || !entry5.transactionId) {
+    fail('Kunne ikke finde entry 5 (TX-LEJE-JAN) eller dens Transaction — annullering kan ikke fortsætte.');
+  }
+
+  // 10a.1 — Marker original Transaction + JE som cancelled via immutability_bypass
+  await db.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL app.immutability_bypass = 'true'`);
+    await tx.transaction.update({
+      where: { id: entry5.transactionId! },
+      data: {
+        cancelled: true,
+        cancelReason: 'SYSTEM:USER_REQUESTED',
+      },
+    });
+    await tx.journalEntry.update({
+      where: { id: entry5.id },
+      data: {
+        cancelled: true,
+        cancelReason: 'Transaction cancelled: SYSTEM:USER_REQUESTED',
+      },
+    });
+  });
+
+  // 10a.2 — Opret reversal JournalEntry (POSTED + sealed + voucherNumber)
+  await db.$transaction(async (tx: PrismaTransaction) => {
+    const reversalJE = await tx.journalEntry.create({
+      data: {
+        // Korrekt transaktionsdato = originalens dato (lander i rigtig periode)
+        date: entry5.date,
+        description: `Annullering – ${entry5.description}`,
+        reference: 'REVERSAL-TX-LEJE-JAN',
+        status: JournalEntryStatus.POSTED,
+        cancelled: false,
+        companyId: company.id,
+        userId: user.id,
+        currency: 'DKK',
+        lines: {
+          create: entry5.lines.map((line) => ({
+            companyId: company.id,
+            accountId: accountByNumber.get(line.accountNumber)!.id,
+            // Swap debit ↔ credit for at reversere posteringen
+            debit: line.credit ? r2(line.credit) : 0,
+            credit: line.debit ? r2(line.debit) : 0,
+            vatCode: line.vatCode || null,
+            description: `Annullering – ${line.description || ''}`,
+          })),
+        },
+      },
+    });
+
+    const voucherNumber = await assignVoucherNumberIfPosted(tx, reversalJE.id, company.id, 'POSTED');
+    const { recordHash } = await sealJournalEntry(tx, reversalJE.id, company.id);
+    console.log(`   ✅ REVERSAL-TX-LEJE-JAN — bilag ${voucherNumber} | hash: ${recordHash?.substring(0, 16)}…`);
+  });
+
+  // ── 10b. Faktura-annullering — INV-{år}-0001 (med kreditnota) ─────────
+  //
+  // Samme flow som DELETE /api/invoices?id=xxx (se src/app/api/invoices/
+  // route.ts:234-410):
+  //   1. Opret kreditnota Invoice (documentType='CREDIT_NOTE',
+  //      originalInvoiceId, KRE-{år}-{seq} nummerering, issueDate =
+  //      originalens issueDate for korrekt transaktionsdato, lineItems =
+  //      spejlede negative beløb)
+  //   2. Bump Company.nextCreditNoteSequence atomisk i db.$transaction
+  //   3. Marker original faktura cancelled=true + status=CANCELLED +
+  //      cancelReason (Invoice er ikke sealed → ingen immutability_bypass
+  //      nødvendig)
+  //   4. Opret reversal JournalEntry med date = originalens accrual JE dato,
+  //      reference REVERSAL-INV-{år}-0001, byttet debet/kredit
+  //   5. Seal reversal JE + tildel voucherNumber
+  const invoice1Accrual = createdEntries.find((e) => e.reference === `INV-${CURRENT_YEAR}-0001`);
+  if (!invoice1Accrual) {
+    fail(`Kunne ikke finde accrual JE for INV-${CURRENT_YEAR}-0001 — annullering kan ikke fortsætte.`);
+  }
+
+  // 10b.1 — Opret kreditnota + bump sequence atomisk
+  const creditNote = await db.$transaction(async (tx) => {
+    const cn = await tx.invoice.create({
+      data: {
+        invoiceNumber: `KRE-${CURRENT_YEAR}-0001`,
+        documentType: 'CREDIT_NOTE',
+        originalInvoiceId: invoice1.id,
+        customerName: invoice1.customerName,
+        customerAddress: invoice1.customerAddress,
+        customerCvr: invoice1.customerCvr,
+        // issueDate = originalens issueDate (samme transaktionsdato — lander i
+        // rigtig periode jf. bogføringslovens god praksis)
+        issueDate: invoice1.issueDate,
+        dueDate: invoice1.issueDate,
+        // Spejlede negative beløb (kreditnotaen dokumenterer tilbageføring af salget)
+        lineItems: [
+          { description: 'Kreditnota – Cloud migration konsulentydelse', quantity: -10, unitPrice: 8000, vatPercent: 25 },
+        ],
+        subtotal: -80000,
+        vatTotal: -20000,
+        total: -100000,
+        currency: 'DKK',
+        status: 'SENT',
+        notes: `Automatisk kreditnota ved annullering af INV-${CURRENT_YEAR}-0001. Årsag: Fejl i faktura — kunden skulle ikke have faktureres`,
+        userId: user.id,
+        companyId: company.id,
+      },
+    });
+
+    // Bump credit-note sequence (atomisk sammen med kreditnota-oprettelsen)
+    await tx.company.update({
+      where: { id: company.id },
+      data: { nextCreditNoteSequence: 2 },
+    });
+
+    return cn;
+  });
+  console.log(`   ✅ Kreditnota ${creditNote.invoiceNumber} oprettet for annullering af ${invoice1.invoiceNumber}`);
+
+  // 10b.2 — Marker original faktura cancelled (Invoice er IKKE sealed — ingen bypass nødvendig)
+  await db.invoice.update({
+    where: { id: invoice1.id },
+    data: {
+      cancelled: true,
+      cancelReason: 'Fejl i faktura — kunden skulle ikke have faktureres',
+      status: 'CANCELLED',
+    },
+  });
+
+  // 10b.3 — Opret reversal JournalEntry (POSTED + sealed + voucherNumber)
+  await db.$transaction(async (tx: PrismaTransaction) => {
+    const reversalJE = await tx.journalEntry.create({
+      data: {
+        // Korrekt transaktionsdato = originalens accrual JE dato (IKKE new Date())
+        date: invoice1Accrual.date,
+        description: `Annullering – ${invoice1Accrual.description}`,
+        reference: `REVERSAL-INV-${CURRENT_YEAR}-0001`,
+        status: JournalEntryStatus.POSTED,
+        cancelled: false,
+        companyId: company.id,
+        userId: user.id,
+        currency: 'DKK',
+        lines: {
+          create: invoice1Accrual.lines.map((line) => ({
+            companyId: company.id,
+            accountId: accountByNumber.get(line.accountNumber)!.id,
+            // Swap debit ↔ credit for at reversere posteringen
+            debit: line.credit ? r2(line.credit) : 0,
+            credit: line.debit ? r2(line.debit) : 0,
+            vatCode: line.vatCode || null,
+            description: `Annullering – ${line.description || ''}`,
+          })),
+        },
+      },
+    });
+
+    const voucherNumber = await assignVoucherNumberIfPosted(tx, reversalJE.id, company.id, 'POSTED');
+    const { recordHash } = await sealJournalEntry(tx, reversalJE.id, company.id);
+    console.log(`   ✅ REVERSAL-INV-${CURRENT_YEAR}-0001 — bilag ${voucherNumber} | hash: ${recordHash?.substring(0, 16)}…`);
+  });
+
+  // ─── 11. Valider resultat ──────────────────────────────────────────────
+  console.log('\n[9/9] Validerer resultat…');
   const finalEntries = await db.journalEntry.findMany({
     where: { companyId: company.id, status: 'POSTED' },
     select: { id: true, voucherNumber: true, reference: true, cancelled: true, recordHash: true },
@@ -426,26 +700,37 @@ async function main() {
   const mappings = await db.standardAccountMapping.count({ where: { companyId: company.id } });
   const accounts2 = await db.account.count({ where: { companyId: company.id } });
   const transactions = await db.transaction.count({ where: { companyId: company.id } });
+  const transactionsCancelled = await db.transaction.count({ where: { companyId: company.id, cancelled: true } });
+  const invoicesTotal = await db.invoice.count({ where: { companyId: company.id } });
+  const invoicesActive = await db.invoice.count({ where: { companyId: company.id, cancelled: false, documentType: 'INVOICE' } });
+  const invoicesCancelled = await db.invoice.count({ where: { companyId: company.id, cancelled: true, documentType: 'INVOICE' } });
+  const creditNotesTotal = await db.invoice.count({ where: { companyId: company.id, documentType: 'CREDIT_NOTE' } });
 
   // ─── Opsummering ────────────────────────────────────────────────────────
   console.log('\n═══════════════════════════════════════════════════════════════════');
   console.log('  🎉 SCREENSHOT TENANT KLAR');
   console.log('═══════════════════════════════════════════════════════════════════');
-  console.log(`  Company:       ${company.name}`);
-  console.log(`  Company ID:    ${company.id}`);
-  console.log(`  CVR:           ${company.cvrNumber} (fiktivt)`);
-  console.log(`  User:          ${user.email} (OWNER)`);
-  console.log(`  Accounts:      ${accounts2}`);
-  console.log(`  Mappings:      ${mappings} (FSR → 2026-kontoplan)`);
-  console.log(`  Transactions:  ${transactions} (alle aktive)`);
-  console.log(`  Journal entries: ${finalEntries.length} POSTED`);
-  console.log(`     • 6 aktive POSTED entries (bilag 1-6, ingen annulleringer)`);
+  console.log(`  Company:         ${company.name}`);
+  console.log(`  Company ID:      ${company.id}`);
+  console.log(`  CVR:             ${company.cvrNumber} (fiktivt)`);
+  console.log(`  User:            ${user.email} (OWNER)`);
+  console.log(`  Accounts:        ${accounts2}`);
+  console.log(`  Mappings:        ${mappings} (FSR → 2026-kontoplan)`);
+  console.log(`  Fakturaer:       ${invoicesTotal} (${invoicesActive} aktive, ${invoicesCancelled} annulleret med kreditnota)`);
+  console.log(`  Kreditnotaer:    ${creditNotesTotal} (KRE-${CURRENT_YEAR}-0001 — oprettet ved faktura-annullering)`);
+  console.log(`  Transactions:    ${transactions} (${transactionsCancelled} annulleret med modpostering REVERSAL-TX-LEJE-JAN)`);
+  console.log(`  Journal entries: ${finalEntries.length} POSTED (inkl. reversal entries)`);
+  console.log(`     • 8 oprindelige POSTED entries (bilag 1-8, incl. faktura-accruals INV-${CURRENT_YEAR}-0001/0002)`);
+  console.log(`     • 1 transaktion annulleret med modpostering (REVERSAL-TX-LEJE-JAN)`);
+  console.log(`     • 1 faktura annulleret med kreditnota (KRE-${CURRENT_YEAR}-0001) + modpostering (REVERSAL-INV-${CURRENT_YEAR}-0001)`);
   console.log(`  einvoiceEnabled: ${company.einvoiceEnabled} → NemHandel-banner vil vises`);
   console.log('');
   console.log('── Næste skridt ────────────────────────────────────────────────────');
   console.log('1. Log ind i AlphaFlow som ' + user.email);
   console.log('2. Skift til virksomheden "AlphaFlow Screenshot Demo"');
   console.log('3. Tag screenshots ifølge erhvervsstyrelsen-svar/Guide-Bilag-19a-20a-20b-20e.md');
+  console.log('   • Bilag 20b: vis REVERSAL-TX-LEJE-JAN + REVERSAL-INV-' + CURRENT_YEAR + '-0001');
+  console.log('                + kreditnota KRE-' + CURRENT_YEAR + '-0001 i finansjournalen');
   console.log('');
   console.log('── Oprydning (når du er færdig) ────────────────────────────────────');
   console.log('bun run scripts/remove-screenshot-tenant.ts');
