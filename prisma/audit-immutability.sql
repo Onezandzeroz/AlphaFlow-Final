@@ -22,9 +22,18 @@
 -- ============================================================
 
 -- 1. Create trigger function that raises an exception
+--    (unless app.immutability_bypass is set — used by demo-tenant cleanup scripts)
 CREATE OR REPLACE FUNCTION audit_log_immutable_guard()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Allow bypass for controlled administrative operations (demo-tenant cleanup,
+    -- etc.) — same pattern as journal-immutability.sql.
+    -- The bypass is only set via `SET LOCAL app.immutability_bypass = 'true'`
+    -- inside explicit db.$transaction blocks in trusted scripts.
+    IF current_setting('app.immutability_bypass', true) = 'true' THEN
+        RETURN OLD;
+    END IF;
+
     RAISE EXCEPTION
       'AuditLog immutability violation: % operations are not permitted on AuditLog (Bogforingsloven S 10-12)',
       TG_OP;
