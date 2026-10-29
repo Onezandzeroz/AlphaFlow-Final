@@ -80,8 +80,8 @@ cp .env.example .env
 # Edit .env — set your PostgreSQL DATABASE_URL (e.g. Neon, Supabase, or local Postgres)
 # Enable pgvector for the Hermes knowledge base:
 #   psql "$DATABASE_URL" -f scripts/setup-pgvector.sql
-bun run db:push
-bun run audit-immutable   # AuditLog immutability triggers (Bogføringsloven §10-12)
+# Sync schema + generate Prisma Client + apply ALL immutability triggers (§10-12):
+bun run db:deploy
 
 # 4. Install the mini-services
 cd mini-services/tokenpay-access-service && bun install && cd ../..
@@ -642,9 +642,11 @@ AlphaFlow-ZIPR-D/
 | `bun run start` | Start production server on port 3000 |
 | `bun run start:pm2` | Start all services with PM2 (copy `ecosystem.config.example.js` → `ecosystem.config.js` first) |
 | `bun run lint` | Run ESLint |
-| `bun run db:push` | Push schema changes to PostgreSQL |
-| `bun run db:generate` | Generate Prisma Client |
-| `bun run audit-immutable` | Apply AuditLog immutability DB triggers (§10-12) |
+| `bun run db:deploy` | **Full deploy:** generate Prisma Client + push schema + apply ALL immutability triggers (JournalEntry/Transaction/AuditLog — §10-12). Use this for fresh setups and production deploys. |
+| `bun run db:push` | Push schema changes to PostgreSQL (schema sync only — no triggers) |
+| `bun run db:generate` | Generate Prisma Client only |
+| `bun run immutability:apply` | Apply JournalEntry + Transaction + AuditLog immutability DB triggers (§10-12) |
+| `bun run audit-immutable` | Apply AuditLog immutability DB triggers only (subset of immutability:apply) |
 | `bun scripts/seed-hermes-skills.ts` | Seed the Hermes skill catalog (idempotent) |
 | `bun scripts/seed-knowledge.ts` | Seed the RAG knowledge base |
 | `bun scripts/einvoice-send-worker.ts` | Process queued e-invoice sends manually |

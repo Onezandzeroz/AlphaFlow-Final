@@ -10,7 +10,7 @@
 >
 > **Ansvarlig:** AlphaAi Consult ApS
 >
-> **Seneste ændring (v1.2, oktober 2026):** Storecove-kode (`src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*`) er **fuldt fjernet** fra kodebasen — Sproom er eneste e-faktura Access Point. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Legacy `PUBLIC_STANDARD_CHART` (~49 konti) er helt fjernet — kun `OFFICIAL_STANDARD_CHART` (603 konti, 2026-versionen) benyttes (U-24 gennemført). DB-migration (`bun run db:push`) er kørt på VPS — schema er i sync.
+> **Seneste ændring (v1.2, oktober 2026):** Storecove-kode (`src/lib/storecove-client.ts` + 5 ruter under `/api/storecove/*`) er **fuldt fjernet** fra kodebasen — Sproom er eneste e-faktura Access Point. Tidligere Storecove-specifikke DB-felter er fjernet fra Prisma-schemaet (Sproom har egne ækvivalenter); e-faktura dokument-ID-felt er omdøbt til `sproomDocumentId`; e-faktura-kanal-enum er omdøbt til `SPROOM_AUTO`. Legacy `PUBLIC_STANDARD_CHART` (~49 konti) er helt fjernet — kun `OFFICIAL_STANDARD_CHART` (603 konti, 2026-versionen) benyttes (U-24 gennemført). DB-migration (`bun run db:deploy`) er kørt på VPS — schema + immutability triggers er i sync.
 
 ---
 

@@ -779,6 +779,10 @@ I alle finansielle rapporter (hovedbog, P&L, balance, momsrapport, bankafstemnin
 
 Annullerede poster forbliver synlige i revisionsloggen med dato, bruger og årsag. Dette opfylder Bogføringslovens krav om uigendrkelig dokumentation.
 
+**For fakturaer (annullering opretter kreditnota):** Når en faktura annulleres (`DELETE /api/invoices?id=<id>`), opretter systemet automatisk en **kreditnota** (`Invoice` med `documentType='CREDIT_NOTE'`) med separat nummerering (`KRE-{år}-{seq}`), `originalInvoiceId` reference til den oprindelige faktura, spejlede negative beløb, og `issueDate = originalInvoice.issueDate` (samme transaktionsdato — lander i rigtig periode). Derudover oprettes reversal-JE'er (`REVERSAL-{invoiceNumber}`) med byttet debet/kredit på korrekt transaktionsdato. Kreditnotaen er det forbrugervendte dokument der dokumenterer annulleringen over for kunden; reversal-JE'erne er den interne bogføringspostering. Kreditnotaen kan desuden afsendes som OIOUBL/Peppol BIS e-faktura (type 381) hvis kunden skal have formel besked. Se Bilag-04 afsnit 2.3.1 for detaljer.
+
+**Datohåndtering (transaktionsdato vs registreringsdato):** Transaktionsdatoen (`date`/`issueDate`) er altid originalens dato — sikrer at annulleringen lander i samme regnskabsperiode (god praksis jf. bogføringsloven). Registreringsdatoen (`createdAt`) er automatisk i dag — dokumenterer hvornår annulleringen rent faktisk blev foretaget. Det er helt i orden at registreringsdatoen er senere end transaktionsdatoen.
+
 **Tre-niveau uforanderlighed for POSTED-poster:**
 
 | Niveau | Beskyttelse | Filkilde |
@@ -841,7 +845,7 @@ AlphaFlows faktureringsmodul (`/invoices`) håndterer salgsfakturaer, e-mail-afs
 | **PAID (Betalt)** | Fakturaen er markeret som betalt (med betalingsdato). |
 | **CANCELLED (Annulleret)** | Fakturaen er annulleret. Bruges, når en faktura skal trækkes tilbage. |
 
-> **Kreditnotaer:** Kreditnotaer er fuldt implementeret i AlphaFlow. Klik på **Opret kreditnota** i faktura-listen (`invoices-page.tsx`) for at oprette en kreditnota med separat nummerering (`creditNotePrefix` → f.eks. `KRE-2026-0001`), spejlet bogføring (debet/kredit byttet), valgfrit `originalInvoiceId` reference til den oprindelige faktura, PDF-generering (PDF'en viser titlen "KREDITNOTA"), og OIOUBL e-fakturering med type 381 (`oioubl-generator.ts`). Annullering af en faktura opretter en modpostering (`REVERSAL-{invoiceNumber}`) jf. Bogføringsloven §§ 10-12.
+> **Kreditnotaer:** Kreditnotaer er fuldt implementeret i AlphaFlow. Klik på **Opret kreditnota** i faktura-listen (`invoices-page.tsx`) for at oprette en kreditnota manuelt med separat nummerering (`creditNotePrefix` → f.eks. `KRE-2026-0001`), spejlet bogføring (debet/kredit byttet), valgfrit `originalInvoiceId` reference til den oprindelige faktura, PDF-generering (PDF'en viser titlen "KREDITNOTA"), og OIOUBL e-fakturering med type 381 (`oioubl-generator.ts`). **Annullering af en faktura opretter automatisk en kreditnota** (`documentType='CREDIT_NOTE'`, `originalInvoiceId`, `issueDate = original.issueDate`) samt modposteringer (`REVERSAL-{invoiceNumber}`) med korrekt transaktionsdato — jf. Bogføringsloven §§ 10-12 + Bilag-04 afsnit 2.3.1.
 
 ### 6.3 PDF og e-mail
 
@@ -851,7 +855,7 @@ Fra faktura-preview-dialogen (klik på en faktura i listen):
 - **Print** — åbner browserens print-dialog.
 - **Send via e-mail** (`SendInvoiceDialog`) — indtast subject og message, se modtager-preview. Fakturaen sendes via SMTP (kræver konfigureret SMTP_HOST).
 - **Markér som betalt** (`MarkPaidDialog`) — skift status til PAID med valgfri betalingsdato (`paidDate`); systemet opretter automatisk en kassejournalpost (Debit Bank / Kredit Tilgodehavende).
-- **Annuller** — skift status til CANCELLED med årsag. Systemet opretter automatisk en modpostering (`REVERSAL-{invoiceNumber}`), der neutraliserer den oprindelige accrual- og evt. kassejournalpost jf. Bogføringsloven §§ 10-12.
+- **Annuller** — skift status til CANCELLED med årsag. Systemet opretter automatisk en **kreditnota** (`documentType='CREDIT_NOTE'`, `originalInvoiceId`, `KRE-{år}-{seq}` nummerering, `issueDate = original.issueDate`) samt modposteringer (`REVERSAL-{invoiceNumber}`) med korrekt transaktionsdato, der neutraliserer den oprindelige accrual- og evt. kassejournalpost jf. Bogføringsloven §§ 10-12. Kreditnotaen er det forbrugervendte dokument der kan afsendes til kunden via e-faktura (type 381).
 - **Slet** — kun for DRAFT-status.
 
 ### 6.4 Send e-faktura (Peppol/NemHandel via Sproom)

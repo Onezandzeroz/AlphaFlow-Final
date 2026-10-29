@@ -3,7 +3,7 @@
 //
 // PREREQUISITES:
 //   1. bun run build
-//   2. bun run db:push
+//   2. bun run db:deploy   (prisma generate + db push + immutability triggers)
 //   3. cd mini-services/tokenpay-access-service && bun install
 //   4. cd mini-services/hermes-agent && bun install   (runs prisma generate via postinstall)
 //

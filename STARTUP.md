@@ -16,7 +16,7 @@ The app runs **six services** managed together via PM2 and routed through a sing
 > A seventh helper — **pg-service** — runs an embedded PostgreSQL 17 + pgvector locally. It exists **only for sandbox/local development** and is **not** part of production deployment.
 
 > **Important — three different data stores:**
-> - The **host app**, **hermes-agent** and **knowledge-service** all share the **same Neon PostgreSQL** database via `DATABASE_URL` (Prisma ORM, `prisma/schema.prisma`). Run `bun run db:push` to sync the schema. The knowledge-service additionally requires the **pgvector extension** (see §1.3).
+> - The **host app**, **hermes-agent** and **knowledge-service** all share the **same Neon PostgreSQL** database via `DATABASE_URL` (Prisma ORM, `prisma/schema.prisma`). Run `bun run db:deploy` to sync the schema + generate the Prisma Client + apply immutability triggers. The knowledge-service additionally requires the **pgvector extension** (see §1.3).
 > - The **tokenpay-access** mini-service uses its own **local SQLite** file (`data/access.db`) managed by `bun:sqlite` directly — no Prisma, no `db:push`. Self-initializing on first startup.
 > - The **scanner-service** uses its own **local SQLite** file (`data/scanner.db`) managed by Python `sqlite3` — also self-initializing.
 
@@ -113,18 +113,14 @@ psql "$DATABASE_URL" -f scripts/setup-pgvector.sql
 # (idempotent — safe to run multiple times)
 ```
 
-Then push the Prisma schema to your Neon database:
+Then deploy the Prisma schema + generate the Prisma Client + apply ALL immutability triggers (JournalEntry/Transaction/AuditLog — required for Bogføringsloven §10-12 compliance):
 
 ```bash
-# Sync the Prisma schema to Neon (creates/updates all tables)
-bun run db:push
+# Full deploy: prisma generate + db push + immutability triggers (§10-12)
+bun run db:deploy
 ```
 
-Apply the AuditLog database-level immutability triggers (required for Bogføringsloven §10-12 compliance):
-
-```bash
-bun run audit-immutable
-```
+> **What `db:deploy` does:** (1) generates the Prisma Client from `schema.prisma`, (2) syncs the schema to Neon (`db push` — creates/updates all tables), (3) applies PostgreSQL triggers that prevent UPDATE/DELETE on sealed JournalEntry/Transaction rows + all AuditLog rows (`immutability:apply`). This is the recommended single command for fresh setups and production deploys.
 
 ### 1.4. Mini-Service Setup
 
@@ -348,13 +344,10 @@ Then initialize the database:
 # 1. Enable pgvector on Neon (once)
 psql "$DATABASE_URL" -f scripts/setup-pgvector.sql
 
-# 2. Push the Prisma schema
-bun run db:push
+# 2. Full deploy: schema + Prisma Client + ALL immutability triggers (§10-12)
+bun run db:deploy
 
-# 3. Apply AuditLog immutability triggers (Bogføringsloven §10-12)
-bun run audit-immutable
-
-# 4. Seed Hermes skills + knowledge base
+# 3. Seed Hermes skills + knowledge base
 bun scripts/seed-hermes-skills.ts
 bun scripts/seed-knowledge.ts
 ```
@@ -584,8 +577,8 @@ cd mini-services/hermes-agent && bun install && cd ../..
 cd mini-services/knowledge-service && bun install && cd ../..
 cd mini-services/scanner-service && bash install.sh && cd ../..
 
-# Update the Neon database schema (if Prisma schema changed)
-bun run db:push
+# Update the Neon database schema + Prisma Client + immutability triggers (if changed)
+bun run db:deploy
 
 # Rebuild for production
 bun run build
@@ -835,11 +828,8 @@ sudo kill <PID>
 # Check that DATABASE_URL is set in .env
 grep DATABASE_URL .env
 
-# Re-sync the Prisma schema to Neon
-bun run db:push
-
-# Regenerate Prisma Client
-bun run db:generate
+# Re-sync schema + regenerate Prisma Client + reapply immutability triggers
+bun run db:deploy
 ```
 
 ### Build errors
@@ -920,8 +910,7 @@ dig yourdomain.com
 Before going live, ensure:
 
 - [ ] `.env` is configured with a valid `DATABASE_URL` pointing to your Neon PostgreSQL database
-- [ ] `scripts/setup-pgvector.sql` was run and `bun run db:push` succeeded (45 models)
-- [ ] `bun run audit-immutable` succeeded (AuditLog immutability triggers applied)
+- [ ] `scripts/setup-pgvector.sql` was run and `bun run db:deploy` succeeded (45 models + immutability triggers applied)
 - [ ] `ENCRYPTION_KEY` is set to a strong random value (bank tokens / backups / 2FA at rest)
 - [ ] `PROOF_ENCRYPTION_KEY` is set (tokenpay-access will not start without it)
 - [ ] Stale SQLite files were removed (`rm -f mini-services/*/data/*.db*`)

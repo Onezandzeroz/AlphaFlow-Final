@@ -427,9 +427,9 @@ Bemærk: Neon PITR genopretter hele databasen, ikke enkelt-tenant. For single-te
    ENCRYPTION_KEY=<ny_nøgle>                  # sæt nye nøgle
    CURRENT_KEY_VERSION=2                       # forøg version
    ```
-4. **Push DB-schema** (hvis ikke allerede gjort — tilføjer `encryptionKeyVersion` kolonner):
+4. **Push DB-schema + immutability triggers** (hvis ikke allerede gjort — tilføjer `encryptionKeyVersion` kolonner + reapply'er §10-12 triggers):
    ```bash
-   bun run db:push
+   bun run db:deploy
    ```
 5. **Genstart applikation:**
    ```bash

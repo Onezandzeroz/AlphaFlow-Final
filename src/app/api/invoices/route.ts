@@ -252,7 +252,107 @@ export const DELETE = withGuard(
         return NextResponse.json({ error: 'Invoice not found or already cancelled' }, { status: 404 });
       }
 
-      // Soft-delete: mark as cancelled
+      // Fetch company info (needed for credit-note numbering: creditNotePrefix + nextCreditNoteSequence)
+      const companyInfo = await db.company.findUnique({
+        where: { id: ctx.activeCompanyId! },
+        select: {
+          id: true, creditNotePrefix: true, nextCreditNoteSequence: true, currentYear: true,
+        },
+      });
+      if (!companyInfo) {
+        return NextResponse.json({ error: 'Company info not found' }, { status: 400 });
+      }
+
+      // ── Find the original journal entries (accrual + cash receipt if PAID) ──
+      // Reference patterns: accrual = invoiceNumber, cash receipt = invoiceNumber-IND
+      const originalJournalEntries = await db.journalEntry.findMany({
+        where: {
+          reference: { in: [invoice.invoiceNumber, `${invoice.invoiceNumber}-IND`] },
+          ...tenantFilter(ctx),
+          cancelled: false,
+        },
+        include: { lines: true },
+      });
+
+      // ── Create a credit note (kreditnota) automatically ──
+      //
+      // Per bogføringsloven §10-12 + god praksis for faktura-annullering:
+      // Når en FAKTURA annulleres, oprettes en kreditnota (ikke blot en rå
+      // modpostering). Kreditnotaen er det forbrugervendte dokument der
+      // dokumenterer annulleringen over for kunden, mens reversal-JE'erne
+      // (oprettet nedenfor) er den interne bogføringspostering der spejler
+      // originalen med byttet debet/kredit.
+      //
+      // Kreditnotaens issueDate = originalInvoice.issueDate (samme transaktionsdato
+      // — lander i rigtig periode jf. bogføringslovens god praksis).
+      // Kreditnotaens createdAt (registreringsdato) er automatisk i dag.
+      const currentYear = new Date().getFullYear();
+      const yearRolled = companyInfo.currentYear !== currentYear;
+      const nextSeq = yearRolled ? 1 : companyInfo.nextCreditNoteSequence;
+      const creditNoteNumber = `${companyInfo.creditNotePrefix}-${currentYear}-${String(nextSeq).padStart(4, '0')}`;
+
+      // Build credit-note line items as the negative mirror of the original invoice.
+      // lineItems on the Invoice model is a JSON array; we negate quantity (and thus
+      // subtotal/vatTotal/total) so the credit note documents the reversal of the sale.
+      const originalLineItems = (invoice.lineItems as Array<{
+        description: string;
+        quantity: number;
+        unitPrice: number;
+        vatPercent: number;
+      }>) || [];
+
+      const cnLineItems = originalLineItems.map((item) => ({
+        description: `Kreditnota – ${item.description || ''}`,
+        quantity: -Math.abs(Number(item.quantity) || 0),
+        unitPrice: Number(item.unitPrice) || 0,
+        vatPercent: Number(item.vatPercent) || 0,
+      }));
+
+      const cnSubtotal = -Math.abs(Number(invoice.subtotal) || 0);
+      const cnVatTotal = -Math.abs(Number(invoice.vatTotal) || 0);
+      const cnTotal = -Math.abs(Number(invoice.total) || 0);
+
+      // Create the credit note + bump sequence in a transaction
+      const creditNote = await db.$transaction(async (tx) => {
+        const cn = await tx.invoice.create({
+          data: {
+            invoiceNumber: creditNoteNumber,
+            documentType: 'CREDIT_NOTE',
+            originalInvoiceId: invoice.id,
+            customerName: invoice.customerName,
+            customerAddress: invoice.customerAddress,
+            customerEmail: invoice.customerEmail,
+            customerPhone: invoice.customerPhone,
+            customerCvr: invoice.customerCvr,
+            // issueDate = originalens issueDate (samme transaktionsdato — rigtig periode)
+            issueDate: invoice.issueDate,
+            dueDate: invoice.issueDate, // kreditnota har ingen forfaldsdato
+            lineItems: cnLineItems,
+            subtotal: cnSubtotal,
+            vatTotal: cnVatTotal,
+            total: cnTotal,
+            status: 'SENT', // kreditnotaen er bogført + aktiv (reversal-JE'erne udgør bogføringen)
+            notes: `Automatisk kreditnota ved annullering af ${invoice.invoiceNumber}. Årsag: ${reason}`,
+            projectId: invoice.projectId,
+            userId: ctx.id,
+            companyId: ctx.activeCompanyId!,
+          },
+        });
+
+        // Bump credit-note sequence + sync currentYear
+        await tx.company.update({
+          where: { id: companyInfo.id },
+          data: { nextCreditNoteSequence: nextSeq + 1, currentYear },
+        });
+
+        return cn;
+      });
+
+      logger.info(
+        `[INVOICE CANCEL] Created credit note ${creditNote.invoiceNumber} (id: ${creditNote.id}) for cancelled invoice ${invoice.invoiceNumber}`
+      );
+
+      // ── Mark the original invoice as cancelled ──
       await db.invoice.update({
         where: { id },
         data: {
@@ -262,35 +362,33 @@ export const DELETE = withGuard(
         },
       });
 
-      // ── Create a reversal journal entry (modpostering) ──
-      // Per bogføringsloven §10-12, cancelling an invoice must be done by
-      // creating a counter-entry (modpostering) that neutralises the original —
-      // NOT by hiding/deleting the original. Both entries stay POSTED + visible
-      // in the journal; together they net to zero in all accounting figures.
+      // ── Create reversal journal entries (modposteringer) ──
       //
-      // The original journal entry (reference = invoiceNumber) stays POSTED +
-      // not cancelled. We create a NEW journal entry with the same lines but
-      // debit/credit swapped, reference `REVERSAL-<invoiceNumber>`.
-      const originalJournalEntries = await db.journalEntry.findMany({
-        where: {
-          reference: invoice.invoiceNumber,
-          ...tenantFilter(ctx),
-          cancelled: false,
-        },
-        include: {
-          lines: true,
-        },
-      });
-
+      // Per bogføringsloven §10-12: annullering af en bogført postering må IKKE
+      // ske ved sletning/mutation — der oprettes en NY modpostering der
+      // neutraliserer originalen. Begge posteringer forbliver POSTED + synlige
+      // i finansjournalen; sammen netto de til nul.
+      //
+      // Transaktionsdato (date-feltet) = originalens dato (IKKE new Date()).
+      // Dette er kritisk for periodebaserede rapporter (moms, P&L): hvis
+      // modposteringen dateres på annulleringsdatoen og den falder i en anden
+      // regnskabsperiode, ville originalen og modposteringen ikke netto til
+      // nul inden for én periode. Registreringsdatoen (createdAt) er automatisk
+      // i dag — det er helt i orden jf. bogføringslovens god praksis.
+      //
+      // Reference: `REVERSAL-<invoiceNumber>` kobler modposteringen til originalen.
       for (const originalJE of originalJournalEntries) {
         const reversalJE = await db.journalEntry.create({
           data: {
-            date: new Date(),
+            // Korrekt transaktionsdato = originalens dato (lander i rigtig periode)
+            date: originalJE.date,
             description: `Annullering – ${originalJE.description}`,
             reference: `REVERSAL-${originalJE.reference || invoice.invoiceNumber}`,
             status: 'POSTED',
             userId: ctx.id,
             companyId: ctx.activeCompanyId!,
+            currency: originalJE.currency || 'DKK',
+            exchangeRate: originalJE.exchangeRate ? Number(originalJE.exchangeRate) : null,
             lines: {
               create: originalJE.lines.map((line) => ({
                 companyId: line.companyId,
@@ -307,7 +405,7 @@ export const DELETE = withGuard(
         });
 
         logger.info(
-          `[INVOICE CANCEL] Created reversal journal entry ${reversalJE.id} (reference: ${reversalJE.reference}) for invoice ${invoice.invoiceNumber}`
+          `[INVOICE CANCEL] Created reversal journal entry ${reversalJE.id} (reference: ${reversalJE.reference}, date: ${originalJE.date.toISOString()}) for invoice ${invoice.invoiceNumber}`
         );
       }
 
@@ -326,7 +424,12 @@ export const DELETE = withGuard(
         { scope: 'dashboard', companyId: ctx.activeCompanyId!, action: 'update' },
       ]).catch(() => {});
 
-      return NextResponse.json({ success: true, message: 'Invoice cancelled (soft-delete)' });
+      return NextResponse.json({
+        success: true,
+        message: 'Invoice cancelled — credit note created + reversal entries posted',
+        creditNoteId: creditNote.id,
+        creditNoteNumber: creditNote.invoiceNumber,
+      });
     } catch (error) {
       logger.error('Failed to cancel invoice:', error);
       return NextResponse.json({ error: 'Failed to cancel invoice' }, { status: 500 });
