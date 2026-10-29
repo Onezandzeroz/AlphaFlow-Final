@@ -18,10 +18,12 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-// Load .env.local if present
+// Load .env then .env.local (later files win). Mirrors Next.js env-loading
+// order so the script works on the VPS where PM2 doesn't auto-load .env.
 try {
   const dotenv = await import('dotenv');
-  dotenv.config({ path: join(process.cwd(), '.env.local') });
+  dotenv.config({ path: join(process.cwd(), '.env') });
+  dotenv.config({ path: join(process.cwd(), '.env.local'), override: true });
 } catch {
   // dotenv not available, rely on environment
 }
@@ -30,7 +32,8 @@ const DATABASE_URL = process.env.DATABASE_URL;
 
 if (!DATABASE_URL) {
   console.error('ERROR: DATABASE_URL environment variable is not set.');
-  console.error('Set it in .env.local or pass it as an environment variable.');
+  console.error('Set it in .env (or .env.local) or pass it as an environment variable.');
+  console.error('Tip: run "set -a; source .env; set +a" first, or use "bun run db:deploy".');
   process.exit(1);
 }
 

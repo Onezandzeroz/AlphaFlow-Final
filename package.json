@@ -14,6 +14,8 @@
     "db:generate": "bun x prisma generate",
     "db:migrate": "bun x prisma migrate dev",
     "db:reset": "bun x prisma migrate reset",
+    "db:deploy": "bun x prisma generate && bun x prisma db push && bun run immutability:apply",
+    "immutability:apply": "bun scripts/apply-immutability.ts",
     "audit-immutable": "bun scripts/apply-audit-immutability.ts",
     "kill-port": "bun scripts/kill-port.ts",
     "ports": "bun -e \"import { scanPorts, printPortStatus } from './src/lib/port-utils'; scanPorts().then(printPortStatus);\""

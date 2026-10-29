@@ -23,6 +23,10 @@
  *    — required by Erhvervsstyrelsen compliance review, Krav 18, row 18)
  *  - Sproom inbox puller (safety-net poller for the e-invoice DocumentReceived
  *    webhook — every 5 min, fires real-time toasts for new received documents)
+ *  - Immutability guard (verifies + self-heals the PostgreSQL triggers that
+ *    enforce Bogføringsloven §10-12 — runs FIRST, before any other service,
+ *    so posted JournalEntry/Transaction/AuditLog rows are protected from the
+ *    very first request. See src/lib/immutability-guard.ts)
  *
  * All are idempotent — guarded by internal `_schedulerStarted` flags — so
  * duplicate calls are safe.
@@ -33,6 +37,8 @@
  *   - DISABLE_BILLING_SCHEDULER=true
  *   - DISABLE_LOG_MONITOR_SCHEDULER=true
  *   - DISABLE_SPROOM_INBOX_SCHEDULER=true
+ *   - DISABLE_IMMUTABILITY_GUARD=true            (skip trigger verification)
+ *   - DISABLE_IMMUTABILITY_AUTO_APPLY=true       (verify only, don't self-heal)
  *
  * NOTE ON IMPORTS: ALL imports here are dynamic (inside register/unregister),
  * including `logger`. This is intentional — a static top-level import of
@@ -52,6 +58,23 @@ export async function register(): Promise<void> {
     // Dynamic imports — including logger — so Node-only modules are NOT
     // statically pulled into the Edge instrumentation bundle.
     const { logger } = await import('@/lib/logger');
+
+    // ─── Immutability Guard (runs FIRST) ─────────────────────────────
+    // Verifies the PostgreSQL triggers enforcing Bogføringsloven §10-12 are
+    // present, and self-heals (re-applies the SQL) if any are missing. This
+    // guarantees posted JournalEntry/Transaction/AuditLog rows are protected
+    // from the very first request, even if the deploy skipped `bun run
+    // db:deploy`. Never blocks startup — errors are logged CRITICAL.
+    // See src/lib/immutability-guard.ts for full behavior + env overrides.
+    try {
+      const { verifyAndApplyImmutability } = await import('@/lib/immutability-guard');
+      await verifyAndApplyImmutability(process.env.DATABASE_URL);
+    } catch (error) {
+      // Never let the guard crash boot — log and continue. The app still
+      // serves requests; the CRITICAL log line is the operator signal.
+      logger.error('[INSTRUMENTATION] Immutability guard threw (non-blocking):', error);
+    }
+
     const { startBackupScheduler } = await import('@/lib/backup-scheduler');
     const { startRecurringScheduler } = await import('@/lib/recurring-scheduler');
     // FASE 6 — billing scheduler for subscription-lifecycle reminder emails

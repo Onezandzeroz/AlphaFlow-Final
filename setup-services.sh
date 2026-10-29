@@ -92,6 +92,40 @@ for svc in notification-ws-service; do
 done
 
 echo ""
+
+# ─── Step 4: Apply immutability triggers ─────────────────────
+# Bogføringsloven §10-12 requires posted transactions to be immutable at the
+# DB level. prisma db push only syncs tables/columns/indexes — it does NOT
+# apply the custom trigger SQL in prisma/*.sql. We apply them here so the
+# system is compliant from the very first boot. Idempotent — safe to re-run.
+echo "━━━ Step 4: Applying immutability triggers (Bogføringsloven §10-12) ━━━"
+echo ""
+
+cd "$PROJECT_ROOT"
+
+# Load .env so DATABASE_URL is available (PM2 doesn't auto-load it).
+if [ -f .env ]; then
+  set -a; source .env; set +a
+fi
+
+if [ -z "$DATABASE_URL" ]; then
+  echo "  ⚠ DATABASE_URL not set — skipping trigger application."
+  echo "    Run 'bun run db:deploy' AFTER configuring .env to apply triggers."
+  echo "    The app's startup guard (src/lib/immutability-guard.ts) will also"
+  echo "    auto-apply them on first boot, but applying now is recommended."
+  ALL_OK=false
+else
+  echo "→ Applying JournalEntry + JournalEntryLine + Transaction + AuditLog triggers..."
+  if bun run scripts/apply-immutability.ts; then
+    echo "  ✓ Immutability triggers applied successfully"
+  else
+    echo "  ✗ FAILED to apply immutability triggers"
+    echo "    The app's startup guard will retry on boot, but investigate manually."
+    ALL_OK=false
+  fi
+fi
+echo ""
+
 if [ "$ALL_OK" = true ]; then
   echo "╔═══════════════════════════════════════════════════════════╗"
   echo "║  ✓ All services are ready!                              ║"
@@ -99,7 +133,8 @@ if [ "$ALL_OK" = true ]; then
   echo "║  Next steps:                                              ║"
   echo "║    1. Copy .env.example to .env and fill in values       ║"
   echo "║    2. Update ecosystem.config.js with your env vars      ║"
-  echo "║    3. Run: pm2 start ecosystem.config.js                 ║"
+  echo "║    3. Run: bun run db:deploy  (schema + triggers)        ║"
+  echo "║    4. Run: pm2 start ecosystem.config.js                 ║"
   echo "╚═══════════════════════════════════════════════════════════╝"
 else
   echo "╔═══════════════════════════════════════════════════════════╗"
