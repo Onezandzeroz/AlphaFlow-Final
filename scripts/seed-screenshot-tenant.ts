@@ -45,7 +45,9 @@ type PrismaTransaction = Parameters<Parameters<typeof db.$transaction>[0]>[0];
 // ─── Konfiguration ─────────────────────────────────────────────────────────
 
 const TENANT_NAME = 'AlphaFlow Screenshot Demo';
-const TENANT_CVR = '00000000'; // tydeligt fiktivt CVR
+// SKAT's test-virksomhed SE-nummer — kræves for at momsindberetning virker
+// mod SKAT's testmiljø (se docs/SKAT-setup.md §2 og scripts/reset-demo-company.ts).
+const TENANT_CVR = '41250313';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -404,7 +406,7 @@ async function main() {
   });
   console.log(`   ✅ Company ID: ${company.id}`);
   console.log(`   ✅ Navn: ${company.name}`);
-  console.log(`   ✅ CVR: ${company.cvrNumber} (fiktivt)`);
+  console.log(`   ✅ CVR: ${company.cvrNumber} (SKAT test SE-nummer)`);
   console.log(`   ✅ einvoiceEnabled: ${company.einvoiceEnabled} (NemHandel-banner vil vises)`);
 
   // ─── 4. Opret UserCompany-medlemskab ──────────────────────────────────
@@ -848,7 +850,7 @@ async function main() {
   console.log('═══════════════════════════════════════════════════════════════════');
   console.log(`  Company:         ${company.name}`);
   console.log(`  Company ID:      ${company.id}`);
-  console.log(`  CVR:             ${company.cvrNumber} (fiktivt)`);
+  console.log(`  CVR:             ${company.cvrNumber} (SKAT test SE-nummer — bruges til momsindberetning)`);
   console.log(`  User:            ${user.email} (OWNER)`);
   console.log(`  Accounts:        ${accounts2}`);
   console.log(`  Mappings:        ${mappings} (FSR → 2026-kontoplan)`);
