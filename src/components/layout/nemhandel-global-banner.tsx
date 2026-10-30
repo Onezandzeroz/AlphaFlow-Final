@@ -201,7 +201,7 @@ export function NemHandelGlobalBanner({
   // ── Render ───────────────────────────────────────────────────────
 
   // Localized strings (kept in one place for readability)
-  const title = isDa ? 'Tilmeld NemHandelsregisteret - Erhvervsstyrelsen' : 'Enroll in the NemHandel Register - Danish Business Authority';
+  const title = isDa ? 'Tilmeld NemHandelsregisteret' : 'Enroll in the NemHandel Register';
   const body = isDa
     ? 'AlphaFlow er registreret som digitalt standardbogføringssystem hos Erhvervsstyrelsen. Din virksomhed kan derfor nu tilmeldes NemHandelsregisteret og modtage og afsende elektroniske fakturaer via NemHandel og Peppol netværket. Tilmelding er frivillig og kræver dit samtykke.'
     : 'AlphaFlow is registered as a digital standard bookkeeping system with the Danish Business Authority. Your business can therefore be enrolled in the NemHandel Register to receive and send electronic invoices via NemHandel and Peppol. Enrollment is voluntary and requires your consent.';

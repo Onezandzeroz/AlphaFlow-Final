@@ -140,8 +140,8 @@ export function NemHandelRegistrationNotice({
   const isDa = language === 'da';
 
   const title = isDa
-    ? 'Tilmeld NemHandelsregisteret - Erhvervsstyrelsen'
-    : 'Enroll in the NemHandel Register - Danish Business Authority';
+    ? 'Tilmeld NemHandelsregisteret'
+    : 'Enroll in the NemHandel Register';
 
   const body = isDa
     ? 'AlphaFlow er registreret som digitalt standardbogføringssystem hos Erhvervsstyrelsen. Din virksomhed kan derfor nu tilmeldes NemHandelsregisteret og modtage og afsende elektroniske fakturaer via NemHandel og Peppol netværket. Tilmelding er frivillig og kræver dit samtykke.'
