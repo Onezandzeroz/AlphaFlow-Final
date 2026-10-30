@@ -14,6 +14,8 @@
  *     (KRE-{år}-0001) + modpostering (REVERSAL-INV-{år}-0001)
  *   - 1 transaktion (entry 5 — TX-LEJE-JAN) annulleres med modpostering
  *     (REVERSAL-TX-LEJE-JAN) — viser transaktionsannullering i Bilag 20b
+ *   - 8 POSTED journal entries for 2024 (2 pr. kvartal, med moms) — muliggør
+ *     momsindberetning for alle 4 kvartaler i 2024 via SKAT testnet
  *   - Alle entries har SHA-256 hash-chain + er sealed (Bilag 20b kode-bevis)
  *
  * Brug:
@@ -46,6 +48,11 @@ const TENANT_NAME = 'AlphaFlow Screenshot Demo';
 const TENANT_CVR = '00000000'; // tydeligt fiktivt CVR
 
 const CURRENT_YEAR = new Date().getFullYear();
+
+// 2024 er det år SKAT har åbent i deres testnet til at ret/slet indberetninger.
+// Vi seeder moms-relevante posteringer for alle 4 kvartaler i 2024 således at
+// momsindberetning er mulig for 2024.
+const SKAT_TEST_YEAR = 2024;
 
 // ─── Hjælpefunktioner ──────────────────────────────────────────────────────
 
@@ -202,6 +209,126 @@ const ENTRIES: EntrySpec[] = [
       { accountNumber: '1200', debit: r2(37500), description: 'Tilgodehavende DataDrift ApS' },
       { accountNumber: '4100', credit: r2(30000), description: 'Salg af DevOps-rådgivning' },
       { accountNumber: '4510', credit: r2(7500), vatCode: VATCode.S25, description: 'Udgående moms 25%' },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // 2024 KVARTALSDATA — for momsindberetning via SKAT testnet
+  // SKAT har kun 2024 åbent i deres testmiljø til at ret/slet indberetninger.
+  // Vi seeder moms-relevante posteringer (salg + køb med moms) for hvert
+  // kvartal i 2024, således at momsindberetning kan foretages for alle 4
+  // kvartaler (Q1: jan-mar, Q2: apr-jun, Q3: jul-sep, Q4: okt-dec).
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // ─── 2024 Q1 (januar–marts) ──────────────────────────────────────────────
+  {
+    description: 'Salg af konsulentydelse — Q1 2024',
+    date: new Date(SKAT_TEST_YEAR, 0, 15), // 15. januar 2024
+    reference: 'SALG-2024-Q1',
+    lines: [
+      { accountNumber: '1200', debit: r2(50000), description: 'Tilgodehavende Q1 2024' },
+      { accountNumber: '4100', credit: r2(40000), description: 'Salg af konsulentydelse Q1' },
+      { accountNumber: '4510', credit: r2(10000), vatCode: VATCode.S25, description: 'Udgående moms 25% Q1' },
+    ],
+  },
+  {
+    description: 'Køb af kontorartikler — Q1 2024',
+    date: new Date(SKAT_TEST_YEAR, 1, 10), // 10. februar 2024
+    reference: 'KOEB-2024-Q1',
+    createTransaction: {
+      type: TransactionType.PURCHASE,
+      amount: r2(5000),
+      vatPercent: 25.0,
+      description: 'Køb af kontorartikler — Q1 2024',
+    },
+    lines: [
+      { accountNumber: '8700', debit: r2(4000), description: 'Kontorartikler Q1' },
+      { accountNumber: '5410', debit: r2(1000), vatCode: VATCode.K25, description: 'Indgående moms 25% Q1' },
+      { accountNumber: '1100', credit: r2(5000), description: 'Betaling via bank Q1' },
+    ],
+  },
+
+  // ─── 2024 Q2 (april–juni) ────────────────────────────────────────────────
+  {
+    description: 'Salg af konsulentydelse — Q2 2024',
+    date: new Date(SKAT_TEST_YEAR, 3, 15), // 15. april 2024
+    reference: 'SALG-2024-Q2',
+    lines: [
+      { accountNumber: '1200', debit: r2(75000), description: 'Tilgodehavende Q2 2024' },
+      { accountNumber: '4100', credit: r2(60000), description: 'Salg af konsulentydelse Q2' },
+      { accountNumber: '4510', credit: r2(15000), vatCode: VATCode.S25, description: 'Udgående moms 25% Q2' },
+    ],
+  },
+  {
+    description: 'Køb af reklame — Q2 2024',
+    date: new Date(SKAT_TEST_YEAR, 4, 5), // 5. maj 2024
+    reference: 'KOEB-2024-Q2',
+    createTransaction: {
+      type: TransactionType.PURCHASE,
+      amount: r2(12000),
+      vatPercent: 25.0,
+      description: 'Køb af reklame — Q2 2024',
+    },
+    lines: [
+      { accountNumber: '8800', debit: r2(9600), description: 'Reklame og markedsføring Q2' },
+      { accountNumber: '5410', debit: r2(2400), vatCode: VATCode.K25, description: 'Indgående moms 25% Q2' },
+      { accountNumber: '1100', credit: r2(12000), description: 'Betaling via bank Q2' },
+    ],
+  },
+
+  // ─── 2024 Q3 (juli–september) ────────────────────────────────────────────
+  {
+    description: 'Salg af konsulentydelse — Q3 2024',
+    date: new Date(SKAT_TEST_YEAR, 6, 20), // 20. juli 2024
+    reference: 'SALG-2024-Q3',
+    lines: [
+      { accountNumber: '1200', debit: r2(60000), description: 'Tilgodehavende Q3 2024' },
+      { accountNumber: '4100', credit: r2(48000), description: 'Salg af konsulentydelse Q3' },
+      { accountNumber: '4510', credit: r2(12000), vatCode: VATCode.S25, description: 'Udgående moms 25% Q3' },
+    ],
+  },
+  {
+    description: 'Husleje — Q3 2024',
+    date: new Date(SKAT_TEST_YEAR, 7, 1), // 1. august 2024
+    reference: 'LEJE-2024-Q3',
+    createTransaction: {
+      type: TransactionType.PURCHASE,
+      amount: r2(10000),
+      vatPercent: 25.0,
+      description: 'Husleje — Q3 2024',
+    },
+    lines: [
+      { accountNumber: '8000', debit: r2(8000), description: 'Husleje Q3' },
+      { accountNumber: '5410', debit: r2(2000), vatCode: VATCode.K25, description: 'Indgående moms 25% Q3' },
+      { accountNumber: '1100', credit: r2(10000), description: 'Betaling via bank Q3' },
+    ],
+  },
+
+  // ─── 2024 Q4 (oktober–december) ───────────────────────────────────────────
+  {
+    description: 'Salg af konsulentydelse — Q4 2024',
+    date: new Date(SKAT_TEST_YEAR, 9, 10), // 10. oktober 2024
+    reference: 'SALG-2024-Q4',
+    lines: [
+      { accountNumber: '1200', debit: r2(90000), description: 'Tilgodehavende Q4 2024' },
+      { accountNumber: '4100', credit: r2(72000), description: 'Salg af konsulentydelse Q4' },
+      { accountNumber: '4510', credit: r2(18000), vatCode: VATCode.S25, description: 'Udgående moms 25% Q4' },
+    ],
+  },
+  {
+    description: 'Køb af IT-udstyr — Q4 2024',
+    date: new Date(SKAT_TEST_YEAR, 10, 15), // 15. november 2024
+    reference: 'KOEB-2024-Q4',
+    createTransaction: {
+      type: TransactionType.PURCHASE,
+      amount: r2(25000),
+      vatPercent: 25.0,
+      description: 'Køb af IT-udstyr — Q4 2024',
+    },
+    lines: [
+      { accountNumber: '1800', debit: r2(20000), description: 'IT-udstyr Q4' },
+      { accountNumber: '5410', debit: r2(5000), vatCode: VATCode.K25, description: 'Indgående moms 25% Q4' },
+      { accountNumber: '1100', credit: r2(25000), description: 'Betaling via bank Q4' },
     ],
   },
 ];
@@ -363,8 +490,17 @@ async function main() {
       status: 'OPEN' as const,
     });
   }
+  // 2024 FiscalPeriods (for SKAT testnet momsindberetning)
+  for (let month = 1; month <= 12; month++) {
+    fiscalPeriods.push({
+      companyId: company.id,
+      year: SKAT_TEST_YEAR,
+      month,
+      status: 'OPEN' as const,
+    });
+  }
   await db.fiscalPeriod.createMany({ data: fiscalPeriods, skipDuplicates: true });
-  console.log(`   ✅ 12 FiscalPeriods oprettet (alle OPEN)`);
+  console.log(`   ✅ ${fiscalPeriods.length} FiscalPeriods oprettet (${CURRENT_YEAR} + ${SKAT_TEST_YEAR}, alle OPEN)`);
 
   // ─── 8. Opret Journal Entries (med voucherNumber + hash-chain) ───────
   console.log(`\n[6/9] Opretter ${ENTRIES.length} POSTED journal entries med fortløbende voucherNumber…`);
@@ -720,7 +856,8 @@ async function main() {
   console.log(`  Kreditnotaer:    ${creditNotesTotal} (KRE-${CURRENT_YEAR}-0001 — oprettet ved faktura-annullering)`);
   console.log(`  Transactions:    ${transactions} (${transactionsCancelled} annulleret med modpostering REVERSAL-TX-LEJE-JAN)`);
   console.log(`  Journal entries: ${finalEntries.length} POSTED (inkl. reversal entries)`);
-  console.log(`     • 8 oprindelige POSTED entries (bilag 1-8, incl. faktura-accruals INV-${CURRENT_YEAR}-0001/0002)`);
+  console.log(`     • 8 oprindelige POSTED entries ${CURRENT_YEAR} (bilag 1-8, incl. faktura-accruals INV-${CURRENT_YEAR}-0001/0002)`);
+  console.log(`     • 8 POSTED entries for 2024 (2 pr. kvartal — Q1/Q2/Q3/Q4, med moms til SKAT testnet)`);
   console.log(`     • 1 transaktion annulleret med modpostering (REVERSAL-TX-LEJE-JAN)`);
   console.log(`     • 1 faktura annulleret med kreditnota (KRE-${CURRENT_YEAR}-0001) + modpostering (REVERSAL-INV-${CURRENT_YEAR}-0001)`);
   console.log(`  einvoiceEnabled: ${company.einvoiceEnabled} → NemHandel-banner vil vises`);
@@ -731,6 +868,7 @@ async function main() {
   console.log('3. Tag screenshots ifølge erhvervsstyrelsen-svar/Guide-Bilag-19a-20a-20b-20e.md');
   console.log('   • Bilag 20b: vis REVERSAL-TX-LEJE-JAN + REVERSAL-INV-' + CURRENT_YEAR + '-0001');
   console.log('                + kreditnota KRE-' + CURRENT_YEAR + '-0001 i finansjournalen');
+  console.log('4. Momsindberetning: vælg år 2024 → alle 4 kvartaler har moms-data');
   console.log('');
   console.log('── Oprydning (når du er færdig) ────────────────────────────────────');
   console.log('bun run scripts/remove-screenshot-tenant.ts');
