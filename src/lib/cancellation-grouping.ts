@@ -18,6 +18,47 @@
  */
 
 /**
+ * Format a journal entry reference for display, translating the prefix
+ * based on the user's language and replacing invoice-reversal references
+ * with credit-note references (since a reversed invoice produces a credit
+ * note, not another invoice).
+ *
+ * Rules:
+ *   - `REVERSAL-TX-<id8>` → DA: `MODPOST-TX-<id8>` | EN: `REVERSAL-TX-<id8>`
+ *   - `REVERSAL-INV-<year>-<seq>` → DA: `MODPOST-KRE-<year>-<seq>` | EN: `REVERSAL-CN-<year>-<seq>`
+ *     (INV prefix replaced with KRE/CN because the reversal IS a credit note, not an invoice)
+ *   - `REVERSAL-<anything-else>` → DA: `MODPOST-<anything-else>` | EN: `REVERSAL-<anything-else>`
+ *   - Non-REVERSAL references (TX-, INV-, SALG-, etc.) → returned as-is (no translation)
+ *
+ * @param reference  The raw reference string from the JournalEntry
+ * @param language   'da' for Danish, 'en' for English (or any other → English fallback)
+ * @returns The display-formatted reference string
+ */
+export function formatReferenceForDisplay(
+  reference: string | null | undefined,
+  language: string = 'en'
+): string {
+  if (!reference) return '';
+
+  // Only translate REVERSAL- prefixed references
+  if (!reference.startsWith('REVERSAL-')) return reference;
+
+  const suffix = reference.slice('REVERSAL-'.length);
+  const isDanish = language === 'da';
+  const prefix = isDanish ? 'MODPOST' : 'REVERSAL';
+
+  // Special case: REVERSAL-INV-{year}-{seq} → the reversal is a credit note,
+  // not an invoice — replace INV with KRE (DA) / CN (EN)
+  if (suffix.startsWith('INV-')) {
+    const afterInv = suffix.slice('INV-'.length);
+    const creditNotePrefix = isDanish ? 'KRE' : 'CN';
+    return `${prefix}-${creditNotePrefix}-${afterInv}`;
+  }
+
+  return `${prefix}-${suffix}`;
+}
+
+/**
  * Extract the transaction short-id from a journal entry reference.
  * Returns null if the reference doesn't follow the TX-/REVERSAL-TX- pattern.
  *

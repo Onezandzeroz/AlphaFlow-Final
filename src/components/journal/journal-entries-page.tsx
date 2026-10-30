@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@/lib/auth-store';
 import { useTranslation } from '@/lib/use-translation';
 import { translateSystemReason } from '@/lib/system-reason-i18n';
-import { groupByCancellation, type CancellationGroup } from '@/lib/cancellation-grouping';
+import { groupByCancellation, formatReferenceForDisplay, type CancellationGroup } from '@/lib/cancellation-grouping';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -1014,7 +1014,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                         {/* Reference (eksternt bilagsnr / leverandørfaktura-nr) */}
                         {entry.reference && (
                           <Badge variant="outline" className={`text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 ${isDimmed ? 'text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-300'}`}>
-                            {entry.reference}
+                            {formatReferenceForDisplay(entry.reference, language)}
                           </Badge>
                         )}
 
@@ -1327,7 +1327,7 @@ export function JournalEntriesPage({ user }: JournalEntriesPageProps) {
                         </span>
                         {orig.reference && (
                           <Badge variant="outline" className="text-xs font-mono bg-gray-50 dark:bg-white/5 shrink-0 text-gray-400 dark:text-gray-500 line-through">
-                            {orig.reference}
+                            {formatReferenceForDisplay(orig.reference, language)}
                           </Badge>
                         )}
                         <span className="text-sm flex-1 truncate min-w-0 text-gray-400 dark:text-gray-500 line-through">
